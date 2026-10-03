@@ -1,7 +1,15 @@
 import { HttpApi } from "effect/unstable/httpapi"
 import { OperatorConfigApi } from "./groups/config"
 import { MergeApi } from "./groups/merge"
+import { OperatorProjectApi } from "./groups/project"
 
-// Every route this fork adds. Upstream's InstanceHttpApi mounts this once, so new fork routes are
-// added here without touching upstream files. Keep group files free of handler imports.
-export const OperatorApi = HttpApi.make("operator").addHttpApi(MergeApi).addHttpApi(OperatorConfigApi)
+export { OperatorRootApi } from "./groups/overview"
+
+// Every per-project route this fork adds. Upstream's InstanceHttpApi mounts this once (and the server
+// mounts OperatorRootApi beside its root API), so new fork routes are added here without touching
+// upstream files.
+// Keep group files free of handler imports.
+export const OperatorApi = HttpApi.make("operator")
+  .addHttpApi(MergeApi)
+  .addHttpApi(OperatorConfigApi)
+  .addHttpApi(OperatorProjectApi)

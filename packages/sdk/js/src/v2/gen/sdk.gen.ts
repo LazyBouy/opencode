@@ -115,6 +115,8 @@ import type {
   MergeAdapterListResponses,
   ModelRef,
   MoveSessionDestination,
+  OperatorAgentListErrors,
+  OperatorAgentListResponses,
   OperatorConfigLayersErrors,
   OperatorConfigLayersResponses,
   OperatorConfigSchemaErrors,
@@ -122,6 +124,18 @@ import type {
   OperatorConfigScope,
   OperatorConfigUpdateErrors,
   OperatorConfigUpdateResponses,
+  OperatorConfigWriteErrors,
+  OperatorConfigWriteResponses,
+  OperatorPermissionPendingErrors,
+  OperatorPermissionPendingResponses,
+  OperatorSessionListErrors,
+  OperatorSessionListResponses,
+  OperatorStatsErrors,
+  OperatorStatsResponses,
+  OperatorStatusErrors,
+  OperatorStatusResponses,
+  OperatorToolListErrors,
+  OperatorToolListResponses,
   OutputFormat,
   Part as Part2,
   PartDeleteErrors,
@@ -1393,6 +1407,350 @@ export class Global extends HeyApiClient {
   }
 }
 
+export class Session2 extends HeyApiClient {
+  /**
+   * List sessions across projects
+   *
+   * Sessions from every project, most recently updated first, filtered by directory, agent, title search or archive state. Page with `cursor` (the last row's update time).
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      agent?: string
+      search?: string
+      roots?: "true" | "false"
+      archived?: "true" | "false"
+      cursor?: string
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "agent" },
+            { in: "query", key: "search" },
+            { in: "query", key: "roots" },
+            { in: "query", key: "archived" },
+            { in: "query", key: "cursor" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<OperatorSessionListResponses, OperatorSessionListErrors, ThrowOnError>({
+      url: "/operator/session",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Permission extends HeyApiClient {
+  /**
+   * List pending permission requests
+   *
+   * Permission requests waiting for a reply in every project, oldest first. Reply with POST /permission/{requestID}/reply and the request's directory.
+   */
+  public pending<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<
+      OperatorPermissionPendingResponses,
+      OperatorPermissionPendingErrors,
+      ThrowOnError
+    >({ url: "/operator/permission", ...options })
+  }
+}
+
+export class Config2 extends HeyApiClient {
+  /**
+   * List config layers
+   *
+   * List the config files that apply to this project, in load order, and the file a global or project write goes to.
+   */
+  public layers<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorConfigLayersResponses,
+      OperatorConfigLayersErrors,
+      ThrowOnError
+    >({
+      url: "/operator/config/layer",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update config at a scope
+   *
+   * Merge a patch into the global or project config file, keeping comments. A null value removes the key so the inherited value applies. The result is validated before it is written.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      scope: OperatorConfigScope
+      body?: {
+        [key: string]: unknown
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "scope" },
+            { key: "body", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      OperatorConfigUpdateResponses,
+      OperatorConfigUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/operator/config",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Replace a config file
+   *
+   * Replace the global or project config file with the given JSONC text. The text is validated before it is written.
+   */
+  public write<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      scope: OperatorConfigScope
+      text?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "scope" },
+            { in: "body", key: "text" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<OperatorConfigWriteResponses, OperatorConfigWriteErrors, ThrowOnError>({
+      url: "/operator/config/raw",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get config JSON schema
+   *
+   * The JSON schema of the config file, for building editors.
+   */
+  public schema<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorConfigSchemaResponses,
+      OperatorConfigSchemaErrors,
+      ThrowOnError
+    >({
+      url: "/operator/config/schema",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Agent extends HeyApiClient {
+  /**
+   * List agents with their source
+   *
+   * Every agent in this project, including hidden ones, with where it is defined (built-in, config or a markdown file) and how many of the project's sessions use it.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<OperatorAgentListResponses, OperatorAgentListErrors, ThrowOnError>({
+      url: "/operator/agent",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Tool extends HeyApiClient {
+  /**
+   * List tools with their origin
+   *
+   * Every tool available in this project: built-in, custom tool files, plugin tools and tools from connected MCP servers.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<OperatorToolListResponses, OperatorToolListErrors, ThrowOnError>({
+      url: "/operator/tool",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Operator extends HeyApiClient {
+  /**
+   * Get server status
+   *
+   * The server's version, start time and platform.
+   */
+  public status<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<OperatorStatusResponses, OperatorStatusErrors, ThrowOnError>({
+      url: "/operator/status",
+      ...options,
+    })
+  }
+
+  /**
+   * Get usage statistics
+   *
+   * Session, token and cost totals, usage by agent, and a per-day series for the last `days` days (default 14). `offset` is the viewer's UTC offset in minutes, used to group days.
+   */
+  public stats<ThrowOnError extends boolean = false>(
+    parameters?: {
+      days?: string
+      offset?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "days" },
+            { in: "query", key: "offset" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<OperatorStatsResponses, OperatorStatsErrors, ThrowOnError>({
+      url: "/operator/stats",
+      ...options,
+      ...params,
+    })
+  }
+
+  private _session?: Session2
+  get session(): Session2 {
+    return (this._session ??= new Session2({ client: this.client }))
+  }
+
+  private _permission?: Permission
+  get permission(): Permission {
+    return (this._permission ??= new Permission({ client: this.client }))
+  }
+
+  private _config?: Config2
+  get config(): Config2 {
+    return (this._config ??= new Config2({ client: this.client }))
+  }
+
+  private _agent?: Agent
+  get agent(): Agent {
+    return (this._agent ??= new Agent({ client: this.client }))
+  }
+
+  private _tool?: Tool
+  get tool(): Tool {
+    return (this._tool ??= new Tool({ client: this.client }))
+  }
+}
+
 export class Event extends HeyApiClient {
   /**
    * Subscribe to events
@@ -1425,7 +1783,7 @@ export class Event extends HeyApiClient {
   }
 }
 
-export class Config2 extends HeyApiClient {
+export class Config3 extends HeyApiClient {
   /**
    * Get configuration
    *
@@ -1524,7 +1882,7 @@ export class Config2 extends HeyApiClient {
   }
 }
 
-export class Tool extends HeyApiClient {
+export class Tool2 extends HeyApiClient {
   /**
    * List tools
    *
@@ -3093,7 +3451,7 @@ export class Question extends HeyApiClient {
   }
 }
 
-export class Permission extends HeyApiClient {
+export class Permission2 extends HeyApiClient {
   /**
    * List pending permissions
    *
@@ -3370,7 +3728,7 @@ export class Provider extends HeyApiClient {
   }
 }
 
-export class Session2 extends HeyApiClient {
+export class Session3 extends HeyApiClient {
   /**
    * List sessions
    *
@@ -5103,128 +5461,6 @@ export class Merge extends HeyApiClient {
   }
 }
 
-export class Config3 extends HeyApiClient {
-  /**
-   * List config layers
-   *
-   * List the config files that apply to this project, in load order, and the file a global or project write goes to.
-   */
-  public layers<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<
-      OperatorConfigLayersResponses,
-      OperatorConfigLayersErrors,
-      ThrowOnError
-    >({
-      url: "/operator/config/layer",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Update config at a scope
-   *
-   * Merge a patch into the global or project config file, keeping comments. A null value removes the key so the inherited value applies. The result is validated before it is written.
-   */
-  public update<ThrowOnError extends boolean = false>(
-    parameters: {
-      directory?: string
-      workspace?: string
-      scope: OperatorConfigScope
-      body?: {
-        [key: string]: unknown
-      }
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "query", key: "scope" },
-            { key: "body", map: "body" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).patch<
-      OperatorConfigUpdateResponses,
-      OperatorConfigUpdateErrors,
-      ThrowOnError
-    >({
-      url: "/operator/config",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Get config JSON schema
-   *
-   * The JSON schema of the config file, for building editors.
-   */
-  public schema<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<
-      OperatorConfigSchemaResponses,
-      OperatorConfigSchemaErrors,
-      ThrowOnError
-    >({
-      url: "/operator/config/schema",
-      ...options,
-      ...params,
-    })
-  }
-}
-
-export class Operator extends HeyApiClient {
-  private _config?: Config3
-  get config(): Config3 {
-    return (this._config ??= new Config3({ client: this.client }))
-  }
-}
-
 export class Health extends HeyApiClient {
   /**
    * Check server health
@@ -5263,7 +5499,7 @@ export class Location extends HeyApiClient {
   }
 }
 
-export class Agent extends HeyApiClient {
+export class Agent2 extends HeyApiClient {
   /**
    * List agents
    *
@@ -5372,7 +5608,7 @@ export class Revert extends HeyApiClient {
   }
 }
 
-export class Permission2 extends HeyApiClient {
+export class Permission3 extends HeyApiClient {
   /**
    * List session permission requests
    *
@@ -5627,7 +5863,7 @@ export class Question2 extends HeyApiClient {
   }
 }
 
-export class Session3 extends HeyApiClient {
+export class Session4 extends HeyApiClient {
   /**
    * List sessions
    *
@@ -6066,9 +6302,9 @@ export class Session3 extends HeyApiClient {
     return (this._revert ??= new Revert({ client: this.client }))
   }
 
-  private _permission?: Permission2
-  get permission(): Permission2 {
-    return (this._permission ??= new Permission2({ client: this.client }))
+  private _permission?: Permission3
+  get permission(): Permission3 {
+    return (this._permission ??= new Permission3({ client: this.client }))
   }
 
   private _question?: Question2
@@ -6596,7 +6832,7 @@ export class Saved extends HeyApiClient {
   }
 }
 
-export class Permission3 extends HeyApiClient {
+export class Permission4 extends HeyApiClient {
   private _request?: Request
   get request(): Request {
     return (this._request ??= new Request({ client: this.client }))
@@ -7202,14 +7438,14 @@ export class V2 extends HeyApiClient {
     return (this._location ??= new Location({ client: this.client }))
   }
 
-  private _agent?: Agent
-  get agent(): Agent {
-    return (this._agent ??= new Agent({ client: this.client }))
+  private _agent?: Agent2
+  get agent(): Agent2 {
+    return (this._agent ??= new Agent2({ client: this.client }))
   }
 
-  private _session?: Session3
-  get session(): Session3 {
-    return (this._session ??= new Session3({ client: this.client }))
+  private _session?: Session4
+  get session(): Session4 {
+    return (this._session ??= new Session4({ client: this.client }))
   }
 
   private _model?: Model
@@ -7232,9 +7468,9 @@ export class V2 extends HeyApiClient {
     return (this._credential ??= new Credential({ client: this.client }))
   }
 
-  private _permission?: Permission3
-  get permission(): Permission3 {
-    return (this._permission ??= new Permission3({ client: this.client }))
+  private _permission?: Permission4
+  get permission(): Permission4 {
+    return (this._permission ??= new Permission4({ client: this.client }))
   }
 
   private _fs?: Fs
@@ -7306,19 +7542,24 @@ export class OpencodeClient extends HeyApiClient {
     return (this._global ??= new Global({ client: this.client }))
   }
 
+  private _operator?: Operator
+  get operator(): Operator {
+    return (this._operator ??= new Operator({ client: this.client }))
+  }
+
   private _event?: Event
   get event(): Event {
     return (this._event ??= new Event({ client: this.client }))
   }
 
-  private _config?: Config2
-  get config(): Config2 {
-    return (this._config ??= new Config2({ client: this.client }))
+  private _config?: Config3
+  get config(): Config3 {
+    return (this._config ??= new Config3({ client: this.client }))
   }
 
-  private _tool?: Tool
-  get tool(): Tool {
-    return (this._tool ??= new Tool({ client: this.client }))
+  private _tool?: Tool2
+  get tool(): Tool2 {
+    return (this._tool ??= new Tool2({ client: this.client }))
   }
 
   private _worktree?: Worktree
@@ -7386,9 +7627,9 @@ export class OpencodeClient extends HeyApiClient {
     return (this._question ??= new Question({ client: this.client }))
   }
 
-  private _permission?: Permission
-  get permission(): Permission {
-    return (this._permission ??= new Permission({ client: this.client }))
+  private _permission?: Permission2
+  get permission(): Permission2 {
+    return (this._permission ??= new Permission2({ client: this.client }))
   }
 
   private _provider?: Provider
@@ -7396,9 +7637,9 @@ export class OpencodeClient extends HeyApiClient {
     return (this._provider ??= new Provider({ client: this.client }))
   }
 
-  private _session?: Session2
-  get session(): Session2 {
-    return (this._session ??= new Session2({ client: this.client }))
+  private _session?: Session3
+  get session(): Session3 {
+    return (this._session ??= new Session3({ client: this.client }))
   }
 
   private _part?: Part
@@ -7419,11 +7660,6 @@ export class OpencodeClient extends HeyApiClient {
   private _merge?: Merge
   get merge(): Merge {
     return (this._merge ??= new Merge({ client: this.client }))
-  }
-
-  private _operator?: Operator
-  get operator(): Operator {
-    return (this._operator ??= new Operator({ client: this.client }))
   }
 
   private _v2?: V2

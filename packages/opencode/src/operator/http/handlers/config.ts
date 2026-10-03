@@ -15,24 +15,22 @@ export const operatorConfigHandlers = HttpApiBuilder.group(InstanceHttpApi, "ope
     const config = yield* Config.Service
     const bridge = yield* EffectBridge.make()
 
-    const update = Effect.fn("OperatorConfigHttpApi.update")(function* (ctx: {
-      query: { scope: OperatorConfig.Scope }
-      payload: Record<string, unknown>
-    }) {
-      const result = yield* operatorConfig
-        .update(ctx.query.scope, ctx.payload)
-        .pipe(
-          Effect.mapError(
-            (error) =>
-              new ApiOperatorConfigInvalidError({
-                name: "OperatorConfigInvalidError",
-                data: { path: error.path, message: error.message },
-              }),
-          ),
-        )
+    // Global config feeds every project, so every instance reloads; a project write reloads this one.
+    const apply = Effect.fnUntraced(function* (
+      scope: OperatorConfig.Scope,
+      write: Effect.Effect<typeof OperatorConfig.UpdateResult.Type, OperatorConfig.InvalidError>,
+    ) {
+      const result = yield* write.pipe(
+        Effect.mapError(
+          (error) =>
+            new ApiOperatorConfigInvalidError({
+              name: "OperatorConfigInvalidError",
+              data: { path: error.path, message: error.message },
+            }),
+        ),
+      )
       if (!result.changed) return result
-      // Global config feeds every project, so every instance reloads; a project write reloads this one.
-      if (ctx.query.scope === "global") {
+      if (scope === "global") {
         yield* config.invalidate()
         bridge.fork(disposeAllInstancesAndEmitGlobalDisposed({ swallowErrors: true }))
         return result
@@ -43,7 +41,8 @@ export const operatorConfigHandlers = HttpApiBuilder.group(InstanceHttpApi, "ope
 
     return handlers
       .handle("layers", () => operatorConfig.layers())
-      .handle("update", update)
+      .handle("update", (ctx) => apply(ctx.query.scope, operatorConfig.update(ctx.query.scope, ctx.payload)))
+      .handle("write", (ctx) => apply(ctx.query.scope, operatorConfig.write(ctx.query.scope, ctx.payload.text)))
       .handle("schema", () => Effect.sync(() => OperatorConfig.jsonSchema()))
   }),
 )

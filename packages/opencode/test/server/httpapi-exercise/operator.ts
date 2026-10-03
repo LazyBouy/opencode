@@ -55,6 +55,75 @@ export const operatorScenarios: Scenario[] = [
     .patch("/operator/config", "operator.config.update.invalid")
     .at((ctx) => ({ path: "/operator/config?scope=project", headers: ctx.headers(), body: { username: 1 } }))
     .status(400),
+  http.protected
+    .get("/operator/status", "operator.status")
+    .global()
+    .json(200, (body) => {
+      object(body)
+      check(typeof body.version === "string", "status should include the version")
+      check(typeof body.startedAt === "number" && body.startedAt <= Date.now(), "status should include the start time")
+    }),
+  http.protected
+    .get("/operator/session", "operator.session.list")
+    .seeded((ctx) => ctx.session({ title: "Operator session" }))
+    .at((ctx) => ({ path: `/operator/session?directory=${encodeURIComponent(ctx.directory ?? "")}`, headers: ctx.headers() }))
+    .json(200, (body, ctx) => {
+      array(body)
+      check(
+        body.some((session) => isRecord(session) && session.id === ctx.state.id),
+        "the seeded session should be listed for its directory",
+      )
+    }),
+  http.protected
+    .get("/operator/stats", "operator.stats")
+    .global()
+    .at(() => ({ path: "/operator/stats?days=3&offset=0" }))
+    .json(200, (body) => {
+      object(body)
+      array(body.days)
+      check(body.days.length === 3, "stats should cover the requested days")
+      object(body.all)
+    }),
+  http.protected
+    .get("/operator/permission", "operator.permission.pending")
+    .global()
+    .json(200, array),
+  http.protected.get("/operator/agent", "operator.agent.list").json(200, (body) => {
+    array(body)
+    const build = body.find((agent) => isRecord(agent) && agent.name === "build")
+    object(build)
+    object(build.source)
+    check(build.source.kind === "builtin", "build should be a built-in agent")
+  }),
+  http.protected.get("/operator/tool", "operator.tool.list").json(200, (body) => {
+    array(body)
+    check(
+      body.some((tool) => isRecord(tool) && tool.id === "read" && tool.origin === "builtin"),
+      "read should be listed as a built-in tool",
+    )
+  }),
+  http.protected
+    .put("/operator/config/raw", "operator.config.write")
+    .mutating()
+    .at((ctx) => ({
+      path: "/operator/config/raw?scope=project",
+      headers: ctx.headers(),
+      body: { text: '{\n  // by hand\n  "username": "httpapi-raw"\n}\n' },
+    }))
+    .jsonEffect(
+      200,
+      (body) =>
+        Effect.gen(function* () {
+          object(body)
+          const text = yield* Effect.promise(() => Bun.file(String(body.path)).text())
+          check(text.includes("// by hand"), "the raw text should be written as given")
+        }),
+      "status",
+    ),
+  http.protected
+    .put("/operator/config/raw", "operator.config.write.invalid")
+    .at((ctx) => ({ path: "/operator/config/raw?scope=project", headers: ctx.headers(), body: { text: "{ nope" } }))
+    .status(400),
   http.protected.get("/operator/config/schema", "operator.config.schema").json(200, (body) => {
     object(body)
     object(body.properties)

@@ -29,7 +29,7 @@ const withGlobalDirectory = <A, E, R>(body: (dir: string) => Effect.Effect<A, E,
     )
   })
 
-const text = (file: string) => Effect.promise(() => fs.readFile(file, "utf8"))
+const readText = (file: string) => Effect.promise(() => fs.readFile(file, "utf8"))
 
 it.instance("a project write creates .opencode/opencode.jsonc and lists it as a source", () =>
   Effect.gen(function* () {
@@ -40,7 +40,7 @@ it.instance("a project write creates .opencode/opencode.jsonc and lists it as a 
     const layers = yield* config.layers()
 
     expect(result).toEqual({ path: path.join(directory, ".opencode", "opencode.jsonc"), changed: true })
-    expect(JSON.parse(yield* text(result.path))).toEqual({ username: "operator" })
+    expect(JSON.parse(yield* readText(result.path))).toEqual({ username: "operator" })
     expect(layers.targets.project).toBe(result.path)
     expect(layers.sources.findLast((source) => source.kind === "directory")?.path).toBe(result.path)
   }),
@@ -58,7 +58,7 @@ it.instance("a project write edits the existing project file, keeping comments, 
     const result = yield* config.update("project", { share: null, username: "after" })
 
     expect(result.path).toBe(file)
-    const written = yield* text(file)
+    const written = yield* readText(file)
     expect(written).toContain("// settings for this repo")
     expect(written).toContain("// shown in the chat")
     expect(written).toContain('"username": "after"')
@@ -101,11 +101,29 @@ it.instance("a global write goes to the global config file", () =>
       const layers = yield* config.layers()
 
       expect(result.path).toBe(path.join(dir, "opencode.jsonc"))
-      expect(JSON.parse(yield* text(result.path))).toEqual({ merge: { adapters: { claude: { enabled: false } } } })
+      expect(JSON.parse(yield* readText(result.path))).toEqual({ merge: { adapters: { claude: { enabled: false } } } })
       expect(layers.sources.find((source) => source.kind === "global")?.path).toBe(result.path)
       expect(layers.targets.global).toBe(result.path)
     }),
   ),
+)
+
+it.instance("a raw write replaces the file after validating it", () =>
+  Effect.gen(function* () {
+    const { directory } = yield* TestInstance
+    const config = yield* OperatorConfig.Service
+    const text = '{\n  // edited by hand\n  "username": "raw"\n}\n'
+
+    const result = yield* config.write("project", text)
+    expect(result).toEqual({ path: path.join(directory, ".opencode", "opencode.jsonc"), changed: true })
+    expect(yield* readText(result.path)).toBe(text)
+
+    const exit = yield* config.write("project", '{ "share": "sometimes" }').pipe(Effect.exit)
+    expect(Exit.isFailure(exit)).toBe(true)
+    expect(yield* readText(result.path)).toBe(text)
+    const broken = yield* config.write("project", "{ not json").pipe(Effect.exit)
+    expect(Exit.isFailure(broken)).toBe(true)
+  }),
 )
 
 it.effect("the JSON schema describes the fork's config keys", () =>

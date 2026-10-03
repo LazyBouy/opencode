@@ -92,6 +92,7 @@ import { globalHandlers } from "./handlers/global"
 import { instanceHandlers } from "./handlers/instance"
 import { mcpHandlers } from "./handlers/mcp"
 import { operatorHandlers } from "@/operator/http/handlers"
+import { operatorRootRoutes } from "@/operator/http/routes"
 import { permissionHandlers } from "./handlers/permission"
 import { projectHandlers } from "./handlers/project"
 import { projectCopyHandlers } from "./handlers/project-copy"
@@ -279,6 +280,7 @@ export function createRoutes(
 
   return Layer.mergeAll(
     rootApiRoutes,
+    operatorRootRoutes,
     eventApiRoutes,
     ptyConnectApiRoutes,
     instanceRoutes,

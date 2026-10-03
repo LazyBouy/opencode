@@ -2060,6 +2060,146 @@ export type Config = {
   }
 }
 
+export type OperatorStatus = {
+  version: string
+  startedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  platform: string
+  arch: string
+}
+
+export type ProjectSummary = {
+  id: string
+  name?: string
+  worktree: string
+}
+
+export type GlobalSession = {
+  id: string
+  slug: string
+  projectID: string
+  workspaceID?: string
+  directory: string
+  path?: string
+  parentID?: string
+  summary?: {
+    additions: number
+    deletions: number
+    files: number
+    diffs?: Array<SnapshotFileDiff>
+  }
+  cost?: number
+  tokens?: {
+    input: number
+    output: number
+    reasoning: number
+    cache: {
+      read: number
+      write: number
+    }
+  }
+  share?: {
+    url: string
+  }
+  title: string
+  agent?: string
+  model?: {
+    id: string
+    providerID: string
+    variant?: string
+  }
+  version: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+    updated: number
+    compacting?: number
+    archived?: number
+  }
+  permission?: PermissionRuleset
+  revert?: {
+    messageID: string
+    partID?: string
+    snapshot?: string
+    diff?: string
+  }
+  project: ProjectSummary | null
+}
+
+export type OperatorStats = {
+  /**
+   * Every session, including archived ones
+   */
+  all: {
+    sessions: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    projects: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    cost: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    tokens: {
+      input: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      output: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      reasoning: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      cacheRead: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      cacheWrite: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+  }
+  /**
+   * Sessions started within the requested number of days
+   */
+  range: {
+    sessions: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    projects: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    cost: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    tokens: {
+      input: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      output: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      reasoning: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      cacheRead: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      cacheWrite: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+  }
+  activeToday: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  /**
+   * Sessions started within the range, by agent
+   */
+  agents: Array<{
+    agent: string
+    sessions: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    cost: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    lastUsed: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }>
+  /**
+   * One entry per day of the range, oldest first, including empty days
+   */
+  days: Array<{
+    day: string
+    sessions: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    cost: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    tokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }>
+}
+
+export type PermissionRequest = {
+  id: string
+  sessionID: string
+  permission: string
+  patterns: Array<string>
+  metadata: {
+    [key: string]: unknown
+  }
+  always: Array<string>
+  tool?: {
+    messageID: string
+    callID: string
+  }
+}
+
+export type OperatorPendingPermission = {
+  directory: string
+  time: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  request: PermissionRequest
+}
+
 export type Model = {
   id: string
   providerID: string
@@ -2215,66 +2355,6 @@ export type WorktreeRemoveInput = {
 
 export type WorktreeResetInput = {
   directory: string
-}
-
-export type ProjectSummary = {
-  id: string
-  name?: string
-  worktree: string
-}
-
-export type GlobalSession = {
-  id: string
-  slug: string
-  projectID: string
-  workspaceID?: string
-  directory: string
-  path?: string
-  parentID?: string
-  summary?: {
-    additions: number
-    deletions: number
-    files: number
-    diffs?: Array<SnapshotFileDiff>
-  }
-  cost?: number
-  tokens?: {
-    input: number
-    output: number
-    reasoning: number
-    cache: {
-      read: number
-      write: number
-    }
-  }
-  share?: {
-    url: string
-  }
-  title: string
-  agent?: string
-  model?: {
-    id: string
-    providerID: string
-    variant?: string
-  }
-  version: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-    updated: number
-    compacting?: number
-    archived?: number
-  }
-  permission?: PermissionRuleset
-  revert?: {
-    messageID: string
-    partID?: string
-    snapshot?: string
-    diff?: string
-  }
-  project: ProjectSummary | null
 }
 
 export type McpResource = {
@@ -2494,21 +2574,6 @@ export type QuestionNotFoundError = {
   _tag: "QuestionNotFoundError"
   requestID: string
   message: string
-}
-
-export type PermissionRequest = {
-  id: string
-  sessionID: string
-  permission: string
-  patterns: Array<string>
-  metadata: {
-    [key: string]: unknown
-  }
-  always: Array<string>
-  tool?: {
-    messageID: string
-    callID: string
-  }
 }
 
 export type PermissionNotFoundError = {
@@ -2741,6 +2806,52 @@ export type OperatorConfigInvalidError = {
     path: string
     message: string
   }
+}
+
+export type OperatorAgentSource = {
+  kind: "builtin" | "config" | "file"
+  path?: string
+  /**
+   * A built-in agent that config or a file changes
+   */
+  customized: boolean
+}
+
+export type OperatorAgent = {
+  name: string
+  description?: string
+  mode: "subagent" | "primary" | "all"
+  native?: boolean
+  hidden?: boolean
+  topP?: number
+  temperature?: number
+  color?: string
+  permission: PermissionRuleset
+  model?: {
+    modelID: string
+    providerID: string
+  }
+  variant?: string
+  prompt?: string
+  options: {
+    [key: string]: unknown
+  }
+  steps?: number
+  source: OperatorAgentSource
+  /**
+   * Sessions in this project that use the agent
+   */
+  sessions: {
+    total: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    lastUsed?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+}
+
+export type OperatorTool = {
+  id: string
+  description: string
+  origin: "builtin" | "custom" | "plugin" | "mcp"
+  source?: string
 }
 
 export type UnauthorizedError = {
@@ -7541,6 +7652,118 @@ export type GlobalUpgradeResponses = {
 
 export type GlobalUpgradeResponse = GlobalUpgradeResponses[keyof GlobalUpgradeResponses]
 
+export type OperatorStatusData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/operator/status"
+}
+
+export type OperatorStatusErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorStatusError = OperatorStatusErrors[keyof OperatorStatusErrors]
+
+export type OperatorStatusResponses = {
+  /**
+   * Server status
+   */
+  200: OperatorStatus
+}
+
+export type OperatorStatusResponse = OperatorStatusResponses[keyof OperatorStatusResponses]
+
+export type OperatorSessionListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    agent?: string
+    search?: string
+    roots?: "true" | "false"
+    archived?: "true" | "false"
+    cursor?: string
+    limit?: string
+  }
+  url: "/operator/session"
+}
+
+export type OperatorSessionListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorSessionListError = OperatorSessionListErrors[keyof OperatorSessionListErrors]
+
+export type OperatorSessionListResponses = {
+  /**
+   * Sessions
+   */
+  200: Array<GlobalSession>
+}
+
+export type OperatorSessionListResponse = OperatorSessionListResponses[keyof OperatorSessionListResponses]
+
+export type OperatorStatsData = {
+  body?: never
+  path?: never
+  query?: {
+    days?: string
+    offset?: string
+  }
+  url: "/operator/stats"
+}
+
+export type OperatorStatsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorStatsError = OperatorStatsErrors[keyof OperatorStatsErrors]
+
+export type OperatorStatsResponses = {
+  /**
+   * Usage statistics
+   */
+  200: OperatorStats
+}
+
+export type OperatorStatsResponse = OperatorStatsResponses[keyof OperatorStatsResponses]
+
+export type OperatorPermissionPendingData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/operator/permission"
+}
+
+export type OperatorPermissionPendingErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorPermissionPendingError = OperatorPermissionPendingErrors[keyof OperatorPermissionPendingErrors]
+
+export type OperatorPermissionPendingResponses = {
+  /**
+   * Pending permission requests
+   */
+  200: Array<OperatorPendingPermission>
+}
+
+export type OperatorPermissionPendingResponse =
+  OperatorPermissionPendingResponses[keyof OperatorPermissionPendingResponses]
+
 export type EventSubscribeData = {
   body?: never
   path?: never
@@ -11503,6 +11726,37 @@ export type OperatorConfigUpdateResponses = {
 
 export type OperatorConfigUpdateResponse = OperatorConfigUpdateResponses[keyof OperatorConfigUpdateResponses]
 
+export type OperatorConfigWriteData = {
+  body?: {
+    text: string
+  }
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    scope: OperatorConfigScope
+  }
+  url: "/operator/config/raw"
+}
+
+export type OperatorConfigWriteErrors = {
+  /**
+   * OperatorConfigInvalidError | InvalidRequestError
+   */
+  400: OperatorConfigInvalidError | InvalidRequestError
+}
+
+export type OperatorConfigWriteError = OperatorConfigWriteErrors[keyof OperatorConfigWriteErrors]
+
+export type OperatorConfigWriteResponses = {
+  /**
+   * Written file
+   */
+  200: OperatorConfigUpdateResult
+}
+
+export type OperatorConfigWriteResponse = OperatorConfigWriteResponses[keyof OperatorConfigWriteResponses]
+
 export type OperatorConfigSchemaData = {
   body?: never
   path?: never
@@ -11532,6 +11786,62 @@ export type OperatorConfigSchemaResponses = {
 }
 
 export type OperatorConfigSchemaResponse = OperatorConfigSchemaResponses[keyof OperatorConfigSchemaResponses]
+
+export type OperatorAgentListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/agent"
+}
+
+export type OperatorAgentListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorAgentListError = OperatorAgentListErrors[keyof OperatorAgentListErrors]
+
+export type OperatorAgentListResponses = {
+  /**
+   * Agents
+   */
+  200: Array<OperatorAgent>
+}
+
+export type OperatorAgentListResponse = OperatorAgentListResponses[keyof OperatorAgentListResponses]
+
+export type OperatorToolListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/tool"
+}
+
+export type OperatorToolListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorToolListError = OperatorToolListErrors[keyof OperatorToolListErrors]
+
+export type OperatorToolListResponses = {
+  /**
+   * Tools
+   */
+  200: Array<OperatorTool>
+}
+
+export type OperatorToolListResponse = OperatorToolListResponses[keyof OperatorToolListResponses]
 
 export type V2HealthGetData = {
   body?: never

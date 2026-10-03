@@ -13,6 +13,7 @@ import { described } from "@/server/routes/instance/httpapi/groups/metadata"
 export const OperatorConfigPaths = {
   layers: "/operator/config/layer",
   update: "/operator/config",
+  write: "/operator/config/raw",
   schema: "/operator/config/schema",
 } as const
 
@@ -52,6 +53,19 @@ export const OperatorConfigApi = HttpApi.make("operator-config")
             summary: "Update config at a scope",
             description:
               "Merge a patch into the global or project config file, keeping comments. A null value removes the key so the inherited value applies. The result is validated before it is written.",
+          }),
+        ),
+        HttpApiEndpoint.put("write", OperatorConfigPaths.write, {
+          query: Schema.Struct({ ...WorkspaceRoutingQueryFields, scope: OperatorConfig.Scope }),
+          payload: Schema.Struct({ text: Schema.String }),
+          success: described(OperatorConfig.UpdateResult, "Written file"),
+          error: ApiOperatorConfigInvalidError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.config.write",
+            summary: "Replace a config file",
+            description:
+              "Replace the global or project config file with the given JSONC text. The text is validated before it is written.",
           }),
         ),
         HttpApiEndpoint.get("schema", OperatorConfigPaths.schema, {

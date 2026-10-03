@@ -51,6 +51,8 @@ export interface Interface {
     scope: Scope,
     patch: Record<string, unknown>,
   ) => Effect.Effect<typeof UpdateResult.Type, InvalidError>
+  /** Replaces the scope's config file with `text` after validating it, for raw JSONC editing. */
+  readonly write: (scope: Scope, text: string) => Effect.Effect<typeof UpdateResult.Type, InvalidError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorConfig") {}
@@ -111,10 +113,7 @@ const layer = Layer.effect(
       return { sources: list, targets: yield* targets(list) }
     })
 
-    const update = Effect.fn("OperatorConfig.update")(function* (scope: Scope, patch: Record<string, unknown>) {
-      const file = (yield* targets(yield* sources()))[scope]
-      const before = (yield* fs.readFileStringSafe(file).pipe(Effect.orElseSucceed(() => undefined))) ?? "{}"
-      const after = patchJsonc(before, patch)
+    const save = Effect.fnUntraced(function* (file: string, before: string, after: string) {
       if (after === before) return { path: file, changed: false }
       yield* Effect.try({
         try: () => ConfigParse.schema(ConfigV1.Info, ConfigV2Compat.lower(ConfigParse.jsonc(after, file), file).value, file),
@@ -124,7 +123,22 @@ const layer = Layer.effect(
       return { path: file, changed: true }
     })
 
-    return Service.of({ layers, update })
+    const current = Effect.fnUntraced(function* (file: string) {
+      return yield* fs.readFileStringSafe(file).pipe(Effect.orElseSucceed(() => undefined))
+    })
+
+    const update = Effect.fn("OperatorConfig.update")(function* (scope: Scope, patch: Record<string, unknown>) {
+      const file = (yield* targets(yield* sources()))[scope]
+      const before = (yield* current(file)) ?? "{}"
+      return yield* save(file, before, patchJsonc(before, patch))
+    })
+
+    const write = Effect.fn("OperatorConfig.write")(function* (scope: Scope, text: string) {
+      const file = (yield* targets(yield* sources()))[scope]
+      return yield* save(file, (yield* current(file)) ?? "", text)
+    })
+
+    return Service.of({ layers, update, write })
   }),
 )
 
