@@ -1,6 +1,7 @@
 ;(function () {
   var key = "opencode-theme-id"
-  var themeId = localStorage.getItem(key) || "oc-2"
+  // Keep this default in sync with ThemeProvider's defaultTheme in src/app.tsx.
+  var themeId = localStorage.getItem(key) || "iphi"
 
   if (themeId === "oc-1") {
     themeId = "oc-2"
@@ -15,11 +16,13 @@
 
   document.documentElement.dataset.theme = themeId
   document.documentElement.dataset.colorScheme = mode
-  document.documentElement.style.backgroundColor = isDark ? "#080808" : "#fafafa"
+  // Paint the theme's backdrop before its CSS loads so the first frame does not flash.
+  var backdrop = themeId === "iphi" ? (isDark ? "#1b1c20" : "#e5e6e8") : isDark ? "#080808" : "#fafafa"
+  document.documentElement.style.backgroundColor = backdrop
 
   // Update theme-color meta tag to match app color scheme
   var metas = document.querySelectorAll("meta[name='theme-color']")
-  if (metas.length > 0) metas[0].setAttribute("content", isDark ? "#080808" : "#fafafa")
+  if (metas.length > 0) metas[0].setAttribute("content", backdrop)
 
   if (themeId === "oc-2") return
 

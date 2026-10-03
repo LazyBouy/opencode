@@ -1,0 +1,230 @@
+/*
+ * iphi skin: the iphi-frontend look (glass surfaces, a single orange accent, serif-italic display type,
+ * a dark project column) layered over the `iphi` color theme. Every rule is scoped to
+ * html[data-theme="iphi"], so all other themes render exactly as before.
+ *
+ * Tailwind utilities sit in a later layer than these rules, so where markup colors an element with a
+ * utility (bg-v2-*, text-v2-*), the skin re-scopes the CSS variable that utility reads instead of
+ * overriding the property.
+ */
+
+html[data-theme="iphi"] {
+  --theme-font-sans: "Work Sans";
+  --font-family-text: "Work Sans", "Inter", sans-serif;
+  --v2-font-family-sans: "Work Sans", "Inter", sans-serif;
+  --iphi-display: "Instrument Serif", Georgia, serif;
+
+  --iphi-orange-radial: radial-gradient(81.91% 49.83% at 50.17% 50%, #ff8d03 0%, #ff6600 100%);
+  --iphi-glass: rgba(255, 255, 255, 0.55);
+  --iphi-glass-strong: rgba(255, 255, 255, 0.72);
+  --iphi-glass-border: rgba(255, 255, 255, 0.2);
+  --iphi-glass-shadow: 0 8px 24px rgba(35, 37, 42, 0.06);
+  --iphi-ink: #23252a;
+  --iphi-sidebar: #23252a;
+  --iphi-sidebar-ink: #e5e6e8;
+  --iphi-sidebar-mute: #b8bec8;
+  --iphi-user-bubble: #ffe0cc;
+  --iphi-user-bubble-border: rgba(255, 102, 0, 0.28);
+  --iphi-assistant-rail: rgba(203, 122, 169, 0.45);
+  --merge-accent: #74b4fa;
+
+  --iphi-radius-card: 16px;
+  --iphi-radius-btn: 12px;
+  --iphi-radius-pill: 100px;
+}
+
+html[data-theme="iphi"][data-color-scheme="dark"] {
+  --iphi-glass: rgba(35, 37, 42, 0.55);
+  --iphi-glass-strong: rgba(35, 37, 42, 0.78);
+  --iphi-glass-border: rgba(255, 255, 255, 0.06);
+  --iphi-glass-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --iphi-sidebar: #141518;
+  --iphi-user-bubble: rgba(255, 102, 0, 0.16);
+  --iphi-user-bubble-border: rgba(255, 141, 3, 0.3);
+}
+
+/* Serif-italic display type for dialog titles and headings that opt in with .oc-display. */
+html[data-theme="iphi"] :is([data-slot="dialog-header-title"], [data-slot="dialog-title"]) {
+  font-family: var(--iphi-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 1.15em;
+}
+
+html[data-theme="iphi"] .oc-display {
+  font-family: var(--iphi-display);
+  font-style: italic;
+  letter-spacing: -0.01em;
+}
+
+/* Glass on floating surfaces only; large scrolling panes stay opaque for performance. */
+html[data-theme="iphi"]
+  :is(
+    [data-component="dropdown-menu-content"],
+    [data-component="dropdown-menu-sub-content"],
+    [data-component="popover-content"],
+    [data-component="toast"]
+  ) {
+  background: var(--iphi-glass-strong);
+  border: 1px solid var(--iphi-glass-border);
+  border-radius: var(--iphi-radius-btn);
+  box-shadow: var(--iphi-glass-shadow);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+html[data-theme="iphi"] [data-component="dialog-v2"] [data-slot="dialog-container"] {
+  background: var(--iphi-glass-strong);
+  border: 1px solid var(--iphi-glass-border);
+  border-radius: var(--iphi-radius-card);
+  box-shadow: var(--iphi-glass-shadow);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+html[data-theme="iphi"] [data-dock-surface="shell"] {
+  border-radius: var(--iphi-radius-card);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  html[data-theme="iphi"]
+    :is(
+      [data-component="dropdown-menu-content"],
+      [data-component="dropdown-menu-sub-content"],
+      [data-component="popover-content"],
+      [data-component="toast"],
+      [data-component="dialog-v2"] [data-slot="dialog-container"]
+    ) {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: var(--v2-background-bg-base);
+  }
+}
+
+/* Primary call to action: iphi's radial orange. Ink text keeps WCAG AA contrast on orange. */
+html[data-theme="iphi"] [data-component="button-v2"][data-variant="contrast"] {
+  background: var(--iphi-orange-radial);
+  color: var(--iphi-ink);
+  border-radius: var(--iphi-radius-btn);
+  transition:
+    filter 0.15s ease,
+    transform 0.1s ease;
+}
+
+html[data-theme="iphi"]
+  [data-component="button-v2"][data-variant="contrast"]:is(:hover, [data-state="hover"]):not(:disabled) {
+  background: var(--iphi-orange-radial);
+  filter: brightness(1.05);
+}
+
+html[data-theme="iphi"]
+  [data-component="button-v2"][data-variant="contrast"]:is(:active, [data-state="pressed"]):not(:disabled) {
+  background: var(--iphi-orange-radial);
+  transform: translateY(1px);
+}
+
+/* Secondary buttons: iphi's glass ghost button. */
+html[data-theme="iphi"] [data-component="button-v2"][data-variant="neutral"] {
+  background: var(--iphi-glass);
+  border-radius: 10px;
+}
+
+html[data-theme="iphi"]
+  [data-component="button-v2"][data-variant="neutral"]:is(:hover, [data-state="hover"]):not(:disabled) {
+  background: var(--iphi-glass-strong);
+}
+
+/* Tabs: the active tab carries a 2px orange underline. */
+html[data-theme="iphi"] [data-component="tabs-v2"] [data-slot="tabs-v2-trigger-wrapper"]:has([data-selected]) {
+  box-shadow: inset 0 -2px 0 var(--v2-border-border-focus);
+}
+
+html[data-theme="iphi"] [data-component="tabs"] [data-selected] {
+  box-shadow: inset 0 -2px 0 var(--v2-border-border-focus);
+}
+
+/* Chat: peach user bubble with iphi's tucked corner; assistant output gets a soft pink rail. */
+/* `[data-color-scheme] body` outranks session-ui's per-scheme new-layout bubble rule. */
+html[data-theme="iphi"][data-color-scheme] body [data-component="user-message"] [data-slot="user-message-text"] {
+  background: var(--iphi-user-bubble);
+  border: 1px solid var(--iphi-user-bubble-border);
+  border-radius: 14px 14px 4px 14px;
+}
+
+html[data-theme="iphi"] [data-component="text-part"] {
+  border-left: 2px solid var(--iphi-assistant-rail);
+  padding-left: 12px;
+}
+
+/* Output projected from a merged external session keeps the blue merge rail, so it is never
+   mistaken for OpenCode's own answer. */
+html[data-theme="iphi"] [data-origin="merge"][data-origin-role="projection"] > [data-component="text-part"] {
+  border-left-color: var(--merge-accent);
+}
+
+html[data-theme="iphi"] [data-origin="merge"][data-origin-role="notice"] > [data-component="text-part"] {
+  border-left: 3px solid var(--merge-accent);
+}
+
+/* Tool calls read as cards. */
+html[data-theme="iphi"] [data-component="basic-tool-v2"] {
+  border-radius: var(--iphi-radius-btn);
+}
+
+/* The home project column becomes iphi's dark sidebar. Its rows are colored by utilities, so the
+   variables those utilities read are re-scoped here. */
+html[data-theme="iphi"] [data-component="home-projects"] {
+  /* Tailwind's --color-v2-* aliases resolve at :root, so they are re-pointed here as well. */
+  --v2-text-text-base: var(--iphi-sidebar-ink);
+  --v2-text-text-muted: var(--iphi-sidebar-mute);
+  --v2-text-text-faint: #8e9298;
+  --v2-icon-icon-base: var(--iphi-sidebar-ink);
+  --v2-icon-icon-muted: var(--iphi-sidebar-mute);
+  --v2-background-bg-layer-01: rgba(255, 255, 255, 0.06);
+  --v2-background-bg-layer-02: rgba(255, 255, 255, 0.1);
+  --v2-overlay-simple-overlay-hover: rgba(255, 255, 255, 0.06);
+  --v2-overlay-simple-overlay-pressed: rgba(255, 255, 255, 0.1);
+  --v2-border-border-base: rgba(255, 255, 255, 0.08);
+  --color-v2-text-text-base: var(--iphi-sidebar-ink);
+  --color-v2-text-text-muted: var(--iphi-sidebar-mute);
+  --color-v2-text-text-faint: #8e9298;
+  --color-v2-icon-icon-base: var(--iphi-sidebar-ink);
+  --color-v2-icon-icon-muted: var(--iphi-sidebar-mute);
+  --color-v2-background-bg-layer-01: rgba(255, 255, 255, 0.06);
+  --color-v2-background-bg-layer-02: rgba(255, 255, 255, 0.1);
+  --color-v2-overlay-simple-overlay-hover: rgba(255, 255, 255, 0.06);
+  --color-v2-overlay-simple-overlay-pressed: rgba(255, 255, 255, 0.1);
+  --color-v2-border-border-base: rgba(255, 255, 255, 0.08);
+  background: var(--iphi-sidebar);
+  color: var(--iphi-sidebar-ink);
+  border-radius: var(--iphi-radius-card);
+  padding: 16px 8px 16px 12px;
+}
+
+html[data-theme="iphi"] [data-component="home-projects"] [data-component="home-project-row"][data-selected] {
+  background: rgba(255, 102, 0, 0.16);
+  border-radius: 10px;
+}
+
+html[data-theme="iphi"] [data-component="home-projects"] [data-component="home-project-row"][data-selected] svg {
+  color: #ff8d03;
+}
+
+/* Titlebar: glass in light mode, ink in dark mode, so desktop window controls stay legible. */
+html[data-theme="iphi"] [data-slot="titlebar-v2"] {
+  --v2-background-bg-deep: var(--iphi-glass-strong);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--v2-border-border-muted);
+}
+
+html[data-theme="iphi"][data-color-scheme="dark"] [data-slot="titlebar-v2"] {
+  --v2-background-bg-deep: var(--iphi-sidebar);
+}
+
+/* Merge provenance and the merge pill pick up iphi's blue. */
+html[data-theme="iphi"] [data-component="merge-indicator"] {
+  background: var(--iphi-glass-strong);
+  border: 1px solid var(--iphi-glass-border);
+  border-radius: var(--iphi-radius-pill);
+}

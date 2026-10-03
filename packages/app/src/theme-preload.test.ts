@@ -34,6 +34,13 @@ describe("theme preload", () => {
     expect(document.getElementById("oc-theme-preload")).toBeNull()
   })
 
+  test("defaults to the iphi theme and paints its backdrop before mount", () => {
+    run()
+
+    expect(document.documentElement.dataset.theme).toBe("iphi")
+    expect(document.documentElement.style.backgroundColor).toBe("#e5e6e8")
+  })
+
   test("keeps cached css for non-default themes", () => {
     localStorage.setItem("opencode-theme-id", "nightowl")
     localStorage.setItem("opencode-theme-css-light", "--background-base:#fff;")

@@ -10,6 +10,23 @@
   font-style: normal;
 }
 
+/* SIL OFL fonts for the iphi theme; licences sit next to the files in /assets/fonts. */
+@font-face {
+  font-family: "Work Sans";
+  src: url("/assets/fonts/WorkSans-Variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Instrument Serif";
+  src: url("/assets/fonts/InstrumentSerif-Italic.ttf") format("truetype");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
 @font-face {
   font-family: "Inter";
   src: url("/assets/Inter.ttf") format("truetype");

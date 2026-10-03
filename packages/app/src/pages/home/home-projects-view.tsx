@@ -68,6 +68,7 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
   }
   return (
     <aside
+      data-component="home-projects"
       class={`
         mt-6 flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden
         lg:sticky lg:top-14 lg:mt-14 lg:h-[calc(100cqh-56px)] lg:self-start lg:pt-[52px]
@@ -79,7 +80,7 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
       }}
     >
       <div class="flex h-7 min-w-0 shrink-0 items-center justify-between pl-1.5 pr-3">
-        <div class="text-v2-text-text-muted [font-weight:530]">{props.language.t("home.projects")}</div>
+        <div class="oc-display text-v2-text-text-muted [font-weight:530]">{props.language.t("home.projects")}</div>
         <Show
           when={props.servers().length === 1 && !(props.projects().length === 0 && props.recentlyClosed().length > 0)}
         >

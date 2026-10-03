@@ -32,6 +32,12 @@ export default defineConfig({
   },
   use: {
     baseURL,
+    // Pin the previous default theme so layout- and pixel-sensitive specs keep their baselines;
+    // the iphi default is covered by e2e/regression/theme-iphi.spec.ts.
+    storageState: {
+      cookies: [],
+      origins: [{ origin: baseURL, localStorage: [{ name: "opencode-theme-id", value: "oc-2" }] }],
+    },
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
