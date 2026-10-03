@@ -8,7 +8,7 @@ import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
 import { useOpenSession, useOperatorClient } from "../data"
-import { formatAgo, formatCost, formatCount, shortPath } from "../format"
+import { formatAgo, formatCost, formatCount, sessionFolder, shortPath } from "../format"
 import { useOperatorScope } from "../scope"
 import { ColumnPicker } from "../ui/column-picker"
 import { type Column, DataTable } from "../ui/data-table"
@@ -56,8 +56,8 @@ export default function SessionsPage() {
     {
       id: "project",
       header: language.t("operator.column.project"),
-      value: (session) => session.project?.worktree ?? session.directory,
-      cell: (session) => <span title={session.directory}>{shortPath(session.project?.worktree ?? session.directory)}</span>,
+      value: (session) => sessionFolder(session),
+      cell: (session) => <span title={session.directory}>{shortPath(sessionFolder(session))}</span>,
     },
     { id: "agent", header: language.t("operator.column.agent"), value: (session) => session.agent, cell: (session) => session.agent ?? "" },
     {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { formatAgo, formatCost, formatCount, shortPath } from "./format"
+import { formatAgo, formatCost, formatCount, sessionFolder, shortPath } from "./format"
 
 describe("operator formatting", () => {
   test("money keeps cents, with more precision below a dollar", () => {
@@ -22,5 +22,11 @@ describe("operator formatting", () => {
     expect(shortPath("/root/projects/phi/i-phi")).toBe("…/phi/i-phi")
     expect(shortPath("C:\\work\\app")).toBe("…/work/app")
     expect(shortPath("/work")).toBe("/work")
+  })
+
+  test("a session's folder is its project root, or its own folder outside git projects", () => {
+    expect(sessionFolder({ directory: "/work/app/pkg", project: { worktree: "/work/app" } })).toBe("/work/app")
+    expect(sessionFolder({ directory: "/root/.local", project: { worktree: "/" } })).toBe("/root/.local")
+    expect(sessionFolder({ directory: "/tmp/x", project: null })).toBe("/tmp/x")
   })
 })

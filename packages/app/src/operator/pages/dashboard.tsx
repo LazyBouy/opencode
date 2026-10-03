@@ -6,7 +6,7 @@ import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
 import { useOpenSession, useOperatorClient, usePendingPermissions, useServerStatus } from "../data"
-import { formatAgo, formatCost, formatCount, shortPath } from "../format"
+import { formatAgo, formatCost, formatCount, sessionFolder, shortPath } from "../format"
 import { DataTable } from "../ui/data-table"
 import { PageHeader } from "../ui/page-header"
 import { StatTile } from "../ui/stat-tile"
@@ -124,7 +124,7 @@ export default function DashboardPage() {
               {
                 id: "project",
                 header: language.t("operator.column.project"),
-                cell: (session) => shortPath(session.project?.worktree ?? session.directory),
+                cell: (session) => shortPath(sessionFolder(session)),
               },
               { id: "agent", header: language.t("operator.column.agent"), cell: (session) => session.agent ?? "" },
               {

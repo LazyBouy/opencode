@@ -32,3 +32,9 @@ export function shortPath(value: string) {
   const parts = value.split(/[\\/]/).filter(Boolean)
   return parts.length <= 2 ? value : `…/${parts.slice(-2).join("/")}`
 }
+
+// Where a session ran: its project root, or its own folder for sessions outside a git project (whose
+// project is the global one, rooted at "/").
+export function sessionFolder(session: { directory: string; project?: { worktree: string } | null }) {
+  return session.project && session.project.worktree !== "/" ? session.project.worktree : session.directory
+}
