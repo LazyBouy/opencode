@@ -45,29 +45,29 @@ Re-check these after every upstream merge. **Risk** is how likely the file is to
 | `packages/opencode/src/session/processor.ts` | merge: `origin` on parts, `consume()` for adapter streams, doom-loop skip | high |
 | `packages/opencode/src/session/prompt.ts` | merge: turn branch and `/merge` dispatch | medium |
 | `packages/opencode/src/permission/index.ts` | merge: `dismiss` for cancelled child asks | low |
-| `packages/opencode/src/session/{message-v2,compaction}.ts`, `share/share-next.ts`, `cli/cmd/export.ts` | merge: keep projected parts out of the model, shares and exports | low |
+| `packages/opencode/src/session/message-v2.ts`, `packages/opencode/src/session/compaction.ts`, `packages/opencode/src/share/share-next.ts`, `packages/opencode/src/cli/cmd/export.ts` | merge: keep projected parts out of the model, shares and exports | low |
 | `packages/opencode/src/command/index.ts` | merge: built-in `/merge` command | low |
 | `packages/opencode/src/effect/app-runtime.ts` | merge: `MergeBinding` in the CLI runtime | low |
-| `packages/opencode/src/server/routes/instance/httpapi/{api,server}.ts` | mount the fork's routes: `OperatorApi` in InstanceHttpApi; `OperatorRootApi` in the OpenAPI document and `operatorRootRoutes` beside RootHttpApi (kept out of RootHttpApi so upstream tests that assemble it still work); `operatorHandlers` and `operatorNodes` (one line each) | low |
-| `packages/opencode/src/server/routes/instance/httpapi/{groups,handlers}/session.ts` | merge: `GET /session/:id/merge`, compaction guard | low |
-| `packages/core/src/session.ts`, `session/sql.ts` | merge: binding table and V2 prompt guard | low |
+| `packages/opencode/src/server/routes/instance/httpapi/api.ts`, `packages/opencode/src/server/routes/instance/httpapi/server.ts` | mount the fork's routes: `OperatorApi` in InstanceHttpApi; `OperatorRootApi` in the OpenAPI document and `operatorRootRoutes` beside RootHttpApi (kept out of RootHttpApi so upstream tests that assemble it still work); `operatorHandlers` and `operatorNodes` (one line each) | low |
+| `packages/opencode/src/server/routes/instance/httpapi/groups/session.ts`, `packages/opencode/src/server/routes/instance/httpapi/handlers/session.ts` | merge: `GET /session/:id/merge`, compaction guard | low |
+| `packages/core/src/session.ts`, `packages/core/src/session/sql.ts` | merge: binding table and V2 prompt guard | low |
 | `packages/core/src/v1/config/config.ts` | spread `ConfigForkV1.fields` (one line) | low |
-| `packages/schema/src/{event-manifest,v1/session}.ts` | merge: event and `origin` on parts | low |
+| `packages/schema/src/event-manifest.ts`, `packages/schema/src/v1/session.ts` | merge: event and `origin` on parts | low |
 | `packages/server/src/handlers/session.ts` | merge: `MergedError` → 409 | low |
 | `packages/app/src/app.tsx` | mount `<OperatorRoutes />`; default theme `iphi` | medium |
 | `packages/app/src/pages/layout-new.tsx` | mount `<OperatorSidebar />` | low |
 | `packages/app/src/context/layout.tsx` | `operator` route type (3 lines) | low |
 | `packages/app/src/context/language.tsx` | merge the fork dictionary (3 lines) | low |
 | `packages/app/src/components/settings-v2/dialog-settings-v2.tsx` | Adapters tab (trigger and content) | low |
-| `packages/app/src/context/{server-session,directory-sync,global-sync/*}.ts` | merge: binding store and event | low |
-| `packages/app/src/pages/session/timeline/{rows,message-timeline}.ts*`, `utils/session-export.ts` | merge: indicator and hidden duplicate summary | low |
+| `packages/app/src/context/server-session.ts`, `packages/app/src/context/directory-sync.ts`, `packages/app/src/context/global-sync/child-store.ts`, `packages/app/src/context/global-sync/types.ts` | merge: binding store and event | low |
+| `packages/app/src/pages/session/timeline/rows.ts`, `packages/app/src/pages/session/timeline/message-timeline.tsx`, `packages/app/src/utils/session-export.ts` | merge: indicator and hidden duplicate summary | low |
 | `packages/app/src/context/settings.tsx`, `public/oc-theme-preload.js`, `pages/home/home-projects-view.tsx`, `packages/desktop/src/main/windows.ts` | iphi theme defaults and display font | low |
-| `packages/session-ui/src/components/message-part.{tsx,css}` | merge: `data-origin` wrapper and rails | medium |
-| `packages/tui/src/**` (prompt, sync, session route and sidebar, transcript, theme index) | merge indicator and iphi theme in the TUI | low |
-| `packages/ui/src/styles/index.css`, `theme/context.tsx` | import the iphi skin; theme name | low |
+| `packages/session-ui/src/components/message-part.tsx`, `packages/session-ui/src/components/message-part.css` | merge: `data-origin` wrapper and rails | medium |
+| `packages/tui/src/component/prompt/index.tsx`, `packages/tui/src/context/sync.tsx`, `packages/tui/src/routes/session/index.tsx`, `packages/tui/src/routes/session/sidebar.tsx`, `packages/tui/src/util/transcript.ts`, `packages/tui/src/theme/index.ts` | merge indicator and iphi theme in the TUI | low |
+| `packages/ui/src/styles/index.css`, `packages/ui/src/theme/context.tsx` | import the iphi skin; theme name | low |
 | `packages/opencode/test/server/httpapi-exercise/index.ts` | spread `operatorScenarios` (one line) | low |
 | `packages/app/playwright.config.ts` | pin `oc-2` for pixel-sensitive specs | low |
-| Tests and snapshots: `event-manifest.test.ts`, help snapshot, `session/{compaction,tools}.test.ts`, `core/test/session-prompt.test.ts`, `bootstrap.test.ts`, `session-export.test.ts`, `theme-preload.test.ts` | counts, fakes and expectations for the above | low |
+| Tests and snapshots: `packages/opencode/test/event-manifest.test.ts`, `help-snapshots.test.ts.snap`, `packages/opencode/test/session/compaction.test.ts`, `packages/opencode/test/session/tools.test.ts`, `packages/core/test/session-prompt.test.ts`, `bootstrap.test.ts`, `session-export.test.ts`, `theme-preload.test.ts` | counts, fakes and expectations for the above | low |
 
 **Generated files** are never merged by hand. Regenerate them after a merge (see below):
 - `packages/sdk/**`
