@@ -145,6 +145,8 @@ import type {
   OperatorIdentitySaveResponses,
   OperatorPermissionPendingErrors,
   OperatorPermissionPendingResponses,
+  OperatorProjectListErrors,
+  OperatorProjectListResponses,
   OperatorSessionListErrors,
   OperatorSessionListResponses,
   OperatorStatsErrors,
@@ -1467,6 +1469,20 @@ export class Session2 extends HeyApiClient {
   }
 }
 
+export class Project extends HeyApiClient {
+  /**
+   * List projects with activity
+   *
+   * Every project the server knows, with its session count, cost and last activity, most recently active first.
+   */
+  public list<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<OperatorProjectListResponses, OperatorProjectListErrors, ThrowOnError>({
+      url: "/operator/project",
+      ...options,
+    })
+  }
+}
+
 export class Permission extends HeyApiClient {
   /**
    * List pending permission requests
@@ -2162,6 +2178,11 @@ export class Operator extends HeyApiClient {
   private _session?: Session2
   get session(): Session2 {
     return (this._session ??= new Session2({ client: this.client }))
+  }
+
+  private _project?: Project
+  get project(): Project {
+    return (this._project ??= new Project({ client: this.client }))
   }
 
   private _permission?: Permission
@@ -3335,7 +3356,7 @@ export class Mcp extends HeyApiClient {
   }
 }
 
-export class Project extends HeyApiClient {
+export class Project2 extends HeyApiClient {
   /**
    * List all projects
    *
@@ -8051,9 +8072,9 @@ export class OpencodeClient extends HeyApiClient {
     return (this._mcp ??= new Mcp({ client: this.client }))
   }
 
-  private _project?: Project
-  get project(): Project {
-    return (this._project ??= new Project({ client: this.client }))
+  private _project?: Project2
+  get project(): Project2 {
+    return (this._project ??= new Project2({ client: this.client }))
   }
 
   private _pty?: Pty

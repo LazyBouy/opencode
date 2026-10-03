@@ -2183,6 +2183,21 @@ export type OperatorStats = {
   }>
 }
 
+export type OperatorProject = {
+  id: string
+  name?: string
+  worktree: string
+  vcs?: string
+  /**
+   * The project for sessions outside git repositories
+   */
+  global: boolean
+  sessions: number
+  cost: number
+  lastActivity?: number
+  created: number
+}
+
 export type PermissionRequest = {
   id: string
   sessionID: string
@@ -7801,6 +7816,31 @@ export type OperatorStatsResponses = {
 }
 
 export type OperatorStatsResponse = OperatorStatsResponses[keyof OperatorStatsResponses]
+
+export type OperatorProjectListData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/operator/project"
+}
+
+export type OperatorProjectListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorProjectListError = OperatorProjectListErrors[keyof OperatorProjectListErrors]
+
+export type OperatorProjectListResponses = {
+  /**
+   * Projects
+   */
+  200: Array<OperatorProject>
+}
+
+export type OperatorProjectListResponse = OperatorProjectListResponses[keyof OperatorProjectListResponses]
 
 export type OperatorPermissionPendingData = {
   body?: never

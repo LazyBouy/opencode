@@ -42,6 +42,19 @@ export const Stats = Schema.Struct({
 }).annotate({ identifier: "OperatorStats" })
 export type Stats = typeof Stats.Type
 
+export const ProjectSummary = Schema.Struct({
+  id: Schema.String,
+  name: Schema.optional(Schema.String),
+  worktree: Schema.String,
+  vcs: Schema.optional(Schema.String),
+  global: Schema.Boolean.annotate({ description: "The project for sessions outside git repositories" }),
+  sessions: Schema.Finite,
+  cost: Schema.Finite,
+  lastActivity: Schema.optional(Schema.Finite),
+  created: Schema.Finite,
+}).annotate({ identifier: "OperatorProject" })
+export type ProjectSummary = typeof ProjectSummary.Type
+
 export interface SessionInput {
   readonly directory?: string
   readonly agent?: string
@@ -62,6 +75,8 @@ export interface Interface {
   readonly status: () => typeof Status.Type
   readonly sessions: (input: SessionInput) => Effect.Effect<Session.GlobalInfo[]>
   readonly stats: (input: StatsInput) => Effect.Effect<Stats>
+  /** Every project the server knows, with session totals, most recently active first. */
+  readonly projects: () => Effect.Effect<ProjectSummary[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorOverview") {}
@@ -204,10 +219,43 @@ const layer = Layer.effect(
       }
     })
 
+    const projects = Effect.fn("OperatorOverview.projects")(function* () {
+      const rows = yield* db.select().from(ProjectTable).all().pipe(Effect.orDie)
+      const usage = yield* db
+        .select({
+          project: SessionTable.project_id,
+          sessions: count(),
+          cost: sum(SessionTable.cost),
+          lastActivity: max(SessionTable.time_updated),
+        })
+        .from(SessionTable)
+        .groupBy(SessionTable.project_id)
+        .all()
+        .pipe(Effect.orDie)
+      const byProject = new Map(usage.map((row) => [row.project, row]))
+      return rows
+        .map((row) => {
+          const used = byProject.get(row.id)
+          return {
+            id: row.id,
+            ...(row.name ? { name: row.name } : {}),
+            worktree: row.worktree,
+            ...(row.vcs ? { vcs: row.vcs } : {}),
+            global: row.worktree === "/",
+            sessions: used?.sessions ?? 0,
+            cost: Number(used?.cost ?? 0),
+            ...(used?.lastActivity ? { lastActivity: used.lastActivity } : {}),
+            created: row.time_created,
+          }
+        })
+        .sort((a, b) => (b.lastActivity ?? b.created) - (a.lastActivity ?? a.created))
+    })
+
     return Service.of({
       status: () => ({ version: InstallationVersion, startedAt, platform: process.platform, arch: process.arch }),
       sessions,
       stats,
+      projects,
     })
   }),
 )

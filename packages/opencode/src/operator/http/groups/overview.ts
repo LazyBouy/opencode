@@ -13,6 +13,7 @@ export const OperatorOverviewPaths = {
   sessions: "/operator/session",
   stats: "/operator/stats",
   permissions: "/operator/permission",
+  projects: "/operator/project",
 } as const
 
 export const SessionQuery = Schema.Struct({
@@ -65,6 +66,16 @@ export const OperatorRootApi = HttpApi.make("operator-root")
             summary: "Get usage statistics",
             description:
               "Session, token and cost totals, usage by agent, and a per-day series for the last `days` days (default 14). `offset` is the viewer's UTC offset in minutes, used to group days.",
+          }),
+        ),
+        HttpApiEndpoint.get("projects", OperatorOverviewPaths.projects, {
+          success: described(Schema.Array(OperatorOverview.ProjectSummary), "Projects"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.project.list",
+            summary: "List projects with activity",
+            description:
+              "Every project the server knows, with its session count, cost and last activity, most recently active first.",
           }),
         ),
         HttpApiEndpoint.get("permissions", OperatorOverviewPaths.permissions, {

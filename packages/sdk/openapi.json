@@ -765,6 +765,47 @@
         ]
       }
     },
+    "/operator/project": {
+      "get": {
+        "tags": ["operator"],
+        "operationId": "operator.project.list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Projects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorProject"
+                  },
+                  "description": "Projects"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Every project the server knows, with its session count, cost and last activity, most recently active first.",
+        "summary": "List projects with activity",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.project.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/operator/permission": {
       "get": {
         "tags": ["operator"],
@@ -23574,6 +23615,41 @@
           }
         },
         "required": ["all", "range", "activeToday", "agents", "days"],
+        "additionalProperties": false
+      },
+      "OperatorProject": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "worktree": {
+            "type": "string"
+          },
+          "vcs": {
+            "type": "string"
+          },
+          "global": {
+            "type": "boolean",
+            "description": "The project for sessions outside git repositories"
+          },
+          "sessions": {
+            "type": "number"
+          },
+          "cost": {
+            "type": "number"
+          },
+          "lastActivity": {
+            "type": "number"
+          },
+          "created": {
+            "type": "number"
+          }
+        },
+        "required": ["id", "worktree", "global", "sessions", "cost", "created"],
         "additionalProperties": false
       },
       "PermissionRequest": {

@@ -87,6 +87,19 @@ export const operatorScenarios: Scenario[] = [
       check(body.days.length === 3, "stats should cover the requested days")
       object(body.all)
     }),
+  http.protected
+    .get("/operator/project", "operator.project.list")
+    .global()
+    .json(200, (body) => {
+      array(body)
+      check(
+        body.every(
+          (project) =>
+            isRecord(project) && typeof project.worktree === "string" && typeof project.sessions === "number",
+        ),
+        "projects should report their worktree and sessions",
+      )
+    }),
   http.protected.get("/operator/permission", "operator.permission.pending").global().json(200, array),
   http.protected.get("/operator/agent", "operator.agent.list").json(200, (body) => {
     array(body)

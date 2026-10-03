@@ -81,6 +81,19 @@ it.instance("adds up sessions, tokens and cost by agent and by day", () =>
   }),
 )
 
+it.instance("lists projects with their session totals", () =>
+  Effect.gen(function* () {
+    const sessions = yield* Session.Service
+    const overview = yield* OperatorOverview.Service
+    const created = yield* sessions.create({ title: "Counted", agent: "build" })
+
+    const project = (yield* overview.projects()).find((item) => item.id === created.projectID)
+    expect(project?.sessions).toBeGreaterThanOrEqual(1)
+    expect(project?.lastActivity).toBeGreaterThanOrEqual(created.time.updated)
+    expect(typeof project?.global).toBe("boolean")
+  }),
+)
+
 it.effect("reports the server version and start time", () =>
   Effect.gen(function* () {
     const status = (yield* OperatorOverview.Service).status()
