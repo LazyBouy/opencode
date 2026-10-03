@@ -1173,10 +1173,4 @@ export const dict = {
   "workspace.reset.archived.many": "{{count}} ဆက်ရှင်များကို သိမ်းဆည်းထားပါမည်။",
   "workspace.reset.note": "၎င်းသည် မူရင်းဌာနခွဲနှင့် ကိုက်ညီစေရန် အလုပ်ခွင်ကို ပြန်လည်သတ်မှတ်ပါမည်။",
   "dialog.usageExceeded.dontShowAgain": "ထပ်မပြပါနှင့်",
-  // Untranslated: merge-session strings awaiting the localization review in AGENTS.md.
-  "session.merge.indicator": "merged: {{adapter}} · {{id}} · {{status}}",
-  "session.merge.running": "running",
-  "session.merge.copyId": "Copy {{adapter}} session ID",
-  "session.merge.copied": "Session ID copied",
-  "session.merge.detach": "Detach from {{adapter}}",
 }

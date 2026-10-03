@@ -65,6 +65,7 @@ import { partDefaultOpen } from "./part-default-open"
 import { animate } from "motion"
 import { attached, inline, kind, typeLabel } from "./message-file"
 import { readPartText } from "./message-part-text"
+import { redundantMergeSummary } from "./merge-summary"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
 
 async function writeClipboard(text: string): Promise<boolean> {
@@ -706,12 +707,6 @@ export function groupParts(parts: { messageID: string; part: PartType }[]) {
 
 function index<T extends { id: string }>(items: readonly T[]) {
   return new Map(items.map((item) => [item.id, item] as const))
-}
-
-// A merged turn's summary restates the projected parts shown beside it; it exists for OpenCode's
-// model, shares and exports, where those parts are left out.
-export function redundantMergeSummary(part: PartType, parts: readonly PartType[]) {
-  return part.origin?.role === "summary" && parts.some((item) => item.origin?.role === "projection")
 }
 
 export function renderable(part: PartType, showReasoningSummaries = true) {

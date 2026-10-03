@@ -1264,10 +1264,4 @@ export const dict = {
   "settings.general.row.pinchZoom.description": "Tillat knipebevegelser på styreflaten og Ctrl-rulling for å zoome",
   "settings.updates.action.downloading": "Laster ned...",
   "settings.updates.action.installing": "Installerer...",
-  // Untranslated: merge-session strings awaiting the localization review in AGENTS.md.
-  "session.merge.indicator": "merged: {{adapter}} · {{id}} · {{status}}",
-  "session.merge.running": "running",
-  "session.merge.copyId": "Copy {{adapter}} session ID",
-  "session.merge.copied": "Session ID copied",
-  "session.merge.detach": "Detach from {{adapter}}",
 } satisfies Partial<Record<Keys, string>>

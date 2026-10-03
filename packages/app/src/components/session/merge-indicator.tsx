@@ -6,6 +6,7 @@ import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { showToast } from "@/utils/toast"
+import "./merge-indicator.css"
 
 // Shows that a session is merged with an external agent (`/merge claude`), whose turns stream into
 // this session instead of OpenCode's model, and offers copy-id and detach.

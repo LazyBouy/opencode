@@ -1,0 +1,30 @@
+/* Merge indicator pill: status dot, pulsing while the child process runs. */
+[data-component="merge-indicator"] [data-slot="merge-indicator-dot"] {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  flex: 0 0 auto;
+  background: var(--v2-state-fg-success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--v2-state-fg-success) 18%, transparent);
+}
+
+[data-component="merge-indicator"][data-status="starting"] [data-slot="merge-indicator-dot"] {
+  background: var(--v2-state-fg-warning);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--v2-state-fg-warning) 20%, transparent);
+}
+
+[data-component="merge-indicator"][data-running] [data-slot="merge-indicator-dot"] {
+  animation: merge-indicator-pulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="merge-indicator"][data-running] [data-slot="merge-indicator-dot"] {
+    animation: none;
+  }
+}
+
+@keyframes merge-indicator-pulse {
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--v2-state-fg-success) 8%, transparent);
+  }
+}
