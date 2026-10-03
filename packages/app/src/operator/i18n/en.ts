@@ -89,8 +89,8 @@ export const dict = {
 
   "operator.error.title": "This page couldn't load",
   "operator.error.retry": "Try again",
-  "operator.project.none": "No project open",
-  "operator.project.noneHint": "Open a project from Chat first; this page shows one project at a time.",
+  "operator.project.none": "No projects yet",
+  "operator.project.noneHint": "Add a project from Chat with Add project. This page shows one project at a time.",
   "operator.column.title": "Title",
   "operator.column.name": "Name",
   "operator.column.project": "Project",

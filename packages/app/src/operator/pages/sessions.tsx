@@ -104,7 +104,7 @@ export default function SessionsPage() {
       <PageHeader
         title={language.t("operator.page.sessions.title")}
         description={language.t("operator.page.sessions.description")}
-        actions={<ScopePicker />}
+        actions={<ScopePicker all />}
       />
       <div data-slot="operator-toolbar">
         <TextInputV2

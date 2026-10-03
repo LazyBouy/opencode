@@ -57,6 +57,14 @@ test("the agents table filters, hides hidden agents and opens an agent", async (
   await expect(page.locator('[data-component="operator-code"]')).toContainText("Review the diff carefully.")
 })
 
+test("per-project pages use a project the server knows when none is open in the browser", async ({ page }) => {
+  await mockOperator(page)
+  await page.goto("/operator/agents")
+  await expect(page.locator('[data-component="operator-table"]')).toContainText("reviewer")
+  await expect(page.getByRole("button", { name: "New agent" })).toBeVisible()
+  await expect(page.locator('[data-component="select-v2"]').first()).toContainText("smoke-project")
+})
+
 test("an agent's permission rules are listed in order", async ({ page }) => {
   await mockOperator(page)
   await page.goto(`/operator/agents/build${dir}`)
