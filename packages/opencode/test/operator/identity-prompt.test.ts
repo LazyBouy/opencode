@@ -1,0 +1,34 @@
+import fs from "fs/promises"
+import path from "path"
+import { expect } from "bun:test"
+import { Effect } from "effect"
+import { configure, send, session, unix } from "../merge/harness"
+
+const systemText = (input: Record<string, unknown> | undefined) =>
+  JSON.stringify(
+    (Array.isArray(input?.messages) ? input.messages : []).filter(
+      (message: { role?: string }) => message.role === "system",
+    ),
+  )
+
+unix("identity layers reach the model's system prompt for the agents they name", () =>
+  Effect.gen(function* () {
+    const { directory, llm } = yield* configure()
+    yield* Effect.promise(async () => {
+      await fs.mkdir(path.join(directory, ".opencode", "identity"), { recursive: true })
+      await fs.writeFile(
+        path.join(directory, ".opencode", "identity", "voice.md"),
+        "---\nagents: [build]\n---\nAlways answer like a pirate.\n",
+      )
+    })
+    yield* llm.text("Arr")
+    yield* llm.text("Plan")
+
+    yield* send((yield* session()).id, "hello", "build")
+    yield* send((yield* session()).id, "hello", "plan")
+
+    const inputs = yield* llm.inputs
+    expect(systemText(inputs[0])).toContain("Always answer like a pirate.")
+    expect(systemText(inputs[1])).not.toContain("Always answer like a pirate.")
+  }),
+)
