@@ -1,0 +1,89 @@
+# OpenCode development stack: the API server, the web UI dev server, and a tools service for
+# one-off commands. Everything runs in containers with resource limits; nothing is installed on the
+# host. See README.md in this folder.
+name: opencode-dev
+
+x-image: &image
+  image: opencode-dev:local
+  build:
+    context: ../..
+    dockerfile: docker/dev/Dockerfile
+  init: true
+
+services:
+  server:
+    <<: *image
+    # bunfig.toml in packages/opencode must apply, so the server runs from that directory.
+    command: ["bun", "run", "--cwd", "/opencode/packages/opencode", "./src/index.ts", "serve", "--hostname", "0.0.0.0", "--port", "4096"]
+    ports:
+      - "127.0.0.1:${OPENCODE_SERVER_PORT:-4096}:4096"
+    environment:
+      OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD:-}
+      OPENCODE_DISABLE_AUTOUPDATE: "1"
+    volumes:
+      # Projects are mounted at the same path as on the host, so paths shown in the UI and the
+      # Claude sessions created by `/merge claude` match the host.
+      - ${WORKSPACE:-/root/projects}:${WORKSPACE:-/root/projects}
+      - opencode-data:/root/.local/share/opencode
+      - opencode-config:/root/.config/opencode
+      - opencode-state:/root/.local/state/opencode
+      - claude-config:/claude-config
+    cpus: ${SERVER_CPUS:-4}
+    mem_limit: ${SERVER_MEMORY:-6g}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:4096/global/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    develop:
+      watch:
+        - { action: sync+restart, path: ../../packages/opencode/src, target: /opencode/packages/opencode/src }
+        - { action: sync+restart, path: ../../packages/core/src, target: /opencode/packages/core/src }
+        - { action: sync+restart, path: ../../packages/schema/src, target: /opencode/packages/schema/src }
+        - { action: sync+restart, path: ../../packages/server/src, target: /opencode/packages/server/src }
+        - { action: sync+restart, path: ../../packages/protocol/src, target: /opencode/packages/protocol/src }
+        - { action: sync+restart, path: ../../packages/llm/src, target: /opencode/packages/llm/src }
+        - { action: sync+restart, path: ../../packages/plugin/src, target: /opencode/packages/plugin/src }
+        - { action: rebuild, path: ../../bun.lock }
+
+  web:
+    <<: *image
+    command: ["bun", "run", "--cwd", "/opencode/packages/app", "dev", "--host", "0.0.0.0", "--port", "4444", "--strictPort"]
+    ports:
+      - "127.0.0.1:${OPENCODE_WEB_PORT:-4444}:4444"
+    environment:
+      # The browser on the host reaches the server through its published port.
+      VITE_OPENCODE_SERVER_HOST: localhost
+      VITE_OPENCODE_SERVER_PORT: ${OPENCODE_SERVER_PORT:-4096}
+    depends_on:
+      server:
+        condition: service_healthy
+    cpus: ${WEB_CPUS:-2}
+    mem_limit: ${WEB_MEMORY:-3g}
+    develop:
+      watch:
+        - { action: sync, path: ../../packages/app/src, target: /opencode/packages/app/src }
+        - { action: sync, path: ../../packages/app/public, target: /opencode/packages/app/public }
+        - { action: sync, path: ../../packages/ui/src, target: /opencode/packages/ui/src }
+        - { action: sync, path: ../../packages/session-ui/src, target: /opencode/packages/session-ui/src }
+        - { action: sync, path: ../../packages/sdk/js/src, target: /opencode/packages/sdk/js/src }
+        - { action: rebuild, path: ../../bun.lock }
+
+  # One-off commands against the image's copy of the source, for example:
+  #   docker compose -f docker/dev/compose.yaml run --rm tools bun run --cwd packages/opencode typecheck
+  # Run `docker compose -f docker/dev/compose.yaml build` first to pick up source edits.
+  tools:
+    <<: *image
+    profiles: ["tools"]
+    working_dir: /opencode
+    command: ["bash"]
+    volumes:
+      - claude-config:/claude-config
+    cpus: ${TOOLS_CPUS:-4}
+    mem_limit: ${TOOLS_MEMORY:-6g}
+
+volumes:
+  opencode-data:
+  opencode-config:
+  opencode-state:
+  claude-config:
