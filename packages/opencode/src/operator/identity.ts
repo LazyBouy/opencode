@@ -30,17 +30,22 @@ export const Info = Schema.Struct({
 }).annotate({ identifier: "OperatorIdentityLayer" })
 export type Info = typeof Info.Type
 
+// Not named in the API document, so the generated client takes these as flat parameters.
 export const SaveInput = Schema.Struct({
   scope: OperatorConfig.Scope,
-  file: Schema.optional(Schema.String).annotate({ description: "Existing file to replace; a new one is named after `name`" }),
+  file: Schema.optional(Schema.String).annotate({
+    description: "Existing file to replace; a new one is named after `name`",
+  }),
   name: Schema.String,
-  kind: Schema.optional(Kind).annotate({ description: "org or user for global layers; project layers are always project" }),
+  kind: Schema.optional(Kind).annotate({
+    description: "org or user for global layers; project layers are always project",
+  }),
   priority: Schema.optional(Schema.Finite),
   agents: Schema.optional(Schema.Array(Schema.String)),
   maxLength: Schema.optional(Schema.Finite),
   enabled: Schema.optional(Schema.Boolean),
   content: Schema.String,
-}).annotate({ identifier: "OperatorIdentitySave" })
+})
 export type SaveInput = typeof SaveInput.Type
 
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("OperatorIdentityNotFound", {
@@ -132,10 +137,11 @@ export async function readLayers(dirs: { global: string; project: string }) {
     return layers.filter((item): item is Info => item !== undefined)
   }
   // When the project is the global config folder's parent (a project in ~/.config), skip duplicates.
-  const layers = [...(await read("global", dirs.global)), ...(dirs.project === dirs.global ? [] : await read("project", dirs.project))]
-  return layers.sort(
-    (a, b) => RANK[a.kind] - RANK[b.kind] || a.priority - b.priority || a.file.localeCompare(b.file),
-  )
+  const layers = [
+    ...(await read("global", dirs.global)),
+    ...(dirs.project === dirs.global ? [] : await read("project", dirs.project)),
+  ]
+  return layers.sort((a, b) => RANK[a.kind] - RANK[b.kind] || a.priority - b.priority || a.file.localeCompare(b.file))
 }
 
 async function readLayer(scope: OperatorConfig.Scope, file: string): Promise<Info | undefined> {
@@ -145,7 +151,9 @@ async function readLayer(scope: OperatorConfig.Scope, file: string): Promise<Inf
     .catch(() => undefined)
   if (!parsed) return
   const data = parsed.data as Record<string, unknown>
-  const agents = Array.isArray(data.agents) ? data.agents.filter((item): item is string => typeof item === "string") : undefined
+  const agents = Array.isArray(data.agents)
+    ? data.agents.filter((item): item is string => typeof item === "string")
+    : undefined
   return {
     scope,
     file: path.basename(file),
@@ -163,8 +171,12 @@ async function readLayer(scope: OperatorConfig.Scope, file: string): Promise<Inf
 // The identity text for an agent: enabled layers that apply to it, each cut to its length limit.
 export function render(layers: ReadonlyArray<Info>, agent?: string) {
   return layers
-    .filter((item) => item.enabled && item.content && (!item.agents || (agent !== undefined && item.agents.includes(agent))))
-    .map((item) => (item.maxLength && item.content.length > item.maxLength ? item.content.slice(0, item.maxLength) : item.content))
+    .filter(
+      (item) => item.enabled && item.content && (!item.agents || (agent !== undefined && item.agents.includes(agent))),
+    )
+    .map((item) =>
+      item.maxLength && item.content.length > item.maxLength ? item.content.slice(0, item.maxLength) : item.content,
+    )
     .join("\n\n")
 }
 

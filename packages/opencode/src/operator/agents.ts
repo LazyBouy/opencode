@@ -27,30 +27,52 @@ export const Info = Schema.Struct({
   source: Source,
   home: Schema.optional(Schema.String).annotate({ description: "Folder new sessions as this agent open in" }),
   disabled: Schema.Boolean.annotate({ description: "Turned off with `disable: true`; such agents cannot be used" }),
+  settings: Schema.Record(Schema.String, Schema.Unknown).annotate({
+    description: "The agent's own settings as written in config or its file, before defaults are applied",
+  }),
   sessions: Schema.Struct({ total: Schema.Finite, lastUsed: Schema.optional(Schema.Finite) }).annotate({
     description: "Sessions in this project that use the agent",
   }),
 }).annotate({ identifier: "OperatorAgent" })
 export type Info = typeof Info.Type
 
-// Settings an agent can be created or edited with, in config/frontmatter form. In a patch, null
-// removes a setting so the default applies.
-const unset = <S extends Schema.Top>(schema: S) => Schema.optional(Schema.NullOr(schema))
+// Settings an agent can be created or edited with, in config/frontmatter form.
+export const ResetKey = Schema.Literals([
+  "description",
+  "mode",
+  "model",
+  "variant",
+  "temperature",
+  "top_p",
+  "steps",
+  "color",
+  "hidden",
+  "disable",
+  "home",
+  "prompt",
+  "permission",
+])
+export type ResetKey = typeof ResetKey.Type
+
+// Not named in the API document, so the generated client takes these as flat parameters.
 export const Patch = Schema.Struct({
-  description: unset(Schema.String),
-  mode: unset(Schema.Literals(["subagent", "primary", "all"])),
-  model: unset(Schema.String).annotate({ description: "provider/model" }),
-  variant: unset(Schema.String),
-  temperature: unset(Schema.Finite),
-  top_p: unset(Schema.Finite),
-  steps: unset(Schema.Int.check(Schema.isGreaterThan(0))),
-  color: unset(Schema.String),
-  hidden: unset(Schema.Boolean),
-  disable: unset(Schema.Boolean),
-  home: unset(Schema.String),
-  prompt: unset(Schema.String),
-  permission: unset(ConfigPermissionV1.Info),
-}).annotate({ identifier: "OperatorAgentPatch" })
+  description: Schema.optional(Schema.String),
+  mode: Schema.optional(Schema.Literals(["subagent", "primary", "all"])),
+  model: Schema.optional(Schema.String).annotate({ description: "provider/model" }),
+  variant: Schema.optional(Schema.String),
+  temperature: Schema.optional(Schema.Finite),
+  top_p: Schema.optional(Schema.Finite),
+  steps: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
+  color: Schema.optional(Schema.String),
+  hidden: Schema.optional(Schema.Boolean),
+  disable: Schema.optional(Schema.Boolean),
+  home: Schema.optional(Schema.String),
+  prompt: Schema.optional(Schema.String),
+  permission: Schema.optional(ConfigPermissionV1.Info),
+  reset: Schema.optional(Schema.Array(ResetKey)).annotate({
+    description: "Settings to remove so their defaults apply",
+  }),
+})
 type Fields = typeof Patch.Type
 
 export const Name = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/)).annotate({
@@ -102,11 +124,20 @@ const layer = Layer.effect(
     const files = Effect.fnUntraced(function* () {
       const found = yield* Effect.forEach(yield* config.directories(), (dir) =>
         Effect.promise(async () => {
-          const agentFiles = await Glob.scan("{agent,agents}/**/*.md", { cwd: dir, absolute: true, dot: true, symlink: true })
+          const agentFiles = await Glob.scan("{agent,agents}/**/*.md", {
+            cwd: dir,
+            absolute: true,
+            dot: true,
+            symlink: true,
+          })
           const modeFiles = await Glob.scan("{mode,modes}/*.md", { cwd: dir, absolute: true, dot: true, symlink: true })
           return [
-            ...agentFiles.map((file) => [configEntryNameFromPath(path.relative(dir, file), ["agent/", "agents/"]), file] as const),
-            ...modeFiles.map((file) => [configEntryNameFromPath(path.relative(dir, file), ["mode/", "modes/"]), file] as const),
+            ...agentFiles.map(
+              (file) => [configEntryNameFromPath(path.relative(dir, file), ["agent/", "agents/"]), file] as const,
+            ),
+            ...modeFiles.map(
+              (file) => [configEntryNameFromPath(path.relative(dir, file), ["mode/", "modes/"]), file] as const,
+            ),
           ]
         }),
       )
@@ -116,7 +147,10 @@ const layer = Layer.effect(
     const list = Effect.fn("OperatorAgents.list")(function* () {
       const ctx = yield* InstanceState.context
       const paths = yield* files()
-      const configured = { ...(yield* config.get()).agent } as Record<string, { home?: string; disable?: boolean } | undefined>
+      const configured = { ...(yield* config.get()).agent } as Record<
+        string,
+        ({ home?: string; disable?: boolean } & Record<string, unknown>) | undefined
+      >
       const usage = yield* db
         .select({ agent: SessionTable.agent, total: count(), lastUsed: max(SessionTable.time_updated) })
         .from(SessionTable)
@@ -140,6 +174,7 @@ const layer = Layer.effect(
           },
           home: configured[agent.name]?.home,
           disabled: false,
+          settings: configured[agent.name] ?? {},
           sessions: sessions(agent.name),
         }
       })
@@ -151,9 +186,14 @@ const layer = Layer.effect(
           mode: "all" as const,
           permission: [],
           options: {},
-          source: { kind: paths.has(name) ? ("file" as const) : ("config" as const), path: paths.get(name), customized: false },
+          source: {
+            kind: paths.has(name) ? ("file" as const) : ("config" as const),
+            path: paths.get(name),
+            customized: false,
+          },
           home: value?.home,
           disabled: true,
+          settings: value ?? {},
           sessions: sessions(name),
         }))
       return [...active, ...disabled]
@@ -168,30 +208,41 @@ const layer = Layer.effect(
     const ensureHome = (home: string | null | undefined) =>
       home ? Effect.promise(() => fs.mkdir(home, { recursive: true })).pipe(Effect.asVoid) : Effect.void
 
-    const create = Effect.fn("OperatorAgents.create")(function* (scope: OperatorConfig.Scope, name: string, patch: Fields) {
+    const create = Effect.fn("OperatorAgents.create")(function* (
+      scope: OperatorConfig.Scope,
+      name: string,
+      patch: Fields,
+    ) {
       if (!Schema.is(Name)(name)) return yield* new InvalidError({ message: `"${name}" is not a valid agent name` })
       if ((yield* list()).some((agent) => agent.name === name))
         return yield* new ConflictError({ message: `An agent named "${name}" already exists` })
       const file = path.join(OperatorConfig.scopeDirectory(scope, yield* InstanceState.context), "agents", `${name}.md`)
-      const values = present(patch)
+      const values = present(settings(patch))
       yield* write(file, omitPrompt(values), String(values.prompt ?? ""))
       yield* ensureHome(patch.home)
       return file
     })
 
-    const update = Effect.fn("OperatorAgents.update")(function* (scope: OperatorConfig.Scope, name: string, patch: Fields) {
+    const update = Effect.fn("OperatorAgents.update")(function* (
+      scope: OperatorConfig.Scope,
+      name: string,
+      patch: Fields,
+    ) {
       const agent = (yield* list()).find((item) => item.name === name)
       if (!agent) return yield* new NotFoundError({ message: `No agent named "${name}"` })
       yield* ensureHome(patch.home)
       if (agent.source.kind === "file" && agent.source.path) {
         const file = agent.source.path
         const current = matter(yield* Effect.promise(() => fs.readFile(file, "utf8")))
-        const data = present({ ...current.data, ...patch })
-        const prompt = patch.prompt === undefined ? current.content : (patch.prompt ?? "")
+        const changes = settings(patch)
+        const data = present({ ...current.data, ...changes })
+        // A new prompt replaces the body, a reset prompt empties it, and otherwise the body is kept.
+        const prompt =
+          typeof changes.prompt === "string" ? changes.prompt : changes.prompt === null ? "" : current.content
         yield* write(file, omitPrompt(data), prompt)
         return file
       }
-      return (yield* operatorConfig.update(scope, { agent: { [name]: patch } })).path
+      return (yield* operatorConfig.update(scope, { agent: { [name]: settings(patch) } })).path
     })
 
     const remove = Effect.fn("OperatorAgents.remove")(function* (scope: OperatorConfig.Scope, name: string) {
@@ -216,6 +267,12 @@ export const node = LayerNode.make({
   layer,
   deps: [Agent.node, Config.node, OperatorConfig.node, Database.node],
 })
+
+// The patch as config/frontmatter values: reset settings become null, which removes them.
+function settings(patch: Fields): Record<string, unknown> {
+  const { reset, ...values } = patch
+  return { ...values, ...Object.fromEntries((reset ?? []).map((key) => [key, null])) }
+}
 
 // Drops unset and null values, which mean "use the default" in a new or rewritten file.
 function present(values: Record<string, unknown>) {

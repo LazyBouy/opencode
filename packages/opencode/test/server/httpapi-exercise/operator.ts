@@ -66,7 +66,10 @@ export const operatorScenarios: Scenario[] = [
   http.protected
     .get("/operator/session", "operator.session.list")
     .seeded((ctx) => ctx.session({ title: "Operator session" }))
-    .at((ctx) => ({ path: `/operator/session?directory=${encodeURIComponent(ctx.directory ?? "")}`, headers: ctx.headers() }))
+    .at((ctx) => ({
+      path: `/operator/session?directory=${encodeURIComponent(ctx.directory ?? "")}`,
+      headers: ctx.headers(),
+    }))
     .json(200, (body, ctx) => {
       array(body)
       check(
@@ -84,10 +87,7 @@ export const operatorScenarios: Scenario[] = [
       check(body.days.length === 3, "stats should cover the requested days")
       object(body.all)
     }),
-  http.protected
-    .get("/operator/permission", "operator.permission.pending")
-    .global()
-    .json(200, array),
+  http.protected.get("/operator/permission", "operator.permission.pending").global().json(200, array),
   http.protected.get("/operator/agent", "operator.agent.list").json(200, (body) => {
     array(body)
     const build = body.find((agent) => isRecord(agent) && agent.name === "build")
@@ -108,9 +108,15 @@ export const operatorScenarios: Scenario[] = [
       (body) =>
         Effect.gen(function* () {
           object(body)
-          check(String(body.path).endsWith("/.opencode/agents/httpapi-agent.md"), "a project agent file should be written")
+          check(
+            String(body.path).endsWith("/.opencode/agents/httpapi-agent.md"),
+            "a project agent file should be written",
+          )
           const text = yield* Effect.promise(() => Bun.file(String(body.path)).text())
-          check(text.includes("description: From the exerciser") && text.includes("Say hi."), "the file should hold the agent")
+          check(
+            text.includes("description: From the exerciser") && text.includes("Say hi."),
+            "the file should hold the agent",
+          )
         }),
       "status",
     ),
@@ -144,7 +150,10 @@ export const operatorScenarios: Scenario[] = [
     .status(404),
   http.protected
     .delete("/operator/agent/{name}", "operator.agent.remove")
-    .at((ctx) => ({ path: route("/operator/agent/{name}", { name: "plan" }) + "?scope=project", headers: ctx.headers() }))
+    .at((ctx) => ({
+      path: route("/operator/agent/{name}", { name: "plan" }) + "?scope=project",
+      headers: ctx.headers(),
+    }))
     .status(400),
   http.protected.get("/operator/identity", "operator.identity.list").json(200, array),
   http.protected
@@ -169,7 +178,11 @@ export const operatorScenarios: Scenario[] = [
     .status(404),
   http.protected
     .post("/operator/identity/reorder", "operator.identity.reorder")
-    .at((ctx) => ({ path: "/operator/identity/reorder", headers: ctx.headers(), body: { scope: "project", files: [] } }))
+    .at((ctx) => ({
+      path: "/operator/identity/reorder",
+      headers: ctx.headers(),
+      body: { scope: "project", files: [] },
+    }))
     .json(200, array),
   http.protected.get("/operator/identity/preview", "operator.identity.preview").json(200, (body) => {
     object(body)

@@ -30,7 +30,10 @@ it.effect("tracks requests until they are answered or their project closes", () 
 
     GlobalBus.emit("event", {
       directory: "/work/a",
-      payload: { type: "permission.replied", properties: { sessionID: "ses_test", requestID: "per_a1", reply: "once" } },
+      payload: {
+        type: "permission.replied",
+        properties: { sessionID: "ses_test", requestID: "per_a1", reply: "once" },
+      },
     })
     expect(inbox.pending().map((item) => String(item.request.id))).toEqual(["per_b1", "per_b2"])
 

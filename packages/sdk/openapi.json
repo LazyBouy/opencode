@@ -10606,6 +10606,27 @@
                   },
                   "permission": {
                     "$ref": "#/components/schemas/PermissionConfig"
+                  },
+                  "reset": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "description",
+                        "mode",
+                        "model",
+                        "variant",
+                        "temperature",
+                        "top_p",
+                        "steps",
+                        "color",
+                        "hidden",
+                        "disable",
+                        "home",
+                        "prompt",
+                        "permission"
+                      ]
+                    }
                   }
                 },
                 "required": ["name"],
@@ -10715,7 +10736,72 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/OperatorAgentPatch"
+                "type": "object",
+                "properties": {
+                  "description": {
+                    "type": "string"
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": ["subagent", "primary", "all"]
+                  },
+                  "model": {
+                    "type": "string"
+                  },
+                  "variant": {
+                    "type": "string"
+                  },
+                  "temperature": {
+                    "type": "number"
+                  },
+                  "top_p": {
+                    "type": "number"
+                  },
+                  "steps": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  "color": {
+                    "type": "string"
+                  },
+                  "hidden": {
+                    "type": "boolean"
+                  },
+                  "disable": {
+                    "type": "boolean"
+                  },
+                  "home": {
+                    "type": "string"
+                  },
+                  "prompt": {
+                    "type": "string"
+                  },
+                  "permission": {
+                    "$ref": "#/components/schemas/PermissionConfig"
+                  },
+                  "reset": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "description",
+                        "mode",
+                        "model",
+                        "variant",
+                        "temperature",
+                        "top_p",
+                        "steps",
+                        "color",
+                        "hidden",
+                        "disable",
+                        "home",
+                        "prompt",
+                        "permission"
+                      ]
+                    }
+                  }
+                },
+                "additionalProperties": false
               }
             }
           }
@@ -10989,7 +11075,41 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/OperatorIdentitySave"
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "$ref": "#/components/schemas/OperatorConfigScope"
+                  },
+                  "file": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "$ref": "#/components/schemas/OperatorIdentityKind"
+                  },
+                  "priority": {
+                    "type": "number"
+                  },
+                  "agents": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "maxLength": {
+                    "type": "number"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "content": {
+                    "type": "string"
+                  }
+                },
+                "required": ["scope", "name", "content"],
+                "additionalProperties": false
               }
             }
           }
@@ -25372,6 +25492,10 @@
             "type": "boolean",
             "description": "Turned off with `disable: true`; such agents cannot be used"
           },
+          "settings": {
+            "type": "object",
+            "description": "The agent's own settings as written in config or its file, before defaults are applied"
+          },
           "sessions": {
             "type": "object",
             "properties": {
@@ -25387,7 +25511,7 @@
             "description": "Sessions in this project that use the agent"
           }
         },
-        "required": ["name", "mode", "permission", "options", "source", "disabled", "sessions"],
+        "required": ["name", "mode", "permission", "options", "source", "disabled", "settings", "sessions"],
         "additionalProperties": false
       },
       "OperatorAgentWritten": {
@@ -25463,53 +25587,6 @@
         "required": ["name", "data"],
         "additionalProperties": false
       },
-      "OperatorAgentPatch": {
-        "type": "object",
-        "properties": {
-          "description": {
-            "type": "string"
-          },
-          "mode": {
-            "type": "string",
-            "enum": ["subagent", "primary", "all"]
-          },
-          "model": {
-            "type": "string"
-          },
-          "variant": {
-            "type": "string"
-          },
-          "temperature": {
-            "type": "number"
-          },
-          "top_p": {
-            "type": "number"
-          },
-          "steps": {
-            "type": "integer",
-            "exclusiveMinimum": 0
-          },
-          "color": {
-            "type": "string"
-          },
-          "hidden": {
-            "type": "boolean"
-          },
-          "disable": {
-            "type": "boolean"
-          },
-          "home": {
-            "type": "string"
-          },
-          "prompt": {
-            "type": "string"
-          },
-          "permission": {
-            "$ref": "#/components/schemas/PermissionConfig"
-          }
-        },
-        "additionalProperties": false
-      },
       "OperatorTool": {
         "type": "object",
         "properties": {
@@ -25574,43 +25651,6 @@
           }
         },
         "required": ["scope", "file", "path", "name", "kind", "priority", "enabled", "content"],
-        "additionalProperties": false
-      },
-      "OperatorIdentitySave": {
-        "type": "object",
-        "properties": {
-          "scope": {
-            "$ref": "#/components/schemas/OperatorConfigScope"
-          },
-          "file": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "kind": {
-            "$ref": "#/components/schemas/OperatorIdentityKind"
-          },
-          "priority": {
-            "type": "number"
-          },
-          "agents": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "maxLength": {
-            "type": "number"
-          },
-          "enabled": {
-            "type": "boolean"
-          },
-          "content": {
-            "type": "string"
-          }
-        },
-        "required": ["scope", "name", "content"],
         "additionalProperties": false
       },
       "UnauthorizedError": {

@@ -69,28 +69,32 @@ const layer = Layer.effect(
       )
 
     // Mirrors the load order in Config.loadInstanceState so the last project source is the effective one.
-    const sources = Effect.fnUntraced(function* () {
-      const ctx = yield* InstanceState.context
-      const global = yield* Effect.forEach(["config.json", "opencode.json", "opencode.jsonc"], (name) =>
-        read("global", path.join(Global.Path.config, name)),
-      )
-      const custom = Flag.OPENCODE_CONFIG ? yield* read("custom", Flag.OPENCODE_CONFIG) : []
-      const project = Flag.OPENCODE_DISABLE_PROJECT_CONFIG
-        ? []
-        : yield* Effect.forEach(yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie), (file) =>
-            read("project", file),
-          )
-      const directories = (yield* ConfigPaths.directories(ctx.directory, ctx.worktree).pipe(Effect.orDie)).filter(
-        (dir) => dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR,
-      )
-      const directory = yield* Effect.forEach(directories, (dir) =>
-        Effect.forEach(["opencode.json", "opencode.jsonc"], (name) => read("directory", path.join(dir, name))),
-      )
-      const env = Flag.OPENCODE_CONFIG_CONTENT
-        ? [{ kind: "env" as const, path: "OPENCODE_CONFIG_CONTENT", text: Flag.OPENCODE_CONFIG_CONTENT }]
-        : []
-      return [...global.flat(), ...custom, ...project.flat(), ...directory.flat(2), ...env]
-    }, Effect.provideService(FSUtil.Service, fs))
+    const sources = Effect.fnUntraced(
+      function* () {
+        const ctx = yield* InstanceState.context
+        const global = yield* Effect.forEach(["config.json", "opencode.json", "opencode.jsonc"], (name) =>
+          read("global", path.join(Global.Path.config, name)),
+        )
+        const custom = Flag.OPENCODE_CONFIG ? yield* read("custom", Flag.OPENCODE_CONFIG) : []
+        const project = Flag.OPENCODE_DISABLE_PROJECT_CONFIG
+          ? []
+          : yield* Effect.forEach(
+              yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie),
+              (file) => read("project", file),
+            )
+        const directories = (yield* ConfigPaths.directories(ctx.directory, ctx.worktree).pipe(Effect.orDie)).filter(
+          (dir) => dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR,
+        )
+        const directory = yield* Effect.forEach(directories, (dir) =>
+          Effect.forEach(["opencode.json", "opencode.jsonc"], (name) => read("directory", path.join(dir, name))),
+        )
+        const env = Flag.OPENCODE_CONFIG_CONTENT
+          ? [{ kind: "env" as const, path: "OPENCODE_CONFIG_CONTENT", text: Flag.OPENCODE_CONFIG_CONTENT }]
+          : []
+        return [...global.flat(), ...custom, ...project.flat(), ...directory.flat(2), ...env]
+      },
+      Effect.provideService(FSUtil.Service, fs),
+    )
 
     const targets = Effect.fnUntraced(function* (list: ReadonlyArray<Source>) {
       const root = projectRoot(yield* InstanceState.context)
@@ -114,7 +118,8 @@ const layer = Layer.effect(
     const save = Effect.fnUntraced(function* (file: string, before: string, after: string) {
       if (after === before) return { path: file, changed: false }
       yield* Effect.try({
-        try: () => ConfigParse.schema(ConfigV1.Info, ConfigV2Compat.lower(ConfigParse.jsonc(after, file), file).value, file),
+        try: () =>
+          ConfigParse.schema(ConfigV1.Info, ConfigV2Compat.lower(ConfigParse.jsonc(after, file), file).value, file),
         catch: (cause) => new InvalidError({ path: file, message: describe(cause) }),
       })
       yield* fs.writeWithDirs(file, after).pipe(Effect.orDie)
@@ -181,7 +186,9 @@ function describe(cause: unknown) {
   const issues = Array.isArray(data?.issues) ? data.issues.filter(isRecord) : []
   if (issues.length)
     return issues
-      .map((issue) => [Array.isArray(issue.path) ? issue.path.join(".") : "", String(issue.message)].filter(Boolean).join(": "))
+      .map((issue) =>
+        [Array.isArray(issue.path) ? issue.path.join(".") : "", String(issue.message)].filter(Boolean).join(": "),
+      )
       .join("\n")
   if (typeof data?.message === "string") return data.message
   return cause instanceof Error ? cause.message : String(cause)

@@ -36,7 +36,9 @@ const layer = Layer.effect(
     const list = Effect.fn("OperatorTools.list")(function* () {
       // Custom tool files are named `<file>` or `<file>_<export>`, as ToolRegistry registers them.
       const files = (yield* Effect.forEach(yield* config.directories(), (dir) =>
-        Effect.promise(() => Glob.scan("{tool,tools}/*.{js,ts}", { cwd: dir, absolute: true, dot: true, symlink: true })),
+        Effect.promise(() =>
+          Glob.scan("{tool,tools}/*.{js,ts}", { cwd: dir, absolute: true, dot: true, symlink: true }),
+        ),
       )).flat()
       const fileFor = (id: string) =>
         files.find((file) => {

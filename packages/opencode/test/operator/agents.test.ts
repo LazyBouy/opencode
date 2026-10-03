@@ -66,7 +66,11 @@ it.instance("creating an agent writes a markdown file the agent loader reads", (
     })
     expect(written.content.trim()).toBe("Write clear docs.")
     const loaded = yield* Effect.promise(() => ConfigAgent.load(path.join(directory, ".opencode")))
-    expect(loaded["docs-writer"]).toMatchObject({ description: "Writes docs", mode: "subagent", prompt: "Write clear docs." })
+    expect(loaded["docs-writer"]).toMatchObject({
+      description: "Writes docs",
+      mode: "subagent",
+      prompt: "Write clear docs.",
+    })
     expect(yield* Effect.promise(() => fs.stat(home).then((stat) => stat.isDirectory()))).toBe(true)
   }),
 )
@@ -84,14 +88,16 @@ it.instance("names must be file-safe and unique", () =>
 )
 
 it.instance(
-  "editing a file agent rewrites its file; null resets a setting and the prompt is kept",
+  "editing a file agent rewrites its file; reset settings are removed and the prompt is kept",
   () =>
     Effect.gen(function* () {
       const { directory } = yield* TestInstance
       const agents = yield* OperatorAgents.Service
       const file = path.join(directory, ".opencode", "agents", "reviewer.md")
 
-      expect(yield* agents.update("project", "reviewer", { description: "Reviews carefully", temperature: null })).toBe(file)
+      expect(
+        yield* agents.update("project", "reviewer", { description: "Reviews carefully", reset: ["temperature"] }),
+      ).toBe(file)
       const written = yield* read(file)
       expect(written.data).toEqual({ description: "Reviews carefully", mode: "subagent" })
       expect(written.content.trim()).toBe("Review the diff.")
@@ -132,7 +138,9 @@ it.instance(
 
       expect(yield* agents.remove("project", "scratch")).toBe(file)
       expect(yield* Effect.promise(() => Bun.file(file).exists())).toBe(false)
-      expect(failure(yield* agents.remove("project", "plan").pipe(Effect.exit))).toBeInstanceOf(OperatorAgents.InvalidError)
+      expect(failure(yield* agents.remove("project", "plan").pipe(Effect.exit))).toBeInstanceOf(
+        OperatorAgents.InvalidError,
+      )
       expect(failure(yield* agents.remove("project", "missing").pipe(Effect.exit))).toBeInstanceOf(
         OperatorAgents.NotFoundError,
       )
@@ -141,7 +149,10 @@ it.instance(
     init: (directory) =>
       Effect.promise(async () => {
         await fs.mkdir(path.join(directory, ".opencode", "agents"), { recursive: true })
-        await fs.writeFile(path.join(directory, ".opencode", "agents", "scratch.md"), "---\nmode: subagent\n---\nTemp.\n")
+        await fs.writeFile(
+          path.join(directory, ".opencode", "agents", "scratch.md"),
+          "---\nmode: subagent\n---\nTemp.\n",
+        )
       }),
   },
 )

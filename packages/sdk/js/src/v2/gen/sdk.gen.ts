@@ -119,7 +119,6 @@ import type {
   OperatorAgentCreateResponses,
   OperatorAgentListErrors,
   OperatorAgentListResponses,
-  OperatorAgentPatch,
   OperatorAgentRemoveErrors,
   OperatorAgentRemoveResponses,
   OperatorAgentUpdateErrors,
@@ -133,6 +132,7 @@ import type {
   OperatorConfigUpdateResponses,
   OperatorConfigWriteErrors,
   OperatorConfigWriteResponses,
+  OperatorIdentityKind,
   OperatorIdentityListErrors,
   OperatorIdentityListResponses,
   OperatorIdentityPreviewErrors,
@@ -141,7 +141,6 @@ import type {
   OperatorIdentityRemoveResponses,
   OperatorIdentityReorderErrors,
   OperatorIdentityReorderResponses,
-  OperatorIdentitySave,
   OperatorIdentitySaveErrors,
   OperatorIdentitySaveResponses,
   OperatorPermissionPendingErrors,
@@ -1692,6 +1691,21 @@ export class Agent extends HeyApiClient {
       home?: string
       prompt?: string
       permission?: PermissionConfig
+      reset?: Array<
+        | "description"
+        | "mode"
+        | "model"
+        | "variant"
+        | "temperature"
+        | "top_p"
+        | "steps"
+        | "color"
+        | "hidden"
+        | "disable"
+        | "home"
+        | "prompt"
+        | "permission"
+      >
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1717,6 +1731,7 @@ export class Agent extends HeyApiClient {
             { in: "body", key: "home" },
             { in: "body", key: "prompt" },
             { in: "body", key: "permission" },
+            { in: "body", key: "reset" },
           ],
         },
       ],
@@ -1784,7 +1799,34 @@ export class Agent extends HeyApiClient {
       directory?: string
       workspace?: string
       scope: OperatorConfigScope
-      operatorAgentPatch?: OperatorAgentPatch
+      description?: string
+      mode?: "subagent" | "primary" | "all"
+      model?: string
+      variant?: string
+      temperature?: number
+      top_p?: number
+      steps?: number
+      color?: string
+      hidden?: boolean
+      disable?: boolean
+      home?: string
+      prompt?: string
+      permission?: PermissionConfig
+      reset?: Array<
+        | "description"
+        | "mode"
+        | "model"
+        | "variant"
+        | "temperature"
+        | "top_p"
+        | "steps"
+        | "color"
+        | "hidden"
+        | "disable"
+        | "home"
+        | "prompt"
+        | "permission"
+      >
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1797,7 +1839,20 @@ export class Agent extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "query", key: "scope" },
-            { key: "operatorAgentPatch", map: "body" },
+            { in: "body", key: "description" },
+            { in: "body", key: "mode" },
+            { in: "body", key: "model" },
+            { in: "body", key: "variant" },
+            { in: "body", key: "temperature" },
+            { in: "body", key: "top_p" },
+            { in: "body", key: "steps" },
+            { in: "body", key: "color" },
+            { in: "body", key: "hidden" },
+            { in: "body", key: "disable" },
+            { in: "body", key: "home" },
+            { in: "body", key: "prompt" },
+            { in: "body", key: "permission" },
+            { in: "body", key: "reset" },
           ],
         },
       ],
@@ -1933,7 +1988,15 @@ export class Identity extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
-      operatorIdentitySave?: OperatorIdentitySave
+      scope?: OperatorConfigScope
+      file?: string
+      name?: string
+      kind?: OperatorIdentityKind
+      priority?: number
+      agents?: Array<string>
+      maxLength?: number
+      enabled?: boolean
+      content?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1944,7 +2007,15 @@ export class Identity extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
-            { key: "operatorIdentitySave", map: "body" },
+            { in: "body", key: "scope" },
+            { in: "body", key: "file" },
+            { in: "body", key: "name" },
+            { in: "body", key: "kind" },
+            { in: "body", key: "priority" },
+            { in: "body", key: "agents" },
+            { in: "body", key: "maxLength" },
+            { in: "body", key: "enabled" },
+            { in: "body", key: "content" },
           ],
         },
       ],

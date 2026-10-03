@@ -2851,6 +2851,12 @@ export type OperatorAgent = {
    */
   disabled: boolean
   /**
+   * The agent's own settings as written in config or its file, before defaults are applied
+   */
+  settings: {
+    [key: string]: unknown
+  }
+  /**
    * Sessions in this project that use the agent
    */
   sessions: {
@@ -2884,22 +2890,6 @@ export type OperatorAgentInvalidError = {
   }
 }
 
-export type OperatorAgentPatch = {
-  description?: string
-  mode?: "subagent" | "primary" | "all"
-  model?: string
-  variant?: string
-  temperature?: number
-  top_p?: number
-  steps?: number
-  color?: string
-  hidden?: boolean
-  disable?: boolean
-  home?: string
-  prompt?: string
-  permission?: PermissionConfig
-}
-
 export type OperatorTool = {
   id: string
   description: string
@@ -2925,18 +2915,6 @@ export type OperatorIdentityLayer = {
   agents?: Array<string>
   maxLength?: number
   enabled: boolean
-  content: string
-}
-
-export type OperatorIdentitySave = {
-  scope: OperatorConfigScope
-  file?: string
-  name: string
-  kind?: OperatorIdentityKind
-  priority?: number
-  agents?: Array<string>
-  maxLength?: number
-  enabled?: boolean
   content: string
 }
 
@@ -11917,6 +11895,21 @@ export type OperatorAgentCreateData = {
     home?: string
     prompt?: string
     permission?: PermissionConfig
+    reset?: Array<
+      | "description"
+      | "mode"
+      | "model"
+      | "variant"
+      | "temperature"
+      | "top_p"
+      | "steps"
+      | "color"
+      | "hidden"
+      | "disable"
+      | "home"
+      | "prompt"
+      | "permission"
+    >
   }
   path?: never
   query: {
@@ -11993,7 +11986,36 @@ export type OperatorAgentRemoveResponses = {
 export type OperatorAgentRemoveResponse = OperatorAgentRemoveResponses[keyof OperatorAgentRemoveResponses]
 
 export type OperatorAgentUpdateData = {
-  body?: OperatorAgentPatch
+  body?: {
+    description?: string
+    mode?: "subagent" | "primary" | "all"
+    model?: string
+    variant?: string
+    temperature?: number
+    top_p?: number
+    steps?: number
+    color?: string
+    hidden?: boolean
+    disable?: boolean
+    home?: string
+    prompt?: string
+    permission?: PermissionConfig
+    reset?: Array<
+      | "description"
+      | "mode"
+      | "model"
+      | "variant"
+      | "temperature"
+      | "top_p"
+      | "steps"
+      | "color"
+      | "hidden"
+      | "disable"
+      | "home"
+      | "prompt"
+      | "permission"
+    >
+  }
   path: {
     name: string
   }
@@ -12122,7 +12144,17 @@ export type OperatorIdentityRemoveResponses = {
 export type OperatorIdentityRemoveResponse = OperatorIdentityRemoveResponses[keyof OperatorIdentityRemoveResponses]
 
 export type OperatorIdentitySaveData = {
-  body?: OperatorIdentitySave
+  body?: {
+    scope: OperatorConfigScope
+    file?: string
+    name: string
+    kind?: OperatorIdentityKind
+    priority?: number
+    agents?: Array<string>
+    maxLength?: number
+    enabled?: boolean
+    content: string
+  }
   path?: never
   query?: {
     directory?: string

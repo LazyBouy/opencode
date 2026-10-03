@@ -24,7 +24,10 @@ const mcp = Layer.mock(MCP.Service)({
   clients: () => Effect.succeed({ docs }),
   tools: () =>
     Effect.succeed({
-      docs_search: { def: { name: "search", description: "Search the docs", inputSchema: { type: "object" } }, client: docs },
+      docs_search: {
+        def: { name: "search", description: "Search the docs", inputSchema: { type: "object" } },
+        client: docs,
+      },
     }),
 })
 

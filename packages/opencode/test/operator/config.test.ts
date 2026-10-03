@@ -51,7 +51,10 @@ it.instance("a project write edits the existing project file, keeping comments, 
     const { directory } = yield* TestInstance
     const file = path.join(directory, "opencode.jsonc")
     yield* Effect.promise(() =>
-      fs.writeFile(file, '// settings for this repo\n{\n  // shown in the chat\n  "username": "before",\n  "share": "manual"\n}\n'),
+      fs.writeFile(
+        file,
+        '// settings for this repo\n{\n  // shown in the chat\n  "username": "before",\n  "share": "manual"\n}\n',
+      ),
     )
     const config = yield* OperatorConfig.Service
 
@@ -79,7 +82,9 @@ it.instance("an invalid patch is rejected and nothing is written", () =>
       expect(error).toBeInstanceOf(OperatorConfig.InvalidError)
       expect(String((error as OperatorConfig.InvalidError).message)).toContain("share")
     }
-    expect(yield* Effect.promise(() => Bun.file(path.join(directory, ".opencode", "opencode.jsonc")).exists())).toBe(false)
+    expect(yield* Effect.promise(() => Bun.file(path.join(directory, ".opencode", "opencode.jsonc")).exists())).toBe(
+      false,
+    )
   }),
 )
 

@@ -24,7 +24,9 @@ export const operatorProjectHandlers = HttpApiBuilder.group(InstanceHttpApi, "op
       .handle("tools", () => tools.list())
       .handle("agentCreate", (ctx) => {
         const { name, ...patch } = ctx.payload
-        return agents.create(ctx.query.scope, name, patch).pipe(Effect.flatMap(written(ctx.query.scope)), Effect.mapError(apiError))
+        return agents
+          .create(ctx.query.scope, name, patch)
+          .pipe(Effect.flatMap(written(ctx.query.scope)), Effect.mapError(apiError))
       })
       .handle("agentUpdate", (ctx) =>
         agents
@@ -41,7 +43,9 @@ export const operatorProjectHandlers = HttpApiBuilder.group(InstanceHttpApi, "op
 
 function apiError(error: { readonly _tag: string; readonly message: string }) {
   const data = { message: error.message }
-  if (error._tag === "OperatorAgentNotFound") return new ApiAgentNotFoundError({ name: "OperatorAgentNotFoundError", data })
-  if (error._tag === "OperatorAgentConflict") return new ApiAgentConflictError({ name: "OperatorAgentConflictError", data })
+  if (error._tag === "OperatorAgentNotFound")
+    return new ApiAgentNotFoundError({ name: "OperatorAgentNotFoundError", data })
+  if (error._tag === "OperatorAgentConflict")
+    return new ApiAgentConflictError({ name: "OperatorAgentConflictError", data })
   return new ApiAgentInvalidError({ name: "OperatorAgentInvalidError", data })
 }

@@ -102,7 +102,10 @@ const layer = Layer.effect(
             .pipe(Effect.orDie)
         : []
       const byID = new Map(
-        projects.map((project) => [project.id, { id: project.id, name: project.name ?? undefined, worktree: project.worktree }]),
+        projects.map((project) => [
+          project.id,
+          { id: project.id, name: project.name ?? undefined, worktree: project.worktree },
+        ]),
       )
       return rows.map((row) => ({ ...Session.fromRow(row), project: byID.get(row.project_id) ?? null }))
     })
