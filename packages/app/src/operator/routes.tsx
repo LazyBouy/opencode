@@ -7,6 +7,7 @@ import { OperatorShell } from "./shell"
 // Pages that are built; the rest show what they will do.
 const built: Partial<Record<OperatorPage["id"], Component>> = {
   dashboard: lazy(() => import("./pages/dashboard")),
+  projects: lazy(() => import("./pages/projects")),
   agents: lazy(() => import("./pages/agents")),
   sessions: lazy(() => import("./pages/sessions")),
   inbox: lazy(() => import("./pages/inbox")),

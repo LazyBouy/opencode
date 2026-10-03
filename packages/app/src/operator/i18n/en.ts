@@ -45,6 +45,9 @@ export const dict = {
   "operator.page.dashboard.description": "Health, activity and cost across your projects at a glance.",
   "operator.page.dashboard.planned":
     "Tiles for server health, active sessions, turns, tool calls, tokens and cost, with recent sessions and pending approvals.",
+  "operator.page.projects.title": "Projects",
+  "operator.page.projects.description": "Every project the server knows, with its activity and cost.",
+  "operator.page.projects.planned": "Projects with their agents, settings and sessions.",
   "operator.page.agents.title": "Agents",
   "operator.page.agents.description": "Every agent your projects can use, where it is defined and how it is set up.",
   "operator.page.agents.planned":
@@ -313,4 +316,13 @@ export const dict = {
   "operator.profile.preview": "Preview",
   "operator.profile.previewHint": "What the chosen agent gets at the top of its system prompt.",
   "operator.profile.previewEmpty": "No layers apply to this agent.",
+
+  "operator.projects.add": "Add project",
+  "operator.projects.addFailed": "Couldn't add the project",
+  "operator.projects.hint":
+    "Each project has its own agents and settings in its .opencode folder. Global and built-in agents are available in every project, and a project can change or turn them off.",
+  "operator.projects.empty": "No projects yet. Add a folder to start.",
+  "operator.projects.global": "Outside projects",
+  "operator.projects.globalHint": "Sessions started in folders that are not in a git repository",
+  "operator.projects.newSession": "New session",
 }

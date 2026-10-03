@@ -182,6 +182,29 @@ export async function mockOperator(page: Page) {
       return json(route, { version: "1.18.34-fork", startedAt: now - 7_200_000, platform: "linux", arch: "x64" })
     if (url.pathname === "/operator/stats") return json(route, stats)
     if (url.pathname === "/operator/permission") return json(route, state.pending)
+    if (url.pathname === "/operator/project")
+      return json(route, [
+        {
+          id: "proj_smoke_timeline",
+          name: "smoke-project",
+          worktree: directory,
+          vcs: "git",
+          global: false,
+          sessions: 2,
+          cost: 0.42,
+          lastActivity: now - 600_000,
+          created: now - 86_400_000,
+        },
+        {
+          id: "global",
+          worktree: "/",
+          global: true,
+          sessions: 1,
+          cost: 0.03,
+          lastActivity: now - 3_600_000,
+          created: now - 86_400_000,
+        },
+      ])
     if (url.pathname === "/operator/session") {
       state.sessionQueries.push(url.searchParams)
       const search = url.searchParams.get("search")?.toLowerCase()

@@ -6,6 +6,7 @@ type IconName = ComponentProps<typeof Icon>["name"]
 export interface OperatorPage {
   readonly id:
     | "dashboard"
+    | "projects"
     | "agents"
     | "sessions"
     | "inbox"
@@ -24,6 +25,7 @@ export interface OperatorPage {
 // read this list, so a new page is added here once.
 export const operatorPages: readonly OperatorPage[] = [
   { id: "dashboard", path: "/operator", icon: "dot-grid" },
+  { id: "projects", path: "/operator/projects", icon: "folder" },
   { id: "agents", path: "/operator/agents", icon: "brain" },
   { id: "sessions", path: "/operator/sessions", icon: "bullet-list" },
   { id: "inbox", path: "/operator/inbox", icon: "shield" },

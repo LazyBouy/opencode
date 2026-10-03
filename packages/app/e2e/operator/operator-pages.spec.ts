@@ -65,6 +65,19 @@ test("per-project pages use a project the server knows when none is open in the 
   await expect(page.locator('[data-component="select-v2"]').first()).toContainText("smoke-project")
 })
 
+test("the projects page lists projects and opens a project's agents", async ({ page }) => {
+  await mockOperator(page)
+  await page.goto("/operator/projects")
+  const rows = page.locator('[data-component="operator-table"] tbody tr')
+  await expect(rows).toHaveCount(2)
+  await expect(rows.nth(0)).toContainText("smoke-project")
+  await expect(rows.nth(1)).toContainText("Outside projects")
+  await expect(rows.nth(1).getByRole("button", { name: "Agents" })).toHaveCount(0)
+  await rows.nth(0).getByRole("button", { name: "Agents" }).click()
+  await expect(page).toHaveURL(/\/operator\/agents\?dir=/)
+  await expect(page.locator('[data-component="operator-table"]')).toContainText("reviewer")
+})
+
 test("an agent's permission rules are listed in order", async ({ page }) => {
   await mockOperator(page)
   await page.goto(`/operator/agents/build${dir}`)
