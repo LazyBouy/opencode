@@ -26,10 +26,11 @@ Fork code lives in **fork-only paths**. Upstream never touches them, so they nev
 
 1. **Put new code in a fork-only path.**
 2. **Register through the existing aggregators instead of editing upstream again:**
-   - Routes: add a group to `packages/opencode/src/operator/http/api.ts` and its handler to `http/handlers.ts`. Add its HTTP scenarios to `test/server/httpapi-exercise/operator.ts`.
+   - Routes: add a per-project group to `OperatorApi` in `packages/opencode/src/operator/http/api.ts`, or a server-wide one to `OperatorRootApi` (`http/groups/overview.ts`), and its handler to `http/handlers.ts`. Add its HTTP scenarios to `test/server/httpapi-exercise/operator.ts`.
    - Services the routes need: add them to `packages/opencode/src/operator/nodes.ts`.
    - Top-level config keys: add them to `packages/core/src/v1/config/fork.ts`.
-   - Web pages: add them to `packages/app/src/operator/pages.ts`. The routes, sidebar and command palette all read it.
+   - Web pages: add them to `packages/app/src/operator/pages.ts` and their component to `routes.tsx`. The routes, sidebar and command palette all read the list.
+   - Things on the session page: mount them from the fork-owned sidebar (as `inspector/` does through the titlebar's right-hand slot), not from session page files.
    - UI strings: add them to `packages/app/src/operator/i18n/en.ts`, **not** the 62 upstream locale files. Every locale falls back to these English strings.
 3. **Prefer events and hooks to edits.** Subscribe to bus events or use plugin hooks rather than changing upstream logic.
 4. **Keep unavoidable upstream edits small and list them below.** For example: a new agent config key must go in `KNOWN_KEYS`, or it is sent to the model provider.
@@ -47,7 +48,7 @@ Re-check these after every upstream merge. **Risk** is how likely the file is to
 | `packages/opencode/src/session/{message-v2,compaction}.ts`, `share/share-next.ts`, `cli/cmd/export.ts` | merge: keep projected parts out of the model, shares and exports | low |
 | `packages/opencode/src/command/index.ts` | merge: built-in `/merge` command | low |
 | `packages/opencode/src/effect/app-runtime.ts` | merge: `MergeBinding` in the CLI runtime | low |
-| `packages/opencode/src/server/routes/instance/httpapi/{api,server}.ts` | mount `OperatorApi`, `operatorHandlers` and `operatorNodes` (one line each) | low |
+| `packages/opencode/src/server/routes/instance/httpapi/{api,server}.ts` | mount the fork's routes: `OperatorApi` in InstanceHttpApi; `OperatorRootApi` in the OpenAPI document and `operatorRootRoutes` beside RootHttpApi (kept out of RootHttpApi so upstream tests that assemble it still work); `operatorHandlers` and `operatorNodes` (one line each) | low |
 | `packages/opencode/src/server/routes/instance/httpapi/{groups,handlers}/session.ts` | merge: `GET /session/:id/merge`, compaction guard | low |
 | `packages/core/src/session.ts`, `session/sql.ts` | merge: binding table and V2 prompt guard | low |
 | `packages/core/src/v1/config/config.ts` | spread `ConfigForkV1.fields` (one line) | low |

@@ -6,6 +6,7 @@ import { useSettingsDialog } from "@/components/settings-dialog"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
 import { useOperatorCommands } from "./commands"
+import { SessionInspector } from "./inspector/inspector"
 import { isActivePage, operatorPages } from "./pages"
 import "./operator.css"
 
@@ -76,6 +77,7 @@ export function OperatorSidebar() {
         </For>
       </div>
 
+      <SessionInspector />
       <div data-slot="operator-sidebar-footer">
         <button
           type="button"

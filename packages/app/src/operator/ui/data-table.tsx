@@ -32,8 +32,10 @@ export function DataTable<T>(props: DataTableProps<T>) {
   const [store, setStore] = createStore<{ sort?: Sort }>({ sort: props.initialSort })
   const columns = createMemo(() => props.columns.filter((column) => !props.hidden?.includes(column.id)))
   const rows = createMemo(() => {
+    // A server that answers with an unexpected shape shows an empty table rather than breaking the page.
+    const source = Array.isArray(props.rows) ? props.rows : []
     const search = props.search
-    const filtered = search && props.filter ? filterRows(props.rows, props.filter, search) : props.rows
+    const filtered = search && props.filter ? filterRows(source, props.filter, search) : source
     return sortRows(filtered, store.sort, (row, id) => props.columns.find((column) => column.id === id)?.value?.(row))
   })
   const direction = (column: Column<T>) => {

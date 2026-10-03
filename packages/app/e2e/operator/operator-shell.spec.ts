@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test"
 import { fixture, pageMessages } from "../smoke/session-timeline.fixture"
 import { mockOpenCodeServer } from "../utils/mock-server"
+import { mockOperator } from "./mock-operator"
 
 const claude = {
   id: "claude",
@@ -21,6 +22,7 @@ test.beforeEach(async ({ page }) => {
     project: fixture.project,
     pageMessages,
   })
+  await mockOperator(page)
 })
 
 test("the sidebar opens operator pages and marks the current one", async ({ page }) => {
@@ -40,6 +42,13 @@ test("the sidebar opens operator pages and marks the current one", async ({ page
 
   await nav.getByRole("link", { name: "Chat" }).click()
   await expect(page).toHaveURL(/\/$/)
+})
+
+test("a page whose data has an unexpected shape still renders", async ({ page }) => {
+  await page.route("**/operator/stats*", (route) => route.fulfill({ contentType: "application/json", body: "{}" }))
+  await page.goto("/operator")
+  await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeVisible()
+  await expect(page.getByRole("navigation", { name: "Operator" })).toBeVisible()
 })
 
 test("an unknown operator page falls back to the dashboard", async ({ page }) => {

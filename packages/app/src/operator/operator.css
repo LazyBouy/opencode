@@ -399,3 +399,293 @@ html[data-theme="iphi"] :is([data-component="operator-stat"], [data-component="o
     transition: none;
   }
 }
+
+/* Page sections */
+
+[data-slot="operator-tiles"] {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+[data-slot="operator-columns"] {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  [data-slot="operator-columns"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+[data-component="operator-panel"] {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+[data-component="operator-panel"] [data-slot="operator-panel-head"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+[data-component="operator-panel"] [data-slot="operator-panel-title"] {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--v2-text-text-base);
+}
+
+:is([data-slot="operator-note"], [data-slot="operator-panel-empty"]) {
+  margin: 0;
+  font-size: 12px;
+  color: var(--v2-text-text-muted);
+}
+
+[data-slot="operator-toolbar"] {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+[data-slot="operator-toolbar"] > :first-child {
+  flex: 1 1 220px;
+  max-width: 360px;
+}
+
+:is([data-slot="operator-actions"], [data-slot="operator-more"]) {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+[data-slot="operator-more"] {
+  justify-content: center;
+}
+
+[data-slot="operator-color-dot"] {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  flex: 0 0 auto;
+}
+
+[data-slot="operator-cell-clamp"] {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--v2-text-text-muted);
+  max-width: 60ch;
+}
+
+[data-slot="operator-link"] {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--v2-text-text-accent);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: start;
+}
+
+[data-slot="operator-link"]:hover {
+  color: var(--v2-text-text-accent-hover);
+  text-decoration: underline;
+}
+
+[data-component="operator-code"],
+[data-slot="operator-error"] {
+  margin: 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--v2-background-bg-layer-01);
+  border: 1px solid var(--v2-border-border-muted);
+  font-family: var(--font-family-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 480px;
+  overflow: auto;
+  color: var(--v2-text-text-base);
+}
+
+[data-slot="operator-error"] {
+  color: var(--v2-state-fg-danger);
+  border-color: var(--v2-state-border-danger);
+  background: var(--v2-state-bg-danger);
+}
+
+[data-component="textarea-v2"].operator-editor {
+  width: 100%;
+}
+
+[data-component="textarea-v2"].operator-editor textarea {
+  width: 100%;
+  font-family: var(--font-family-mono, ui-monospace, monospace);
+  font-size: 12px;
+}
+
+[data-component="operator-facts"] {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px 24px;
+  margin: 12px 0 0;
+  font-size: 13px;
+}
+
+[data-component="operator-facts"] dt {
+  color: var(--v2-text-text-muted);
+}
+
+[data-component="operator-facts"] dd {
+  margin: 0;
+  color: var(--v2-text-text-base);
+  word-break: break-word;
+}
+
+[data-component="operator-sources"] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13px;
+}
+
+[data-component="operator-sources"] summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+[data-component="operator-sources"] details[open] summary {
+  margin-bottom: 6px;
+}
+
+/* Permission Inbox */
+
+[data-component="operator-ask-group"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--v2-border-border-muted);
+  border-radius: 12px;
+  background: var(--v2-background-bg-base);
+}
+
+html[data-theme="iphi"] [data-component="operator-ask-group"] {
+  background: var(--iphi-glass);
+  border-color: var(--iphi-glass-border);
+  border-radius: var(--iphi-radius-card);
+}
+
+[data-component="operator-ask"] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--v2-border-border-muted);
+}
+
+[data-component="operator-ask"] [data-slot="operator-ask-head"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+[data-component="operator-ask"] [data-slot="operator-ask-age"] {
+  font-size: 12px;
+  color: var(--v2-text-text-muted);
+}
+
+[data-component="operator-ask"] [data-slot="operator-ask-patterns"] {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+/* Tab panels on operator pages get the same spacing as the page itself. */
+[data-component="operator-shell"] [role="tabpanel"] {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 12px;
+}
+
+/* Session details panel */
+
+[data-component="operator-inspector"] {
+  position: fixed;
+  top: 44px;
+  right: 8px;
+  bottom: 8px;
+  z-index: 40;
+  width: min(380px, calc(100vw - 16px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  overflow-y: auto;
+  background: var(--v2-background-bg-base);
+  border: 1px solid var(--v2-border-border-base);
+  border-radius: 12px;
+  box-shadow: var(--v2-elevation-raised, 0 8px 24px rgba(0, 0, 0, 0.12));
+}
+
+html[data-theme="iphi"] [data-component="operator-inspector"] {
+  background: var(--iphi-glass-strong);
+  border-color: var(--iphi-glass-border);
+  border-radius: var(--iphi-radius-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+[data-component="operator-inspector"] [data-slot="operator-inspector-head"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+[data-component="operator-inspector"] [data-slot="operator-inspector-head"] h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+[data-component="operator-inspector"] [role="tabpanel"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+}
+
+[data-component="operator-list"] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+[data-component="operator-list"] li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
