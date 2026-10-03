@@ -2,6 +2,7 @@ import { MergeAdapterRegistry } from "@/merge/adapter/registry"
 import { MergeBinding } from "@/merge/binding"
 import { OperatorAgents } from "./agents"
 import { OperatorConfig } from "./config"
+import { OperatorIdentity } from "./identity"
 import { OperatorInbox } from "./inbox"
 import { OperatorOverview } from "./overview"
 import { OperatorTools } from "./tools"
@@ -15,4 +16,5 @@ export const operatorNodes = [
   OperatorInbox.node,
   OperatorAgents.node,
   OperatorTools.node,
+  OperatorIdentity.node,
 ] as const

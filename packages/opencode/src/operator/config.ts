@@ -93,9 +93,7 @@ const layer = Layer.effect(
     }, Effect.provideService(FSUtil.Service, fs))
 
     const targets = Effect.fnUntraced(function* (list: ReadonlyArray<Source>) {
-      const ctx = yield* InstanceState.context
-      // Non-git projects report "/" as their worktree; their root is the directory itself.
-      const root = ctx.worktree === "/" ? ctx.directory : ctx.worktree
+      const root = projectRoot(yield* InstanceState.context)
       const global =
         ["opencode.jsonc", "opencode.json", "config.json"]
           .map((name) => path.join(Global.Path.config, name))
@@ -143,6 +141,17 @@ const layer = Layer.effect(
 )
 
 export const node = LayerNode.make({ service: Service, layer, deps: [FSUtil.node] })
+
+// Where a project's own files live. Non-git projects report "/" as their worktree; their root is the
+// directory itself.
+export function projectRoot(ctx: { directory: string; worktree: string }) {
+  return ctx.worktree === "/" ? ctx.directory : ctx.worktree
+}
+
+// The folder that holds config-like files (agents, identity layers) at a scope.
+export function scopeDirectory(scope: Scope, ctx: { directory: string; worktree: string }) {
+  return scope === "global" ? Global.Path.config : path.join(projectRoot(ctx), ".opencode")
+}
 
 // The JSON schema of the config file, for building editors. Computed once on first use.
 let schemaDocument: Record<string, unknown> | undefined

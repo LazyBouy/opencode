@@ -1,5 +1,6 @@
 import { HttpApi } from "effect/unstable/httpapi"
 import { OperatorConfigApi } from "./groups/config"
+import { OperatorIdentityApi } from "./groups/identity"
 import { MergeApi } from "./groups/merge"
 import { OperatorProjectApi } from "./groups/project"
 
@@ -13,3 +14,4 @@ export const OperatorApi = HttpApi.make("operator")
   .addHttpApi(MergeApi)
   .addHttpApi(OperatorConfigApi)
   .addHttpApi(OperatorProjectApi)
+  .addHttpApi(OperatorIdentityApi)

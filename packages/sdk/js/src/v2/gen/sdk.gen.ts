@@ -115,8 +115,15 @@ import type {
   MergeAdapterListResponses,
   ModelRef,
   MoveSessionDestination,
+  OperatorAgentCreateErrors,
+  OperatorAgentCreateResponses,
   OperatorAgentListErrors,
   OperatorAgentListResponses,
+  OperatorAgentPatch,
+  OperatorAgentRemoveErrors,
+  OperatorAgentRemoveResponses,
+  OperatorAgentUpdateErrors,
+  OperatorAgentUpdateResponses,
   OperatorConfigLayersErrors,
   OperatorConfigLayersResponses,
   OperatorConfigSchemaErrors,
@@ -126,6 +133,17 @@ import type {
   OperatorConfigUpdateResponses,
   OperatorConfigWriteErrors,
   OperatorConfigWriteResponses,
+  OperatorIdentityListErrors,
+  OperatorIdentityListResponses,
+  OperatorIdentityPreviewErrors,
+  OperatorIdentityPreviewResponses,
+  OperatorIdentityRemoveErrors,
+  OperatorIdentityRemoveResponses,
+  OperatorIdentityReorderErrors,
+  OperatorIdentityReorderResponses,
+  OperatorIdentitySave,
+  OperatorIdentitySaveErrors,
+  OperatorIdentitySaveResponses,
   OperatorPermissionPendingErrors,
   OperatorPermissionPendingResponses,
   OperatorSessionListErrors,
@@ -144,6 +162,7 @@ import type {
   PartUpdateResponses,
   PathGetErrors,
   PathGetResponses,
+  PermissionConfig,
   PermissionListErrors,
   PermissionListResponses,
   PermissionReplyErrors,
@@ -1648,6 +1667,156 @@ export class Agent extends HeyApiClient {
       ...params,
     })
   }
+
+  /**
+   * Create an agent
+   *
+   * Write a new markdown agent in the global or project `agents` folder. The project reloads so the agent can be used.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      scope: OperatorConfigScope
+      name?: string
+      description?: string
+      mode?: "subagent" | "primary" | "all"
+      model?: string
+      variant?: string
+      temperature?: number
+      top_p?: number
+      steps?: number
+      color?: string
+      hidden?: boolean
+      disable?: boolean
+      home?: string
+      prompt?: string
+      permission?: PermissionConfig
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "scope" },
+            { in: "body", key: "name" },
+            { in: "body", key: "description" },
+            { in: "body", key: "mode" },
+            { in: "body", key: "model" },
+            { in: "body", key: "variant" },
+            { in: "body", key: "temperature" },
+            { in: "body", key: "top_p" },
+            { in: "body", key: "steps" },
+            { in: "body", key: "color" },
+            { in: "body", key: "hidden" },
+            { in: "body", key: "disable" },
+            { in: "body", key: "home" },
+            { in: "body", key: "prompt" },
+            { in: "body", key: "permission" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<OperatorAgentCreateResponses, OperatorAgentCreateErrors, ThrowOnError>(
+      {
+        url: "/operator/agent",
+        ...options,
+        ...params,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+          ...params.headers,
+        },
+      },
+    )
+  }
+
+  /**
+   * Delete an agent
+   *
+   * Delete a markdown or config agent. Built-in agents can only be turned off.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+      scope: OperatorConfigScope
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "scope" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      OperatorAgentRemoveResponses,
+      OperatorAgentRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/operator/agent/{name}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Edit an agent
+   *
+   * Change an agent's settings. A markdown agent's own file is edited; built-in and config agents get `agent.<name>` settings in the global or project config. null resets a setting.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+      scope: OperatorConfigScope
+      operatorAgentPatch?: OperatorAgentPatch
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "scope" },
+            { key: "operatorAgentPatch", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      OperatorAgentUpdateResponses,
+      OperatorAgentUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/operator/agent/{name}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
 }
 
 export class Tool extends HeyApiClient {
@@ -1676,6 +1845,200 @@ export class Tool extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<OperatorToolListResponses, OperatorToolListErrors, ThrowOnError>({
       url: "/operator/tool",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Identity extends HeyApiClient {
+  /**
+   * List identity layers
+   *
+   * The global and project identity layers, in the order they are added to system prompts: org, user, project, then priority.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorIdentityListResponses,
+      OperatorIdentityListErrors,
+      ThrowOnError
+    >({
+      url: "/operator/identity",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Delete an identity layer
+   *
+   * Delete an identity layer file.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      scope: OperatorConfigScope
+      file: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "scope" },
+            { in: "query", key: "file" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      OperatorIdentityRemoveResponses,
+      OperatorIdentityRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/operator/identity/layer",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Save an identity layer
+   *
+   * Create or replace an identity layer file. Changes apply from the next request.
+   */
+  public save<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      operatorIdentitySave?: OperatorIdentitySave
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "operatorIdentitySave", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorIdentitySaveResponses,
+      OperatorIdentitySaveErrors,
+      ThrowOnError
+    >({
+      url: "/operator/identity/layer",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Reorder identity layers
+   *
+   * Set a scope's layer order by rewriting their priorities (10, 20, 30, …).
+   */
+  public reorder<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      scope?: OperatorConfigScope
+      files?: Array<string>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "scope" },
+            { in: "body", key: "files" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorIdentityReorderResponses,
+      OperatorIdentityReorderErrors,
+      ThrowOnError
+    >({
+      url: "/operator/identity/reorder",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Preview an agent's identity
+   *
+   * The identity text added to the given agent's system prompt.
+   */
+  public preview<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      agent?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "agent" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorIdentityPreviewResponses,
+      OperatorIdentityPreviewErrors,
+      ThrowOnError
+    >({
+      url: "/operator/identity/preview",
       ...options,
       ...params,
     })
@@ -1748,6 +2111,11 @@ export class Operator extends HeyApiClient {
   private _tool?: Tool
   get tool(): Tool {
     return (this._tool ??= new Tool({ client: this.client }))
+  }
+
+  private _identity?: Identity
+  get identity(): Identity {
+    return (this._identity ??= new Identity({ client: this.client }))
   }
 }
 

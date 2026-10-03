@@ -10476,6 +10476,351 @@
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.agent.list({\n  ...\n})"
           }
         ]
+      },
+      "post": {
+        "tags": ["operator project"],
+        "operationId": "operator.agent.create",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/OperatorConfigScope"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The agent file that was written",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAgentWritten"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorAgentInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorAgentInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorAgentNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAgentNotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "OperatorAgentConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAgentConflictError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Write a new markdown agent in the global or project `agents` folder. The project reloads so the agent can be used.",
+        "summary": "Create an agent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": ["subagent", "primary", "all"]
+                  },
+                  "model": {
+                    "type": "string"
+                  },
+                  "variant": {
+                    "type": "string"
+                  },
+                  "temperature": {
+                    "type": "number"
+                  },
+                  "top_p": {
+                    "type": "number"
+                  },
+                  "steps": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  "color": {
+                    "type": "string"
+                  },
+                  "hidden": {
+                    "type": "boolean"
+                  },
+                  "disable": {
+                    "type": "boolean"
+                  },
+                  "home": {
+                    "type": "string"
+                  },
+                  "prompt": {
+                    "type": "string"
+                  },
+                  "permission": {
+                    "$ref": "#/components/schemas/PermissionConfig"
+                  }
+                },
+                "required": ["name"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.agent.create({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/agent/{name}": {
+      "patch": {
+        "tags": ["operator project"],
+        "operationId": "operator.agent.update",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/OperatorConfigScope"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The file that was written",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAgentWritten"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorAgentInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorAgentInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorAgentNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAgentNotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "OperatorAgentConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAgentConflictError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Change an agent's settings. A markdown agent's own file is edited; built-in and config agents get `agent.<name>` settings in the global or project config. null resets a setting.",
+        "summary": "Edit an agent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperatorAgentPatch"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.agent.update({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "tags": ["operator project"],
+        "operationId": "operator.agent.remove",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/OperatorConfigScope"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The file that was changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAgentWritten"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorAgentInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorAgentInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorAgentNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAgentNotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "OperatorAgentConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAgentConflictError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Delete a markdown or config agent. Built-in agents can only be turned off.",
+        "summary": "Delete an agent",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.agent.remove({\n  ...\n})"
+          }
+        ]
       }
     },
     "/operator/tool": {
@@ -10532,6 +10877,356 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.tool.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/identity": {
+      "get": {
+        "tags": ["operator identity"],
+        "operationId": "operator.identity.list",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Identity layers in prompt order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorIdentityLayer"
+                  },
+                  "description": "Identity layers in prompt order"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The global and project identity layers, in the order they are added to system prompts: org, user, project, then priority.",
+        "summary": "List identity layers",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.identity.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/identity/layer": {
+      "put": {
+        "tags": ["operator identity"],
+        "operationId": "operator.identity.save",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The saved layer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorIdentityLayer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Create or replace an identity layer file. Changes apply from the next request.",
+        "summary": "Save an identity layer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperatorIdentitySave"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.identity.save({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "tags": ["operator identity"],
+        "operationId": "operator.identity.remove",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/OperatorConfigScope"
+            },
+            "required": true
+          },
+          {
+            "name": "file",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Deleted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Delete an identity layer file.",
+        "summary": "Delete an identity layer",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.identity.remove({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/identity/reorder": {
+      "post": {
+        "tags": ["operator identity"],
+        "operationId": "operator.identity.reorder",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Identity layers in prompt order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorIdentityLayer"
+                  },
+                  "description": "Identity layers in prompt order"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Set a scope's layer order by rewriting their priorities (10, 20, 30, …).",
+        "summary": "Reorder identity layers",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "$ref": "#/components/schemas/OperatorConfigScope"
+                  },
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": ["scope", "files"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.identity.reorder({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/identity/preview": {
+      "get": {
+        "tags": ["operator identity"],
+        "operationId": "operator.identity.preview",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Identity text",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["text"],
+                  "additionalProperties": false,
+                  "description": "Identity text"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The identity text added to the given agent's system prompt.",
+        "summary": "Preview an agent's identity",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.identity.preview({\n  ...\n})"
           }
         ]
       }
@@ -21530,6 +22225,9 @@
           },
           "permission": {
             "$ref": "#/components/schemas/PermissionConfig"
+          },
+          "home": {
+            "type": "string"
           }
         },
         "additionalProperties": {}
@@ -24667,6 +25365,13 @@
           "source": {
             "$ref": "#/components/schemas/OperatorAgentSource"
           },
+          "home": {
+            "type": "string"
+          },
+          "disabled": {
+            "type": "boolean",
+            "description": "Turned off with `disable: true`; such agents cannot be used"
+          },
           "sessions": {
             "type": "object",
             "properties": {
@@ -24682,7 +25387,127 @@
             "description": "Sessions in this project that use the agent"
           }
         },
-        "required": ["name", "mode", "permission", "options", "source", "sessions"],
+        "required": ["name", "mode", "permission", "options", "source", "disabled", "sessions"],
+        "additionalProperties": false
+      },
+      "OperatorAgentWritten": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": ["path"],
+        "additionalProperties": false
+      },
+      "OperatorAgentNotFoundError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorAgentNotFoundError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorAgentConflictError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorAgentConflictError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorAgentInvalidError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorAgentInvalidError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorAgentPatch": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["subagent", "primary", "all"]
+          },
+          "model": {
+            "type": "string"
+          },
+          "variant": {
+            "type": "string"
+          },
+          "temperature": {
+            "type": "number"
+          },
+          "top_p": {
+            "type": "number"
+          },
+          "steps": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "color": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
+          },
+          "disable": {
+            "type": "boolean"
+          },
+          "home": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "permission": {
+            "$ref": "#/components/schemas/PermissionConfig"
+          }
+        },
         "additionalProperties": false
       },
       "OperatorTool": {
@@ -24703,6 +25528,89 @@
           }
         },
         "required": ["id", "description", "origin"],
+        "additionalProperties": false
+      },
+      "OperatorIdentityKind": {
+        "type": "string",
+        "enum": ["org", "user", "project"]
+      },
+      "OperatorIdentityLayer": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "$ref": "#/components/schemas/OperatorConfigScope"
+          },
+          "file": {
+            "type": "string",
+            "description": "File name inside the scope's identity folder"
+          },
+          "path": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/OperatorIdentityKind"
+          },
+          "priority": {
+            "type": "number",
+            "description": "Lower comes first within a kind (default 50)"
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "maxLength": {
+            "type": "number"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": ["scope", "file", "path", "name", "kind", "priority", "enabled", "content"],
+        "additionalProperties": false
+      },
+      "OperatorIdentitySave": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "$ref": "#/components/schemas/OperatorConfigScope"
+          },
+          "file": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/OperatorIdentityKind"
+          },
+          "priority": {
+            "type": "number"
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "maxLength": {
+            "type": "number"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": ["scope", "name", "content"],
         "additionalProperties": false
       },
       "UnauthorizedError": {
@@ -38345,6 +39253,10 @@
     {
       "name": "operator project",
       "description": "Per-project operator routes."
+    },
+    {
+      "name": "operator identity",
+      "description": "Identity layer routes."
     },
     {
       "name": "opencode HttpApi",

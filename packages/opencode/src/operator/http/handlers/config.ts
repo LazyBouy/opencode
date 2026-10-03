@@ -1,13 +1,11 @@
 import { Config } from "@/config/config"
 import { EffectBridge } from "@/effect/bridge"
-import { InstanceState } from "@/effect/instance-state"
 import { OperatorConfig } from "@/operator/config"
-import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
-import { markInstanceForDisposal } from "@/server/routes/instance/httpapi/lifecycle"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { ApiOperatorConfigInvalidError } from "../groups/config"
+import { reloadAfterWrite } from "../reload"
 
 export const operatorConfigHandlers = HttpApiBuilder.group(InstanceHttpApi, "operatorConfig", (handlers) =>
   Effect.gen(function* () {
@@ -15,7 +13,6 @@ export const operatorConfigHandlers = HttpApiBuilder.group(InstanceHttpApi, "ope
     const config = yield* Config.Service
     const bridge = yield* EffectBridge.make()
 
-    // Global config feeds every project, so every instance reloads; a project write reloads this one.
     const apply = Effect.fnUntraced(function* (
       scope: OperatorConfig.Scope,
       write: Effect.Effect<typeof OperatorConfig.UpdateResult.Type, OperatorConfig.InvalidError>,
@@ -29,13 +26,7 @@ export const operatorConfigHandlers = HttpApiBuilder.group(InstanceHttpApi, "ope
             }),
         ),
       )
-      if (!result.changed) return result
-      if (scope === "global") {
-        yield* config.invalidate()
-        bridge.fork(disposeAllInstancesAndEmitGlobalDisposed({ swallowErrors: true }))
-        return result
-      }
-      yield* markInstanceForDisposal(yield* InstanceState.context)
+      if (result.changed) yield* reloadAfterWrite(scope, config, bridge)
       return result
     })
 

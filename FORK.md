@@ -28,7 +28,8 @@ Fork code lives in **fork-only paths**. Upstream never touches them, so they nev
 2. **Register through the existing aggregators instead of editing upstream again:**
    - Routes: add a per-project group to `OperatorApi` in `packages/opencode/src/operator/http/api.ts`, or a server-wide one to `OperatorRootApi` (`http/groups/overview.ts`), and its handler to `http/handlers.ts`. Add its HTTP scenarios to `test/server/httpapi-exercise/operator.ts`.
    - Services the routes need: add them to `packages/opencode/src/operator/nodes.ts`.
-   - Top-level config keys: add them to `packages/core/src/v1/config/fork.ts`.
+   - Top-level config keys: add them to `fields` in `packages/core/src/v1/config/fork.ts`; agent keys to `agentFields` there.
+   - Built-in plugins: add them to `operatorPlugins` in `packages/opencode/src/operator/plugins.ts`.
    - Web pages: add them to `packages/app/src/operator/pages.ts` and their component to `routes.tsx`. The routes, sidebar and command palette all read the list.
    - Things on the session page: mount them from the fork-owned sidebar (as `inspector/` does through the titlebar's right-hand slot), not from session page files.
    - UI strings: add them to `packages/app/src/operator/i18n/en.ts`, **not** the 62 upstream locale files. Every locale falls back to these English strings.
@@ -52,6 +53,9 @@ Re-check these after every upstream merge. **Risk** is how likely the file is to
 | `packages/opencode/src/server/routes/instance/httpapi/groups/session.ts`, `packages/opencode/src/server/routes/instance/httpapi/handlers/session.ts` | merge: `GET /session/:id/merge`, compaction guard | low |
 | `packages/core/src/session.ts`, `packages/core/src/session/sql.ts` | merge: binding table and V2 prompt guard | low |
 | `packages/core/src/v1/config/config.ts` | spread `ConfigForkV1.fields` (one line) | low |
+| `packages/core/src/v1/config/agent.ts` | spread `ConfigForkV1.agentFields` into the agent schema and `agentKeys` into `KNOWN_KEYS`, so fork agent keys (such as `home`) are not sent to providers as options | low |
+| `packages/opencode/src/plugin/index.ts` | add `operatorPlugins` (identity layers) to the built-in plugins; they are off when default plugins are disabled | low |
+| `packages/opencode/src/session/llm/request.ts`, `packages/plugin/src/index.ts` | pass the agent name to `experimental.chat.system.transform` (upstream-able) | low |
 | `packages/schema/src/event-manifest.ts`, `packages/schema/src/v1/session.ts` | merge: event and `origin` on parts | low |
 | `packages/server/src/handlers/session.ts` | merge: `MergedError` → 409 | low |
 | `packages/app/src/app.tsx` | mount `<OperatorRoutes />`; default theme `iphi` | medium |

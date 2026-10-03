@@ -10,3 +10,14 @@ export const fields = {
     description: "Settings for `/merge`, which attaches external agent sessions such as Claude Code",
   }),
 }
+
+// Agent keys this fork adds. ConfigAgentV1 spreads these fields into its schema and their names into
+// KNOWN_KEYS once; without that, unknown agent keys are folded into `options` and sent to the model
+// provider. The fork reads them from config itself, so upstream's agent merge stays unchanged.
+export const agentFields = {
+  home: Schema.optional(Schema.String).annotate({
+    description: "Folder this agent works in: new sessions started as this agent open there",
+  }),
+}
+export const agentKeys = Object.keys(agentFields)
+

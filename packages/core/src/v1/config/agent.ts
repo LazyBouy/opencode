@@ -2,6 +2,7 @@ export * as ConfigAgentV1 from "./agent"
 
 import { Schema, SchemaGetter } from "effect"
 import { PositiveInt } from "../../schema"
+import { ConfigForkV1 } from "./fork"
 import { ConfigPermissionV1 } from "./permission"
 
 const Color = Schema.Union([
@@ -36,6 +37,7 @@ const AgentSchema = Schema.StructWithRest(
     }),
     maxSteps: Schema.optional(PositiveInt).annotate({ description: "@deprecated Use 'steps' field instead." }),
     permission: Schema.optional(ConfigPermissionV1.Info),
+    ...ConfigForkV1.agentFields,
   }),
   [Schema.Record(Schema.String, Schema.Any)],
 )
@@ -57,6 +59,7 @@ const KNOWN_KEYS = new Set([
   "permission",
   "disable",
   "tools",
+  ...ConfigForkV1.agentKeys,
 ])
 
 const normalize = (agent: Schema.Schema.Type<typeof AgentSchema>): Schema.Schema.Type<typeof AgentSchema> => {

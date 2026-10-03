@@ -1,4 +1,5 @@
 import { OperatorAgents } from "@/operator/agents"
+import { OperatorConfig } from "@/operator/config"
 import { OperatorTools } from "@/operator/tools"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
@@ -7,13 +8,27 @@ import { InstanceContextMiddleware } from "@/server/routes/instance/httpapi/midd
 import {
   WorkspaceRoutingMiddleware,
   WorkspaceRoutingQuery,
+  WorkspaceRoutingQueryFields,
 } from "@/server/routes/instance/httpapi/middleware/workspace-routing"
 import { described } from "@/server/routes/instance/httpapi/groups/metadata"
 
 export const OperatorProjectPaths = {
   agents: "/operator/agent",
+  agent: "/operator/agent/:name",
   tools: "/operator/tool",
 } as const
+
+const ScopeQuery = Schema.Struct({ ...WorkspaceRoutingQueryFields, scope: OperatorConfig.Scope })
+const AgentWritten = Schema.Struct({ path: Schema.String }).annotate({ identifier: "OperatorAgentWritten" })
+
+const agentError = <Name extends string, Status extends number>(name: Name, status: Status) =>
+  Schema.ErrorClass<{ readonly name: Name; readonly data: { readonly message: string } }>(name)(
+    { name: Schema.Literal(name), data: Schema.Struct({ message: Schema.String }) },
+    { httpApiStatus: status },
+  )
+export class ApiAgentNotFoundError extends agentError("OperatorAgentNotFoundError", 404) {}
+export class ApiAgentConflictError extends agentError("OperatorAgentConflictError", 409) {}
+export class ApiAgentInvalidError extends agentError("OperatorAgentInvalidError", 400) {}
 
 export const OperatorProjectApi = HttpApi.make("operator-project")
   .add(
@@ -28,6 +43,45 @@ export const OperatorProjectApi = HttpApi.make("operator-project")
             summary: "List agents with their source",
             description:
               "Every agent in this project, including hidden ones, with where it is defined (built-in, config or a markdown file) and how many of the project's sessions use it.",
+          }),
+        ),
+        HttpApiEndpoint.post("agentCreate", OperatorProjectPaths.agents, {
+          query: ScopeQuery,
+          payload: Schema.Struct({ name: Schema.String, ...OperatorAgents.Patch.fields }),
+          success: described(AgentWritten, "The agent file that was written"),
+          error: [ApiAgentNotFoundError, ApiAgentConflictError, ApiAgentInvalidError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.agent.create",
+            summary: "Create an agent",
+            description:
+              "Write a new markdown agent in the global or project `agents` folder. The project reloads so the agent can be used.",
+          }),
+        ),
+        HttpApiEndpoint.patch("agentUpdate", OperatorProjectPaths.agent, {
+          params: { name: Schema.String },
+          query: ScopeQuery,
+          payload: OperatorAgents.Patch,
+          success: described(AgentWritten, "The file that was written"),
+          error: [ApiAgentNotFoundError, ApiAgentConflictError, ApiAgentInvalidError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.agent.update",
+            summary: "Edit an agent",
+            description:
+              "Change an agent's settings. A markdown agent's own file is edited; built-in and config agents get `agent.<name>` settings in the global or project config. null resets a setting.",
+          }),
+        ),
+        HttpApiEndpoint.delete("agentRemove", OperatorProjectPaths.agent, {
+          params: { name: Schema.String },
+          query: ScopeQuery,
+          success: described(AgentWritten, "The file that was changed"),
+          error: [ApiAgentNotFoundError, ApiAgentConflictError, ApiAgentInvalidError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.agent.remove",
+            summary: "Delete an agent",
+            description: "Delete a markdown or config agent. Built-in agents can only be turned off.",
           }),
         ),
         HttpApiEndpoint.get("tools", OperatorProjectPaths.tools, {

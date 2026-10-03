@@ -1727,6 +1727,7 @@ export type AgentConfig = {
   steps?: number
   maxSteps?: number
   permission?: PermissionConfig
+  home?: string
   [key: string]:
     | unknown
     | string
@@ -2844,6 +2845,11 @@ export type OperatorAgent = {
   }
   steps?: number
   source: OperatorAgentSource
+  home?: string
+  /**
+   * Turned off with `disable: true`; such agents cannot be used
+   */
+  disabled: boolean
   /**
    * Sessions in this project that use the agent
    */
@@ -2853,11 +2859,85 @@ export type OperatorAgent = {
   }
 }
 
+export type OperatorAgentWritten = {
+  path: string
+}
+
+export type OperatorAgentNotFoundError = {
+  name: "OperatorAgentNotFoundError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorAgentConflictError = {
+  name: "OperatorAgentConflictError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorAgentInvalidError = {
+  name: "OperatorAgentInvalidError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorAgentPatch = {
+  description?: string
+  mode?: "subagent" | "primary" | "all"
+  model?: string
+  variant?: string
+  temperature?: number
+  top_p?: number
+  steps?: number
+  color?: string
+  hidden?: boolean
+  disable?: boolean
+  home?: string
+  prompt?: string
+  permission?: PermissionConfig
+}
+
 export type OperatorTool = {
   id: string
   description: string
   origin: "builtin" | "custom" | "plugin" | "mcp"
   source?: string
+}
+
+export type OperatorIdentityKind = "org" | "user" | "project"
+
+export type OperatorIdentityLayer = {
+  scope: OperatorConfigScope
+  /**
+   * File name inside the scope's identity folder
+   */
+  file: string
+  path: string
+  name: string
+  kind: OperatorIdentityKind
+  /**
+   * Lower comes first within a kind (default 50)
+   */
+  priority: number
+  agents?: Array<string>
+  maxLength?: number
+  enabled: boolean
+  content: string
+}
+
+export type OperatorIdentitySave = {
+  scope: OperatorConfigScope
+  file?: string
+  name: string
+  kind?: OperatorIdentityKind
+  priority?: number
+  agents?: Array<string>
+  maxLength?: number
+  enabled?: boolean
+  content: string
 }
 
 export type UnauthorizedError = {
@@ -11821,6 +11901,136 @@ export type OperatorAgentListResponses = {
 
 export type OperatorAgentListResponse = OperatorAgentListResponses[keyof OperatorAgentListResponses]
 
+export type OperatorAgentCreateData = {
+  body?: {
+    name: string
+    description?: string
+    mode?: "subagent" | "primary" | "all"
+    model?: string
+    variant?: string
+    temperature?: number
+    top_p?: number
+    steps?: number
+    color?: string
+    hidden?: boolean
+    disable?: boolean
+    home?: string
+    prompt?: string
+    permission?: PermissionConfig
+  }
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    scope: OperatorConfigScope
+  }
+  url: "/operator/agent"
+}
+
+export type OperatorAgentCreateErrors = {
+  /**
+   * OperatorAgentInvalidError | InvalidRequestError
+   */
+  400: OperatorAgentInvalidError | InvalidRequestError
+  /**
+   * OperatorAgentNotFoundError
+   */
+  404: OperatorAgentNotFoundError
+  /**
+   * OperatorAgentConflictError
+   */
+  409: OperatorAgentConflictError
+}
+
+export type OperatorAgentCreateError = OperatorAgentCreateErrors[keyof OperatorAgentCreateErrors]
+
+export type OperatorAgentCreateResponses = {
+  /**
+   * The agent file that was written
+   */
+  200: OperatorAgentWritten
+}
+
+export type OperatorAgentCreateResponse = OperatorAgentCreateResponses[keyof OperatorAgentCreateResponses]
+
+export type OperatorAgentRemoveData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query: {
+    directory?: string
+    workspace?: string
+    scope: OperatorConfigScope
+  }
+  url: "/operator/agent/{name}"
+}
+
+export type OperatorAgentRemoveErrors = {
+  /**
+   * OperatorAgentInvalidError | InvalidRequestError
+   */
+  400: OperatorAgentInvalidError | InvalidRequestError
+  /**
+   * OperatorAgentNotFoundError
+   */
+  404: OperatorAgentNotFoundError
+  /**
+   * OperatorAgentConflictError
+   */
+  409: OperatorAgentConflictError
+}
+
+export type OperatorAgentRemoveError = OperatorAgentRemoveErrors[keyof OperatorAgentRemoveErrors]
+
+export type OperatorAgentRemoveResponses = {
+  /**
+   * The file that was changed
+   */
+  200: OperatorAgentWritten
+}
+
+export type OperatorAgentRemoveResponse = OperatorAgentRemoveResponses[keyof OperatorAgentRemoveResponses]
+
+export type OperatorAgentUpdateData = {
+  body?: OperatorAgentPatch
+  path: {
+    name: string
+  }
+  query: {
+    directory?: string
+    workspace?: string
+    scope: OperatorConfigScope
+  }
+  url: "/operator/agent/{name}"
+}
+
+export type OperatorAgentUpdateErrors = {
+  /**
+   * OperatorAgentInvalidError | InvalidRequestError
+   */
+  400: OperatorAgentInvalidError | InvalidRequestError
+  /**
+   * OperatorAgentNotFoundError
+   */
+  404: OperatorAgentNotFoundError
+  /**
+   * OperatorAgentConflictError
+   */
+  409: OperatorAgentConflictError
+}
+
+export type OperatorAgentUpdateError = OperatorAgentUpdateErrors[keyof OperatorAgentUpdateErrors]
+
+export type OperatorAgentUpdateResponses = {
+  /**
+   * The file that was written
+   */
+  200: OperatorAgentWritten
+}
+
+export type OperatorAgentUpdateResponse = OperatorAgentUpdateResponses[keyof OperatorAgentUpdateResponses]
+
 export type OperatorToolListData = {
   body?: never
   path?: never
@@ -11848,6 +12058,158 @@ export type OperatorToolListResponses = {
 }
 
 export type OperatorToolListResponse = OperatorToolListResponses[keyof OperatorToolListResponses]
+
+export type OperatorIdentityListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/identity"
+}
+
+export type OperatorIdentityListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorIdentityListError = OperatorIdentityListErrors[keyof OperatorIdentityListErrors]
+
+export type OperatorIdentityListResponses = {
+  /**
+   * Identity layers in prompt order
+   */
+  200: Array<OperatorIdentityLayer>
+}
+
+export type OperatorIdentityListResponse = OperatorIdentityListResponses[keyof OperatorIdentityListResponses]
+
+export type OperatorIdentityRemoveData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    scope: OperatorConfigScope
+    file: string
+  }
+  url: "/operator/identity/layer"
+}
+
+export type OperatorIdentityRemoveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type OperatorIdentityRemoveError = OperatorIdentityRemoveErrors[keyof OperatorIdentityRemoveErrors]
+
+export type OperatorIdentityRemoveResponses = {
+  /**
+   * Deleted
+   */
+  200: boolean
+}
+
+export type OperatorIdentityRemoveResponse = OperatorIdentityRemoveResponses[keyof OperatorIdentityRemoveResponses]
+
+export type OperatorIdentitySaveData = {
+  body?: OperatorIdentitySave
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/identity/layer"
+}
+
+export type OperatorIdentitySaveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorIdentitySaveError = OperatorIdentitySaveErrors[keyof OperatorIdentitySaveErrors]
+
+export type OperatorIdentitySaveResponses = {
+  /**
+   * The saved layer
+   */
+  200: OperatorIdentityLayer
+}
+
+export type OperatorIdentitySaveResponse = OperatorIdentitySaveResponses[keyof OperatorIdentitySaveResponses]
+
+export type OperatorIdentityReorderData = {
+  body?: {
+    scope: OperatorConfigScope
+    files: Array<string>
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/identity/reorder"
+}
+
+export type OperatorIdentityReorderErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorIdentityReorderError = OperatorIdentityReorderErrors[keyof OperatorIdentityReorderErrors]
+
+export type OperatorIdentityReorderResponses = {
+  /**
+   * Identity layers in prompt order
+   */
+  200: Array<OperatorIdentityLayer>
+}
+
+export type OperatorIdentityReorderResponse = OperatorIdentityReorderResponses[keyof OperatorIdentityReorderResponses]
+
+export type OperatorIdentityPreviewData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    agent?: string
+  }
+  url: "/operator/identity/preview"
+}
+
+export type OperatorIdentityPreviewErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorIdentityPreviewError = OperatorIdentityPreviewErrors[keyof OperatorIdentityPreviewErrors]
+
+export type OperatorIdentityPreviewResponses = {
+  /**
+   * Identity text
+   */
+  200: {
+    text: string
+  }
+}
+
+export type OperatorIdentityPreviewResponse = OperatorIdentityPreviewResponses[keyof OperatorIdentityPreviewResponses]
 
 export type V2HealthGetData = {
   body?: never

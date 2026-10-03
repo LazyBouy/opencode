@@ -95,6 +95,86 @@ export const operatorScenarios: Scenario[] = [
     object(build.source)
     check(build.source.kind === "builtin", "build should be a built-in agent")
   }),
+  http.protected
+    .post("/operator/agent", "operator.agent.create")
+    .mutating()
+    .at((ctx) => ({
+      path: "/operator/agent?scope=project",
+      headers: ctx.headers(),
+      body: { name: "httpapi-agent", mode: "subagent", description: "From the exerciser", prompt: "Say hi." },
+    }))
+    .jsonEffect(
+      200,
+      (body) =>
+        Effect.gen(function* () {
+          object(body)
+          check(String(body.path).endsWith("/.opencode/agents/httpapi-agent.md"), "a project agent file should be written")
+          const text = yield* Effect.promise(() => Bun.file(String(body.path)).text())
+          check(text.includes("description: From the exerciser") && text.includes("Say hi."), "the file should hold the agent")
+        }),
+      "status",
+    ),
+  http.protected
+    .post("/operator/agent", "operator.agent.create.conflict")
+    .at((ctx) => ({ path: "/operator/agent?scope=project", headers: ctx.headers(), body: { name: "build" } }))
+    .status(409),
+  http.protected
+    .patch("/operator/agent/{name}", "operator.agent.update")
+    .mutating()
+    .at((ctx) => ({
+      path: route("/operator/agent/{name}", { name: "build" }) + "?scope=project",
+      headers: ctx.headers(),
+      body: { temperature: 0.4 },
+    }))
+    .json(
+      200,
+      (body) => {
+        object(body)
+        check(String(body.path).endsWith("opencode.jsonc"), "a built-in agent's overrides go to the project config")
+      },
+      "status",
+    ),
+  http.protected
+    .patch("/operator/agent/{name}", "operator.agent.update.missing")
+    .at((ctx) => ({
+      path: route("/operator/agent/{name}", { name: "no-such-agent" }) + "?scope=project",
+      headers: ctx.headers(),
+      body: { temperature: 0.4 },
+    }))
+    .status(404),
+  http.protected
+    .delete("/operator/agent/{name}", "operator.agent.remove")
+    .at((ctx) => ({ path: route("/operator/agent/{name}", { name: "plan" }) + "?scope=project", headers: ctx.headers() }))
+    .status(400),
+  http.protected.get("/operator/identity", "operator.identity.list").json(200, array),
+  http.protected
+    .put("/operator/identity/layer", "operator.identity.save")
+    .mutating()
+    .at((ctx) => ({
+      path: "/operator/identity/layer",
+      headers: ctx.headers(),
+      body: { scope: "project", name: "HttpApi layer", content: "Speak plainly." },
+    }))
+    .json(
+      200,
+      (body) => {
+        object(body)
+        check(body.file === "httpapi-layer.md" && body.kind === "project", "the layer should be saved in the project")
+      },
+      "status",
+    ),
+  http.protected
+    .delete("/operator/identity/layer", "operator.identity.remove")
+    .at((ctx) => ({ path: "/operator/identity/layer?scope=project&file=missing.md", headers: ctx.headers() }))
+    .status(404),
+  http.protected
+    .post("/operator/identity/reorder", "operator.identity.reorder")
+    .at((ctx) => ({ path: "/operator/identity/reorder", headers: ctx.headers(), body: { scope: "project", files: [] } }))
+    .json(200, array),
+  http.protected.get("/operator/identity/preview", "operator.identity.preview").json(200, (body) => {
+    object(body)
+    check(typeof body.text === "string", "the preview should be text")
+  }),
   http.protected.get("/operator/tool", "operator.tool.list").json(200, (body) => {
     array(body)
     check(
