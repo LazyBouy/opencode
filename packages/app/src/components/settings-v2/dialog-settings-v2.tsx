@@ -8,6 +8,7 @@ import { SettingsGeneralV2 } from "./general"
 import { SettingsKeybinds } from "../settings-keybinds"
 import { SettingsProvidersV2 } from "./providers"
 import { SettingsModelsV2 } from "./models"
+import { SettingsAdaptersV2 } from "@/operator/settings/adapters"
 import "./settings-v2.css"
 import { SettingsServersV2 } from "./servers"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -83,6 +84,10 @@ export const DialogSettings: Component<{
                       <Icon name="models" />
                       {language.t("settings.models.title")}
                     </TabsV2.Trigger>
+                    <TabsV2.Trigger value="adapters">
+                      <Icon name="fork" />
+                      {language.t("settings.adapters.title")}
+                    </TabsV2.Trigger>
                   </div>
                 </div>
               </div>
@@ -107,6 +112,9 @@ export const DialogSettings: Component<{
         </TabsV2.Content>
         <TabsV2.Content value="models" class="settings-v2-panel">
           <SettingsModelsV2 />
+        </TabsV2.Content>
+        <TabsV2.Content value="adapters" class="settings-v2-panel">
+          <SettingsAdaptersV2 />
         </TabsV2.Content>
       </TabsV2>
     </Dialog>
