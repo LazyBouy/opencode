@@ -4,7 +4,18 @@ import type { ComponentProps } from "solid-js"
 type IconName = ComponentProps<typeof Icon>["name"]
 
 export interface OperatorPage {
-  readonly id: "dashboard" | "agents" | "sessions" | "inbox" | "observability" | "config" | "profile" | "models" | "capabilities" | "integrations" | "memory"
+  readonly id:
+    | "dashboard"
+    | "agents"
+    | "sessions"
+    | "inbox"
+    | "observability"
+    | "config"
+    | "profile"
+    | "models"
+    | "capabilities"
+    | "integrations"
+    | "memory"
   readonly path: string
   readonly icon: IconName
 }

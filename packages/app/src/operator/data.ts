@@ -19,7 +19,11 @@ export function useServerStatus() {
   const api = useOperatorClient()
   return useQuery(() => ({
     queryKey: api.key("status"),
-    queryFn: () => api.client().operator.status().then((result) => result.data!),
+    queryFn: () =>
+      api
+        .client()
+        .operator.status()
+        .then((result) => result.data!),
     staleTime: 60_000,
   }))
 }

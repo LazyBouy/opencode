@@ -1,5 +1,6 @@
 import { useNavigate } from "@solidjs/router"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
+import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import type { OperatorAgent } from "@opencode-ai/sdk/v2/client"
@@ -61,6 +62,9 @@ export default function AgentsPage() {
           <Show when={agent.hidden}>
             <Tag>{language.t("operator.agents.hidden")}</Tag>
           </Show>
+          <Show when={agent.disabled}>
+            <Tag>{language.t("operator.agent.off")}</Tag>
+          </Show>
         </span>
       ),
     },
@@ -116,11 +120,30 @@ export default function AgentsPage() {
       <PageHeader
         title={language.t("operator.page.agents.title")}
         description={language.t("operator.page.agents.description")}
-        actions={<ScopePicker />}
+        actions={
+          <>
+            <ScopePicker />
+            <Show when={directory()}>
+              <ButtonV2
+                size="small"
+                variant="contrast"
+                onClick={() => navigate(`/operator/agents/new?dir=${encodeURIComponent(directory() ?? "")}`)}
+              >
+                {language.t("operator.agents.new")}
+              </ButtonV2>
+            </Show>
+          </>
+        }
       />
       <Show
         when={directory()}
-        fallback={<EmptyState icon="brain" title={language.t("operator.project.none")} description={language.t("operator.project.noneHint")} />}
+        fallback={
+          <EmptyState
+            icon="brain"
+            title={language.t("operator.project.none")}
+            description={language.t("operator.project.noneHint")}
+          />
+        }
       >
         <div data-slot="operator-toolbar">
           <TextInputV2

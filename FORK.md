@@ -62,6 +62,7 @@ Re-check these after every upstream merge. **Risk** is how likely the file is to
 | `packages/app/src/pages/layout-new.tsx` | mount `<OperatorSidebar />` | low |
 | `packages/app/src/context/layout.tsx` | `operator` route type (3 lines) | low |
 | `packages/app/src/context/language.tsx` | merge the fork dictionary (3 lines) | low |
+| `packages/app/src/context/local.tsx` | with no agent chosen yet, the composer uses the agent a session was created with, so "Start a session" as an agent works (upstream-able) | medium |
 | `packages/app/src/components/settings-v2/dialog-settings-v2.tsx` | Adapters tab (trigger and content) | low |
 | `packages/app/src/context/server-session.ts`, `packages/app/src/context/directory-sync.ts`, `packages/app/src/context/global-sync/child-store.ts`, `packages/app/src/context/global-sync/types.ts` | merge: binding store and event | low |
 | `packages/app/src/pages/session/timeline/rows.ts`, `packages/app/src/pages/session/timeline/message-timeline.tsx`, `packages/app/src/utils/session-export.ts` | merge: indicator and hidden duplicate summary | low |

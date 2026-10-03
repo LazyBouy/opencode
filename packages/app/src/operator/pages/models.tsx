@@ -63,7 +63,12 @@ export default function ModelsPage() {
         </span>
       ),
     },
-    { id: "provider", header: language.t("operator.column.provider"), value: (model) => model.providerName, cell: (model) => model.providerName },
+    {
+      id: "provider",
+      header: language.t("operator.column.provider"),
+      value: (model) => model.providerName,
+      cell: (model) => model.providerName,
+    },
     {
       id: "context",
       header: language.t("operator.models.context"),

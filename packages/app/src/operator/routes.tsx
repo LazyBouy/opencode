@@ -13,16 +13,23 @@ const built: Partial<Record<OperatorPage["id"], Component>> = {
   config: lazy(() => import("./pages/config")),
   models: lazy(() => import("./pages/models")),
   capabilities: lazy(() => import("./pages/capabilities")),
+  profile: lazy(() => import("./pages/profile")),
 }
 const AgentPage = lazy(() => import("./pages/agent"))
+const AgentFormPage = lazy(() => import("./pages/agent-form"))
 
 // All /operator routes. Mounted once from app.tsx inside the new layout.
 export function OperatorRoutes() {
   return (
     <Route path="/operator" component={OperatorShell}>
       {operatorPages.map((page) => (
-        <Route path={page.path.slice("/operator".length) || "/"} component={built[page.id] ?? (() => <PlannedPage page={page} />)} />
+        <Route
+          path={page.path.slice("/operator".length) || "/"}
+          component={built[page.id] ?? (() => <PlannedPage page={page} />)}
+        />
       ))}
+      <Route path="/agents/new" component={AgentFormPage} />
+      <Route path="/agents/:name/edit" component={AgentFormPage} />
       <Route path="/agents/:name" component={AgentPage} />
       <Route path="*" component={() => <Navigate href="/operator" />} />
     </Route>

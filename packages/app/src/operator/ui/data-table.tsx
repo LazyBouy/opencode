@@ -50,7 +50,12 @@ export function DataTable<T>(props: DataTableProps<T>) {
           <tr>
             <For each={columns()}>
               {(column) => (
-                <th scope="col" style={{ width: column.width }} data-align={column.align ?? "start"} aria-sort={direction(column)}>
+                <th
+                  scope="col"
+                  style={{ width: column.width }}
+                  data-align={column.align ?? "start"}
+                  aria-sort={direction(column)}
+                >
                   <Show when={column.value} fallback={column.header}>
                     <button
                       type="button"
@@ -58,7 +63,11 @@ export function DataTable<T>(props: DataTableProps<T>) {
                       onClick={() => setStore("sort", nextSort(store.sort, column.id))}
                     >
                       {column.header}
-                      <span data-slot="operator-table-sort-indicator" data-direction={direction(column)} aria-hidden="true" />
+                      <span
+                        data-slot="operator-table-sort-indicator"
+                        data-direction={direction(column)}
+                        aria-hidden="true"
+                      />
                     </button>
                   </Show>
                 </th>

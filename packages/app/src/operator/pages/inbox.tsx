@@ -36,10 +36,12 @@ export default function InboxPage() {
   const groups = createMemo(() =>
     Object.entries(Object.groupBy(pending.data ?? [], (item) => item.directory)).map(([directory, items]) => ({
       directory,
-      sessions: Object.entries(Object.groupBy(items ?? [], (item) => item.request.sessionID)).map(([sessionID, requests]) => ({
-        sessionID,
-        requests: requests ?? [],
-      })),
+      sessions: Object.entries(Object.groupBy(items ?? [], (item) => item.request.sessionID)).map(
+        ([sessionID, requests]) => ({
+          sessionID,
+          requests: requests ?? [],
+        }),
+      ),
     })),
   )
 
@@ -92,16 +94,37 @@ export default function InboxPage() {
                             <span data-slot="operator-ask-age">{formatAgo(item.time, language.intl())}</span>
                           </div>
                           <ul data-slot="operator-ask-patterns">
-                            <For each={item.request.patterns}>{(pattern) => <li><code>{pattern}</code></li>}</For>
+                            <For each={item.request.patterns}>
+                              {(pattern) => (
+                                <li>
+                                  <code>{pattern}</code>
+                                </li>
+                              )}
+                            </For>
                           </ul>
                           <div data-slot="operator-actions">
-                            <ButtonV2 size="small" variant="neutral" disabled={store.busy[item.request.id]} onClick={() => void reply(item, "reject")}>
+                            <ButtonV2
+                              size="small"
+                              variant="neutral"
+                              disabled={store.busy[item.request.id]}
+                              onClick={() => void reply(item, "reject")}
+                            >
                               {language.t("operator.inbox.reject")}
                             </ButtonV2>
-                            <ButtonV2 size="small" variant="outline" disabled={store.busy[item.request.id]} onClick={() => void reply(item, "always")}>
+                            <ButtonV2
+                              size="small"
+                              variant="outline"
+                              disabled={store.busy[item.request.id]}
+                              onClick={() => void reply(item, "always")}
+                            >
                               {language.t("operator.inbox.always")}
                             </ButtonV2>
-                            <ButtonV2 size="small" variant="contrast" disabled={store.busy[item.request.id]} onClick={() => void reply(item, "once")}>
+                            <ButtonV2
+                              size="small"
+                              variant="contrast"
+                              disabled={store.busy[item.request.id]}
+                              onClick={() => void reply(item, "once")}
+                            >
                               {language.t("operator.inbox.once")}
                             </ButtonV2>
                           </div>

@@ -52,14 +52,24 @@ export default function SessionsPage() {
   const tokens = (session: GlobalSession) => (session.tokens?.input ?? 0) + (session.tokens?.output ?? 0)
 
   const columns: Column<GlobalSession>[] = [
-    { id: "title", header: language.t("operator.column.title"), value: (session) => session.title, cell: (session) => session.title },
+    {
+      id: "title",
+      header: language.t("operator.column.title"),
+      value: (session) => session.title,
+      cell: (session) => session.title,
+    },
     {
       id: "project",
       header: language.t("operator.column.project"),
       value: (session) => sessionFolder(session),
       cell: (session) => <span title={session.directory}>{shortPath(sessionFolder(session))}</span>,
     },
-    { id: "agent", header: language.t("operator.column.agent"), value: (session) => session.agent, cell: (session) => session.agent ?? "" },
+    {
+      id: "agent",
+      header: language.t("operator.column.agent"),
+      value: (session) => session.agent,
+      cell: (session) => session.agent ?? "",
+    },
     {
       id: "model",
       header: language.t("operator.column.model"),
@@ -131,7 +141,11 @@ export default function SessionsPage() {
       />
       <Show when={sessions.hasNextPage}>
         <div data-slot="operator-more">
-          <ButtonV2 variant="outline" disabled={sessions.isFetchingNextPage} onClick={() => void sessions.fetchNextPage()}>
+          <ButtonV2
+            variant="outline"
+            disabled={sessions.isFetchingNextPage}
+            onClick={() => void sessions.fetchNextPage()}
+          >
             {language.t("operator.sessions.more")}
           </ButtonV2>
         </div>

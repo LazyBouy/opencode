@@ -13,6 +13,7 @@ import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } fro
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 import { useServerSDK } from "./server-sdk"
+import { useServerSync } from "./server-sync"
 import { ScopedKey, type ServerScope } from "@/utils/server-scope"
 
 export type ModelKey = { providerID: string; modelID: string; variant?: string }
@@ -60,6 +61,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
     const params = useParams()
+    const serverSync = useServerSync()
     const sdk = useSDK()
     const sync = useSync()
     const serverSDK = useServerSDK()
@@ -128,7 +130,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const scope = createMemo<State | undefined>(() => {
       const session = id()
       if (!session) return store.draft ?? store.promoting
-      return saved.session[session] ?? handoff.get(handoffKey(serverSDK().scope, sdk().directory, session))
+      const created = serverSync().session.get(session)?.agent
+      // With no choice made here yet, use the agent the session was created with.
+      return (
+        saved.session[session] ??
+        handoff.get(handoffKey(serverSDK().scope, sdk().directory, session)) ??
+        (created ? { agent: created } : undefined)
+      )
     })
 
     createEffect(() => {

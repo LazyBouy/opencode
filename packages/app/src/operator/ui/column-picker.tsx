@@ -25,9 +25,7 @@ export function ColumnPicker<T>(props: {
                 checked={!props.hidden.includes(column.id)}
                 closeOnSelect={false}
                 onChange={(checked: boolean) =>
-                  props.onChange(
-                    checked ? props.hidden.filter((id) => id !== column.id) : [...props.hidden, column.id],
-                  )
+                  props.onChange(checked ? props.hidden.filter((id) => id !== column.id) : [...props.hidden, column.id])
                 }
               >
                 {column.header}

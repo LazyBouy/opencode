@@ -1,16 +1,20 @@
-import { useParams } from "@solidjs/router"
+import { useNavigate, useParams } from "@solidjs/router"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
+import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
-import { useQuery } from "@tanstack/solid-query"
+import { useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createMemo, type JSX, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
+import { showToast } from "@/utils/toast"
 import { useOpenSession, useOperatorClient } from "../data"
 import { formatAgo, formatCost } from "../format"
 import { useScopedProject } from "../project"
+import { useConfirm } from "../ui/confirm"
 import { DataTable } from "../ui/data-table"
 import { EmptyState } from "../ui/empty-state"
 import { PageHeader } from "../ui/page-header"
 import { agentModel, useAgents } from "./agents"
+import { requestError } from "./config-helpers"
 
 export default function AgentPage() {
   const language = useLanguage()
@@ -30,6 +34,51 @@ export default function AgentPage() {
         .then((result) => result.data ?? []),
   }))
   const locale = () => language.intl()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const confirm = useConfirm()
+  const dir = () => `?dir=${encodeURIComponent(directory() ?? "")}`
+  const refresh = () => queryClient.invalidateQueries({ queryKey: api.key("agents", directory()) })
+  const fail = (error: unknown) =>
+    showToast({ title: language.t("operator.agent.actionFailed"), description: requestError(error) })
+
+  // A new session as this agent, in its home folder when it has one.
+  const start = async (name: string, home: string | undefined) => {
+    await api
+      .client()
+      .session.create({ directory: home ?? directory(), agent: name })
+      .then((result) => openSession(result.data!.id))
+      .catch(fail)
+  }
+  const toggle = async (name: string, disabled: boolean) => {
+    await api
+      .client()
+      .operator.agent.update({
+        name,
+        directory: directory(),
+        scope: "project",
+        ...(disabled ? { reset: ["disable" as const] } : { disable: true }),
+      })
+      .then(refresh)
+      .catch(fail)
+  }
+  const remove = async (name: string) => {
+    const ok = await confirm({
+      title: language.t("operator.agent.deleteTitle", { name }),
+      description: language.t("operator.agent.deleteBody"),
+      confirm: language.t("operator.agent.delete"),
+      danger: true,
+    })
+    if (!ok) return
+    await api
+      .client()
+      .operator.agent.remove({ name, directory: directory(), scope: "project" })
+      .then(async () => {
+        await refresh()
+        navigate(`/operator/agents${dir()}`)
+      })
+      .catch(fail)
+  }
 
   return (
     <Show
@@ -47,11 +96,38 @@ export default function AgentPage() {
             title={current().name}
             description={current().description}
             actions={
-              <span class="flex items-center gap-2">
+              <span class="flex items-center gap-2 flex-wrap">
                 <Tag>{language.t(`operator.agents.mode.${current().mode}`)}</Tag>
                 <Tag variant={current().source.kind === "builtin" ? "neutral" : "accent"}>
                   {language.t(`operator.agents.source.${current().source.kind}`)}
                 </Tag>
+                <Show when={current().disabled}>
+                  <Tag>{language.t("operator.agent.off")}</Tag>
+                </Show>
+                <Show when={!current().disabled && current().mode !== "subagent"}>
+                  <ButtonV2 size="small" variant="contrast" onClick={() => void start(current().name, current().home)}>
+                    {language.t("operator.agent.start")}
+                  </ButtonV2>
+                </Show>
+                <ButtonV2
+                  size="small"
+                  variant="outline"
+                  onClick={() => navigate(`/operator/agents/${encodeURIComponent(current().name)}/edit${dir()}`)}
+                >
+                  {language.t("operator.agent.edit")}
+                </ButtonV2>
+                <ButtonV2
+                  size="small"
+                  variant="outline"
+                  onClick={() => void toggle(current().name, current().disabled)}
+                >
+                  {current().disabled ? language.t("operator.agent.turnOn") : language.t("operator.agent.turnOff")}
+                </ButtonV2>
+                <Show when={current().source.kind !== "builtin"}>
+                  <ButtonV2 size="small" variant="danger" onClick={() => void remove(current().name)}>
+                    {language.t("operator.agent.delete")}
+                  </ButtonV2>
+                </Show>
               </span>
             }
           />
@@ -74,6 +150,7 @@ export default function AgentPage() {
                 <Fact label={language.t("operator.column.source")}>
                   {current().source.path ?? language.t(`operator.agents.source.${current().source.kind}`)}
                 </Fact>
+                <Fact label={language.t("operator.agentForm.home")}>{current().home ?? "—"}</Fact>
                 <Fact label={language.t("operator.column.sessions")}>{current().sessions.total}</Fact>
                 <Fact label={language.t("operator.column.lastUsed")}>
                   {formatAgo(current().sessions.lastUsed, locale()) || "—"}

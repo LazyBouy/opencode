@@ -50,7 +50,12 @@ export const stats = {
     { agent: "build", sessions: 9, cost: 3, lastUsed: now - 600_000 },
     { agent: "plan", sessions: 3, cost: 0.25, lastUsed: now - 1_800_000 },
   ],
-  days: Array.from({ length: 14 }, (_, index) => ({ day: day(13 - index), sessions: index % 3, cost: index / 10, tokens: index * 100 })),
+  days: Array.from({ length: 14 }, (_, index) => ({
+    day: day(13 - index),
+    sessions: index % 3,
+    cost: index / 10,
+    tokens: index * 100,
+  })),
 }
 
 export const agents = [
@@ -65,6 +70,8 @@ export const agents = [
     ],
     options: {},
     source: { kind: "builtin", customized: true },
+    disabled: false,
+    settings: { temperature: 0.1 },
     sessions: { total: 9, lastUsed: now - 600_000 },
   },
   {
@@ -76,6 +83,9 @@ export const agents = [
     prompt: "Review the diff carefully.",
     model: { providerID: "opencode", modelID: "claude-opus-4-6" },
     source: { kind: "file", path: `${directory}/.opencode/agents/reviewer.md`, customized: false },
+    home: "/work/reviews",
+    disabled: false,
+    settings: { description: "Reviews diffs", mode: "subagent", prompt: "Review the diff carefully." },
     sessions: { total: 0 },
   },
   {
@@ -86,7 +96,43 @@ export const agents = [
     permission: [],
     options: {},
     source: { kind: "builtin", customized: false },
+    disabled: false,
+    settings: {},
     sessions: { total: 0 },
+  },
+]
+
+export const identityLayers = [
+  {
+    scope: "global",
+    file: "company.md",
+    path: "/home/me/.config/opencode/identity/company.md",
+    name: "Company",
+    kind: "org",
+    priority: 50,
+    enabled: true,
+    content: "We build editors.",
+  },
+  {
+    scope: "project",
+    file: "repo.md",
+    path: `${directory}/.opencode/identity/repo.md`,
+    name: "Repo",
+    kind: "project",
+    priority: 10,
+    enabled: true,
+    content: "This repo uses Bun.",
+  },
+  {
+    scope: "project",
+    file: "style.md",
+    path: `${directory}/.opencode/identity/style.md`,
+    name: "Style",
+    kind: "project",
+    priority: 20,
+    agents: ["build"],
+    enabled: true,
+    content: "Use tabs.",
   },
 ]
 
@@ -108,12 +154,24 @@ export interface OperatorMock {
   readonly writes: Array<{ url: string; body: unknown }>
   readonly connects: string[]
   readonly sessionQueries: URLSearchParams[]
+  readonly agentWrites: Array<{ method: string; url: string; body: unknown }>
+  readonly identityWrites: Array<{ method: string; url: string; body: unknown }>
+  readonly sessionCreates: Array<{ url: string; body: unknown }>
   pending: (typeof pendingRequest)[]
   rejectWrite?: string
 }
 
 export async function mockOperator(page: Page) {
-  const state: OperatorMock = { replies: [], writes: [], connects: [], sessionQueries: [], pending: [pendingRequest] }
+  const state: OperatorMock = {
+    replies: [],
+    writes: [],
+    connects: [],
+    sessionQueries: [],
+    agentWrites: [],
+    identityWrites: [],
+    sessionCreates: [],
+    pending: [pendingRequest],
+  }
   const json = (route: Route, body: unknown, status = 200) =>
     route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) })
 
@@ -127,9 +185,30 @@ export async function mockOperator(page: Page) {
     if (url.pathname === "/operator/session") {
       state.sessionQueries.push(url.searchParams)
       const search = url.searchParams.get("search")?.toLowerCase()
-      return json(route, sessions.filter((session) => !search || session.title.toLowerCase().includes(search)))
+      return json(
+        route,
+        sessions.filter((session) => !search || session.title.toLowerCase().includes(search)),
+      )
+    }
+    if (url.pathname.startsWith("/operator/agent") && method !== "GET") {
+      state.agentWrites.push({ method, url: url.toString(), body: route.request().postDataJSON() })
+      return json(route, { path: `${directory}/.opencode/agents/new.md` })
     }
     if (url.pathname === "/operator/agent") return json(route, agents)
+    if (url.pathname === "/operator/identity") return json(route, identityLayers)
+    if (url.pathname === "/operator/identity/preview")
+      return json(route, {
+        text:
+          url.searchParams.get("agent") === "build"
+            ? "We build editors.\n\nThis repo uses Bun.\n\nUse tabs."
+            : "We build editors.\n\nThis repo uses Bun.",
+      })
+    if (url.pathname.startsWith("/operator/identity/")) {
+      state.identityWrites.push({ method, url: url.toString(), body: route.request().postDataJSON() })
+      if (url.pathname === "/operator/identity/reorder") return json(route, identityLayers)
+      if (method === "DELETE") return json(route, true)
+      return json(route, identityLayers[1])
+    }
     if (url.pathname === "/operator/tool")
       return json(route, [
         { id: "read", description: "Read a file", origin: "builtin" },
@@ -142,14 +221,20 @@ export async function mockOperator(page: Page) {
           { kind: "global", path: "/home/me/.config/opencode/opencode.jsonc", text: '{ "theme": "iphi" }' },
           { kind: "directory", path: `${directory}/.opencode/opencode.jsonc`, text: '{\n  "username": "me"\n}\n' },
         ],
-        targets: { global: "/home/me/.config/opencode/opencode.jsonc", project: `${directory}/.opencode/opencode.jsonc` },
+        targets: {
+          global: "/home/me/.config/opencode/opencode.jsonc",
+          project: `${directory}/.opencode/opencode.jsonc`,
+        },
       })
     if (url.pathname === "/operator/config/raw" && method === "PUT") {
       state.writes.push({ url: url.toString(), body: route.request().postDataJSON() })
       if (state.rejectWrite)
         return json(
           route,
-          { name: "OperatorConfigInvalidError", data: { path: `${directory}/.opencode/opencode.jsonc`, message: state.rejectWrite } },
+          {
+            name: "OperatorConfigInvalidError",
+            data: { path: `${directory}/.opencode/opencode.jsonc`, message: state.rejectWrite },
+          },
           400,
         )
       return json(route, { path: `${directory}/.opencode/opencode.jsonc`, changed: true })
@@ -159,25 +244,49 @@ export async function mockOperator(page: Page) {
 
   await page.route("**/session/*/children*", (route) =>
     json(route, [
-      { ...sessions[1], id: "ses_op_child", parentID: "ses_smoke_target", title: "Explore the codebase", agent: "explore" },
+      {
+        ...sessions[1],
+        id: "ses_op_child",
+        parentID: "ses_smoke_target",
+        title: "Explore the codebase",
+        agent: "explore",
+      },
     ]),
+  )
+  await page.route(
+    (url) => url.pathname === "/session",
+    (route) => {
+      if (route.request().method() !== "POST") return route.fallback()
+      state.sessionCreates.push({ url: route.request().url(), body: route.request().postDataJSON() })
+      return json(route, { ...sessions[0], id: "ses_op_new", title: "New session" })
+    },
   )
   await page.route("**/permission/*/reply*", (route) => {
     state.replies.push({ url: route.request().url(), body: route.request().postDataJSON() })
     state.pending = []
     return json(route, true)
   })
-  await page.route((url) => url.pathname === "/mcp" || url.pathname.startsWith("/mcp/"), (route) => {
-    const url = new URL(route.request().url())
-    if (url.pathname === "/mcp") return json(route, { docs: { status: "disabled" } })
-    if (url.pathname.endsWith("/connect")) {
-      state.connects.push(url.pathname)
-      return json(route, true)
-    }
-    return route.fallback()
-  })
+  await page.route(
+    (url) => url.pathname === "/mcp" || url.pathname.startsWith("/mcp/"),
+    (route) => {
+      const url = new URL(route.request().url())
+      if (url.pathname === "/mcp") return json(route, { docs: { status: "disabled" } })
+      if (url.pathname.endsWith("/connect")) {
+        state.connects.push(url.pathname)
+        return json(route, true)
+      }
+      return route.fallback()
+    },
+  )
   await page.route("**/skill*", (route) =>
-    json(route, [{ name: "release-notes", description: "Write release notes", location: `${directory}/.opencode/skills/release-notes/SKILL.md`, content: "" }]),
+    json(route, [
+      {
+        name: "release-notes",
+        description: "Write release notes",
+        location: `${directory}/.opencode/skills/release-notes/SKILL.md`,
+        content: "",
+      },
+    ]),
   )
   await page.route("**/command*", (route) =>
     new URL(route.request().url()).pathname === "/command"

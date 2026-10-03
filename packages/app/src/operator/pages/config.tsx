@@ -68,7 +68,13 @@ export default function ConfigPage() {
       />
       <Show
         when={directory()}
-        fallback={<EmptyState icon="sliders" title={language.t("operator.project.none")} description={language.t("operator.project.noneHint")} />}
+        fallback={
+          <EmptyState
+            icon="sliders"
+            title={language.t("operator.project.none")}
+            description={language.t("operator.project.noneHint")}
+          />
+        }
       >
         <section data-component="operator-panel">
           <h2 data-slot="operator-panel-title">{language.t("operator.config.sources")}</h2>
@@ -97,9 +103,7 @@ export default function ConfigPage() {
             <h2 data-slot="operator-panel-title">{language.t("operator.config.edit")}</h2>
             <ScopeSwitch value={store.scope} onChange={(scope) => setStore("scope", scope)} />
           </div>
-          <p data-slot="operator-note">
-            {language.t("operator.config.editHint", { path: target() ?? "" })}
-          </p>
+          <p data-slot="operator-note">{language.t("operator.config.editHint", { path: target() ?? "" })}</p>
           <TextareaV2
             class="operator-editor"
             rows={18}
@@ -115,7 +119,11 @@ export default function ConfigPage() {
             </pre>
           </Show>
           <div data-slot="operator-actions">
-            <ButtonV2 variant="neutral" disabled={store.saving || store.text === saved()} onClick={() => setStore({ text: saved(), error: "" })}>
+            <ButtonV2
+              variant="neutral"
+              disabled={store.saving || store.text === saved()}
+              onClick={() => setStore({ text: saved(), error: "" })}
+            >
               {language.t("operator.config.revert")}
             </ButtonV2>
             <ButtonV2 variant="contrast" disabled={store.saving || store.text === saved()} onClick={() => void save()}>

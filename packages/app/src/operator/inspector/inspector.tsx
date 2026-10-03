@@ -165,7 +165,10 @@ function InspectorPanel(props: { sessionID: string; onClose: () => void }) {
           </Show>
         </TabsV2.Content>
         <TabsV2.Content value="approvals">
-          <Show when={asks().length > 0} fallback={<p data-slot="operator-note">{language.t("operator.inspector.noApprovals")}</p>}>
+          <Show
+            when={asks().length > 0}
+            fallback={<p data-slot="operator-note">{language.t("operator.inspector.noApprovals")}</p>}
+          >
             <For each={asks()}>
               {(item) => (
                 <article data-component="operator-ask" data-request={item.request.id}>
@@ -174,7 +177,13 @@ function InspectorPanel(props: { sessionID: string; onClose: () => void }) {
                     <span data-slot="operator-ask-age">{formatAgo(item.time, locale())}</span>
                   </div>
                   <ul data-slot="operator-ask-patterns">
-                    <For each={item.request.patterns}>{(pattern) => <li><code>{pattern}</code></li>}</For>
+                    <For each={item.request.patterns}>
+                      {(pattern) => (
+                        <li>
+                          <code>{pattern}</code>
+                        </li>
+                      )}
+                    </For>
                   </ul>
                 </article>
               )}
@@ -186,7 +195,8 @@ function InspectorPanel(props: { sessionID: string; onClose: () => void }) {
               <For each={session.data?.permission ?? []}>
                 {(rule) => (
                   <li>
-                    <code>{`${rule.permission} ${rule.pattern}`}</code> → {language.t(`operator.permission.action.${rule.action}`)}
+                    <code>{`${rule.permission} ${rule.pattern}`}</code> →{" "}
+                    {language.t(`operator.permission.action.${rule.action}`)}
                   </li>
                 )}
               </For>
@@ -194,7 +204,10 @@ function InspectorPanel(props: { sessionID: string; onClose: () => void }) {
           </Show>
         </TabsV2.Content>
         <TabsV2.Content value="subagents">
-          <Show when={(children.data ?? []).length > 0} fallback={<p data-slot="operator-note">{language.t("operator.inspector.noSubagents")}</p>}>
+          <Show
+            when={(children.data ?? []).length > 0}
+            fallback={<p data-slot="operator-note">{language.t("operator.inspector.noSubagents")}</p>}
+          >
             <ul data-component="operator-list">
               <For each={children.data ?? []}>
                 {(child) => (
@@ -212,7 +225,10 @@ function InspectorPanel(props: { sessionID: string; onClose: () => void }) {
           </Show>
         </TabsV2.Content>
         <TabsV2.Content value="events">
-          <Show when={events.list.length > 0} fallback={<p data-slot="operator-note">{language.t("operator.inspector.noEvents")}</p>}>
+          <Show
+            when={events.list.length > 0}
+            fallback={<p data-slot="operator-note">{language.t("operator.inspector.noEvents")}</p>}
+          >
             <ol data-component="operator-list" data-slot="operator-events">
               <For each={events.list}>
                 {(event) => (

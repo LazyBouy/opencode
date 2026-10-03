@@ -12,9 +12,10 @@ export function formatCost(value: number, locale: string) {
 }
 
 export function formatCount(value: number, locale: string) {
-  return new Intl.NumberFormat(locale, { notation: value >= 10_000 ? "compact" : "standard", maximumFractionDigits: 1 }).format(
-    value,
-  )
+  return new Intl.NumberFormat(locale, {
+    notation: value >= 10_000 ? "compact" : "standard",
+    maximumFractionDigits: 1,
+  }).format(value)
 }
 
 export function formatAgo(time: number | undefined, locale: string) {

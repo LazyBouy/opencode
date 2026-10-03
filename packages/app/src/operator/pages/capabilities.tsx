@@ -51,9 +51,7 @@ export default function CapabilitiesPage() {
       .mcp.status({ directory: directory() })
       .then((result) => result.data ?? {}),
   )
-  const servers = createMemo<Server[]>(() =>
-    Object.entries(mcp.data ?? {}).map(([name, status]) => ({ name, status })),
-  )
+  const servers = createMemo<Server[]>(() => Object.entries(mcp.data ?? {}).map(([name, status]) => ({ name, status })))
 
   const toggle = async (server: Server) => {
     setFilter("busy", server.name)
@@ -94,7 +92,13 @@ export default function CapabilitiesPage() {
       />
       <Show
         when={directory()}
-        fallback={<EmptyState icon="mcp" title={language.t("operator.project.none")} description={language.t("operator.project.noneHint")} />}
+        fallback={
+          <EmptyState
+            icon="mcp"
+            title={language.t("operator.project.none")}
+            description={language.t("operator.project.noneHint")}
+          />
+        }
       >
         <TabsV2 defaultValue="tools">
           <TabsV2.List>
@@ -121,7 +125,12 @@ export default function CapabilitiesPage() {
               search={(tool) => `${tool.id} ${tool.description} ${tool.source ?? ""}`}
               initialSort={{ column: "origin", direction: "asc" }}
               columns={[
-                { id: "id", header: language.t("operator.column.name"), value: (tool) => tool.id, cell: (tool) => <code>{tool.id}</code> },
+                {
+                  id: "id",
+                  header: language.t("operator.column.name"),
+                  value: (tool) => tool.id,
+                  cell: (tool) => <code>{tool.id}</code>,
+                },
                 {
                   id: "origin",
                   header: language.t("operator.column.source"),
@@ -154,7 +163,12 @@ export default function CapabilitiesPage() {
               empty={language.t("operator.capabilities.noSkills")}
               initialSort={{ column: "name", direction: "asc" }}
               columns={[
-                { id: "name", header: language.t("operator.column.name"), value: (skill) => skill.name, cell: (skill) => skill.name },
+                {
+                  id: "name",
+                  header: language.t("operator.column.name"),
+                  value: (skill) => skill.name,
+                  cell: (skill) => skill.name,
+                },
                 {
                   id: "description",
                   header: language.t("operator.column.description"),
@@ -214,7 +228,12 @@ export default function CapabilitiesPage() {
               empty={language.t("operator.capabilities.noMcp")}
               initialSort={{ column: "name", direction: "asc" }}
               columns={[
-                { id: "name", header: language.t("operator.column.name"), value: (server) => server.name, cell: (server) => server.name },
+                {
+                  id: "name",
+                  header: language.t("operator.column.name"),
+                  value: (server) => server.name,
+                  cell: (server) => server.name,
+                },
                 {
                   id: "status",
                   header: language.t("operator.column.status"),
