@@ -154,6 +154,8 @@ async function readLayer(scope: OperatorConfig.Scope, file: string): Promise<Inf
   const agents = Array.isArray(data.agents)
     ? data.agents.filter((item): item is string => typeof item === "string")
     : undefined
+  const maxLength = typeof data.max_length === "number" && data.max_length > 0 ? data.max_length : undefined
+  // Unset optional fields are left out rather than sent as null.
   return {
     scope,
     file: path.basename(file),
@@ -161,8 +163,8 @@ async function readLayer(scope: OperatorConfig.Scope, file: string): Promise<Inf
     name: typeof data.name === "string" ? data.name : path.basename(file, ".md"),
     kind: scope === "project" ? "project" : data.layer === "org" ? "org" : "user",
     priority: typeof data.priority === "number" ? data.priority : 50,
-    agents: agents?.length ? agents : undefined,
-    maxLength: typeof data.max_length === "number" && data.max_length > 0 ? data.max_length : undefined,
+    ...(agents?.length ? { agents } : {}),
+    ...(maxLength === undefined ? {} : { maxLength }),
     enabled: data.enabled !== false,
     content: parsed.content.trim(),
   }

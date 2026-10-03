@@ -88,7 +88,7 @@ export default function ProfilePage() {
         name: layer.name,
         kind: layer.kind === "org" ? "org" : "user",
         agents: (layer.agents ?? []).join(", "),
-        maxLength: layer.maxLength === undefined ? "" : String(layer.maxLength),
+        maxLength: layer.maxLength == null ? "" : String(layer.maxLength),
         enabled: layer.enabled,
         content: layer.content,
       },

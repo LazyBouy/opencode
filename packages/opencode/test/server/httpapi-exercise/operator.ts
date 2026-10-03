@@ -169,6 +169,7 @@ export const operatorScenarios: Scenario[] = [
       (body) => {
         object(body)
         check(body.file === "httpapi-layer.md" && body.kind === "project", "the layer should be saved in the project")
+        check(!("maxLength" in body) && !("agents" in body), "unset optional fields should be left out, not null")
       },
       "status",
     ),
