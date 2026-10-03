@@ -2062,7 +2062,7 @@ export type Config = {
 
 export type OperatorStatus = {
   version: string
-  startedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  startedAt: number
   platform: string
   arch: string
 }
@@ -2132,50 +2132,53 @@ export type OperatorStats = {
    * Every session, including archived ones
    */
   all: {
-    sessions: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    projects: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    cost: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    sessions: number
+    projects: number
+    cost: number
     tokens: {
-      input: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      output: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      reasoning: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      cacheRead: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      cacheWrite: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      input: number
+      output: number
+      reasoning: number
+      cacheRead: number
+      cacheWrite: number
     }
   }
   /**
    * Sessions started within the requested number of days
    */
   range: {
-    sessions: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    projects: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    cost: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    sessions: number
+    projects: number
+    cost: number
     tokens: {
-      input: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      output: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      reasoning: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      cacheRead: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      cacheWrite: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      input: number
+      output: number
+      reasoning: number
+      cacheRead: number
+      cacheWrite: number
     }
   }
-  activeToday: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  /**
+   * Sessions updated since the start of today
+   */
+  activeToday: number
   /**
    * Sessions started within the range, by agent
    */
   agents: Array<{
     agent: string
-    sessions: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    cost: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    lastUsed: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    sessions: number
+    cost: number
+    lastUsed: number
   }>
   /**
    * One entry per day of the range, oldest first, including empty days
    */
   days: Array<{
     day: string
-    sessions: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    cost: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    tokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    sessions: number
+    cost: number
+    tokens: number
   }>
 }
 
@@ -2196,7 +2199,10 @@ export type PermissionRequest = {
 
 export type OperatorPendingPermission = {
   directory: string
-  time: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  /**
+   * When the request was raised
+   */
+  time: number
   request: PermissionRequest
 }
 
@@ -2842,8 +2848,8 @@ export type OperatorAgent = {
    * Sessions in this project that use the agent
    */
   sessions: {
-    total: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    lastUsed?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    total: number
+    lastUsed?: number
   }
 }
 

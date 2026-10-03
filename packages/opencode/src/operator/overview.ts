@@ -11,33 +11,33 @@ import { Session } from "@/session/session"
 
 export const Status = Schema.Struct({
   version: Schema.String,
-  startedAt: Schema.Number,
+  startedAt: Schema.Finite,
   platform: Schema.String,
   arch: Schema.String,
 }).annotate({ identifier: "OperatorStatus" })
 
 const Totals = Schema.Struct({
-  sessions: Schema.Number,
-  projects: Schema.Number,
-  cost: Schema.Number,
+  sessions: Schema.Finite,
+  projects: Schema.Finite,
+  cost: Schema.Finite,
   tokens: Schema.Struct({
-    input: Schema.Number,
-    output: Schema.Number,
-    reasoning: Schema.Number,
-    cacheRead: Schema.Number,
-    cacheWrite: Schema.Number,
+    input: Schema.Finite,
+    output: Schema.Finite,
+    reasoning: Schema.Finite,
+    cacheRead: Schema.Finite,
+    cacheWrite: Schema.Finite,
   }),
 })
 
 export const Stats = Schema.Struct({
   all: Totals.annotate({ description: "Every session, including archived ones" }),
   range: Totals.annotate({ description: "Sessions started within the requested number of days" }),
-  activeToday: Schema.Number.annotate({ description: "Sessions updated since the start of today" }),
+  activeToday: Schema.Finite.annotate({ description: "Sessions updated since the start of today" }),
   agents: Schema.Array(
-    Schema.Struct({ agent: Schema.String, sessions: Schema.Number, cost: Schema.Number, lastUsed: Schema.Number }),
+    Schema.Struct({ agent: Schema.String, sessions: Schema.Finite, cost: Schema.Finite, lastUsed: Schema.Finite }),
   ).annotate({ description: "Sessions started within the range, by agent" }),
   days: Schema.Array(
-    Schema.Struct({ day: Schema.String, sessions: Schema.Number, cost: Schema.Number, tokens: Schema.Number }),
+    Schema.Struct({ day: Schema.String, sessions: Schema.Finite, cost: Schema.Finite, tokens: Schema.Finite }),
   ).annotate({ description: "One entry per day of the range, oldest first, including empty days" }),
 }).annotate({ identifier: "OperatorStats" })
 export type Stats = typeof Stats.Type

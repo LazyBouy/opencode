@@ -21,7 +21,7 @@ export const Source = Schema.Struct({
 export const Info = Schema.Struct({
   ...Agent.Info.fields,
   source: Source,
-  sessions: Schema.Struct({ total: Schema.Number, lastUsed: Schema.optional(Schema.Number) }).annotate({
+  sessions: Schema.Struct({ total: Schema.Finite, lastUsed: Schema.optional(Schema.Finite) }).annotate({
     description: "Sessions in this project that use the agent",
   }),
 }).annotate({ identifier: "OperatorAgent" })

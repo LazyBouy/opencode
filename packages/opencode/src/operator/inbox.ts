@@ -7,7 +7,7 @@ import { GlobalBus, type GlobalEvent } from "@/bus/global"
 
 export const Pending = Schema.Struct({
   directory: Schema.String,
-  time: Schema.Number.annotate({ description: "When the request was raised" }),
+  time: Schema.Finite.annotate({ description: "When the request was raised" }),
   request: PermissionV1.Request,
 }).annotate({ identifier: "OperatorPendingPermission" })
 export type Pending = typeof Pending.Type
