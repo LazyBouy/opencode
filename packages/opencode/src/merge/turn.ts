@@ -12,6 +12,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { LLMEvent } from "@opencode-ai/llm"
 import type { SessionMerge } from "@opencode-ai/schema/session-merge"
 import { Agent } from "@/agent/agent"
+import { Config } from "@/config/config"
 import { Env } from "@/env"
 import { Permission } from "@/permission"
 import { Question } from "@/question"
@@ -60,6 +61,7 @@ const layer = Layer.effect(
     const env = yield* Env.Service
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const database = yield* Database.Service
+    const config = yield* Config.Service
 
     const notice = Effect.fnUntraced(function* (input: RunInput, text: string) {
       const msg = assistant(input, input.entry.binding.cwd)
@@ -127,6 +129,13 @@ const layer = Layer.effect(
       if (!adapter) {
         yield* bindings.update(binding.id, { status: "error", error: `Unknown merge adapter "${binding.adapter}"` })
         yield* notice(input, `Merge adapter "${binding.adapter}" is not available. Run \`/merge detach\` to continue.`)
+        return "break" as const
+      }
+      if (!MergeAdapterRegistry.enabled(yield* config.get(), adapter.id)) {
+        yield* notice(
+          input,
+          `The ${adapter.name} adapter is turned off in Settings → Adapters. Turn it on, or run \`/merge detach\` to continue here.`,
+        )
         return "break" as const
       }
 
@@ -387,6 +396,7 @@ export const node = LayerNode.make({
     Env.node,
     CrossSpawnSpawner.node,
     Database.node,
+    Config.node,
   ],
 })
 

@@ -103,6 +103,7 @@ export interface PermissionView {
 
 export interface Adapter {
   readonly id: string
+  readonly name: string
   readonly transports: ReadonlyArray<SessionMerge.Transport>
   readonly probe: (env: Env) => Effect.Effect<{ readonly binary: string; readonly version: string }, Unavailable>
   readonly start: (input: StartInput) => Effect.Effect<Harness, StartFailed, Scope.Scope>

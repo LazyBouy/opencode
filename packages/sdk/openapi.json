@@ -9858,6 +9858,251 @@
         ]
       }
     },
+    "/merge/adapter": {
+      "get": {
+        "tags": ["merge"],
+        "operationId": "merge.adapter.list",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Merge adapters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SessionMergeAdapter"
+                  },
+                  "description": "Merge adapters"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "List the adapters `/merge` can attach (for example Claude Code), whether each is turned on, and whether its program is installed. Each call checks the installed programs again.",
+        "summary": "List merge adapters",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.merge.adapter.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/config/layer": {
+      "get": {
+        "tags": ["operator config"],
+        "operationId": "operator.config.layers",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Config sources and write targets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorConfigLayers"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "List the config files that apply to this project, in load order, and the file a global or project write goes to.",
+        "summary": "List config layers",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.config.layers({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/config": {
+      "patch": {
+        "tags": ["operator config"],
+        "operationId": "operator.config.update",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/OperatorConfigScope"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Written file",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorConfigUpdateResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorConfigInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorConfigInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Merge a patch into the global or project config file, keeping comments. A null value removes the key so the inherited value applies. The result is validated before it is written.",
+        "summary": "Update config at a scope",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.config.update({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/config/schema": {
+      "get": {
+        "tags": ["operator config"],
+        "operationId": "operator.config.schema",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Config JSON schema",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Config JSON schema"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The JSON schema of the config file, for building editors.",
+        "summary": "Get config JSON schema",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.config.schema({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "tags": ["opencode HttpApi"],
@@ -21709,6 +21954,24 @@
               }
             },
             "additionalProperties": false
+          },
+          "merge": {
+            "type": "object",
+            "properties": {
+              "adapters": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
           }
         },
         "additionalProperties": false
@@ -23631,6 +23894,92 @@
               }
             },
             "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorConfigSource": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["global", "custom", "project", "directory", "env"]
+          },
+          "path": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": ["kind", "path", "text"],
+        "additionalProperties": false
+      },
+      "OperatorConfigLayers": {
+        "type": "object",
+        "properties": {
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorConfigSource"
+            },
+            "description": "Config sources that exist, in load order. Later sources override earlier ones."
+          },
+          "targets": {
+            "type": "object",
+            "properties": {
+              "global": {
+                "type": "string"
+              },
+              "project": {
+                "type": "string"
+              }
+            },
+            "required": ["global", "project"],
+            "additionalProperties": false,
+            "description": "The file a write at each scope goes to. It is created if missing."
+          }
+        },
+        "required": ["sources", "targets"],
+        "additionalProperties": false
+      },
+      "OperatorConfigScope": {
+        "type": "string",
+        "enum": ["global", "project"]
+      },
+      "OperatorConfigUpdateResult": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "changed": {
+            "type": "boolean"
+          }
+        },
+        "required": ["path", "changed"],
+        "additionalProperties": false
+      },
+      "OperatorConfigInvalidError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorConfigInvalidError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["path", "message"],
             "additionalProperties": false
           }
         },
@@ -27388,6 +27737,43 @@
           }
         },
         "required": ["workspaceID", "status"],
+        "additionalProperties": false
+      },
+      "SessionMergeAdapter": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Adapter id used by `/merge <id>`, for example `claude`"
+          },
+          "name": {
+            "type": "string"
+          },
+          "transports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SessionMergeTransport"
+            }
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "False when turned off with `merge.adapters.<id>.enabled`"
+          },
+          "available": {
+            "type": "boolean",
+            "description": "Whether the adapter's program was found and is new enough"
+          },
+          "binary": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "name", "transports", "enabled", "available"],
         "additionalProperties": false
       },
       "LocationInfo": {
@@ -37224,6 +37610,14 @@
     {
       "name": "workspace",
       "description": "Experimental HttpApi workspace routes."
+    },
+    {
+      "name": "merge",
+      "description": "External agent merge routes."
+    },
+    {
+      "name": "operator config",
+      "description": "Scoped config routes."
     },
     {
       "name": "opencode HttpApi",

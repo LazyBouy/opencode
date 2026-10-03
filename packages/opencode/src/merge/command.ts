@@ -6,6 +6,7 @@ import { NamedError } from "@opencode-ai/core/util/error"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import type { SessionMerge } from "@opencode-ai/schema/session-merge"
 import { Agent } from "@/agent/agent"
+import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
 import { Env } from "@/env"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -93,6 +94,7 @@ const layer = Layer.effect(
     const env = yield* Env.Service
     const fs = yield* FSUtil.Service
     const events = yield* EventV2Bridge.Service
+    const config = yield* Config.Service
 
     const fail = Effect.fnUntraced(function* (sessionID: SessionID, message: string) {
       const error = new NamedError.Unknown({ message })
@@ -228,6 +230,11 @@ const layer = Layer.effect(
           input.sessionID,
           `Unknown merge adapter "${parsed.adapter}". Available: ${registry.ids().join(", ")}`,
         )
+      if (!MergeAdapterRegistry.enabled(yield* config.get(), adapter.id))
+        return yield* fail(
+          input.sessionID,
+          `The ${adapter.name} adapter is turned off. Turn it on in Settings → Adapters to use /merge ${adapter.id}.`,
+        )
       const cwd = yield* directory(input, parsed.dir)
       if (parsed.list) return yield* list(input, adapter, cwd)
 
@@ -298,6 +305,7 @@ export const node = LayerNode.make({
     Env.node,
     FSUtil.node,
     EventV2Bridge.node,
+    Config.node,
   ],
 })
 

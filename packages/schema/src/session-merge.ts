@@ -20,6 +20,18 @@ export const Status = Schema.Literals(["starting", "live", "detached", "closed",
 })
 export type Status = typeof Status.Type
 
+export const Adapter = Schema.Struct({
+  id: Schema.String.annotate({ description: "Adapter id used by `/merge <id>`, for example `claude`" }),
+  name: Schema.String,
+  transports: Schema.Array(Transport),
+  enabled: Schema.Boolean.annotate({ description: "False when turned off with `merge.adapters.<id>.enabled`" }),
+  available: Schema.Boolean.annotate({ description: "Whether the adapter's program was found and is new enough" }),
+  binary: Schema.String.pipe(optional),
+  version: Schema.String.pipe(optional),
+  message: Schema.String.pipe(optional).annotate({ description: "Why the adapter is unavailable" }),
+}).annotate({ identifier: "SessionMerge.Adapter" })
+export type Adapter = typeof Adapter.Type
+
 export const Binding = Schema.Struct({
   id: ID,
   sessionID: SessionID,

@@ -17,7 +17,7 @@ import type {
   AuthSetResponses,
   CommandListErrors,
   CommandListResponses,
-  Config as Config3,
+  Config as Config4,
   ConfigGetErrors,
   ConfigGetResponses,
   ConfigProvidersErrors,
@@ -111,8 +111,17 @@ import type {
   McpRemoteConfig,
   McpStatusErrors,
   McpStatusResponses,
+  MergeAdapterListErrors,
+  MergeAdapterListResponses,
   ModelRef,
   MoveSessionDestination,
+  OperatorConfigLayersErrors,
+  OperatorConfigLayersResponses,
+  OperatorConfigSchemaErrors,
+  OperatorConfigSchemaResponses,
+  OperatorConfigScope,
+  OperatorConfigUpdateErrors,
+  OperatorConfigUpdateResponses,
   OutputFormat,
   Part as Part2,
   PartDeleteErrors,
@@ -1299,7 +1308,7 @@ export class Config extends HeyApiClient {
    */
   public update<ThrowOnError extends boolean = false>(
     parameters?: {
-      config?: Config3
+      config?: Config4
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1456,7 +1465,7 @@ export class Config2 extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
-      config?: Config3
+      config?: Config4
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5055,6 +5064,167 @@ export class Tui extends HeyApiClient {
   }
 }
 
+export class Adapter2 extends HeyApiClient {
+  /**
+   * List merge adapters
+   *
+   * List the adapters `/merge` can attach (for example Claude Code), whether each is turned on, and whether its program is installed. Each call checks the installed programs again.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<MergeAdapterListResponses, MergeAdapterListErrors, ThrowOnError>({
+      url: "/merge/adapter",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Merge extends HeyApiClient {
+  private _adapter?: Adapter2
+  get adapter(): Adapter2 {
+    return (this._adapter ??= new Adapter2({ client: this.client }))
+  }
+}
+
+export class Config3 extends HeyApiClient {
+  /**
+   * List config layers
+   *
+   * List the config files that apply to this project, in load order, and the file a global or project write goes to.
+   */
+  public layers<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorConfigLayersResponses,
+      OperatorConfigLayersErrors,
+      ThrowOnError
+    >({
+      url: "/operator/config/layer",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update config at a scope
+   *
+   * Merge a patch into the global or project config file, keeping comments. A null value removes the key so the inherited value applies. The result is validated before it is written.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      scope: OperatorConfigScope
+      body?: {
+        [key: string]: unknown
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "scope" },
+            { key: "body", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      OperatorConfigUpdateResponses,
+      OperatorConfigUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/operator/config",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get config JSON schema
+   *
+   * The JSON schema of the config file, for building editors.
+   */
+  public schema<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorConfigSchemaResponses,
+      OperatorConfigSchemaErrors,
+      ThrowOnError
+    >({
+      url: "/operator/config/schema",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Operator extends HeyApiClient {
+  private _config?: Config3
+  get config(): Config3 {
+    return (this._config ??= new Config3({ client: this.client }))
+  }
+}
+
 export class Health extends HeyApiClient {
   /**
    * Check server health
@@ -7244,6 +7414,16 @@ export class OpencodeClient extends HeyApiClient {
   private _tui?: Tui
   get tui(): Tui {
     return (this._tui ??= new Tui({ client: this.client }))
+  }
+
+  private _merge?: Merge
+  get merge(): Merge {
+    return (this._merge ??= new Merge({ client: this.client }))
+  }
+
+  private _operator?: Operator
+  get operator(): Operator {
+    return (this._operator ??= new Operator({ client: this.client }))
   }
 
   private _v2?: V2

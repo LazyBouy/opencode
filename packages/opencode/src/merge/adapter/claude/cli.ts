@@ -167,6 +167,7 @@ export const make = Effect.gen(function* () {
 
   return {
     id: "claude",
+    name: "Claude Code",
     transports: ["cli"],
     probe,
     start,

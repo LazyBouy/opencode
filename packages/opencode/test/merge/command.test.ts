@@ -48,6 +48,21 @@ unix("acceptance 1: /merge claude without the binary fails before any change", (
   }),
 )
 
+unix("a turned-off adapter is refused before any change", () =>
+  Effect.gen(function* () {
+    yield* configure({ merge: { adapters: { claude: { enabled: false } } } })
+    const fake = yield* FakeClaude.install([[{ text: "ok" }]])
+    const chat = yield* session()
+    const bindings = yield* MergeBinding.Service
+
+    const exit = yield* merge(chat.id, "claude").pipe(Effect.exit)
+
+    expect(failure(exit)).toContain("Claude Code adapter is turned off")
+    expect(yield* bindings.latest(chat.id)).toBeUndefined()
+    expect(FakeClaude.starts(yield* fake.log)).toHaveLength(0)
+  }),
+)
+
 unix("/merge claude binds a new session with a pre-assigned id in the session directory", () =>
   Effect.gen(function* () {
     const { directory } = yield* configure()

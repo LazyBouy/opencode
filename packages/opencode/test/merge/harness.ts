@@ -159,8 +159,8 @@ export const it = testEffect(LayerNode.compile(root, replacements))
 
 export const unix = process.platform !== "win32" ? it.instance : it.instance.skip
 
-/** Writes a config with a `test/test-model` provider served by the in-test LLM server. */
-export const configure = Effect.fn("test.merge.configure")(function* () {
+/** Writes a config with a `test/test-model` provider served by the in-test LLM server, plus `extra` keys. */
+export const configure = Effect.fn("test.merge.configure")(function* (extra: Record<string, unknown> = {}) {
   const { directory } = yield* TestInstance
   const llm = yield* TestLLMServer
   const fs = yield* FSUtil.Service
@@ -192,6 +192,7 @@ export const configure = Effect.fn("test.merge.configure")(function* () {
           options: { apiKey: "test-key", baseURL: llm.url },
         },
       },
+      ...extra,
     }),
   )
   return { directory, llm }

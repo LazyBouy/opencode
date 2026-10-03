@@ -2051,6 +2051,13 @@ export type Config = {
     mcp_timeout?: number
     policies?: Array<ConfigV2ExperimentalPolicy>
   }
+  merge?: {
+    adapters?: {
+      [key: string]: {
+        enabled?: boolean
+      }
+    }
+  }
 }
 
 export type Model = {
@@ -2697,6 +2704,41 @@ export type WorkspaceCreateError = {
 export type WorkspaceWarpError = {
   name: "WorkspaceWarpError"
   data: {
+    message: string
+  }
+}
+
+export type OperatorConfigSource = {
+  kind: "global" | "custom" | "project" | "directory" | "env"
+  path: string
+  text: string
+}
+
+export type OperatorConfigLayers = {
+  /**
+   * Config sources that exist, in load order. Later sources override earlier ones.
+   */
+  sources: Array<OperatorConfigSource>
+  /**
+   * The file a write at each scope goes to. It is created if missing.
+   */
+  targets: {
+    global: string
+    project: string
+  }
+}
+
+export type OperatorConfigScope = "global" | "project"
+
+export type OperatorConfigUpdateResult = {
+  path: string
+  changed: boolean
+}
+
+export type OperatorConfigInvalidError = {
+  name: "OperatorConfigInvalidError"
+  data: {
+    path: string
     message: string
   }
 }
@@ -3923,6 +3965,26 @@ export type PtyTicketConnectToken = {
 export type WorkspaceEventConnectionStatus = {
   workspaceID: string
   status: "connected" | "connecting" | "disconnected" | "error"
+}
+
+export type SessionMergeAdapter = {
+  /**
+   * Adapter id used by `/merge <id>`, for example `claude`
+   */
+  id: string
+  name: string
+  transports: Array<SessionMergeTransport>
+  /**
+   * False when turned off with `merge.adapters.<id>.enabled`
+   */
+  enabled: boolean
+  /**
+   * Whether the adapter's program was found and is new enough
+   */
+  available: boolean
+  binary?: string
+  version?: string
+  message?: string
 }
 
 export type LocationInfo = {
@@ -11353,6 +11415,123 @@ export type ExperimentalWorkspaceWarpResponses = {
 
 export type ExperimentalWorkspaceWarpResponse =
   ExperimentalWorkspaceWarpResponses[keyof ExperimentalWorkspaceWarpResponses]
+
+export type MergeAdapterListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/merge/adapter"
+}
+
+export type MergeAdapterListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type MergeAdapterListError = MergeAdapterListErrors[keyof MergeAdapterListErrors]
+
+export type MergeAdapterListResponses = {
+  /**
+   * Merge adapters
+   */
+  200: Array<SessionMergeAdapter>
+}
+
+export type MergeAdapterListResponse = MergeAdapterListResponses[keyof MergeAdapterListResponses]
+
+export type OperatorConfigLayersData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/config/layer"
+}
+
+export type OperatorConfigLayersErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorConfigLayersError = OperatorConfigLayersErrors[keyof OperatorConfigLayersErrors]
+
+export type OperatorConfigLayersResponses = {
+  /**
+   * Config sources and write targets
+   */
+  200: OperatorConfigLayers
+}
+
+export type OperatorConfigLayersResponse = OperatorConfigLayersResponses[keyof OperatorConfigLayersResponses]
+
+export type OperatorConfigUpdateData = {
+  body?: {
+    [key: string]: unknown
+  }
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    scope: OperatorConfigScope
+  }
+  url: "/operator/config"
+}
+
+export type OperatorConfigUpdateErrors = {
+  /**
+   * OperatorConfigInvalidError | InvalidRequestError
+   */
+  400: OperatorConfigInvalidError | InvalidRequestError
+}
+
+export type OperatorConfigUpdateError = OperatorConfigUpdateErrors[keyof OperatorConfigUpdateErrors]
+
+export type OperatorConfigUpdateResponses = {
+  /**
+   * Written file
+   */
+  200: OperatorConfigUpdateResult
+}
+
+export type OperatorConfigUpdateResponse = OperatorConfigUpdateResponses[keyof OperatorConfigUpdateResponses]
+
+export type OperatorConfigSchemaData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/config/schema"
+}
+
+export type OperatorConfigSchemaErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorConfigSchemaError = OperatorConfigSchemaErrors[keyof OperatorConfigSchemaErrors]
+
+export type OperatorConfigSchemaResponses = {
+  /**
+   * Config JSON schema
+   */
+  200: {
+    [key: string]: unknown
+  }
+}
+
+export type OperatorConfigSchemaResponse = OperatorConfigSchemaResponses[keyof OperatorConfigSchemaResponses]
 
 export type V2HealthGetData = {
   body?: never
