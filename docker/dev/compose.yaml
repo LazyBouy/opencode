@@ -8,6 +8,7 @@ x-image: &image
   build:
     context: ../..
     dockerfile: docker/dev/Dockerfile
+    target: dev
   init: true
 
 services:
@@ -81,6 +82,23 @@ services:
       - claude-config:/claude-config
     cpus: ${TOOLS_CPUS:-4}
     mem_limit: ${TOOLS_MEMORY:-6g}
+
+  # Playwright browser tests for the web app against its mock server, for example:
+  #   docker compose -f docker/dev/compose.yaml run --rm e2e npx playwright test e2e/operator
+  e2e:
+    build:
+      context: ../..
+      dockerfile: docker/dev/Dockerfile
+      target: e2e
+    image: opencode-dev-e2e:local
+    profiles: ["e2e"]
+    init: true
+    shm_size: 1g
+    environment:
+      PLAYWRIGHT_WORKERS: ${E2E_WORKERS:-2}
+    command: ["npx", "playwright", "test", "--reporter=line"]
+    cpus: ${E2E_CPUS:-4}
+    mem_limit: ${E2E_MEMORY:-6g}
 
 volumes:
   opencode-data:

@@ -8,6 +8,7 @@ installed on the host. All commands run from the repository root.
 | `server` | `opencode serve` (API, sessions, `/merge`) | `http://127.0.0.1:4096`   | 4 CPUs, 6 GB     |
 | `web`    | web UI dev server (Vite)                  | `http://127.0.0.1:4444`   | 2 CPUs, 3 GB     |
 | `tools`  | one-off commands (typecheck, tests)       | on demand (`run --rm`)    | 4 CPUs, 6 GB     |
+| `e2e`    | Playwright browser tests                  | on demand (`run --rm`)    | 4 CPUs, 6 GB     |
 
 ## Start
 
@@ -54,8 +55,18 @@ docker compose -f docker/dev/compose.yaml run --rm tools bun run --cwd packages/
 docker compose -f docker/dev/compose.yaml run --rm tools bun run --cwd packages/opencode test test/merge
 ```
 
-Browser (Playwright) tests run in the matching Playwright image with limits, for example
-`docker run --rm --cpus=4 --memory=6g --shm-size=1g mcr.microsoft.com/playwright:v1.59.1-noble …`.
+Browser (Playwright) tests run in the `e2e` service: the Playwright image with Bun and the workspace,
+limited to 4 CPUs and 6 GB, with 2 workers. They use the app's mock server, not the running stack:
+
+```sh
+docker compose -f docker/dev/compose.yaml --profile e2e build e2e
+docker compose -f docker/dev/compose.yaml run --rm e2e npx playwright test e2e/operator e2e/regression e2e/smoke
+```
+
+## Merging upstream releases
+
+`script/fork/upstream-merge.sh` merges upstream OpenCode and runs the fork's checks in these
+containers. See `FORK.md`.
 
 ## Settings
 
@@ -67,7 +78,8 @@ Override in the shell or in `docker/dev/.env`:
 | `OPENCODE_SERVER_PORT`     | `4096`           | API port on the host (127.0.0.1 only)           |
 | `OPENCODE_WEB_PORT`        | `4444`           | web UI port on the host (127.0.0.1 only)        |
 | `OPENCODE_SERVER_PASSWORD` | unset            | require basic auth on the API                   |
-| `SERVER_CPUS` / `SERVER_MEMORY`, `WEB_CPUS` / `WEB_MEMORY`, `TOOLS_CPUS` / `TOOLS_MEMORY` | see table | resource limits |
+| `SERVER_CPUS` / `SERVER_MEMORY`, `WEB_CPUS` / `WEB_MEMORY`, `TOOLS_CPUS` / `TOOLS_MEMORY`, `E2E_CPUS` / `E2E_MEMORY` | see table | resource limits |
+| `E2E_WORKERS`              | `2`              | Playwright workers                              |
 
 ## Stop
 

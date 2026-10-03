@@ -48,3 +48,13 @@ RUN --mount=type=cache,target=/root/.bun/install/cache \
   HUSKY=0 ELECTRON_SKIP_BINARY_DOWNLOAD=1 bun install --frozen-lockfile
 COPY . .
 ENV BUN_RUNTIME_TRANSPILER_CACHE_PATH=0
+
+# Browser tests: the Playwright image (its version matches @playwright/test in packages/app) with Bun
+# and the workspace from the dev stage. Run through the `e2e` compose service, which sets limits.
+FROM mcr.microsoft.com/playwright:v1.59.1-noble AS e2e
+ENV BUN_INSTALL=/opt/bun
+ENV PATH=/opt/bun/bin:$PATH
+COPY --from=base /opt/bun /opt/bun
+COPY --from=dev /opencode /opencode
+WORKDIR /opencode/packages/app
+ENV CI=1

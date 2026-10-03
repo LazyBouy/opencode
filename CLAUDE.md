@@ -6,6 +6,8 @@ OpenCode is an open source AI coding agent: a Bun + Turbo TypeScript monorepo bu
 
 Read these alongside this file:
 
+- `FORK.md` describes this fork: its additions (`/merge`, the iphi theme, the operator console), the fork-only paths new work must use, the aggregators that register fork routes, config keys, pages and strings, the list of upstream files the fork edits, and how to merge upstream releases.
+
 - `AGENTS.md` (root) holds the style guide, import rules, commit/branch conventions, and V2 Session invariants. Packages and some subdirectories have their own `AGENTS.md` with stricter local rules: `packages/opencode/test/`, `packages/opencode/test/server/`, `packages/opencode/src/session/llm/`, `packages/opencode/src/server/routes/instance/httpapi/`, `packages/core/src/tool/`, `packages/llm/`, `packages/schema/`, `packages/app/` (and `app/e2e/`), `packages/ui/`, `packages/session-ui/`, `packages/desktop/`.
 - `CONTEXT.md` is the domain glossary for the Session runtime (System Context, Context Epoch, Admitted Prompt, Session Drain, ...) and the client-contract design. Use its terms.
 - `specs/` holds design docs, especially `specs/v2/*` (session, tools, config, provider-model) and `specs/tui-package.md`.

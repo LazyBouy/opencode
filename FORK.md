@@ -1,0 +1,97 @@
+# This fork
+
+This repository is a fork of [anomalyco/opencode](https://github.com/anomalyco/opencode) (`upstream`). It adds:
+- **`/merge`**: drive Claude Code (and future adapters) from an OpenCode session.
+- **The iphi theme**: the default look.
+- **An operator console**: `/operator/*` pages and the left sidebar, plus Settings → Adapters.
+- **A Docker-only dev stack**: in `docker/dev`.
+
+The fork is built so that new upstream releases merge with as few conflicts as possible.
+
+## How fork code is laid out
+
+Fork code lives in **fork-only paths**. Upstream never touches them, so they never conflict.
+
+| Area | Fork-only paths |
+|---|---|
+| Server: merge | `packages/opencode/src/merge/**`, `packages/schema/src/session-merge.ts`, `packages/core/src/database/migration/*_session_merge_binding.ts` |
+| Server: operator | `packages/opencode/src/operator/**` (services, `http/` routes, `nodes.ts`) |
+| Config keys | `packages/core/src/v1/config/fork.ts`, `packages/core/src/v1/config/merge.ts` |
+| Web app | `packages/app/src/operator/**` (pages, sidebar, UI kit, settings, `i18n/en.ts`), `packages/app/src/components/session/merge-indicator.*` |
+| Shared UI | `packages/session-ui/src/components/merge-summary.tsx`, `packages/ui/src/styles/skins/iphi.css`, `packages/ui/src/theme/themes/iphi.json`, `packages/tui/src/theme/assets/iphi.json` |
+| Tests | `packages/opencode/test/{merge,operator}/**`, `packages/opencode/test/fixtures/merge/**`, `packages/opencode/test/lib/fake-claude.ts`, `packages/opencode/test/server/httpapi-exercise/operator.ts`, `packages/app/e2e/operator/**`, `packages/app/e2e/regression/theme-iphi.spec.ts` |
+| Tooling | `docker/**`, `script/fork/**`, `CLAUDE.md`, `FORK.md` |
+
+## Rules for new fork work
+
+1. **Put new code in a fork-only path.**
+2. **Register through the existing aggregators instead of editing upstream again:**
+   - Routes: add a group to `packages/opencode/src/operator/http/api.ts` and its handler to `http/handlers.ts`. Add its HTTP scenarios to `test/server/httpapi-exercise/operator.ts`.
+   - Services the routes need: add them to `packages/opencode/src/operator/nodes.ts`.
+   - Top-level config keys: add them to `packages/core/src/v1/config/fork.ts`.
+   - Web pages: add them to `packages/app/src/operator/pages.ts`. The routes, sidebar and command palette all read it.
+   - UI strings: add them to `packages/app/src/operator/i18n/en.ts`, **not** the 62 upstream locale files. Every locale falls back to these English strings.
+3. **Prefer events and hooks to edits.** Subscribe to bus events or use plugin hooks rather than changing upstream logic.
+4. **Keep unavoidable upstream edits small and list them below.** For example: a new agent config key must go in `KNOWN_KEYS`, or it is sent to the model provider.
+5. **Don't move fork helpers into upstream modules that tests mock.** Some upstream tests mock whole modules, for example `@opencode-ai/session-ui/message-part`. A fork export in such a module disappears under the mock.
+
+## Upstream files the fork edits
+
+Re-check these after every upstream merge. **Risk** is how likely the file is to conflict: upstream changes it often, or the fork's edit is large.
+
+| File | Why | Risk |
+|---|---|---|
+| `packages/opencode/src/session/processor.ts` | merge: `origin` on parts, `consume()` for adapter streams, doom-loop skip | high |
+| `packages/opencode/src/session/prompt.ts` | merge: turn branch and `/merge` dispatch | medium |
+| `packages/opencode/src/permission/index.ts` | merge: `dismiss` for cancelled child asks | low |
+| `packages/opencode/src/session/{message-v2,compaction}.ts`, `share/share-next.ts`, `cli/cmd/export.ts` | merge: keep projected parts out of the model, shares and exports | low |
+| `packages/opencode/src/command/index.ts` | merge: built-in `/merge` command | low |
+| `packages/opencode/src/effect/app-runtime.ts` | merge: `MergeBinding` in the CLI runtime | low |
+| `packages/opencode/src/server/routes/instance/httpapi/{api,server}.ts` | mount `OperatorApi`, `operatorHandlers` and `operatorNodes` (one line each) | low |
+| `packages/opencode/src/server/routes/instance/httpapi/{groups,handlers}/session.ts` | merge: `GET /session/:id/merge`, compaction guard | low |
+| `packages/core/src/session.ts`, `session/sql.ts` | merge: binding table and V2 prompt guard | low |
+| `packages/core/src/v1/config/config.ts` | spread `ConfigForkV1.fields` (one line) | low |
+| `packages/schema/src/{event-manifest,v1/session}.ts` | merge: event and `origin` on parts | low |
+| `packages/server/src/handlers/session.ts` | merge: `MergedError` → 409 | low |
+| `packages/app/src/app.tsx` | mount `<OperatorRoutes />`; default theme `iphi` | medium |
+| `packages/app/src/pages/layout-new.tsx` | mount `<OperatorSidebar />` | low |
+| `packages/app/src/context/layout.tsx` | `operator` route type (3 lines) | low |
+| `packages/app/src/context/language.tsx` | merge the fork dictionary (3 lines) | low |
+| `packages/app/src/components/settings-v2/dialog-settings-v2.tsx` | Adapters tab (trigger and content) | low |
+| `packages/app/src/context/{server-session,directory-sync,global-sync/*}.ts` | merge: binding store and event | low |
+| `packages/app/src/pages/session/timeline/{rows,message-timeline}.ts*`, `utils/session-export.ts` | merge: indicator and hidden duplicate summary | low |
+| `packages/app/src/context/settings.tsx`, `public/oc-theme-preload.js`, `pages/home/home-projects-view.tsx`, `packages/desktop/src/main/windows.ts` | iphi theme defaults and display font | low |
+| `packages/session-ui/src/components/message-part.{tsx,css}` | merge: `data-origin` wrapper and rails | medium |
+| `packages/tui/src/**` (prompt, sync, session route and sidebar, transcript, theme index) | merge indicator and iphi theme in the TUI | low |
+| `packages/ui/src/styles/index.css`, `theme/context.tsx` | import the iphi skin; theme name | low |
+| `packages/opencode/test/server/httpapi-exercise/index.ts` | spread `operatorScenarios` (one line) | low |
+| `packages/app/playwright.config.ts` | pin `oc-2` for pixel-sensitive specs | low |
+| Tests and snapshots: `event-manifest.test.ts`, help snapshot, `session/{compaction,tools}.test.ts`, `core/test/session-prompt.test.ts`, `bootstrap.test.ts`, `session-export.test.ts`, `theme-preload.test.ts` | counts, fakes and expectations for the above | low |
+
+**Generated files** are never merged by hand. Regenerate them after a merge (see below):
+- `packages/sdk/**`
+- `packages/client/src/generated*`
+- `packages/core/src/database/{migration,schema}.gen.ts`
+- `packages/core/schema.json`
+
+## Merging an upstream release
+
+```sh
+script/fork/upstream-merge.sh            # fetch upstream/dev and merge it into the current branch
+script/fork/upstream-merge.sh --check    # only run the checks (after resolving conflicts)
+```
+
+The script works in four stages:
+1. It adds the `upstream` remote if it is missing, fetches it, and merges `upstream/dev`. It stops if there are conflicts.
+2. **Conflicts:** resolve the files, using the table above, and commit. Then run `--check`.
+3. **Checks:** in Docker with limits (see `docker/dev/README.md`), it:
+   - regenerates the SDKs and migrations;
+   - typechecks the touched packages;
+   - runs the merge and operator tests, the HttpApi coverage gate, and the app unit tests.
+4. It lists upstream files the fork now edits that are missing from the table above.
+
+Then run the browser suites:
+
+```sh
+docker compose -f docker/dev/compose.yaml run --rm e2e npx playwright test e2e/operator e2e/regression e2e/smoke
+```
