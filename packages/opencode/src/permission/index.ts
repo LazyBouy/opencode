@@ -13,6 +13,8 @@ export interface Interface {
   readonly ask: (input: PermissionV1.AskInput) => Effect.Effect<void, PermissionV1.Error>
   readonly reply: (input: PermissionV1.ReplyInput) => Effect.Effect<void, PermissionV1.NotFoundError>
   readonly list: () => Effect.Effect<ReadonlyArray<PermissionV1.Request>>
+  /** Withdraws one pending request without touching others, e.g. when its asker went away. */
+  readonly dismiss: (requestID: PermissionV1.ID) => Effect.Effect<void>
 }
 
 interface PendingEntry {
@@ -171,7 +173,20 @@ const layer = Layer.effect(
       return Array.from(pending.values(), (item) => item.info)
     })
 
-    return Service.of({ ask, reply, list })
+    const dismiss = Effect.fn("Permission.dismiss")(function* (requestID: PermissionV1.ID) {
+      const { pending } = yield* InstanceState.get(state)
+      const existing = pending.get(requestID)
+      if (!existing) return
+      pending.delete(requestID)
+      yield* events.publish(Event.Replied, {
+        sessionID: existing.info.sessionID,
+        requestID: existing.info.id,
+        reply: "reject",
+      })
+      yield* Deferred.fail(existing.deferred, new PermissionV1.RejectedError())
+    })
+
+    return Service.of({ ask, reply, list, dismiss })
   }),
 )
 

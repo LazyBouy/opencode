@@ -1,4 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { SessionMerge } from "@opencode-ai/schema/session-merge"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
 import type * as SDK from "@opencode-ai/sdk/v2"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
@@ -191,8 +192,11 @@ const layer = Layer.effect(
             yield* sync(info.sessionID, [{ type: "model", data: [model] }])
           }),
         )
+        // Raw parts projected from a merged child session are never published; its summary is.
         yield* watch(MessageV2.Event.PartUpdated, (data) =>
-          sync(data.part.sessionID, [{ type: "part", data: structuredClone(data.part) as SDK.Part }]),
+          SessionMerge.isProjection(data.part)
+            ? Effect.void
+            : sync(data.part.sessionID, [{ type: "part", data: structuredClone(data.part) as SDK.Part }]),
         )
         yield* watch(Session.Event.Diff, (data) =>
           sync(data.sessionID, [{ type: "session_diff", data: structuredClone(data.diff) as SDK.SnapshotFileDiff[] }]),
@@ -292,7 +296,11 @@ const layer = Layer.effect(
       yield* sync(sessionID, [
         { type: "session", data: info },
         ...messages.map((item) => ({ type: "message" as const, data: item.info })),
-        ...messages.flatMap((item) => item.parts.map((part) => ({ type: "part" as const, data: part }))),
+        ...messages.flatMap((item) =>
+          item.parts
+            .filter((part) => !SessionMerge.isProjection(part))
+            .map((part) => ({ type: "part" as const, data: part })),
+        ),
         { type: "session_diff", data: diffs },
         { type: "model", data: models },
       ])

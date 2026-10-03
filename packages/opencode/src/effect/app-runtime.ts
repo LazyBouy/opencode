@@ -1,4 +1,5 @@
 import { Layer, ManagedRuntime } from "effect"
+import { MergeBinding } from "@/merge/binding"
 import { attach } from "./run-service"
 import * as Observability from "@opencode-ai/core/observability"
 
@@ -76,6 +77,7 @@ export const AppLayer = AppNodeBuilderV1.build(
     Question.node,
     Permission.node,
     Todo.node,
+    MergeBinding.node,
     Session.node,
     SessionProjector.node,
     SessionStatus.node,

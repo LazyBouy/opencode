@@ -197,6 +197,8 @@ import type {
   SessionInitResponses,
   SessionListErrors,
   SessionListResponses,
+  SessionMergeErrors,
+  SessionMergeResponses,
   SessionMessageErrors,
   SessionMessageResponses,
   SessionMessagesErrors,
@@ -3659,6 +3661,38 @@ export class Session2 extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<SessionTodoResponses, SessionTodoErrors, ThrowOnError>({
       url: "/session/{sessionID}/todo",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get session merge binding
+   *
+   * Retrieve the most recent external-agent merge binding for a session (for example a bound Claude Code session), including its status and whether its process is running.
+   */
+  public merge<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionMergeResponses, SessionMergeErrors, ThrowOnError>({
+      url: "/session/{sessionID}/merge",
       ...options,
       ...params,
     })

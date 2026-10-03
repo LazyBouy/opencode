@@ -84,6 +84,10 @@ export function formatAssistantHeader(
 }
 
 export function formatPart(part: Part, options: TranscriptOptions): string {
+  // Raw parts projected from a merged external session stay out of exported transcripts; the
+  // merge summary (kept below) records what that session did.
+  if (part.origin?.role === "projection") return ""
+
   if (part.type === "text" && !part.synthetic) {
     return `${part.text}\n\n`
   }

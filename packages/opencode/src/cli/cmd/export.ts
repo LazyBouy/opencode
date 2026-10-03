@@ -1,4 +1,6 @@
 import { Session } from "@/session/session"
+import { SessionMerge } from "@opencode-ai/schema/session-merge"
+import { MergeBinding } from "@/merge/binding"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionID } from "../../session/schema"
@@ -231,14 +233,23 @@ export const ExportCommand = effectCmd({
       .option("sanitize", {
         describe: "redact sensitive transcript and file data",
         type: "boolean",
+      })
+      .option("include-foreign-transcript", {
+        describe: "include raw parts projected from merged external agent sessions (excluded by default)",
+        type: "boolean",
       }),
   handler: Effect.fn("Cli.export")(function* (args) {
     return yield* run(args)
   }),
 })
 
-const run = Effect.fn("Cli.export.body")(function* (args: { sessionID?: string; sanitize?: boolean }) {
+const run = Effect.fn("Cli.export.body")(function* (args: {
+  sessionID?: string
+  sanitize?: boolean
+  includeForeignTranscript?: boolean
+}) {
   const svc = yield* Session.Service
+  const merges = yield* MergeBinding.Service
   let sessionID = args.sessionID ? SessionID.make(args.sessionID) : undefined
   process.stderr.write(`Exporting session: ${sessionID ?? "latest"}\n`)
 
@@ -282,9 +293,15 @@ const run = Effect.fn("Cli.export.body")(function* (args: { sessionID?: string; 
   // (Session.Service.get throws NotFoundError as a defect, not a typed E).
   return yield* Effect.gen(function* () {
     const sessionInfo = yield* svc.get(sessionID!)
-    const messages = yield* svc.messages({ sessionID: sessionInfo.id })
+    const all = yield* svc.messages({ sessionID: sessionInfo.id })
+    // A merged child transcript can contain file contents the user did not mean to publish; its raw
+    // projected parts are only exported on request. Summaries and binding metadata always are.
+    const messages = args.includeForeignTranscript
+      ? all
+      : all.map((msg) => ({ ...msg, parts: msg.parts.filter((part) => !SessionMerge.isProjection(part)) }))
+    const merge = yield* merges.list(sessionInfo.id)
 
-    const exportData = { info: sessionInfo, messages }
+    const exportData = { info: sessionInfo, messages, ...(merge.length ? { merge } : {}) }
 
     process.stdout.write(JSON.stringify(args.sanitize ? sanitize(exportData) : exportData, null, 2))
     process.stdout.write(EOL)

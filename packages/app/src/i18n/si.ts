@@ -1150,4 +1150,10 @@ export const dict: Record<string, string> = {
   "workspace.reset.archived.many": "සැසි {{count}} සංරක්ෂිත වනු ඇත.",
   "workspace.reset.note": "මෙය පෙරනිමි ශාඛාවට ගැලපෙන පරිදි වැඩබිම නැවත සකසනු ඇත.",
   "dialog.usageExceeded.dontShowAgain": "නැවත නොපෙන්වන්න",
+  // Untranslated: merge-session strings awaiting the localization review in AGENTS.md.
+  "session.merge.indicator": "merged: {{adapter}} · {{id}} · {{status}}",
+  "session.merge.running": "running",
+  "session.merge.copyId": "Copy {{adapter}} session ID",
+  "session.merge.copied": "Session ID copied",
+  "session.merge.detach": "Detach from {{adapter}}",
 }

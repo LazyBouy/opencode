@@ -161,6 +161,11 @@ export function Prompt(props: PromptProps) {
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
+  // While a session is merged with an external agent, prompts go to that agent instead of the model.
+  const merged = createMemo(() => {
+    const binding = sync.data.merge?.[props.sessionID ?? ""]
+    return binding && (binding.status === "live" || binding.status === "starting") ? binding : undefined
+  })
   const history = usePromptHistory()
   const stash = usePromptStash()
   const keymap = useOpencodeKeymap()
@@ -1452,7 +1457,19 @@ export function Prompt(props: PromptProps) {
                       <Show when={store.mode === "normal" && local.permission.mode === "auto"}>
                         <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>auto</text>
                       </Show>
-                      <Show when={store.mode === "normal"}>
+                      <Show when={store.mode === "normal" && merged()}>
+                        {(binding) => (
+                          <box flexDirection="row" gap={1}>
+                            <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
+                            <text flexShrink={0} fg={fadeColor(theme.accent, modelMetaAlpha())}>
+                              merged: {binding().adapter} · {(binding().externalSessionID ?? "pending").slice(0, 4)}… ·{" "}
+                              {binding().status}
+                              {binding().process ? " · running" : ""}
+                            </text>
+                          </box>
+                        )}
+                      </Show>
+                      <Show when={store.mode === "normal" && !merged()}>
                         <box flexDirection="row" gap={1}>
                           <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
                           <text

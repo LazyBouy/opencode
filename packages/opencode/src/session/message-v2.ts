@@ -1,4 +1,5 @@
 import { SessionID, MessageID } from "./schema"
+import { SessionMerge } from "@opencode-ai/schema/session-merge"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import {
@@ -196,7 +197,9 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
     return { type: "json", value: output as never }
   }
 
-  for (const msg of input) {
+  for (const original of input) {
+    // Parts projected from a merged child session are display-only; only its summary is visible.
+    const msg = { ...original, parts: original.parts.filter(SessionMerge.visibleToModel) }
     if (msg.parts.length === 0) continue
 
     if (msg.info.role === "user") {

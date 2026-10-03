@@ -46,6 +46,7 @@ export function hints(template: string) {
 export const Default = {
   INIT: "init",
   REVIEW: "review",
+  MERGE: "merge",
 } as const
 
 export interface Interface {
@@ -149,6 +150,17 @@ const layer = Layer.effect(
           },
           hints: [],
         }
+      }
+
+      // `/merge` runs code instead of rendering a template (see SessionPrompt.command). It is
+      // registered last so the name stays reserved and clients list and autocomplete it.
+      commands[Default.MERGE] = {
+        name: Default.MERGE,
+        description:
+          "merge an external agent session into this one: /merge claude [--dir] [--resume id] [-- flags] | status | detach",
+        source: "command",
+        template: "",
+        hints: ["$ARGUMENTS"],
       }
 
       return {

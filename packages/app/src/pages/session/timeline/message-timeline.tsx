@@ -1,3 +1,4 @@
+import { MergeIndicator } from "@/components/session/merge-indicator"
 import {
   createEffect,
   createMemo,
@@ -1474,6 +1475,7 @@ export function MessageTimeline(props: {
                       "gap-3": !settings.general.newLayoutDesigns(),
                     }}
                   >
+                    <Show when={sessionID()}>{(id) => <MergeIndicator sessionID={id()} />}</Show>
                     <SessionContextUsage
                       placement="bottom"
                       buttonAppearance={settings.general.newLayoutDesigns() ? "v2" : "default"}

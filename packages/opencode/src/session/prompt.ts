@@ -56,6 +56,9 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
+import { MergeBinding } from "@/merge/binding"
+import { MergeCommand } from "@/merge/command"
+import { MergeTurn } from "@/merge/turn"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -141,6 +144,9 @@ const layer = Layer.effect(
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
     const { db } = database
+    const mergeBindings = yield* MergeBinding.Service
+    const mergeTurn = yield* MergeTurn.Service
+    const mergeCommand = yield* MergeCommand.Service
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
       return {
         cancel: (sessionID: SessionID) => cancel(sessionID),
@@ -1130,6 +1136,16 @@ const layer = Layer.effect(
           }
 
           step++
+
+          // A live merge binding hands this turn to the child harness. Nothing below (title
+          // generation, OpenCode model, tools, compaction) runs for a merged turn.
+          const merged = yield* mergeBindings.active(sessionID)
+          if (merged) {
+            const outcome = yield* mergeTurn.run({ sessionID, session, entry: merged, lastUser, msgs, step })
+            if (outcome === "continue") continue
+            if (outcome === "break") break
+          }
+
           if (step === 1)
             yield* title({
               session,
@@ -1359,6 +1375,14 @@ const layer = Layer.effect(
         command: input.command,
         agent: input.agent,
       })
+      if (input.command === Command.Default.MERGE)
+        return yield* mergeCommand.run({
+          sessionID: input.sessionID,
+          arguments: input.arguments,
+          agent: input.agent ?? (yield* agents.defaultInfo()).name,
+          model: input.model ? Provider.parseModel(input.model) : yield* currentModel(input.sessionID),
+        })
+
       const cmd = yield* commands.get(input.command)
       if (!cmd) {
         const available = (yield* commands.list()).map((c) => c.name)
@@ -1625,6 +1649,9 @@ export const node = LayerNode.make({
     EventV2Bridge.node,
     RuntimeFlags.node,
     Database.node,
+    MergeBinding.node,
+    MergeTurn.node,
+    MergeCommand.node,
   ],
 })
 

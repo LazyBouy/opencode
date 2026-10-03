@@ -32,9 +32,14 @@ export async function fetchSessionExport(input: {
     throw new Error(`Failed to load messages for session: ${input.sessionID}`)
   }
 
+  // Like `opencode export`, raw parts projected from a merged external session are left out; the
+  // merge summary parts that record what that session did are kept.
   return {
     info: sessionRes.data,
-    messages: messagesRes.data,
+    messages: messagesRes.data.map((message) => ({
+      ...message,
+      parts: message.parts.filter((part) => part.origin?.role !== "projection"),
+    })),
   }
 }
 

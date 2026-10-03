@@ -8,6 +8,7 @@ import type {
   PermissionRequest,
   QuestionRequest,
   Session,
+  SessionMergeBinding,
   SessionStatus,
   Todo,
 } from "@opencode-ai/sdk/v2/client"
@@ -198,6 +199,7 @@ export function createServerSession(
     session_status: {} as Record<string, SessionStatus>,
     session_diff: {} as Record<string, FileDiffInfo[]>,
     todo: {} as Record<string, Todo[]>,
+    merge: {} as Record<string, SessionMergeBinding | null>,
     permission: {} as Record<string, PermissionRequest[]>,
     question: {} as Record<string, QuestionRequest[]>,
     message: {} as Record<string, Message[]>,
@@ -1022,6 +1024,11 @@ export function createServerSession(
         setData("todo", props.sessionID, reconcile(props.todos, { key: "id" }))
         return
       }
+      case "session.merge.updated": {
+        const props = event.properties as { sessionID: string; binding: SessionMergeBinding | null }
+        setData("merge", props.sessionID, props.binding ? reconcile(props.binding) : null)
+        return
+      }
       case "session.status": {
         const props = event.properties as { sessionID: string; status: SessionStatus }
         setData("session_status", props.sessionID, reconcile(props.status))
@@ -1391,6 +1398,14 @@ export function createServerSession(
           setData("todo", sessionID, reconcile(result.data ?? [], { key: "id" }))
         })
       })
+    },
+    async merge(sessionID: string) {
+      if ((await options?.protocol) === "v2") {
+        setData("merge", sessionID, null)
+        return
+      }
+      const result = await (options?.retry ?? retry)(() => client.session.merge({ sessionID }))
+      setData("merge", sessionID, result.data ?? null)
     },
     history: {
       more: (sessionID: string) =>

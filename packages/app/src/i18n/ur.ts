@@ -1161,4 +1161,10 @@ export const dict = {
   "workspace.reset.archived.one": "1 سیشن آرکائیو کیا جائے گا۔",
   "workspace.reset.archived.many": "{{count}} سیشنز آرکائیو کیے جائیں گے۔",
   "workspace.reset.note": "یہ ڈیفالٹ برانچ سے ملنے کے لیے ورک اسپیس کو دوبارہ ترتیب دے گا۔",
+  // Untranslated: merge-session strings awaiting the localization review in AGENTS.md.
+  "session.merge.indicator": "merged: {{adapter}} · {{id}} · {{status}}",
+  "session.merge.running": "running",
+  "session.merge.copyId": "Copy {{adapter}} session ID",
+  "session.merge.copied": "Session ID copied",
+  "session.merge.detach": "Detach from {{adapter}}",
 }

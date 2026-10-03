@@ -11,6 +11,7 @@ import type {
   Session,
   SessionStatus,
   Todo,
+  SessionMergeBinding,
   VcsInfo,
 } from "@opencode-ai/sdk/v2/client"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
@@ -53,6 +54,9 @@ export type State = {
   }
   todo: {
     [sessionID: string]: Todo[]
+  }
+  merge: {
+    [sessionID: string]: SessionMergeBinding | null
   }
   permission: {
     [sessionID: string]: PermissionRequest[]

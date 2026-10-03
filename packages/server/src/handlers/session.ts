@@ -165,6 +165,14 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                     }),
                   ),
                 ),
+                Effect.catchTag("Session.MergedError", (error) =>
+                  Effect.fail(
+                    new ConflictError({
+                      message: `Session ${error.sessionID} is merged with ${error.adapter}; detach it with /merge detach first`,
+                      resource: error.sessionID,
+                    }),
+                  ),
+                ),
               ),
           }
         }),

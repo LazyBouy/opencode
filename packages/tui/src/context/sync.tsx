@@ -19,6 +19,7 @@ import type {
   VcsInfo,
   SnapshotFileDiff,
   ConsoleState,
+  SessionMergeBinding,
 } from "@opencode-ai/sdk/v2"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useProject } from "./project"
@@ -96,6 +97,9 @@ export const {
       todo: {
         [sessionID: string]: Todo[]
       }
+      merge: {
+        [sessionID: string]: SessionMergeBinding | null
+      }
       message: {
         [sessionID: string]: Message[]
       }
@@ -134,6 +138,7 @@ export const {
       session_status: {},
       session_diff: {},
       todo: {},
+      merge: {},
       message: {},
       part: {},
       lsp: [],
@@ -264,6 +269,9 @@ export const {
 
         case "todo.updated":
           setStore("todo", event.properties.sessionID, event.properties.todos)
+          break
+        case "session.merge.updated":
+          setStore("merge", event.properties.sessionID, event.properties.binding)
           break
 
         case "session.diff":
@@ -598,11 +606,12 @@ export const {
           const tracker = { messages: new Set<string>(), parts: new Set<string>() }
           hydratingSessions.set(sessionID, tracker)
           const task = (async () => {
-            const [session, messages, todo, diff] = await Promise.all([
+            const [session, messages, todo, diff, merge] = await Promise.all([
               sdk.client.session.get({ sessionID }, { throwOnError: true }),
               sdk.client.session.messages({ sessionID, limit: 100 }),
               sdk.client.session.todo({ sessionID }),
               sdk.client.session.diff({ sessionID }),
+              sdk.client.session.merge({ sessionID }),
             ])
             setStore(
               produce((draft) => {
@@ -610,6 +619,7 @@ export const {
                 if (match.found) draft.session[match.index] = session.data!
                 if (!match.found) draft.session.splice(match.index, 0, session.data!)
                 draft.todo[sessionID] = todo.data ?? []
+                draft.merge[sessionID] = merge.data ?? null
                 const currentMessages = draft.message[sessionID] ?? []
                 const infos = (messages.data ?? []).flatMap((message) => {
                   if (!tracker.messages.has(message.info.id)) return [message.info]

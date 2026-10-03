@@ -1168,4 +1168,10 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "فشل إنشاء أيقونة المشروع الدائمة",
   "error.childStore.storeCreateFailed": "فشل إنشاء المخزن",
   "terminal.connectionLost.abnormalClose": "تم إغلاق WebSocket بشكل غير طبيعي: {{code}}",
+  // Untranslated: merge-session strings awaiting the localization review in AGENTS.md.
+  "session.merge.indicator": "merged: {{adapter}} · {{id}} · {{status}}",
+  "session.merge.running": "running",
+  "session.merge.copyId": "Copy {{adapter}} session ID",
+  "session.merge.copied": "Session ID copied",
+  "session.merge.detach": "Detach from {{adapter}}",
 }

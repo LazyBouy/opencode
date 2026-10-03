@@ -1254,4 +1254,10 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "Nije uspjelo kreiranje trajne ikone projekta",
   "error.childStore.storeCreateFailed": "Nije uspjelo kreiranje skladišta",
   "terminal.connectionLost.abnormalClose": "WebSocket zatvoren nenormalno: {{code}}",
+  // Untranslated: merge-session strings awaiting the localization review in AGENTS.md.
+  "session.merge.indicator": "merged: {{adapter}} · {{id}} · {{status}}",
+  "session.merge.running": "running",
+  "session.merge.copyId": "Copy {{adapter}} session ID",
+  "session.merge.copied": "Session ID copied",
+  "session.merge.detach": "Detach from {{adapter}}",
 }

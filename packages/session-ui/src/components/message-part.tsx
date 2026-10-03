@@ -708,6 +708,12 @@ function index<T extends { id: string }>(items: readonly T[]) {
   return new Map(items.map((item) => [item.id, item] as const))
 }
 
+// A merged turn's summary restates the projected parts shown beside it; it exists for OpenCode's
+// model, shares and exports, where those parts are left out.
+export function redundantMergeSummary(part: PartType, parts: readonly PartType[]) {
+  return part.origin?.role === "summary" && parts.some((item) => item.origin?.role === "projection")
+}
+
 export function renderable(part: PartType, showReasoningSummaries = true) {
   if (part.type === "tool") {
     if (HIDDEN_TOOLS.has(part.tool)) return false
@@ -975,7 +981,10 @@ export function AssistantMessageDisplay(props: {
     () =>
       groupParts(
         props.parts
-          .filter((part) => renderable(part, props.showReasoningSummaries ?? true))
+          .filter(
+            (part) =>
+              renderable(part, props.showReasoningSummaries ?? true) && !redundantMergeSummary(part, props.parts),
+          )
           .map((part) => ({
             messageID: props.message.id,
             part,
@@ -1432,23 +1441,33 @@ function HighlightedText(props: { text: string; references: FilePart[]; agents: 
 
 export function Part(props: MessagePartProps) {
   const component = createMemo(() => PART_MAPPING[props.part.type])
+  const body = () => (
+    <Dynamic
+      component={component()}
+      part={props.part}
+      message={props.message}
+      hideDetails={props.hideDetails}
+      defaultOpen={props.defaultOpen}
+      toolOpen={props.toolOpen}
+      onToolOpenChange={props.onToolOpenChange}
+      deferToolContent={props.deferToolContent}
+      virtualizeDiff={props.virtualizeDiff}
+      onContentRendered={props.onContentRendered}
+      showAssistantCopyPartID={props.showAssistantCopyPartID}
+      turnDurationMs={props.turnDurationMs}
+      useV2Actions={props.useV2Actions}
+    />
+  )
   return (
     <Show when={component()}>
-      <Dynamic
-        component={component()}
-        part={props.part}
-        message={props.message}
-        hideDetails={props.hideDetails}
-        defaultOpen={props.defaultOpen}
-        toolOpen={props.toolOpen}
-        onToolOpenChange={props.onToolOpenChange}
-        deferToolContent={props.deferToolContent}
-        virtualizeDiff={props.virtualizeDiff}
-        onContentRendered={props.onContentRendered}
-        showAssistantCopyPartID={props.showAssistantCopyPartID}
-        turnDurationMs={props.turnDurationMs}
-        useV2Actions={props.useV2Actions}
-      />
+      {/* Parts projected from or about a merged external session carry provenance for styling. */}
+      <Show when={props.part.origin} fallback={body()}>
+        {(origin) => (
+          <div data-origin={origin().type} data-origin-role={origin().role} style={{ display: "contents" }}>
+            {body()}
+          </div>
+        )}
+      </Show>
     </Show>
   )
 }

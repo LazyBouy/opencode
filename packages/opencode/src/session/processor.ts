@@ -25,6 +25,7 @@ import { isRecord } from "@/util/record"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
 import { Usage, type LLMEvent } from "@opencode-ai/llm"
+import type { SessionMerge } from "@opencode-ai/schema/session-merge"
 
 const DOOM_LOOP_THRESHOLD = 3
 export type Result = "compact" | "stop" | "continue"
@@ -45,12 +46,16 @@ export interface Handle {
     },
   ) => Effect.Effect<void>
   readonly process: (streamInput: LLM.StreamInput) => Effect.Effect<Result>
+  /** Drives an already-produced event stream once, without provider retries. */
+  readonly consume: (stream: Stream.Stream<LLMEvent, unknown>) => Effect.Effect<Result>
 }
 
 type Input = {
   assistantMessage: SessionV1.Assistant
   sessionID: SessionID
   model: Provider.Model
+  /** Stamped on every part this processor creates, e.g. parts projected from a merged session. */
+  origin?: SessionMerge.Origin
 }
 
 export interface Interface {
@@ -104,6 +109,7 @@ const layer = Layer.effect(
         assistantMessage: input.assistantMessage,
         sessionID: input.sessionID,
         model: input.model,
+        origin: input.origin,
         toolcalls: {},
         shouldBreak: false,
         snapshot: initialSnapshot,
@@ -113,6 +119,7 @@ const layer = Layer.effect(
         reasoningMap: {},
       }
       let aborted = false
+      const origin = input.origin ? { origin: input.origin } : {}
 
       const parse = (e: unknown) =>
         MessageV2.fromError(e, {
@@ -242,6 +249,7 @@ const layer = Layer.effect(
           callID: input.id,
           state: { status: "pending", input: {}, raw: "" },
           metadata: input.providerExecuted ? { providerExecuted: true } : undefined,
+          ...origin,
         } satisfies SessionV1.ToolPart)
         ctx.toolcalls[input.id] = {
           done: yield* Deferred.make<void>(),
@@ -287,6 +295,7 @@ const layer = Layer.effect(
               text: "",
               time: { start: Date.now() },
               metadata: value.providerMetadata,
+              ...origin,
             }
             yield* session.updatePart(ctx.reasoningMap[value.id])
             return
@@ -349,6 +358,9 @@ const layer = Layer.effect(
                 ? { ...value.providerMetadata, providerExecuted: true }
                 : value.providerMetadata,
             }))
+
+            // Merged parts were executed by the child harness; there is no OpenCode loop to guard.
+            if (ctx.origin) return
 
             const parts = yield* MessageV2.parts(ctx.assistantMessage.id).pipe(
               Effect.provideService(Database.Service, database),
@@ -429,6 +441,7 @@ const layer = Layer.effect(
               sessionID: ctx.sessionID,
               snapshot: ctx.snapshot,
               type: "step-start",
+              ...origin,
             })
             return
 
@@ -466,6 +479,7 @@ const layer = Layer.effect(
               type: "step-finish",
               tokens: usage.tokens,
               cost: usage.cost,
+              ...origin,
             })
             yield* session.updateMessage(ctx.assistantMessage)
             if (ctx.snapshot) {
@@ -478,6 +492,7 @@ const layer = Layer.effect(
                   type: "patch",
                   hash: patch.hash,
                   files: patch.files,
+                  ...origin,
                 })
               }
               ctx.snapshot = undefined
@@ -506,6 +521,7 @@ const layer = Layer.effect(
               text: "",
               time: { start: Date.now() },
               metadata: value.providerMetadata,
+              ...origin,
             }
             yield* session.updatePart(ctx.currentText)
             return
@@ -561,6 +577,7 @@ const layer = Layer.effect(
               type: "patch",
               hash: patch.hash,
               files: patch.files,
+              ...origin,
             })
           }
           ctx.snapshot = undefined
@@ -638,7 +655,7 @@ const layer = Layer.effect(
         yield* status.set(ctx.sessionID, { type: "idle" })
       })
 
-      const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
+      const drive = Effect.fnUntraced(function* (stream: Stream.Stream<LLMEvent, unknown>, retry: boolean) {
         yield* Effect.logInfo("process", {
           "session.id": input.sessionID,
           messageID: input.assistantMessage.id,
@@ -646,54 +663,63 @@ const layer = Layer.effect(
         ctx.needsCompaction = false
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
 
-        return yield* Effect.gen(function* () {
-          yield* Effect.gen(function* () {
-            ctx.currentText = undefined
-            ctx.reasoningMap = {}
-            yield* status.set(ctx.sessionID, { type: "busy" })
-            const stream = llm.stream(streamInput)
-
-            yield* stream.pipe(
-              Stream.tap((event) => handleEvent(event)),
-              Stream.takeUntil(() => ctx.needsCompaction),
-              Stream.runDrain,
-            )
-          }).pipe(
-            Effect.onInterrupt(() =>
-              Effect.gen(function* () {
-                aborted = true
-                if (!ctx.assistantMessage.error) {
-                  yield* halt(new DOMException("Aborted", "AbortError"))
-                }
-              }),
-            ),
-            Effect.catchCauseIf(
-              (cause) => !Cause.hasInterruptsOnly(cause),
-              (cause) => Effect.fail(Cause.squash(cause)),
-            ),
-            Effect.retry(
-              SessionRetry.policy({
-                provider: input.model.providerID,
-                parse,
-                set: (info) => {
-                  return status.set(ctx.sessionID, {
-                    type: "retry",
-                    attempt: info.attempt,
-                    message: info.message,
-                    action: info.action,
-                    next: info.next,
-                  })
-                },
-              }),
-            ),
-            Effect.catch(halt),
-            Effect.ensuring(cleanup()),
+        const run = Effect.gen(function* () {
+          ctx.currentText = undefined
+          ctx.reasoningMap = {}
+          yield* status.set(ctx.sessionID, { type: "busy" })
+          yield* stream.pipe(
+            Stream.tap((event) => handleEvent(event)),
+            Stream.takeUntil(() => ctx.needsCompaction),
+            Stream.runDrain,
           )
+        }).pipe(
+          Effect.onInterrupt(() =>
+            Effect.gen(function* () {
+              aborted = true
+              if (!ctx.assistantMessage.error) {
+                yield* halt(new DOMException("Aborted", "AbortError"))
+              }
+            }),
+          ),
+          Effect.catchCauseIf(
+            (cause) => !Cause.hasInterruptsOnly(cause),
+            (cause) => Effect.fail(Cause.squash(cause)),
+          ),
+        )
 
-          if (ctx.needsCompaction) return "compact"
-          if (ctx.blocked || ctx.assistantMessage.error) return "stop"
-          return "continue"
-        })
+        yield* (
+          retry
+            ? run.pipe(
+                Effect.retry(
+                  SessionRetry.policy({
+                    provider: input.model.providerID,
+                    parse,
+                    set: (info) => {
+                      return status.set(ctx.sessionID, {
+                        type: "retry",
+                        attempt: info.attempt,
+                        message: info.message,
+                        action: info.action,
+                        next: info.next,
+                      })
+                    },
+                  }),
+                ),
+              )
+            : run
+        ).pipe(Effect.catch(halt), Effect.ensuring(cleanup()))
+
+        if (ctx.needsCompaction) return "compact" as const
+        if (ctx.blocked || ctx.assistantMessage.error) return "stop" as const
+        return "continue" as const
+      })
+
+      const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
+        return yield* drive(llm.stream(streamInput), true)
+      })
+
+      const consume = Effect.fn("SessionProcessor.consume")(function* (stream: Stream.Stream<LLMEvent, unknown>) {
+        return yield* drive(stream, false)
       })
 
       return {
@@ -703,6 +729,7 @@ const layer = Layer.effect(
         updateToolCall,
         completeToolCall,
         process,
+        consume,
       } satisfies Handle
     })
 

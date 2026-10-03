@@ -9,6 +9,7 @@ import { Model } from "../model"
 import { NonNegativeInt, optional, statics } from "../schema"
 import { ascending } from "../identifier"
 import { SessionID } from "../session-id"
+import { SessionMerge } from "../session-merge"
 import { WorkspaceID } from "../workspace-id"
 import { PermissionV1 } from "./permission"
 
@@ -82,6 +83,7 @@ const partBase = {
   id: PartID,
   sessionID: SessionID,
   messageID: MessageID,
+  origin: Schema.optional(SessionMerge.Origin),
 }
 
 export const SnapshotPart = Schema.Struct({

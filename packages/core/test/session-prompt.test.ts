@@ -16,7 +16,13 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInput } from "@opencode-ai/core/session/input"
-import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import {
+  SessionInputTable,
+  SessionMergeBindingTable,
+  SessionMessageTable,
+  SessionTable,
+} from "@opencode-ai/core/session/sql"
+import { SessionMerge } from "@opencode-ai/schema/session-merge"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { testEffect } from "./lib/effect"
 
@@ -159,6 +165,46 @@ describe("SessionV2.prompt", () => {
         prompt: { text: "Fix the failing tests" },
         delivery: "steer",
       })
+    }),
+  )
+
+  it.effect("refuses prompts while the session is merged with an external agent", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      const binding = SessionMerge.ID.create()
+      yield* db
+        .insert(SessionMergeBindingTable)
+        .values({
+          id: binding,
+          session_id: sessionID,
+          adapter: "claude",
+          transport: "cli",
+          external_session_id: "1b2c3d4e-0000-4000-8000-000000000001",
+          cwd: "/project",
+          status: "live",
+          args: [],
+        })
+        .run()
+        .pipe(Effect.orDie)
+      const session = yield* SessionV2.Service
+      const before = yield* admittedCount
+      wakeCalls.length = 0
+
+      const error = yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "hi" }) }).pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(SessionV2.MergedError)
+      expect(error).toMatchObject({ sessionID, adapter: "claude" })
+      expect(yield* admittedCount).toBe(before)
+      expect(wakeCalls).toEqual([])
+
+      yield* db
+        .update(SessionMergeBindingTable)
+        .set({ status: "detached" })
+        .where(eq(SessionMergeBindingTable.id, binding))
+        .run()
+        .pipe(Effect.orDie)
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "hi" }), resume: false })
     }),
   )
 

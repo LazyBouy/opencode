@@ -68,6 +68,7 @@ export type Event =
   | EventQuestionV2Replied
   | EventQuestionV2Rejected
   | EventTodoUpdated
+  | EventSessionMergeUpdated
   | EventLspUpdated
   | EventPermissionAsked
   | EventPermissionReplied
@@ -379,6 +380,7 @@ export type TextPart = {
   id: string
   sessionID: string
   messageID: string
+  origin?: SessionMergeOrigin
   type: "text"
   text: string
   synthetic?: boolean
@@ -396,6 +398,7 @@ export type SubtaskPart = {
   id: string
   sessionID: string
   messageID: string
+  origin?: SessionMergeOrigin
   type: "subtask"
   prompt: string
   description: string
@@ -411,6 +414,7 @@ export type ReasoningPart = {
   id: string
   sessionID: string
   messageID: string
+  origin?: SessionMergeOrigin
   type: "reasoning"
   text: string
   metadata?: {
@@ -467,6 +471,7 @@ export type FilePart = {
   id: string
   sessionID: string
   messageID: string
+  origin?: SessionMergeOrigin
   type: "file"
   mime: string
   filename?: string
@@ -535,6 +540,7 @@ export type ToolPart = {
   id: string
   sessionID: string
   messageID: string
+  origin?: SessionMergeOrigin
   type: "tool"
   callID: string
   tool: string
@@ -548,6 +554,7 @@ export type StepStartPart = {
   id: string
   sessionID: string
   messageID: string
+  origin?: SessionMergeOrigin
   type: "step-start"
   snapshot?: string
 }
@@ -556,6 +563,7 @@ export type StepFinishPart = {
   id: string
   sessionID: string
   messageID: string
+  origin?: SessionMergeOrigin
   type: "step-finish"
   reason: string
   snapshot?: string
@@ -576,6 +584,7 @@ export type SnapshotPart = {
   id: string
   sessionID: string
   messageID: string
+  origin?: SessionMergeOrigin
   type: "snapshot"
   snapshot: string
 }
@@ -584,6 +593,7 @@ export type PatchPart = {
   id: string
   sessionID: string
   messageID: string
+  origin?: SessionMergeOrigin
   type: "patch"
   hash: string
   files: Array<string>
@@ -593,6 +603,7 @@ export type AgentPart = {
   id: string
   sessionID: string
   messageID: string
+  origin?: SessionMergeOrigin
   type: "agent"
   name: string
   source?: {
@@ -606,6 +617,7 @@ export type RetryPart = {
   id: string
   sessionID: string
   messageID: string
+  origin?: SessionMergeOrigin
   type: "retry"
   attempt: number
   error: ApiError
@@ -618,6 +630,7 @@ export type CompactionPart = {
   id: string
   sessionID: string
   messageID: string
+  origin?: SessionMergeOrigin
   type: "compaction"
   auto: boolean
   overflow?: boolean
@@ -1364,6 +1377,14 @@ export type GlobalEvent = {
         properties: {
           sessionID: string
           todos: Array<Todo>
+        }
+      }
+    | {
+        id: string
+        type: "session.merge.updated"
+        properties: {
+          sessionID: string
+          binding: SessionMergeBinding
         }
       }
     | {
@@ -2919,6 +2940,7 @@ export type V2Event =
   | QuestionV2Replied
   | QuestionV2Rejected
   | TodoUpdated
+  | SessionMergeUpdated
   | LspUpdated
   | PermissionAsked
   | PermissionReplied
@@ -3036,6 +3058,15 @@ export type SkillV2Source = SkillV2DirectorySource | SkillV2UrlSource | SkillV2E
 
 export type MoveSessionDestination = {
   directory: string
+}
+
+export type SessionMergeOrigin = {
+  type: "merge"
+  bindingID: string
+  adapter: string
+  externalSessionID?: string
+  externalEventID?: string
+  role: "projection" | "summary" | "notice"
 }
 
 export type ModelRef = {
@@ -3164,6 +3195,38 @@ export type QuestionV2Tool = {
 }
 
 export type QuestionV2Answer = Array<string>
+
+export type SessionMergeTransport = "cli" | "http" | "grpc"
+
+export type SessionMergeStatus = "starting" | "live" | "detached" | "closed" | "error"
+
+export type SessionMergeBinding = {
+  id: string
+  sessionID: string
+  /**
+   * Harness adapter id, for example `claude`
+   */
+  adapter: string
+  transport: SessionMergeTransport
+  externalSessionID?: string
+  cwd: string
+  status: SessionMergeStatus
+  /**
+   * Passthrough arguments reapplied on every child turn
+   */
+  args: Array<string>
+  error?: string
+  time: {
+    created: number
+    updated: number
+    lastEvent?: number
+    detached?: number
+  }
+  process?: {
+    pid: number
+    started: number
+  }
+}
 
 export type ProjectVcs = "git"
 
@@ -5679,6 +5742,24 @@ export type TodoUpdated = {
   }
 }
 
+export type SessionMergeUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.merge.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    binding: SessionMergeBinding
+  }
+}
+
 export type LspUpdated = {
   id: string
   metadata?: {
@@ -6848,6 +6929,15 @@ export type EventTodoUpdated = {
   properties: {
     sessionID: string
     todos: Array<Todo>
+  }
+}
+
+export type EventSessionMergeUpdated = {
+  id: string
+  type: "session.merge.updated"
+  properties: {
+    sessionID: string
+    binding: SessionMergeBinding
   }
 }
 
@@ -9723,6 +9813,40 @@ export type SessionTodoResponses = {
 }
 
 export type SessionTodoResponse = SessionTodoResponses[keyof SessionTodoResponses]
+
+export type SessionMergeData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/merge"
+}
+
+export type SessionMergeErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type SessionMergeError = SessionMergeErrors[keyof SessionMergeErrors]
+
+export type SessionMergeResponses = {
+  /**
+   * Merge binding, or null when never merged
+   */
+  200: SessionMergeBinding
+}
+
+export type SessionMergeResponse = SessionMergeResponses[keyof SessionMergeResponses]
 
 export type SessionDiffData = {
   body?: never

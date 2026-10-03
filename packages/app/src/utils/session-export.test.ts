@@ -43,6 +43,29 @@ describe("fetchSessionExport", () => {
     })
   })
 
+  test("leaves out parts projected from a merged session but keeps its summary", async () => {
+    const origin = (role: "projection" | "summary") =>
+      ({ type: "merge", bindingID: "mrg_1", adapter: "claude", externalSessionID: "ext-1", role }) as const
+    const projection = { id: "prt_1", type: "text", text: "raw child output", origin: origin("projection") } as Part
+    const summary = {
+      id: "prt_2",
+      type: "text",
+      text: "[Merged claude session ext-1]",
+      origin: origin("summary"),
+    } as Part
+    const msg = { id: "msg_1", role: "assistant" } as Message
+    const client = {
+      session: {
+        get: async () => ({ data: { id: "ses_1" } as Session }),
+        messages: async () => ({ data: [{ info: msg, parts: [projection, summary] }] }),
+      },
+    }
+
+    const result = await fetchSessionExport({ sessionID: "ses_1", client })
+
+    expect(result.messages[0].parts).toEqual([summary])
+  })
+
   test("throws when session not found", async () => {
     const client = {
       session: {

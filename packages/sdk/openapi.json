@@ -6010,6 +6010,86 @@
         ]
       }
     },
+    "/session/{sessionID}/merge": {
+      "get": {
+        "tags": ["session"],
+        "operationId": "session.merge",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Merge binding, or null when never merged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionMergeBinding"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Retrieve the most recent external-agent merge binding for a session (for example a bound Claude Code session), including its status and whether its process is running.",
+        "summary": "Get session merge binding",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.merge({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/session/{sessionID}/diff": {
       "get": {
         "tags": ["session"],
@@ -15450,6 +15530,9 @@
             "$ref": "#/components/schemas/EventTodoUpdated"
           },
           {
+            "$ref": "#/components/schemas/EventSessionMergeUpdated"
+          },
+          {
             "$ref": "#/components/schemas/EventLspUpdated"
           },
           {
@@ -16405,6 +16488,9 @@
             "type": "string",
             "pattern": "^msg"
           },
+          "origin": {
+            "$ref": "#/components/schemas/SessionMergeOrigin"
+          },
           "type": {
             "type": "string",
             "enum": ["text"]
@@ -16455,6 +16541,9 @@
             "type": "string",
             "pattern": "^msg"
           },
+          "origin": {
+            "$ref": "#/components/schemas/SessionMergeOrigin"
+          },
           "type": {
             "type": "string",
             "enum": ["subtask"]
@@ -16502,6 +16591,9 @@
           "messageID": {
             "type": "string",
             "pattern": "^msg"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/SessionMergeOrigin"
           },
           "type": {
             "type": "string",
@@ -16676,6 +16768,9 @@
           "messageID": {
             "type": "string",
             "pattern": "^msg"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/SessionMergeOrigin"
           },
           "type": {
             "type": "string",
@@ -16859,6 +16954,9 @@
             "type": "string",
             "pattern": "^msg"
           },
+          "origin": {
+            "$ref": "#/components/schemas/SessionMergeOrigin"
+          },
           "type": {
             "type": "string",
             "enum": ["tool"]
@@ -16894,6 +16992,9 @@
             "type": "string",
             "pattern": "^msg"
           },
+          "origin": {
+            "$ref": "#/components/schemas/SessionMergeOrigin"
+          },
           "type": {
             "type": "string",
             "enum": ["step-start"]
@@ -16919,6 +17020,9 @@
           "messageID": {
             "type": "string",
             "pattern": "^msg"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/SessionMergeOrigin"
           },
           "type": {
             "type": "string",
@@ -16984,6 +17088,9 @@
             "type": "string",
             "pattern": "^msg"
           },
+          "origin": {
+            "$ref": "#/components/schemas/SessionMergeOrigin"
+          },
           "type": {
             "type": "string",
             "enum": ["snapshot"]
@@ -17009,6 +17116,9 @@
           "messageID": {
             "type": "string",
             "pattern": "^msg"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/SessionMergeOrigin"
           },
           "type": {
             "type": "string",
@@ -17041,6 +17151,9 @@
           "messageID": {
             "type": "string",
             "pattern": "^msg"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/SessionMergeOrigin"
           },
           "type": {
             "type": "string",
@@ -17086,6 +17199,9 @@
             "type": "string",
             "pattern": "^msg"
           },
+          "origin": {
+            "$ref": "#/components/schemas/SessionMergeOrigin"
+          },
           "type": {
             "type": "string",
             "enum": ["retry"]
@@ -17126,6 +17242,9 @@
           "messageID": {
             "type": "string",
             "pattern": "^msg"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/SessionMergeOrigin"
           },
           "type": {
             "type": "string",
@@ -19638,6 +19757,35 @@
                       }
                     },
                     "required": ["sessionID", "todos"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["session.merge.updated"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "binding": {
+                        "$ref": "#/components/schemas/SessionMergeBinding"
+                      }
+                    },
+                    "required": ["sessionID", "binding"],
                     "additionalProperties": false
                   }
                 },
@@ -24202,6 +24350,9 @@
             "$ref": "#/components/schemas/TodoUpdated"
           },
           {
+            "$ref": "#/components/schemas/SessionMergeUpdated"
+          },
+          {
             "$ref": "#/components/schemas/LspUpdated"
           },
           {
@@ -24537,6 +24688,34 @@
         "required": ["directory"],
         "additionalProperties": false
       },
+      "SessionMergeOrigin": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["merge"]
+          },
+          "bindingID": {
+            "type": "string",
+            "pattern": "^mrg_"
+          },
+          "adapter": {
+            "type": "string"
+          },
+          "externalSessionID": {
+            "type": "string"
+          },
+          "externalEventID": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": ["projection", "summary", "notice"]
+          }
+        },
+        "required": ["type", "bindingID", "adapter", "role"],
+        "additionalProperties": false
+      },
       "ModelRef": {
         "type": "object",
         "properties": {
@@ -24846,6 +25025,93 @@
         "items": {
           "type": "string"
         }
+      },
+      "SessionMergeTransport": {
+        "type": "string",
+        "enum": ["cli", "http", "grpc"]
+      },
+      "SessionMergeStatus": {
+        "type": "string",
+        "enum": ["starting", "live", "detached", "closed", "error"]
+      },
+      "SessionMergeBinding": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^mrg_"
+          },
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses"
+          },
+          "adapter": {
+            "type": "string",
+            "description": "Harness adapter id, for example `claude`"
+          },
+          "transport": {
+            "$ref": "#/components/schemas/SessionMergeTransport"
+          },
+          "externalSessionID": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SessionMergeStatus"
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Passthrough arguments reapplied on every child turn"
+          },
+          "error": {
+            "type": "string"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "updated": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "lastEvent": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "detached": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": ["created", "updated"],
+            "additionalProperties": false
+          },
+          "process": {
+            "type": "object",
+            "properties": {
+              "pid": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "started": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": ["pid", "started"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "sessionID", "adapter", "transport", "cwd", "status", "args", "time"],
+        "additionalProperties": false
       },
       "ProjectVcs": {
         "type": "string",
@@ -32549,6 +32815,57 @@
         "required": ["id", "type", "data"],
         "additionalProperties": false
       },
+      "SessionMergeUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.merge.updated"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "binding": {
+                "$ref": "#/components/schemas/SessionMergeBinding"
+              }
+            },
+            "required": ["sessionID", "binding"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
       "LspUpdated": {
         "type": "object",
         "properties": {
@@ -36050,6 +36367,35 @@
               }
             },
             "required": ["sessionID", "todos"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSessionMergeUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.merge.updated"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "binding": {
+                "$ref": "#/components/schemas/SessionMergeBinding"
+              }
+            },
+            "required": ["sessionID", "binding"],
             "additionalProperties": false
           }
         },

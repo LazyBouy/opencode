@@ -14,6 +14,7 @@ import { Timestamps } from "../database/schema.sql"
 import type { SystemContext } from "../system-context/index"
 import { AgentV2 } from "../agent"
 import type { Revert } from "@opencode-ai/schema/revert"
+import type { SessionMerge } from "@opencode-ai/schema/session-merge"
 
 type SessionMessageData = Omit<(typeof SessionMessage.Message)["Encoded"], "type" | "id">
 type V1MessageData = Omit<SessionV1.Info, "id" | "sessionID">
@@ -113,6 +114,35 @@ export const TodoTable = sqliteTable(
   (table) => [
     primaryKey({ columns: [table.session_id, table.position] }),
     index("todo_session_idx").on(table.session_id),
+  ],
+)
+
+// At most one `starting`/`live` binding per session and per external session is enforced by the
+// merge binding service inside a transaction; SQLite partial unique indexes are not used here.
+export const SessionMergeBindingTable = sqliteTable(
+  "session_merge_binding",
+  {
+    id: text().$type<SessionMerge.ID>().primaryKey(),
+    session_id: text()
+      .$type<SessionSchema.ID>()
+      .notNull()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    adapter: text().notNull(),
+    transport: text().$type<SessionMerge.Transport>().notNull(),
+    external_session_id: text(),
+    cwd: text().notNull(),
+    status: text().$type<SessionMerge.Status>().notNull(),
+    args: text({ mode: "json" }).notNull().$type<string[]>(),
+    parent_model: text({ mode: "json" }).$type<{ providerID: string; modelID: string; variant?: string }>(),
+    process_pid: integer(),
+    error: text(),
+    time_last_event: integer(),
+    time_detached: integer(),
+    ...Timestamps,
+  },
+  (table) => [
+    index("session_merge_binding_session_status_idx").on(table.session_id, table.status),
+    index("session_merge_binding_external_idx").on(table.adapter, table.external_session_id),
   ],
 )
 

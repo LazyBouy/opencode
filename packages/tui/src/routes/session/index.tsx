@@ -1494,8 +1494,13 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       <For each={props.parts}>
         {(part, index) => {
           const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
+          // A merged turn's summary restates the projected parts shown right above it; it is only
+          // needed where those parts are hidden (OpenCode's model, shares, exports).
+          const redundant = createMemo(
+            () => part.origin?.role === "summary" && props.parts.some((item) => item.origin?.role === "projection"),
+          )
           return (
-            <Show when={component()}>
+            <Show when={component() && !redundant()}>
               <Dynamic
                 last={index() === props.parts.length - 1}
                 component={component()}

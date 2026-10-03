@@ -80,6 +80,17 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 <Show when={session()!.share?.url}>
                   <text fg={theme.textMuted}>{session()!.share!.url}</text>
                 </Show>
+                <Show when={sync.data.merge?.[props.sessionID]}>
+                  {(binding) => (
+                    <text
+                      fg={
+                        binding().status === "live" || binding().status === "starting" ? theme.accent : theme.textMuted
+                      }
+                    >
+                      merged: {binding().adapter} · {binding().externalSessionID ?? "pending"} · {binding().status}
+                    </text>
+                  )}
+                </Show>
               </box>
             </pluginRuntime.Slot>
             <pluginRuntime.Slot name="sidebar_content" session_id={props.sessionID} />

@@ -1580,3 +1580,16 @@ body:not([data-new-layout]) {
     color: var(--text-weak);
   }
 }
+
+/* Parts projected from a merged external session (`/merge claude`): a rail marks the child's output
+   and command notices read as notice bars. --merge-accent can be set by a theme. */
+[data-origin="merge"][data-origin-role="projection"] > * {
+  border-left: 2px solid var(--merge-accent, var(--v2-state-fg-info));
+  padding-left: 10px;
+}
+
+[data-origin="merge"][data-origin-role="notice"] > * {
+  border-left: 3px solid var(--merge-accent, var(--v2-state-fg-info));
+  padding-left: 10px;
+  color: var(--v2-text-text-muted);
+}

@@ -1,4 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { SessionMerge } from "@opencode-ai/schema/session-merge"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { Session } from "./session"
@@ -63,7 +64,9 @@ const serialize = (message: SessionV1.WithParts) => {
     )
     return [...(text ? [`[User]: ${text}`] : []), ...files].join("\n")
   }
+  // A merged span is owned by the child session; only its summary is summarized here.
   return message.parts
+    .filter(SessionMerge.visibleToModel)
     .flatMap((part) => {
       if (part.type === "text") return part.text ? [`[Assistant]: ${part.text}`] : []
       if (part.type === "reasoning") return part.text ? [`[Assistant reasoning]: ${part.text}`] : []
@@ -294,6 +297,7 @@ const layer = Layer.effect(
           const part = msg.parts[partIndex]
           if (part.type !== "tool") continue
           if (part.state.status !== "completed") continue
+          if (!SessionMerge.visibleToModel(part)) continue
           if (PRUNE_PROTECTED_TOOLS.includes(part.tool)) continue
           if (part.state.time.compacted) break loop
           const estimate = Token.estimate(part.state.output)
