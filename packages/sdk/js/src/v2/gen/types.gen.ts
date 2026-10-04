@@ -3043,9 +3043,9 @@ export type OperatorMemoryFile = {
   size?: number
   modified?: number
   /**
-   * always: in every system prompt; when-reading: added when the agent reads a file in its folder; on-demand: loaded when the agent asks for it
+   * always: in every system prompt; when-reading: added when the agent reads a file in its folder; on-demand: loaded when the agent asks for it; never: another instruction file in the same folder comes first
    */
-  loaded: "always" | "when-reading" | "on-demand"
+  loaded: "always" | "when-reading" | "on-demand" | "never"
   editable: boolean
 }
 

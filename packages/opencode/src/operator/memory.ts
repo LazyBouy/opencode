@@ -11,6 +11,7 @@ import { Global } from "@opencode-ai/core/global"
 import { MessageTable, PartTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Instruction } from "@/session/instruction"
 import { Skill } from "@/skill"
 import { OperatorConfig } from "./config"
@@ -28,9 +29,9 @@ export const File = Schema.Struct({
   path: Schema.String,
   size: Schema.optional(Schema.Finite),
   modified: Schema.optional(Schema.Finite),
-  loaded: Schema.Literals(["always", "when-reading", "on-demand"]).annotate({
+  loaded: Schema.Literals(["always", "when-reading", "on-demand", "never"]).annotate({
     description:
-      "always: in every system prompt; when-reading: added when the agent reads a file in its folder; on-demand: loaded when the agent asks for it",
+      "always: in every system prompt; when-reading: added when the agent reads a file in its folder; on-demand: loaded when the agent asks for it; never: another instruction file in the same folder comes first",
   }),
   editable: Schema.Boolean,
 }).annotate({ identifier: "OperatorMemoryFile" })
@@ -88,6 +89,9 @@ const layer = Layer.effect(
     const instruction = yield* Instruction.Service
     const skill = yield* Skill.Service
     const config = yield* Config.Service
+    const flags = yield* RuntimeFlags.Service
+    // The names OpenCode looks for in a folder, in order; only the first one found is used.
+    const names = ["AGENTS.md", ...(flags.disableClaudeCodePrompt ? [] : ["CLAUDE.md"]), "CONTEXT.md"]
 
     const stat = (file: string) =>
       Effect.promise(() =>
@@ -105,19 +109,31 @@ const layer = Layer.effect(
 
       const always = [...(yield* instruction.systemPaths().pipe(Effect.orDie))]
       const urls = ((yield* config.get()).instructions ?? []).filter((item) => /^https?:\/\//.test(item))
-      // Nested instruction files are added when the agent reads a file under their folder.
-      const nested =
-        root === "/"
+      // Instruction files below the session folder are added when the agent reads a file under
+      // theirs. In each folder only the first name in `names` counts; the session folder's own files
+      // come from the system prompt paths above.
+      const found =
+        ctx.directory === "/"
           ? []
-          : (yield* Effect.promise(() =>
-              glob("**/{AGENTS,CLAUDE}.md", {
-                cwd: root,
+          : yield* Effect.promise(() =>
+              glob(`**/{${names.map((name) => name.slice(0, -3)).join(",")}}.md`, {
+                cwd: ctx.directory,
                 absolute: true,
                 nodir: true,
                 maxDepth: 8,
                 ignore: ["**/node_modules/**", "**/.git/**", "**/dist/**"],
               }),
-            )).filter((file) => !always.includes(file))
+            )
+      const first = new Map<string, string>()
+      for (const file of found.toSorted((a, b) => names.indexOf(path.basename(a)) - names.indexOf(path.basename(b))))
+        if (!first.has(path.dirname(file))) first.set(path.dirname(file), file)
+      const nested = found
+        .filter((file) => !always.includes(file))
+        .toSorted()
+        .map((file) => ({
+          file,
+          used: path.dirname(file) !== path.resolve(ctx.directory) && first.get(path.dirname(file)) === file,
+        }))
       const skills = yield* skill.all()
       const identity = yield* Effect.promise(() => OperatorIdentity.readLayers(OperatorIdentity.folders(ctx)))
       const folders = OperatorPromptText.promptFolders(ctx)
@@ -134,7 +150,11 @@ const layer = Layer.effect(
 
       const local = [
         ...always.map((file) => ({ kind: "instructions" as const, path: file, loaded: "always" as const })),
-        ...nested.toSorted().map((file) => ({ kind: "nested" as const, path: file, loaded: "when-reading" as const })),
+        ...nested.map((item) => ({
+          kind: "nested" as const,
+          path: item.file,
+          loaded: item.used ? ("when-reading" as const) : ("never" as const),
+        })),
         ...skills
           .filter((item) => path.isAbsolute(item.location))
           .map((item) => ({ kind: "skill" as const, path: item.location, loaded: "on-demand" as const })),
@@ -285,5 +305,5 @@ const layer = Layer.effect(
 export const node = LayerNode.make({
   service: Service,
   layer,
-  deps: [Database.node, Instruction.node, Skill.node, Config.node],
+  deps: [Database.node, Instruction.node, Skill.node, Config.node, RuntimeFlags.node],
 })

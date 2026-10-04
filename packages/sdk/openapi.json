@@ -26778,8 +26778,8 @@
           },
           "loaded": {
             "type": "string",
-            "enum": ["always", "when-reading", "on-demand"],
-            "description": "always: in every system prompt; when-reading: added when the agent reads a file in its folder; on-demand: loaded when the agent asks for it"
+            "enum": ["always", "when-reading", "on-demand", "never"],
+            "description": "always: in every system prompt; when-reading: added when the agent reads a file in its folder; on-demand: loaded when the agent asks for it; never: another instruction file in the same folder comes first"
           },
           "editable": {
             "type": "boolean"

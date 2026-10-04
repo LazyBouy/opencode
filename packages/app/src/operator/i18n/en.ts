@@ -437,6 +437,7 @@ export const dict = {
   "operator.memory.loaded.always": "In every prompt",
   "operator.memory.loaded.when-reading": "When reading files in its folder",
   "operator.memory.loaded.on-demand": "When the agent asks for it",
+  "operator.memory.loaded.never": "Not used: another instruction file in this folder comes first",
   "operator.memory.kind.instructions": "Instructions",
   "operator.memory.kind.nested": "Folder instructions",
   "operator.memory.kind.url": "Remote instructions",

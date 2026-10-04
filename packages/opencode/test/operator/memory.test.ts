@@ -22,6 +22,9 @@ it.instance("lists every file added to prompts, with how it is loaded", () =>
     yield* write(path.join(directory, "AGENTS.md"), "Use Bun.\n")
     yield* write(path.join(directory, "packages", "web", "AGENTS.md"), "Use Solid.\n")
     yield* write(path.join(directory, "node_modules", "dep", "AGENTS.md"), "Ignored.\n")
+    yield* write(path.join(directory, "CLAUDE.md"), "Shadowed by AGENTS.md.\n")
+    yield* write(path.join(directory, "packages", "web", "CLAUDE.md"), "Shadowed too.\n")
+    yield* write(path.join(directory, "packages", "api", "CLAUDE.md"), "Used here.\n")
     yield* write(path.join(directory, ".opencode", "identity", "voice.md"), "Be brief.\n")
     yield* write(path.join(directory, ".opencode", "prompts", "reminder.plan.md"), "Plan only.\n")
 
@@ -40,6 +43,9 @@ it.instance("lists every file added to prompts, with how it is loaded", () =>
       loaded: "when-reading",
     })
     expect(found(path.join(directory, "node_modules", "dep", "AGENTS.md"))).toBeUndefined()
+    expect(found(path.join(directory, "CLAUDE.md"))?.loaded).toBe("never")
+    expect(found(path.join(directory, "packages", "web", "CLAUDE.md"))?.loaded).toBe("never")
+    expect(found(path.join(directory, "packages", "api", "CLAUDE.md"))?.loaded).toBe("when-reading")
     expect(found(path.join(directory, ".opencode", "identity", "voice.md"))?.kind).toBe("identity")
     expect(found(path.join(directory, ".opencode", "prompts", "reminder.plan.md"))?.kind).toBe("prompt")
     expect(overview.creatable.map((item) => item.scope)).not.toContain("project")
