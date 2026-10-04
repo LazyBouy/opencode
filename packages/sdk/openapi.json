@@ -847,6 +847,254 @@
         ]
       }
     },
+    "/operator/folder/roots": {
+      "get": {
+        "tags": ["operator folders"],
+        "operationId": "operator.folder.roots",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Workspace roots",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Workspace roots"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The folders projects can be created in: OPENCODE_WORKSPACE_ROOTS on the server, or the server user's home folder.",
+        "summary": "List workspace roots",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.folder.roots({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/folder": {
+      "get": {
+        "tags": ["operator folders"],
+        "operationId": "operator.folder.list",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The folder and its sub-folders",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorFolderListing"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorFolderInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorFolderInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "OperatorFolderOutsideError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorFolderOutsideError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The sub-folders of `path` (the first workspace root when left out), with which are git repositories. Hidden folders are left out.",
+        "summary": "List sub-folders",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.folder.list({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "tags": ["operator folders"],
+        "operationId": "operator.folder.create",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorFolderCreated"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorFolderInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorFolderInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "OperatorFolderOutsideError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorFolderOutsideError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Create a folder inside a workspace root, by default as a git repository so it can be a project.",
+        "summary": "Create a folder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "parent": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "git": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["parent", "name"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.folder.create({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/folder/init": {
+      "post": {
+        "tags": ["operator folders"],
+        "operationId": "operator.folder.init",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Initialized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorFolderCreated"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorFolderInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorFolderInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "OperatorFolderOutsideError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorFolderOutsideError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Run git init and an empty first commit in an existing folder, so OpenCode treats it as its own project.",
+        "summary": "Make a folder a git repository",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  }
+                },
+                "required": ["path"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.folder.init({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/event": {
       "get": {
         "tags": ["event"],
@@ -11388,6 +11636,533 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.identity.preview({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/prompt": {
+      "get": {
+        "tags": ["operator prompts"],
+        "operationId": "operator.prompt.catalog",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Prompt texts, overrides and switches",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPromptCatalog"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Every prompt text OpenCode adds on its own (base prompts per model family, reminders, notices, the agent generator, tool descriptions), with any global or project overrides, and the switches for generated sections.",
+        "summary": "List prompt texts",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.prompt.catalog({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/prompt/preview": {
+      "get": {
+        "tags": ["operator prompts"],
+        "operationId": "operator.prompt.preview",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The system prompt for an agent and model",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPromptPreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The system messages an agent sends with a model in this project, split into sections with where each comes from. The model defaults to the agent's, then the configured default.",
+        "summary": "Preview a system prompt",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.prompt.preview({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/prompt/{id}": {
+      "put": {
+        "tags": ["operator prompts"],
+        "operationId": "operator.prompt.write",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/OperatorConfigScope"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Saved"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Write the global or project override for a prompt text (`tool.<id>` for a tool description). An empty text turns it off. Applies from the next request.",
+        "summary": "Override a prompt text",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": ["text"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.prompt.write({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "tags": ["operator prompts"],
+        "operationId": "operator.prompt.remove",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/OperatorConfigScope"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Removed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Removed"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Delete the scope's override so OpenCode's own text (or the global override) applies again.",
+        "summary": "Remove a prompt override",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.prompt.remove({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/memory/overview": {
+      "get": {
+        "tags": ["operator memory"],
+        "operationId": "operator.memory.overview",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Memory files and database",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorMemoryOverview"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "What OpenCode keeps for this project: the files it adds to prompts (instruction files, nested AGENTS.md, skills, identity layers, prompt overrides) and its database (path, size, rows per table, recent compaction summaries).",
+        "summary": "Get memory",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.memory.overview({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/memory/file": {
+      "get": {
+        "tags": ["operator memory"],
+        "operationId": "operator.memory.read",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The file",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["path", "text"],
+                  "additionalProperties": false,
+                  "description": "The file"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "OperatorMemoryNotAllowedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorMemoryNotAllowedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read a file the memory overview lists.",
+        "summary": "Read a memory file",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.memory.read({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "tags": ["operator memory"],
+        "operationId": "operator.memory.write",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Saved"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "OperatorMemoryNotAllowedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorMemoryNotAllowedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Write a file the memory overview lists, or create AGENTS.md at the project root or in the global config folder.",
+        "summary": "Write a memory file",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": ["path", "text"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.memory.write({\n  ...\n})"
           }
         ]
       }
@@ -23247,6 +24022,21 @@
             },
             "additionalProperties": false
           },
+          "prompts": {
+            "type": "object",
+            "properties": {
+              "environment": {
+                "type": "boolean"
+              },
+              "skills": {
+                "type": "boolean"
+              },
+              "mcp": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          },
           "merge": {
             "type": "object",
             "properties": {
@@ -23713,6 +24503,101 @@
           }
         },
         "required": ["directory", "time", "request"],
+        "additionalProperties": false
+      },
+      "OperatorFolderEntry": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "project": {
+            "type": "boolean",
+            "description": "A git repository, so OpenCode treats it as its own project"
+          }
+        },
+        "required": ["name", "path", "project"],
+        "additionalProperties": false
+      },
+      "OperatorFolderListing": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "root": {
+            "type": "string",
+            "description": "The workspace root this folder is in"
+          },
+          "parent": {
+            "type": "string"
+          },
+          "project": {
+            "type": "boolean"
+          },
+          "folders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorFolderEntry"
+            }
+          }
+        },
+        "required": ["path", "root", "project", "folders"],
+        "additionalProperties": false
+      },
+      "OperatorFolderOutsideError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorFolderOutsideError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorFolderInvalidError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorFolderInvalidError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorFolderCreated": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": ["path"],
         "additionalProperties": false
       },
       "Model": {
@@ -25727,6 +26612,290 @@
           }
         },
         "required": ["scope", "file", "path", "name", "kind", "priority", "enabled", "content"],
+        "additionalProperties": false
+      },
+      "OperatorPrompt": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["base", "reminder", "notice", "generator"]
+          },
+          "builtin": {
+            "type": "string",
+            "description": "OpenCode's own text"
+          },
+          "global": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "kind", "builtin"],
+        "additionalProperties": false
+      },
+      "OperatorPromptTool": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "builtin": {
+            "type": "string"
+          },
+          "global": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "builtin"],
+        "additionalProperties": false
+      },
+      "OperatorPromptToggles": {
+        "type": "object",
+        "properties": {
+          "environment": {
+            "type": "boolean"
+          },
+          "skills": {
+            "type": "boolean"
+          },
+          "mcp": {
+            "type": "boolean"
+          }
+        },
+        "required": ["environment", "skills", "mcp"],
+        "additionalProperties": false
+      },
+      "OperatorPromptCatalog": {
+        "type": "object",
+        "properties": {
+          "prompts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPrompt"
+            }
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPromptTool"
+            }
+          },
+          "toggles": {
+            "$ref": "#/components/schemas/OperatorPromptToggles"
+          },
+          "folders": {
+            "type": "object",
+            "properties": {
+              "global": {
+                "type": "string"
+              },
+              "project": {
+                "type": "string"
+              }
+            },
+            "required": ["global", "project"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["prompts", "tools", "toggles", "folders"],
+        "additionalProperties": false
+      },
+      "OperatorPromptSection": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["identity", "agent", "base", "environment", "references", "instructions", "mcp", "skills"]
+          },
+          "source": {
+            "type": "string",
+            "description": "Where the text comes from: an override id, file path or agent"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": ["kind", "source", "text"],
+        "additionalProperties": false
+      },
+      "OperatorPromptPreview": {
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string",
+            "description": "provider/model the preview was built for"
+          },
+          "base": {
+            "type": "string",
+            "description": "The base prompt id used for this model"
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPromptSection"
+            }
+          },
+          "system": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The system messages exactly as sent"
+          }
+        },
+        "required": ["agent", "model", "base", "sections", "system"],
+        "additionalProperties": false
+      },
+      "OperatorMemoryFile": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["instructions", "nested", "url", "skill", "identity", "prompt"]
+          },
+          "scope": {
+            "$ref": "#/components/schemas/OperatorConfigScope"
+          },
+          "path": {
+            "type": "string"
+          },
+          "size": {
+            "type": "number"
+          },
+          "modified": {
+            "type": "number"
+          },
+          "loaded": {
+            "type": "string",
+            "enum": ["always", "when-reading", "on-demand"],
+            "description": "always: in every system prompt; when-reading: added when the agent reads a file in its folder; on-demand: loaded when the agent asks for it"
+          },
+          "editable": {
+            "type": "boolean"
+          }
+        },
+        "required": ["kind", "scope", "path", "loaded", "editable"],
+        "additionalProperties": false
+      },
+      "OperatorMemoryTable": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "rows": {
+            "type": "number"
+          }
+        },
+        "required": ["name", "rows"],
+        "additionalProperties": false
+      },
+      "OperatorMemorySummary": {
+        "type": "object",
+        "properties": {
+          "sessionID": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "time": {
+            "type": "number"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": ["sessionID", "title", "time", "text"],
+        "additionalProperties": false
+      },
+      "OperatorMemoryOverview": {
+        "type": "object",
+        "properties": {
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorMemoryFile"
+            }
+          },
+          "database": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "size": {
+                "type": "number",
+                "description": "Bytes, including the write-ahead log"
+              },
+              "tables": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/OperatorMemoryTable"
+                }
+              }
+            },
+            "required": ["path", "size", "tables"],
+            "additionalProperties": false
+          },
+          "summaries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorMemorySummary"
+            },
+            "description": "The latest compaction summaries in this project"
+          },
+          "creatable": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "scope": {
+                  "$ref": "#/components/schemas/OperatorConfigScope"
+                },
+                "path": {
+                  "type": "string"
+                }
+              },
+              "required": ["scope", "path"],
+              "additionalProperties": false
+            },
+            "description": "Where an AGENTS.md can be created that OpenCode would read, when there is none yet"
+          }
+        },
+        "required": ["files", "database", "summaries", "creatable"],
+        "additionalProperties": false
+      },
+      "OperatorMemoryNotAllowedError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorMemoryNotAllowedError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
         "additionalProperties": false
       },
       "UnauthorizedError": {
@@ -39295,6 +40464,10 @@
       "description": "Server-wide operator routes."
     },
     {
+      "name": "operator folders",
+      "description": "Workspace folder routes."
+    },
+    {
       "name": "event",
       "description": "Instance event stream route."
     },
@@ -39373,6 +40546,14 @@
     {
       "name": "operator identity",
       "description": "Identity layer routes."
+    },
+    {
+      "name": "operator prompts",
+      "description": "Prompt text routes."
+    },
+    {
+      "name": "operator memory",
+      "description": "Memory routes."
     },
     {
       "name": "opencode HttpApi",

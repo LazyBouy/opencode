@@ -2052,6 +2052,11 @@ export type Config = {
     mcp_timeout?: number
     policies?: Array<ConfigV2ExperimentalPolicy>
   }
+  prompts?: {
+    environment?: boolean
+    skills?: boolean
+    mcp?: boolean
+  }
   merge?: {
     adapters?: {
       [key: string]: {
@@ -2220,6 +2225,44 @@ export type OperatorPendingPermission = {
    */
   time: number
   request: PermissionRequest
+}
+
+export type OperatorFolderEntry = {
+  name: string
+  path: string
+  /**
+   * A git repository, so OpenCode treats it as its own project
+   */
+  project: boolean
+}
+
+export type OperatorFolderListing = {
+  path: string
+  /**
+   * The workspace root this folder is in
+   */
+  root: string
+  parent?: string
+  project: boolean
+  folders: Array<OperatorFolderEntry>
+}
+
+export type OperatorFolderOutsideError = {
+  name: "OperatorFolderOutsideError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorFolderInvalidError = {
+  name: "OperatorFolderInvalidError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorFolderCreated = {
+  path: string
 }
 
 export type Model = {
@@ -2931,6 +2974,121 @@ export type OperatorIdentityLayer = {
   maxLength?: number
   enabled: boolean
   content: string
+}
+
+export type OperatorPrompt = {
+  id: string
+  kind: "base" | "reminder" | "notice" | "generator"
+  /**
+   * OpenCode's own text
+   */
+  builtin: string
+  global?: string
+  project?: string
+}
+
+export type OperatorPromptTool = {
+  id: string
+  builtin: string
+  global?: string
+  project?: string
+}
+
+export type OperatorPromptToggles = {
+  environment: boolean
+  skills: boolean
+  mcp: boolean
+}
+
+export type OperatorPromptCatalog = {
+  prompts: Array<OperatorPrompt>
+  tools: Array<OperatorPromptTool>
+  toggles: OperatorPromptToggles
+  folders: {
+    global: string
+    project: string
+  }
+}
+
+export type OperatorPromptSection = {
+  kind: "identity" | "agent" | "base" | "environment" | "references" | "instructions" | "mcp" | "skills"
+  /**
+   * Where the text comes from: an override id, file path or agent
+   */
+  source: string
+  text: string
+}
+
+export type OperatorPromptPreview = {
+  agent: string
+  /**
+   * provider/model the preview was built for
+   */
+  model: string
+  /**
+   * The base prompt id used for this model
+   */
+  base: string
+  sections: Array<OperatorPromptSection>
+  /**
+   * The system messages exactly as sent
+   */
+  system: Array<string>
+}
+
+export type OperatorMemoryFile = {
+  kind: "instructions" | "nested" | "url" | "skill" | "identity" | "prompt"
+  scope: OperatorConfigScope
+  path: string
+  size?: number
+  modified?: number
+  /**
+   * always: in every system prompt; when-reading: added when the agent reads a file in its folder; on-demand: loaded when the agent asks for it
+   */
+  loaded: "always" | "when-reading" | "on-demand"
+  editable: boolean
+}
+
+export type OperatorMemoryTable = {
+  name: string
+  rows: number
+}
+
+export type OperatorMemorySummary = {
+  sessionID: string
+  title: string
+  time: number
+  text: string
+}
+
+export type OperatorMemoryOverview = {
+  files: Array<OperatorMemoryFile>
+  database: {
+    path: string
+    /**
+     * Bytes, including the write-ahead log
+     */
+    size: number
+    tables: Array<OperatorMemoryTable>
+  }
+  /**
+   * The latest compaction summaries in this project
+   */
+  summaries: Array<OperatorMemorySummary>
+  /**
+   * Where an AGENTS.md can be created that OpenCode would read, when there is none yet
+   */
+  creatable: Array<{
+    scope: OperatorConfigScope
+    path: string
+  }>
+}
+
+export type OperatorMemoryNotAllowedError = {
+  name: "OperatorMemoryNotAllowedError"
+  data: {
+    message: string
+  }
 }
 
 export type UnauthorizedError = {
@@ -7868,6 +8026,126 @@ export type OperatorPermissionPendingResponses = {
 export type OperatorPermissionPendingResponse =
   OperatorPermissionPendingResponses[keyof OperatorPermissionPendingResponses]
 
+export type OperatorFolderRootsData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/operator/folder/roots"
+}
+
+export type OperatorFolderRootsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorFolderRootsError = OperatorFolderRootsErrors[keyof OperatorFolderRootsErrors]
+
+export type OperatorFolderRootsResponses = {
+  /**
+   * Workspace roots
+   */
+  200: Array<string>
+}
+
+export type OperatorFolderRootsResponse = OperatorFolderRootsResponses[keyof OperatorFolderRootsResponses]
+
+export type OperatorFolderListData = {
+  body?: never
+  path?: never
+  query?: {
+    path?: string
+  }
+  url: "/operator/folder"
+}
+
+export type OperatorFolderListErrors = {
+  /**
+   * OperatorFolderInvalidError | InvalidRequestError
+   */
+  400: OperatorFolderInvalidError | InvalidRequestError
+  /**
+   * OperatorFolderOutsideError
+   */
+  403: OperatorFolderOutsideError
+}
+
+export type OperatorFolderListError = OperatorFolderListErrors[keyof OperatorFolderListErrors]
+
+export type OperatorFolderListResponses = {
+  /**
+   * The folder and its sub-folders
+   */
+  200: OperatorFolderListing
+}
+
+export type OperatorFolderListResponse = OperatorFolderListResponses[keyof OperatorFolderListResponses]
+
+export type OperatorFolderCreateData = {
+  body?: {
+    parent: string
+    name: string
+    git?: boolean
+  }
+  path?: never
+  query?: never
+  url: "/operator/folder"
+}
+
+export type OperatorFolderCreateErrors = {
+  /**
+   * OperatorFolderInvalidError | InvalidRequestError
+   */
+  400: OperatorFolderInvalidError | InvalidRequestError
+  /**
+   * OperatorFolderOutsideError
+   */
+  403: OperatorFolderOutsideError
+}
+
+export type OperatorFolderCreateError = OperatorFolderCreateErrors[keyof OperatorFolderCreateErrors]
+
+export type OperatorFolderCreateResponses = {
+  /**
+   * Created
+   */
+  200: OperatorFolderCreated
+}
+
+export type OperatorFolderCreateResponse = OperatorFolderCreateResponses[keyof OperatorFolderCreateResponses]
+
+export type OperatorFolderInitData = {
+  body?: {
+    path: string
+  }
+  path?: never
+  query?: never
+  url: "/operator/folder/init"
+}
+
+export type OperatorFolderInitErrors = {
+  /**
+   * OperatorFolderInvalidError | InvalidRequestError
+   */
+  400: OperatorFolderInvalidError | InvalidRequestError
+  /**
+   * OperatorFolderOutsideError
+   */
+  403: OperatorFolderOutsideError
+}
+
+export type OperatorFolderInitError = OperatorFolderInitErrors[keyof OperatorFolderInitErrors]
+
+export type OperatorFolderInitResponses = {
+  /**
+   * Initialized
+   */
+  200: OperatorFolderCreated
+}
+
+export type OperatorFolderInitResponse = OperatorFolderInitResponses[keyof OperatorFolderInitResponses]
+
 export type EventSubscribeData = {
   body?: never
   path?: never
@@ -12282,6 +12560,236 @@ export type OperatorIdentityPreviewResponses = {
 }
 
 export type OperatorIdentityPreviewResponse = OperatorIdentityPreviewResponses[keyof OperatorIdentityPreviewResponses]
+
+export type OperatorPromptCatalogData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/prompt"
+}
+
+export type OperatorPromptCatalogErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorPromptCatalogError = OperatorPromptCatalogErrors[keyof OperatorPromptCatalogErrors]
+
+export type OperatorPromptCatalogResponses = {
+  /**
+   * Prompt texts, overrides and switches
+   */
+  200: OperatorPromptCatalog
+}
+
+export type OperatorPromptCatalogResponse = OperatorPromptCatalogResponses[keyof OperatorPromptCatalogResponses]
+
+export type OperatorPromptPreviewData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    agent: string
+    provider?: string
+    model?: string
+  }
+  url: "/operator/prompt/preview"
+}
+
+export type OperatorPromptPreviewErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type OperatorPromptPreviewError = OperatorPromptPreviewErrors[keyof OperatorPromptPreviewErrors]
+
+export type OperatorPromptPreviewResponses = {
+  /**
+   * The system prompt for an agent and model
+   */
+  200: OperatorPromptPreview
+}
+
+export type OperatorPromptPreviewResponse = OperatorPromptPreviewResponses[keyof OperatorPromptPreviewResponses]
+
+export type OperatorPromptRemoveData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query: {
+    directory?: string
+    workspace?: string
+    scope: OperatorConfigScope
+  }
+  url: "/operator/prompt/{id}"
+}
+
+export type OperatorPromptRemoveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorPromptRemoveError = OperatorPromptRemoveErrors[keyof OperatorPromptRemoveErrors]
+
+export type OperatorPromptRemoveResponses = {
+  /**
+   * Removed
+   */
+  200: boolean
+}
+
+export type OperatorPromptRemoveResponse = OperatorPromptRemoveResponses[keyof OperatorPromptRemoveResponses]
+
+export type OperatorPromptWriteData = {
+  body?: {
+    text: string
+  }
+  path: {
+    id: string
+  }
+  query: {
+    directory?: string
+    workspace?: string
+    scope: OperatorConfigScope
+  }
+  url: "/operator/prompt/{id}"
+}
+
+export type OperatorPromptWriteErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type OperatorPromptWriteError = OperatorPromptWriteErrors[keyof OperatorPromptWriteErrors]
+
+export type OperatorPromptWriteResponses = {
+  /**
+   * Saved
+   */
+  200: boolean
+}
+
+export type OperatorPromptWriteResponse = OperatorPromptWriteResponses[keyof OperatorPromptWriteResponses]
+
+export type OperatorMemoryOverviewData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/memory/overview"
+}
+
+export type OperatorMemoryOverviewErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorMemoryOverviewError = OperatorMemoryOverviewErrors[keyof OperatorMemoryOverviewErrors]
+
+export type OperatorMemoryOverviewResponses = {
+  /**
+   * Memory files and database
+   */
+  200: OperatorMemoryOverview
+}
+
+export type OperatorMemoryOverviewResponse = OperatorMemoryOverviewResponses[keyof OperatorMemoryOverviewResponses]
+
+export type OperatorMemoryReadData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    path: string
+  }
+  url: "/operator/memory/file"
+}
+
+export type OperatorMemoryReadErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * OperatorMemoryNotAllowedError
+   */
+  403: OperatorMemoryNotAllowedError
+}
+
+export type OperatorMemoryReadError = OperatorMemoryReadErrors[keyof OperatorMemoryReadErrors]
+
+export type OperatorMemoryReadResponses = {
+  /**
+   * The file
+   */
+  200: {
+    path: string
+    text: string
+  }
+}
+
+export type OperatorMemoryReadResponse = OperatorMemoryReadResponses[keyof OperatorMemoryReadResponses]
+
+export type OperatorMemoryWriteData = {
+  body?: {
+    path: string
+    text: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/memory/file"
+}
+
+export type OperatorMemoryWriteErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * OperatorMemoryNotAllowedError
+   */
+  403: OperatorMemoryNotAllowedError
+}
+
+export type OperatorMemoryWriteError = OperatorMemoryWriteErrors[keyof OperatorMemoryWriteErrors]
+
+export type OperatorMemoryWriteResponses = {
+  /**
+   * Saved
+   */
+  200: boolean
+}
+
+export type OperatorMemoryWriteResponse = OperatorMemoryWriteResponses[keyof OperatorMemoryWriteResponses]
 
 export type V2HealthGetData = {
   body?: never

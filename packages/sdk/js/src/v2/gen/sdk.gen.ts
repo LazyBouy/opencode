@@ -132,6 +132,14 @@ import type {
   OperatorConfigUpdateResponses,
   OperatorConfigWriteErrors,
   OperatorConfigWriteResponses,
+  OperatorFolderCreateErrors,
+  OperatorFolderCreateResponses,
+  OperatorFolderInitErrors,
+  OperatorFolderInitResponses,
+  OperatorFolderListErrors,
+  OperatorFolderListResponses,
+  OperatorFolderRootsErrors,
+  OperatorFolderRootsResponses,
   OperatorIdentityKind,
   OperatorIdentityListErrors,
   OperatorIdentityListResponses,
@@ -143,10 +151,24 @@ import type {
   OperatorIdentityReorderResponses,
   OperatorIdentitySaveErrors,
   OperatorIdentitySaveResponses,
+  OperatorMemoryOverviewErrors,
+  OperatorMemoryOverviewResponses,
+  OperatorMemoryReadErrors,
+  OperatorMemoryReadResponses,
+  OperatorMemoryWriteErrors,
+  OperatorMemoryWriteResponses,
   OperatorPermissionPendingErrors,
   OperatorPermissionPendingResponses,
   OperatorProjectListErrors,
   OperatorProjectListResponses,
+  OperatorPromptCatalogErrors,
+  OperatorPromptCatalogResponses,
+  OperatorPromptPreviewErrors,
+  OperatorPromptPreviewResponses,
+  OperatorPromptRemoveErrors,
+  OperatorPromptRemoveResponses,
+  OperatorPromptWriteErrors,
+  OperatorPromptWriteResponses,
   OperatorSessionListErrors,
   OperatorSessionListResponses,
   OperatorStatsErrors,
@@ -1498,6 +1520,104 @@ export class Permission extends HeyApiClient {
   }
 }
 
+export class Folder extends HeyApiClient {
+  /**
+   * List workspace roots
+   *
+   * The folders projects can be created in: OPENCODE_WORKSPACE_ROOTS on the server, or the server user's home folder.
+   */
+  public roots<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<OperatorFolderRootsResponses, OperatorFolderRootsErrors, ThrowOnError>({
+      url: "/operator/folder/roots",
+      ...options,
+    })
+  }
+
+  /**
+   * List sub-folders
+   *
+   * The sub-folders of `path` (the first workspace root when left out), with which are git repositories. Hidden folders are left out.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      path?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "path" }] }])
+    return (options?.client ?? this.client).get<OperatorFolderListResponses, OperatorFolderListErrors, ThrowOnError>({
+      url: "/operator/folder",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create a folder
+   *
+   * Create a folder inside a workspace root, by default as a git repository so it can be a project.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      parent?: string
+      name?: string
+      git?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "parent" },
+            { in: "body", key: "name" },
+            { in: "body", key: "git" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorFolderCreateResponses,
+      OperatorFolderCreateErrors,
+      ThrowOnError
+    >({
+      url: "/operator/folder",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Make a folder a git repository
+   *
+   * Run git init and an empty first commit in an existing folder, so OpenCode treats it as its own project.
+   */
+  public init<ThrowOnError extends boolean = false>(
+    parameters?: {
+      path?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "path" }] }])
+    return (options?.client ?? this.client).post<OperatorFolderInitResponses, OperatorFolderInitErrors, ThrowOnError>({
+      url: "/operator/folder/init",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Config2 extends HeyApiClient {
   /**
    * List config layers
@@ -2132,6 +2252,268 @@ export class Identity extends HeyApiClient {
   }
 }
 
+export class Prompt extends HeyApiClient {
+  /**
+   * List prompt texts
+   *
+   * Every prompt text OpenCode adds on its own (base prompts per model family, reminders, notices, the agent generator, tool descriptions), with any global or project overrides, and the switches for generated sections.
+   */
+  public catalog<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorPromptCatalogResponses,
+      OperatorPromptCatalogErrors,
+      ThrowOnError
+    >({
+      url: "/operator/prompt",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Preview a system prompt
+   *
+   * The system messages an agent sends with a model in this project, split into sections with where each comes from. The model defaults to the agent's, then the configured default.
+   */
+  public preview<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      agent: string
+      provider?: string
+      model?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "agent" },
+            { in: "query", key: "provider" },
+            { in: "query", key: "model" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorPromptPreviewResponses,
+      OperatorPromptPreviewErrors,
+      ThrowOnError
+    >({
+      url: "/operator/prompt/preview",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Remove a prompt override
+   *
+   * Delete the scope's override so OpenCode's own text (or the global override) applies again.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+      scope: OperatorConfigScope
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "scope" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      OperatorPromptRemoveResponses,
+      OperatorPromptRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/operator/prompt/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Override a prompt text
+   *
+   * Write the global or project override for a prompt text (`tool.<id>` for a tool description). An empty text turns it off. Applies from the next request.
+   */
+  public write<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+      scope: OperatorConfigScope
+      text?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "scope" },
+            { in: "body", key: "text" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<OperatorPromptWriteResponses, OperatorPromptWriteErrors, ThrowOnError>({
+      url: "/operator/prompt/{id}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Memory extends HeyApiClient {
+  /**
+   * Get memory
+   *
+   * What OpenCode keeps for this project: the files it adds to prompts (instruction files, nested AGENTS.md, skills, identity layers, prompt overrides) and its database (path, size, rows per table, recent compaction summaries).
+   */
+  public overview<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorMemoryOverviewResponses,
+      OperatorMemoryOverviewErrors,
+      ThrowOnError
+    >({
+      url: "/operator/memory/overview",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Read a memory file
+   *
+   * Read a file the memory overview lists.
+   */
+  public read<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      path: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "path" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<OperatorMemoryReadResponses, OperatorMemoryReadErrors, ThrowOnError>({
+      url: "/operator/memory/file",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Write a memory file
+   *
+   * Write a file the memory overview lists, or create AGENTS.md at the project root or in the global config folder.
+   */
+  public write<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      path?: string
+      text?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "path" },
+            { in: "body", key: "text" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<OperatorMemoryWriteResponses, OperatorMemoryWriteErrors, ThrowOnError>({
+      url: "/operator/memory/file",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Operator extends HeyApiClient {
   /**
    * Get server status
@@ -2190,6 +2572,11 @@ export class Operator extends HeyApiClient {
     return (this._permission ??= new Permission({ client: this.client }))
   }
 
+  private _folder?: Folder
+  get folder(): Folder {
+    return (this._folder ??= new Folder({ client: this.client }))
+  }
+
   private _config?: Config2
   get config(): Config2 {
     return (this._config ??= new Config2({ client: this.client }))
@@ -2208,6 +2595,16 @@ export class Operator extends HeyApiClient {
   private _identity?: Identity
   get identity(): Identity {
     return (this._identity ??= new Identity({ client: this.client }))
+  }
+
+  private _prompt?: Prompt
+  get prompt(): Prompt {
+    return (this._prompt ??= new Prompt({ client: this.client }))
+  }
+
+  private _memory?: Memory
+  get memory(): Memory {
+    return (this._memory ??= new Memory({ client: this.client }))
   }
 }
 
