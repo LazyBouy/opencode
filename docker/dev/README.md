@@ -3,12 +3,12 @@
 Runs OpenCode, including the `/merge` feature and the iphi web UI, entirely in containers. Nothing is
 installed on the host. All commands run from the repository root.
 
-| Service  | What it runs                              | Host address              | Limits (default) |
-| -------- | ----------------------------------------- | ------------------------- | ---------------- |
-| `server` | `opencode serve` (API, sessions, `/merge`) | `http://127.0.0.1:4096`   | 4 CPUs, 6 GB     |
-| `web`    | web UI dev server (Vite)                  | `http://127.0.0.1:4444`   | 2 CPUs, 3 GB     |
-| `tools`  | one-off commands (typecheck, tests)       | on demand (`run --rm`)    | 4 CPUs, 6 GB     |
-| `e2e`    | Playwright browser tests                  | on demand (`run --rm`)    | 4 CPUs, 6 GB     |
+| Service  | What it runs                               | Host address            | Limits (default) |
+| -------- | ------------------------------------------ | ----------------------- | ---------------- |
+| `server` | `opencode serve` (API, sessions, `/merge`) | `http://127.0.0.1:4096` | 4 CPUs, 6 GB     |
+| `web`    | web UI dev server (Vite)                   | `http://127.0.0.1:4444` | 2 CPUs, 3 GB     |
+| `tools`  | one-off commands (typecheck, tests)        | on demand (`run --rm`)  | 4 CPUs, 6 GB     |
+| `e2e`    | Playwright browser tests                   | on demand (`run --rm`)  | 4 CPUs, 6 GB     |
 
 ## Start
 
@@ -17,7 +17,9 @@ docker compose -f docker/dev/compose.yaml up -d --build server web
 ```
 
 Open http://127.0.0.1:4444. Add a project with **Add project**; the server sees your projects at the
-same paths as the host (default `/root/projects`, change with `WORKSPACE`).
+same paths as the host (default `/root/projects`, change with `WORKSPACE`). **Operator → Projects →
+Add project** browses that folder and can create new sub-folders there (as git repositories, so each is
+its own project). They are written to the mounted host folder, so they persist.
 
 Connect a model provider for OpenCode's own agents under **Settings → Providers**. Credentials are kept
 in the `opencode-data` volume.
@@ -72,14 +74,14 @@ containers. See `FORK.md`.
 
 Override in the shell or in `docker/dev/.env`:
 
-| Variable                   | Default          | Purpose                                         |
-| -------------------------- | ---------------- | ----------------------------------------------- |
-| `WORKSPACE`                | `/root/projects` | host folder mounted into the server, same path  |
-| `OPENCODE_SERVER_PORT`     | `4096`           | API port on the host (127.0.0.1 only)           |
-| `OPENCODE_WEB_PORT`        | `4444`           | web UI port on the host (127.0.0.1 only)        |
-| `OPENCODE_SERVER_PASSWORD` | unset            | require basic auth on the API                   |
-| `SERVER_CPUS` / `SERVER_MEMORY`, `WEB_CPUS` / `WEB_MEMORY`, `TOOLS_CPUS` / `TOOLS_MEMORY`, `E2E_CPUS` / `E2E_MEMORY` | see table | resource limits |
-| `E2E_WORKERS`              | `2`              | Playwright workers                              |
+| Variable                                                                                                             | Default          | Purpose                                        |
+| -------------------------------------------------------------------------------------------------------------------- | ---------------- | ---------------------------------------------- |
+| `WORKSPACE`                                                                                                          | `/root/projects` | host folder mounted into the server, same path |
+| `OPENCODE_SERVER_PORT`                                                                                               | `4096`           | API port on the host (127.0.0.1 only)          |
+| `OPENCODE_WEB_PORT`                                                                                                  | `4444`           | web UI port on the host (127.0.0.1 only)       |
+| `OPENCODE_SERVER_PASSWORD`                                                                                           | unset            | require basic auth on the API                  |
+| `SERVER_CPUS` / `SERVER_MEMORY`, `WEB_CPUS` / `WEB_MEMORY`, `TOOLS_CPUS` / `TOOLS_MEMORY`, `E2E_CPUS` / `E2E_MEMORY` | see table        | resource limits                                |
+| `E2E_WORKERS`                                                                                                        | `2`              | Playwright workers                             |
 
 ## Stop
 

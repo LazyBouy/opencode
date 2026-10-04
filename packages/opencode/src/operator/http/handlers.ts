@@ -1,4 +1,5 @@
 import { operatorConfigHandlers } from "./handlers/config"
+import { operatorFolderHandlers } from "./handlers/folders"
 import { operatorIdentityHandlers } from "./handlers/identity"
 import { mergeHandlers } from "./handlers/merge"
 import { operatorOverviewHandlers } from "./handlers/overview"
@@ -14,4 +15,4 @@ export const operatorHandlers = [
   operatorIdentityHandlers,
   operatorPromptHandlers,
 ] as const
-export const operatorRootHandlers = [operatorOverviewHandlers] as const
+export const operatorRootHandlers = [operatorOverviewHandlers, operatorFolderHandlers] as const

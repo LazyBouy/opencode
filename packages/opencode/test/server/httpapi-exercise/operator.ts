@@ -265,4 +265,20 @@ export const operatorScenarios: Scenario[] = [
     object(body.properties)
     object(body.properties.merge)
   }),
+  http.protected.get("/operator/folder/roots", "operator.folder.roots").json(200, (body) => {
+    array(body)
+    check(body.length > 0 && body.every((root) => typeof root === "string"), "there should be at least one root")
+  }),
+  http.protected
+    .get("/operator/folder", "operator.folder.list")
+    .at((ctx) => ({ path: "/operator/folder?path=/", headers: ctx.headers() }))
+    .status(403),
+  http.protected
+    .post("/operator/folder", "operator.folder.create")
+    .at((ctx) => ({ path: "/operator/folder", headers: ctx.headers(), body: { parent: "/", name: "..", git: false } }))
+    .status(400),
+  http.protected
+    .post("/operator/folder/init", "operator.folder.init")
+    .at((ctx) => ({ path: "/operator/folder/init", headers: ctx.headers(), body: { path: "/" } }))
+    .status(403),
 ]
