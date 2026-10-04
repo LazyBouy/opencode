@@ -99,13 +99,14 @@ The script works in four stages:
    - runs the merge and operator tests, the HttpApi coverage gate, and the app unit tests.
 4. It lists upstream files the fork now edits that are missing from the table above.
 
-**Prompt texts.** The Prompt Profile lists every text OpenCode adds to prompts, so new upstream texts must be added to it. After a merge, check `packages/opencode/src/session/system.ts`, `session/prompt/*.txt`, `session/reminders.ts` and the generated sections in `session/system.ts`:
+**Prompt texts.** Prompt profiles (the Prompt Profile page) show every text OpenCode adds to a prompt as a layer, so new upstream texts must become layers. After a merge, check `session/system.ts`, `session/prompt/*.txt`, `session/reminders.ts`, and the system parts that `session/prompt.ts` and `session/llm/request.ts` pass to the `experimental.chat.system.transform` hook:
 
-- a new prompt file or model family goes in `BUILTINS` in `packages/opencode/src/operator/prompt-text.ts` (and its description in `packages/app/src/operator/i18n/en.ts`);
-- a changed generated section (environment, skills, MCP) needs `SECTION_PATTERNS` there updated;
-- a new part of the system prompt needs a section in `OperatorPrompts.preview` (`operator/prompts.ts`).
+- a new base prompt or model family is a **Base Model Group** layer: add it to `BUILTINS` in `packages/opencode/src/operator/prompt-text.ts`, with its description as `operator.prompts.id.<id>` in `packages/app/src/operator/i18n/en.ts`;
+- a new notice for structured answers is an **Output format** layer (`notice.*` in `BUILTINS`);
+- a new reminder, notice or one-call text (added to the conversation or a single call, not the system prompt) is a **Message text** (`reminder.*`, `notice.*`, `generator.*` in `BUILTINS`); reminders are matched back to their text by `rewriteReminder`;
+- a new section OpenCode writes for every request is a **Generated** layer: add a field to `SystemParts` (`packages/plugin/src/index.ts`, `session/llm/request.ts`, `session/prompt.ts`), a `generated.<name>` layer to `BUILTIN_LAYERS` and its resolution to `resolve` in `packages/opencode/src/operator/profile.ts`, and decide its group in the built-in Default profile (ask the user first: the built-in profiles are theirs to change).
 
-`test/operator/prompts-e2e.test.ts` fails when the preview no longer matches what is sent.
+System text that a caller passes without a label arrives in `SystemParts.extra` and is sent, unlabelled, at the end of the second system message; give it a label. `test/operator/prompts-e2e.test.ts` fails when the agent page's preview no longer matches what is sent.
 
 Then run the browser suites:
 
