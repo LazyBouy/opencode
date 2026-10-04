@@ -878,3 +878,10 @@ html[data-theme="iphi"] [data-component="operator-inspector"] {
   top: 16px;
   align-self: start;
 }
+
+/* A list of checkboxes: the projects a prompt layer, group or profile applies to. */
+[data-slot="operator-scope-list"] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}

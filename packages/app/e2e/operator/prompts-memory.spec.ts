@@ -40,47 +40,30 @@ test("an agent's Prompt tab shows every section with its source, and leads to it
     "Be terse.\nWe build editors.",
   )
 
+  state.profile.layers.push({
+    id: "terse",
+    name: "Terse",
+    section: "base",
+    overrides: "base.default",
+    projects: ["opencode"],
+    priority: 50,
+    enabled: true,
+    text: "Be terse.",
+    origin: "profile",
+  })
   await sections.nth(0).getByRole("button", { name: "Edit" }).click()
-  await expect(page).toHaveURL(/\/operator\/profile\?/)
-  await expect(page).toHaveURL(/tab=texts/)
-  await expect(page).toHaveURL(/text=base\.default/)
+  await expect(page).toHaveURL(/\/operator\/profile\?view=layers&layer=terse/)
   const editor = page.getByLabel("Text", { exact: true })
   await expect(editor).toHaveValue("Be terse.")
   await editor.fill("Be terse and kind.")
   await page.getByRole("button", { name: "Save", exact: true }).click()
-  await expect.poll(() => state.promptWrites.length).toBe(1)
-  expect(state.promptWrites[0].method).toBe("PUT")
-  expect(state.promptWrites[0].url).toContain("/operator/prompt/base.default")
-  expect(state.promptWrites[0].url).toContain("scope=project")
-  expect(state.promptWrites[0].body).toEqual({ text: "Be terse and kind." })
-})
-
-test("prompt profile no longer has a full prompt tab", async ({ page }) => {
-  await mockOperator(page)
-  await page.goto(`/operator/profile${dir}&tab=prompt`)
-  await expect(page.getByRole("tab", { name: "Built-in texts" })).toHaveAttribute("aria-selected", "true")
-  await expect(page.getByRole("tab", { name: "Full prompt" })).toHaveCount(0)
-})
-
-test("built-in texts show overrides, and tool descriptions can be reset", async ({ page }) => {
-  const state = await mockOperator(page)
-  await page.goto(`/operator/profile${dir}&tab=texts`)
-
-  const texts = page.locator('[data-component="operator-layers"] li')
-  await expect(texts.filter({ hasText: "base.default" })).toContainText("Global")
-  await expect(texts.filter({ hasText: "notice.max-steps" })).toContainText("Off")
-
-  await page.getByRole("tab", { name: "Tool descriptions" }).click()
-  await page
-    .locator('[data-component="operator-layers"] li')
-    .filter({ hasText: "tool.read" })
-    .getByRole("button")
-    .click()
-  await expect(page.getByLabel("Text", { exact: true })).toHaveValue("Reads files.")
-  await page.getByRole("button", { name: "Reset" }).click()
-  await expect.poll(() => state.promptWrites.length).toBe(1)
-  expect(state.promptWrites[0].method).toBe("DELETE")
-  expect(state.promptWrites[0].url).toContain("/operator/prompt/tool.read")
+  await expect.poll(() => state.profileWrites.length).toBe(1)
+  expect(state.profileWrites[0]).toMatchObject({ method: "PUT", path: "/operator/prompt-profile/layer/terse" })
+  expect(state.profileWrites[0].body).toMatchObject({
+    text: "Be terse and kind.",
+    overrides: "base.default",
+    projects: ["opencode"],
+  })
 })
 
 test("add project browses the workspace, creates a git folder and opens it", async ({ page }) => {

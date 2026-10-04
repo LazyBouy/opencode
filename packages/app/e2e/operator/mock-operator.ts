@@ -100,6 +100,18 @@ export const agents = [
     settings: {},
     sessions: { total: 0 },
   },
+  {
+    name: "triage",
+    mode: "primary",
+    hidden: true,
+    permission: [],
+    options: {},
+    prompt: "Triage issues.",
+    source: { kind: "file", path: `${directory}/.opencode/agent/triage.md`, customized: false },
+    disabled: false,
+    settings: { mode: "primary", hidden: true, prompt: "Triage issues." },
+    sessions: { total: 0 },
+  },
 ]
 
 export const identityLayers = [
@@ -271,6 +283,113 @@ export const memoryOverview = {
   ],
 }
 
+type MockLayer = {
+  id: string
+  name: string
+  section: string
+  purpose?: "org" | "goal"
+  overrides?: string
+  projects: "*" | string[]
+  agents?: string[]
+  priority: number
+  maxLength?: number
+  enabled: boolean
+  text: string
+  origin: string
+  path?: string
+}
+type MockGroup = {
+  id: string
+  name: string
+  type: string
+  projects: "*" | string[]
+  layers: string[]
+  builtin: boolean
+}
+type MockProfile = { id: string; name: string; projects: "*" | string[]; groups: string[]; builtin: boolean }
+
+const builtinLayer = (id: string, name: string, section: string, origin: string, text = ""): MockLayer => ({
+  id,
+  name,
+  section,
+  projects: "*",
+  priority: 50,
+  enabled: true,
+  text,
+  origin,
+})
+const builtinGroup = (id: string, name: string, type: string, layers: string[]): MockGroup => ({
+  id,
+  name,
+  type,
+  projects: "*",
+  layers,
+  builtin: true,
+})
+
+export const builtinLayers: MockLayer[] = [
+  builtinLayer("base", "base", "base", "builtin"),
+  builtinLayer("base.anthropic", "base.anthropic", "base", "builtin", "You are OpenCode, the best coding agent."),
+  builtinLayer("base.default", "base.default", "base", "builtin", "You are opencode, an interactive CLI tool."),
+  builtinLayer("reminder.plan", "reminder.plan", "message", "builtin", "Plan mode is active."),
+  builtinLayer("notice.structured-output", "notice.structured-output", "output", "builtin", "Use StructuredOutput."),
+  builtinLayer("notice.max-steps", "notice.max-steps", "message", "builtin", "Maximum steps reached."),
+  builtinLayer("slot.base", "Base prompt (by model)", "base", "slot"),
+  builtinLayer("slot.agent", "Agent prompt", "identity", "slot"),
+  builtinLayer("purpose.org", "Org value", "purpose", "collection"),
+  builtinLayer("purpose.goal", "Project goal", "purpose", "collection"),
+  builtinLayer("identity.shared", "Identity layers", "identity", "collection"),
+  builtinLayer("generated.environment", "Environment", "generated", "generated"),
+  builtinLayer("generated.references", "References", "generated", "generated"),
+  builtinLayer("generated.instructions", "Instructions", "generated", "generated"),
+  builtinLayer("generated.mcp", "MCP instructions", "generated", "generated"),
+  builtinLayer("generated.skills", "Skills", "generated", "generated"),
+]
+
+export const builtinGroups: MockGroup[] = [
+  builtinGroup("builtin.platform", "Platform", "platform", []),
+  builtinGroup("builtin.purpose", "Purpose", "purpose", ["purpose.org", "purpose.goal"]),
+  builtinGroup("builtin.role", "Role", "role", []),
+  builtinGroup("builtin.identity", "Identity", "identity", ["identity.shared", "slot.agent"]),
+  builtinGroup("builtin.capabilities", "Capabilities", "capabilities", ["generated.mcp", "generated.skills"]),
+  builtinGroup("builtin.environment", "Environment", "custom", ["generated.environment", "generated.references"]),
+  builtinGroup("builtin.instructions", "Project instructions", "custom", ["generated.instructions"]),
+  builtinGroup("builtin.output", "Output format", "output", ["notice.structured-output"]),
+  builtinGroup("builtin.helper-identity", "Identity (agent prompt)", "identity", ["slot.agent"]),
+]
+
+export const builtinProfiles: MockProfile[] = [
+  {
+    id: "default",
+    name: "Default",
+    projects: "*",
+    groups: [
+      "builtin.platform",
+      "builtin.purpose",
+      "builtin.role",
+      "builtin.identity",
+      "builtin.capabilities",
+      "builtin.environment",
+      "builtin.instructions",
+      "builtin.output",
+    ],
+    builtin: true,
+  },
+  {
+    id: "helper",
+    name: "Helper",
+    projects: "*",
+    groups: ["builtin.purpose", "builtin.role", "builtin.helper-identity"],
+    builtin: true,
+  },
+]
+
+const slug = (name: string) =>
+  name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+
 export interface OperatorMock {
   readonly replies: Array<{ url: string; body: unknown }>
   readonly writes: Array<{ url: string; body: unknown }>
@@ -284,6 +403,13 @@ export interface OperatorMock {
   readonly memoryWrites: Array<{ url: string; body: unknown }>
   readonly projectsOpened: string[]
   readonly folders: Set<string>
+  readonly profileWrites: Array<{ method: string; path: string; body: unknown }>
+  readonly profile: {
+    layers: MockLayer[]
+    groups: MockGroup[]
+    profiles: MockProfile[]
+    defaults: { global?: string; projects: Record<string, string> }
+  }
   pending: (typeof pendingRequest)[]
   rejectWrite?: string
 }
@@ -302,6 +428,8 @@ export async function mockOperator(page: Page) {
     memoryWrites: [],
     projectsOpened: [],
     folders: new Set([`${workspace}/apps`, `${workspace}/site`]),
+    profileWrites: [],
+    profile: { layers: [], groups: [], profiles: [], defaults: { projects: {} } },
     pending: [pendingRequest],
   }
   const repositories = new Set([`${workspace}/site`])
@@ -410,6 +538,92 @@ export async function mockOperator(page: Page) {
       return json(route, { path: `${directory}/.opencode/opencode.jsonc`, changed: true })
     }
     if (url.pathname === "/operator/prompt") return json(route, promptCatalog)
+    if (url.pathname.startsWith("/operator/prompt-profile")) {
+      const store = state.profile
+      if (url.pathname === "/operator/prompt-profile")
+        return json(route, {
+          layers: [...builtinLayers, ...store.layers],
+          groups: [...builtinGroups, ...store.groups],
+          profiles: [...builtinProfiles, ...store.profiles],
+          defaults: store.defaults,
+          projects: [
+            { key: "opencode", name: "OpenCode" },
+            { key: directory, name: "smoke-project" },
+          ],
+        })
+      const body = route.request().postDataJSON() as Record<string, unknown> | null
+      state.profileWrites.push({ method, path: url.pathname, body })
+      const [kind, id] = url.pathname.slice("/operator/prompt-profile/".length).split("/")
+      if (kind === "defaults") {
+        store.defaults = body as typeof store.defaults
+        return json(route, store.defaults)
+      }
+      const list = (kind === "layer" ? store.layers : kind === "group" ? store.groups : store.profiles) as Array<{
+        id: string
+      }>
+      if (method === "DELETE") {
+        list.splice(
+          list.findIndex((item) => item.id === id),
+          1,
+        )
+        return json(route, true)
+      }
+      const saved = {
+        priority: 50,
+        enabled: true,
+        origin: "profile",
+        builtin: false,
+        ...body,
+        id: id ? decodeURIComponent(id) : slug(String(body?.name ?? kind)),
+      }
+      const index = list.findIndex((item) => item.id === saved.id)
+      if (index === -1) list.push(saved)
+      else list[index] = saved
+      return json(route, saved)
+    }
+    if (url.pathname === "/operator/prompt/preview" && url.searchParams.get("agent") === "triage") {
+      // A small stand-in for the assembler: this project's goal (or the base prompt), the role layers of
+      // the project's default profile, then the agent's prompt.
+      const store = state.profile
+      const goal = store.layers.find((layer) => layer.purpose === "goal" && layer.projects.includes(directory))
+      const profile = store.profiles.find((item) => item.id === store.defaults.projects[directory])
+      const roles = (profile?.groups ?? [])
+        .map((group) => store.groups.find((item) => item.id === group))
+        .filter((group) => group?.type === "role")
+        .flatMap((group) => group!.layers)
+        .map((layer) => store.layers.find((item) => item.id === layer)!)
+      const sections = [
+        goal
+          ? section("Purpose", "purpose", goal.name, {
+              layer: goal.id,
+              section: "purpose",
+              text: goal.text,
+              mandatory: true,
+            })
+          : section("Purpose", "purpose", "base.default", {
+              layer: "base.default",
+              section: "base",
+              text: "You are opencode.",
+              mandatory: true,
+            }),
+        ...roles.map((layer) =>
+          section("Role", "role", layer.name, { layer: layer.id, section: "role", text: layer.text }),
+        ),
+        section("Identity", "identity", "Agent prompt", {
+          layer: "slot.agent",
+          section: "identity",
+          text: "Triage issues.",
+        }),
+      ]
+      return json(route, {
+        ...promptPreview,
+        agent: "triage",
+        project: { key: directory, name: "smoke-project" },
+        profile: profile ? { id: profile.id, name: profile.name } : { id: "default", name: "Default" },
+        sections,
+        system: [sections.map((item) => item.text).join("\n")],
+      })
+    }
     if (url.pathname === "/operator/prompt/preview") {
       // An agent with its own prompt sends it instead of the base prompt.
       const own = (

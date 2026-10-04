@@ -88,28 +88,3 @@ test("a file agent can be turned off and deleted", async ({ page }) => {
   expect(state.agentWrites[1].method).toBe("DELETE")
   await expect(page).toHaveURL(/\/operator\/agents\?dir=/)
 })
-
-test("the prompt profile lists layers, saves edits, reorders and previews per agent", async ({ page }) => {
-  const state = await mockOperator(page)
-  await page.goto(`/operator/profile${dir}&tab=identity`)
-  const layers = page.locator('[data-component="operator-layers"] li')
-  await expect(layers).toHaveCount(3)
-  await expect(layers.nth(0)).toContainText("Company")
-  await expect(layers.nth(2)).toContainText("Only build")
-
-  await page.getByRole("button", { name: "Move Style up" }).click()
-  await expect.poll(() => state.identityWrites.length).toBe(1)
-  expect(state.identityWrites[0].body).toEqual({ scope: "project", files: ["style.md", "repo.md"] })
-
-  await layers.nth(1).getByRole("button").first().click()
-  await page.getByLabel("Text").fill("This repo uses Bun 1.3.")
-  await page.getByRole("button", { name: "Save", exact: true }).click()
-  await expect.poll(() => state.identityWrites.length).toBe(2)
-  expect(state.identityWrites[1].body).toMatchObject({
-    scope: "project",
-    file: "repo.md",
-    content: "This repo uses Bun 1.3.",
-  })
-
-  await expect(page.locator('[data-component="operator-code"]')).toContainText("Use tabs.")
-})

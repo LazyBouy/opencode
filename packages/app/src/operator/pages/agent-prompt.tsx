@@ -54,10 +54,8 @@ export function AgentPrompt(props: { agent: string; directory: string }) {
     },
   }))
 
-  const profile = (tab: string, text?: string) =>
-    navigate(
-      `/operator/profile?dir=${encodeURIComponent(props.directory)}&tab=${tab}${text ? `&text=${encodeURIComponent(text)}` : ""}`,
-    )
+  // A layer on the Prompt Profile page.
+  const open = (layer: string) => navigate(`/operator/profile?view=layers&layer=${encodeURIComponent(layer)}`)
 
   const source = (section: OperatorPromptAssembledSection) =>
     section.source.startsWith("/") ? shortPath(section.source) : section.source
@@ -77,13 +75,7 @@ export function AgentPrompt(props: { agent: string; directory: string }) {
         label: language.t("operator.prompts.openMemory"),
         run: () => navigate(`/operator/memory?dir=${encodeURIComponent(props.directory)}`),
       }
-    if (section.section === "generated") return undefined
-    if (section.section === "identity")
-      return { label: language.t("operator.prompts.editLayers"), run: () => profile("identity") }
-    return {
-      label: language.t("operator.prompts.edit"),
-      run: () => profile("texts", section.overrides ?? section.layer),
-    }
+    return { label: language.t("operator.prompts.edit"), run: () => open(section.layer) }
   }
 
   return (
@@ -166,7 +158,7 @@ export function AgentPrompt(props: { agent: string; directory: string }) {
             <section data-component="operator-panel">
               <h2 data-slot="operator-panel-title">{language.t("operator.prompts.perTurn")}</h2>
               <p data-slot="operator-note">{language.t("operator.prompts.perTurnHint")}</p>
-              <ButtonV2 size="small" variant="outline" onClick={() => profile("texts", "reminder.plan")}>
+              <ButtonV2 size="small" variant="outline" onClick={() => open("reminder.plan")}>
                 {language.t("operator.prompts.perTurnOpen")}
               </ButtonV2>
             </section>
