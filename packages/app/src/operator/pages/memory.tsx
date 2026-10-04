@@ -110,7 +110,7 @@ export default function MemoryPage() {
           <TabsV2.Content value="files">
             <p data-slot="operator-note">{language.t("operator.memory.filesHint")}</p>
             <Show when={memory.data?.creatable.length}>
-              <div data-slot="operator-toolbar">
+              <div class="flex flex-wrap gap-2">
                 <For each={memory.data?.creatable ?? []}>
                   {(item) => (
                     <ButtonV2 size="small" variant="outline" onClick={() => setParams({ file: item.path })}>
@@ -132,9 +132,11 @@ export default function MemoryPage() {
                   header: language.t("operator.column.kind"),
                   value: (row) => row.kind,
                   cell: (row) => (
-                    <Tag variant={row.loaded === "always" ? "accent" : "neutral"}>
-                      {language.t(`operator.memory.kind.${row.kind}`)}
-                    </Tag>
+                    <span class="whitespace-nowrap">
+                      <Tag variant={row.loaded === "always" ? "accent" : "neutral"}>
+                        {language.t(`operator.memory.kind.${row.kind}`)}
+                      </Tag>
+                    </span>
                   ),
                 },
                 {

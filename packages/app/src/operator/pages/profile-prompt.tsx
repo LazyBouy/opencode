@@ -18,6 +18,8 @@ import { requestError } from "./config-helpers"
 import { usePromptCatalog } from "./profile-texts"
 
 type Toggle = "environment" | "skills" | "mcp"
+// The model option that means "whatever the agent uses".
+const AGENT_MODEL = "agent"
 const TOGGLES: Toggle[] = ["environment", "skills", "mcp"]
 
 // The section kinds a switch turns off; references go with the environment block.
@@ -33,7 +35,7 @@ export function FullPrompt(props: { directory: string; onEdit: (tab: "texts" | "
   const queryClient = useQueryClient()
   const agents = useAgents()
   const catalog = usePromptCatalog(() => props.directory)
-  const [store, setStore] = createStore({ agent: "build", model: "", scope: "project" as Scope, busy: false })
+  const [store, setStore] = createStore({ agent: "build", model: AGENT_MODEL, scope: "project" as Scope, busy: false })
 
   const providers = useQuery(() => ({
     queryKey: api.key("providers", props.directory),
@@ -44,7 +46,7 @@ export function FullPrompt(props: { directory: string; onEdit: (tab: "texts" | "
         .then((result) => result.data!),
   }))
   const models = createMemo(() => [
-    "",
+    AGENT_MODEL,
     ...(providers.data?.providers ?? []).flatMap((provider) =>
       Object.values(provider.models).map((model) => `${provider.id}/${model.id}`),
     ),
@@ -60,7 +62,7 @@ export function FullPrompt(props: { directory: string; onEdit: (tab: "texts" | "
         .operator.prompt.preview({
           directory: props.directory,
           agent: store.agent,
-          ...(store.model ? { provider, model: rest.join("/") } : {}),
+          ...(store.model === AGENT_MODEL ? {} : { provider, model: rest.join("/") }),
         })
         .then((result) => result.data!)
     },
@@ -125,8 +127,8 @@ export function FullPrompt(props: { directory: string; onEdit: (tab: "texts" | "
               appearance="base"
               options={models()}
               current={store.model}
-              label={(value) => value || language.t("operator.prompts.agentModel")}
-              onSelect={(value) => setStore("model", value ?? "")}
+              label={(value) => (value === AGENT_MODEL ? language.t("operator.prompts.agentModel") : value)}
+              onSelect={(value) => value && setStore("model", value)}
             />
           </Field>
         </div>

@@ -187,7 +187,7 @@ export function PromptTexts(props: {
         </For>
       </section>
 
-      <section data-component="operator-panel">
+      <section data-component="operator-panel" data-slot="operator-sticky">
         <Show when={entry()} fallback={<p data-slot="operator-note">{language.t("operator.prompts.pick")}</p>}>
           {(current) => (
             <>

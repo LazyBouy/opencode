@@ -420,7 +420,7 @@ export const dict = {
   "operator.folders.gitOption": "Make it a git project",
   "operator.folders.create": "Create folder",
   "operator.folders.notGit": "This folder is not a git repository, so its sessions are listed under Outside projects.",
-  "operator.folders.init": "Make it a git project",
+  "operator.folders.init": "Make this folder a git project",
   "operator.folders.use": "Use this folder",
 
   "operator.memory.tab.files": "Files ({{count}})",

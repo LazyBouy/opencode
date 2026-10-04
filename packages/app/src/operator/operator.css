@@ -871,3 +871,10 @@ html[data-theme="iphi"] [data-component="operator-inspector"] {
   font-size: 13px;
   color: var(--v2-text-text-muted);
 }
+
+/* A side panel that stays in view while the list beside it scrolls. */
+[data-slot="operator-sticky"] {
+  position: sticky;
+  top: 16px;
+  align-self: start;
+}

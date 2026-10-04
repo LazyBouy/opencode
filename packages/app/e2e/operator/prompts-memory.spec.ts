@@ -111,7 +111,7 @@ test("an existing folder can be made a git project", async ({ page }) => {
   await page.getByRole("button", { name: "Add project" }).click()
   const dialog = page.getByRole("dialog")
   await dialog.getByRole("list", { name: "Folders" }).getByRole("button", { name: "apps" }).click()
-  await dialog.getByRole("button", { name: "Make it a git project" }).click()
+  await dialog.getByRole("button", { name: "Make this folder a git project" }).click()
   await expect.poll(() => state.folderWrites.length).toBe(1)
   expect(state.folderWrites[0].body).toEqual({ path: `${workspace}/apps` })
   await expect(dialog).not.toContainText("not a git repository")
