@@ -3,6 +3,7 @@ import { OperatorConfigApi } from "./groups/config"
 import { OperatorIdentityApi } from "./groups/identity"
 import { MergeApi } from "./groups/merge"
 import { OperatorProjectApi } from "./groups/project"
+import { OperatorPromptApi } from "./groups/prompts"
 
 export { OperatorRootApi } from "./groups/overview"
 
@@ -15,3 +16,4 @@ export const OperatorApi = HttpApi.make("operator")
   .addHttpApi(OperatorConfigApi)
   .addHttpApi(OperatorProjectApi)
   .addHttpApi(OperatorIdentityApi)
+  .addHttpApi(OperatorPromptApi)

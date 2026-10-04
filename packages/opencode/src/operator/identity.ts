@@ -67,20 +67,13 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Op
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const folders = Effect.fnUntraced(function* () {
-      const ctx = yield* InstanceState.context
-      return {
-        global: path.join(OperatorConfig.scopeDirectory("global", ctx), "identity"),
-        project: path.join(OperatorConfig.scopeDirectory("project", ctx), "identity"),
-      }
-    })
     const list = Effect.fn("OperatorIdentity.list")(function* () {
-      const dirs = yield* folders()
+      const dirs = folders(yield* InstanceState.context)
       return yield* Effect.promise(() => readLayers(dirs))
     })
 
     const save = Effect.fn("OperatorIdentity.save")(function* (input: SaveInput) {
-      const dirs = yield* folders()
+      const dirs = folders(yield* InstanceState.context)
       const file = input.file ?? `${slug(input.name)}.md`
       const target = path.join(dirs[input.scope], path.basename(file))
       const data = {
@@ -99,7 +92,7 @@ const layer = Layer.effect(
     })
 
     const remove = Effect.fn("OperatorIdentity.remove")(function* (scope: OperatorConfig.Scope, file: string) {
-      const target = path.join((yield* folders())[scope], path.basename(file))
+      const target = path.join(folders(yield* InstanceState.context)[scope], path.basename(file))
       const exists = yield* Effect.promise(() => Bun.file(target).exists())
       if (!exists) return yield* new NotFoundError({ message: `No identity layer ${file}` })
       yield* Effect.promise(() => fs.rm(target))
@@ -127,6 +120,13 @@ const layer = Layer.effect(
 )
 
 export const node = LayerNode.make({ service: Service, layer, deps: [] })
+
+export function folders(ctx: { directory: string; worktree: string }) {
+  return {
+    global: path.join(OperatorConfig.scopeDirectory("global", ctx), "identity"),
+    project: path.join(OperatorConfig.scopeDirectory("project", ctx), "identity"),
+  }
+}
 
 const RANK: Record<Kind, number> = { org: 0, user: 1, project: 2 }
 

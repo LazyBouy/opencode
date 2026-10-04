@@ -6,6 +6,23 @@ import { ConfigMergeV1 } from "./merge"
 // Top-level config keys this fork adds. ConfigV1.Info spreads these fields once, so new fork
 // settings are added here without editing upstream's schema.
 export const fields = {
+  prompts: Schema.optional(
+    Schema.Struct({
+      environment: Schema.optional(Schema.Boolean).annotate({
+        description:
+          "Add the environment block (model, working directory, platform, date) to system prompts (default: true)",
+      }),
+      skills: Schema.optional(Schema.Boolean).annotate({
+        description: "List available skills in system prompts (default: true)",
+      }),
+      mcp: Schema.optional(Schema.Boolean).annotate({
+        description: "Add MCP servers' instructions to system prompts (default: true)",
+      }),
+    }),
+  ).annotate({
+    description:
+      "Turn generated system prompt sections on or off. Prompt texts are overridden with prompts/<id>.md files",
+  }),
   merge: Schema.optional(ConfigMergeV1.Info).annotate({
     description: "Settings for `/merge`, which attaches external agent sessions such as Claude Code",
   }),

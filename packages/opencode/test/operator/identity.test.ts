@@ -97,7 +97,7 @@ it.instance("the identity plugin puts the agent's layers first in its system pro
         operatorPlugins[0]({ directory, worktree: directory } as Parameters<(typeof operatorPlugins)[0]>[0]),
       )
       const transform = hooks["experimental.chat.system.transform"]!
-      const model = {} as Parameters<typeof transform>[0]["model"]
+      const model = { providerID: "test", api: { id: "test-model" } } as Parameters<typeof transform>[0]["model"]
 
       const build = { system: ["Base prompt"] }
       yield* Effect.promise(() => transform({ model, agent: "build" }, build))

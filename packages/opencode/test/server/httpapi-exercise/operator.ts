@@ -168,6 +168,35 @@ export const operatorScenarios: Scenario[] = [
       headers: ctx.headers(),
     }))
     .status(400),
+  http.protected.get("/operator/prompt", "operator.prompt.catalog").json(200, (body) => {
+    object(body)
+    array(body.prompts)
+    array(body.tools)
+    check(
+      body.prompts.some((item) => isRecord(item) && item.id === "base.default"),
+      "the catalog should include the default base prompt",
+    )
+  }),
+  http.protected
+    .get("/operator/prompt/preview", "operator.prompt.preview")
+    .at((ctx) => ({ path: "/operator/prompt/preview?agent=no-such-agent", headers: ctx.headers() }))
+    .status(404),
+  http.protected
+    .put("/operator/prompt/{id}", "operator.prompt.write")
+    .mutating()
+    .at((ctx) => ({
+      path: route("/operator/prompt/{id}", { id: "reminder.plan" }) + "?scope=project",
+      headers: ctx.headers(),
+      body: { text: "Plan only." },
+    }))
+    .json(200, (body) => check(body === true, "the override should be saved"), "status"),
+  http.protected
+    .delete("/operator/prompt/{id}", "operator.prompt.remove")
+    .at((ctx) => ({
+      path: route("/operator/prompt/{id}", { id: "reminder.plan" }) + "?scope=project",
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => check(body === true, "removing an override should succeed")),
   http.protected.get("/operator/identity", "operator.identity.list").json(200, array),
   http.protected
     .put("/operator/identity/layer", "operator.identity.save")

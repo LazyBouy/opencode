@@ -16,7 +16,7 @@ import { SessionCompaction } from "./compaction"
 import { SystemPrompt } from "./system"
 import { Instruction } from "./instruction"
 import { Plugin } from "../plugin"
-import { MAX_STEPS_PROMPT } from "@opencode-ai/core/session/runner/max-steps"
+import { OperatorPromptText } from "@/operator/prompt-text"
 import { ToolRegistry } from "@/tool/registry"
 import { MCP } from "../mcp"
 import { LSP } from "@/lsp/lsp"
@@ -1294,7 +1294,7 @@ const layer = Layer.effect(
               system,
               messages: [
                 ...modelMsgs,
-                ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS_PROMPT }] : []),
+                ...(isLastStep ? [{ role: "assistant" as const, content: yield* OperatorPromptText.maxSteps }] : []),
               ],
               tools,
               model,
