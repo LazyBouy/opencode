@@ -27,7 +27,7 @@ test("creating an agent sends its settings and rules, then opens it", async ({ p
   await page.getByRole("button", { name: "Subagent", exact: true }).click()
   await page.getByLabel("Temperature").fill("0.3")
   await page.getByLabel("Home folder").fill("/work/docs")
-  await page.getByLabel("Prompt").fill("Write clear docs.")
+  await page.getByLabel("Prompt", { exact: true }).fill("Write clear docs.")
   await page.getByRole("button", { name: "Add rule" }).click()
   await page.getByRole("textbox", { name: "Permission, such as bash or edit" }).fill("edit")
   await page.getByRole("button", { name: "Create agent" }).click()
@@ -87,4 +87,46 @@ test("a file agent can be turned off and deleted", async ({ page }) => {
   await expect.poll(() => state.agentWrites.length).toBe(2)
   expect(state.agentWrites[1].method).toBe("DELETE")
   await expect(page).toHaveURL(/\/operator\/agents\?dir=/)
+})
+
+test("an agent's prompt mode is saved: Full custom with chosen sections, or the profile plus layers", async ({
+  page,
+}) => {
+  const state = await mockOperator(page)
+  state.profile.layers.push({
+    id: "reviewer",
+    name: "Reviewer",
+    section: "role",
+    projects: "*",
+    priority: 50,
+    enabled: true,
+    text: "You review.",
+    origin: "profile",
+  })
+  await page.goto(`/operator/agents/build/edit${dir}`)
+  const prompt = page.getByRole("group", { name: "Prompt profile", exact: true })
+
+  await prompt.getByRole("button", { name: "Full custom", exact: true }).click()
+  await prompt.getByText("Skills", { exact: true }).click()
+  await page.getByRole("button", { name: "Save", exact: true }).click()
+  await expect.poll(() => state.agentWrites.length).toBe(1)
+  expect((state.agentWrites[0].body as { promptProfile?: unknown }).promptProfile).toEqual({
+    mode: "custom",
+    generated: ["environment", "references", "instructions", "mcp"],
+  })
+
+  await page.goto(`/operator/agents/build/edit${dir}`)
+  await prompt.getByRole("button", { name: "Profile + layers", exact: true }).click()
+  await prompt.getByRole("group", { name: "Group", exact: true }).locator('[data-component="select-v2"]').click()
+  await page.getByRole("option", { name: "Role", exact: true }).click()
+  await prompt.getByRole("group", { name: "Layer", exact: true }).locator('[data-component="select-v2"]').click()
+  await page.getByRole("option", { name: "Reviewer · Role" }).click()
+  await prompt.getByRole("button", { name: "Add", exact: true }).click()
+  await expect(prompt.getByRole("list", { name: "This agent's layers" })).toContainText("Reviewer → Role")
+  await page.getByRole("button", { name: "Save", exact: true }).click()
+  await expect.poll(() => state.agentWrites.length).toBe(2)
+  expect((state.agentWrites[1].body as { promptProfile?: unknown }).promptProfile).toEqual({
+    mode: "layers",
+    layers: [{ layer: "reviewer", group: "builtin.role" }],
+  })
 })

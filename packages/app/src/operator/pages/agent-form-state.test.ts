@@ -40,4 +40,31 @@ describe("agent form", () => {
     expect(sent(agentPatch(form, before, { bash: "ask" }))).toEqual({ reset: ["description", "temperature"] })
     expect(agentPatch(form, before, {}).reset).toEqual(["description", "temperature", "permission"])
   })
+
+  test("prompt modes: unset is the default chain; only a change is sent", () => {
+    const blank = formFromSettings("docs", {})
+    expect(blank).toMatchObject({ promptMode: "profile", promptProfile: "", promptLayers: [] })
+    expect(sent(agentPatch(blank, {}, {}))).toEqual({})
+
+    const layers = {
+      ...blank,
+      promptMode: "layers" as const,
+      promptProfile: "release",
+      promptLayers: [{ layer: "reviewer", group: "builtin.role" }],
+    }
+    expect(sent(agentPatch(layers, {}, {})).promptProfile).toEqual({
+      mode: "layers",
+      profile: "release",
+      layers: [{ layer: "reviewer", group: "builtin.role" }],
+    })
+
+    const custom = { ...blank, promptMode: "custom" as const, promptGenerated: ["instructions" as const] }
+    expect(sent(agentPatch(custom, {}, {})).promptProfile).toEqual({ mode: "custom", generated: ["instructions"] })
+
+    const before = { promptProfile: { mode: "profile", profile: "release" } }
+    const same = formFromSettings("docs", before)
+    expect(same.promptProfile).toBe("release")
+    expect(sent(agentPatch(same, before, {}))).toEqual({})
+    expect(agentPatch({ ...same, promptProfile: "" }, before, {}).reset).toEqual(["promptProfile"])
+  })
 })

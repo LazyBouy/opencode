@@ -459,6 +459,22 @@ export const dict = {
   "operator.memory.noSummaries": "No sessions here have been compacted yet.",
   "operator.memory.openSession": "Open session",
 
+  "operator.agentForm.promptMode": "Prompt profile",
+  "operator.agentForm.promptModeHint.profile":
+    "The system prompt comes from the profile, with this agent's prompt in Identity. Purpose (org values and the project goal) is always included.",
+  "operator.agentForm.promptModeHint.layers":
+    "The profile, plus layers of this agent's own added to the end of the groups you choose.",
+  "operator.agentForm.promptModeHint.custom":
+    "No profile: Purpose (always included), this agent's prompt, and the generated sections you tick.",
+  "operator.agentForm.profile": "Profile",
+  "operator.agentForm.defaultProfile": "The project's or global default",
+  "operator.agentForm.extraLayers": "This agent's layers",
+  "operator.agentForm.extraLayersHint": "Each is added to the end of its group.",
+  "operator.agentForm.toGroup": "Group",
+  "operator.agentForm.layer": "Layer",
+  "operator.agentForm.addLayer": "Add",
+  "operator.agentForm.generated": "Generated sections",
+  "operator.agentForm.generatedHint": "Sent after this agent's prompt, in the Default profile's order.",
   "operator.profile.view": "View",
   "operator.profile.view.layers": "Layer Definition",
   "operator.profile.view.groups": "Group Definition",

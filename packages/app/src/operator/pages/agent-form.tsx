@@ -18,6 +18,7 @@ import { type Rule, rulesFromConfig, rulesToConfig } from "../ui/rules"
 import { RulesEditor } from "../ui/rules-editor"
 import { type Scope, ScopeSwitch } from "../ui/scope-switch"
 import { useAgents } from "./agents"
+import { PromptModeField } from "./agent-form-prompt"
 import { agentPatch, type AgentForm, formFromSettings } from "./agent-form-state"
 import { requestError } from "./config-helpers"
 
@@ -226,6 +227,7 @@ export default function AgentFormPage() {
               onInput={(event) => set("prompt", event.currentTarget.value)}
             />
           </Field>
+          <PromptModeField form={store.form} set={set} />
           <Field
             group
             label={language.t("operator.agent.tab.permissions")}
