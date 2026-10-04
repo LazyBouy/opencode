@@ -114,40 +114,6 @@ export const agents = [
   },
 ]
 
-export const identityLayers = [
-  {
-    scope: "global",
-    file: "company.md",
-    path: "/home/me/.config/opencode/identity/company.md",
-    name: "Company",
-    kind: "org",
-    priority: 50,
-    enabled: true,
-    content: "We build editors.",
-  },
-  {
-    scope: "project",
-    file: "repo.md",
-    path: `${directory}/.opencode/identity/repo.md`,
-    name: "Repo",
-    kind: "project",
-    priority: 10,
-    enabled: true,
-    content: "This repo uses Bun.",
-  },
-  {
-    scope: "project",
-    file: "style.md",
-    path: `${directory}/.opencode/identity/style.md`,
-    name: "Style",
-    kind: "project",
-    priority: 20,
-    agents: ["build"],
-    enabled: true,
-    content: "Use tabs.",
-  },
-]
-
 export const pendingRequest = {
   directory,
   time: now - 120_000,
@@ -164,19 +130,10 @@ export const pendingRequest = {
 export const workspace = "/workspace"
 
 export const promptCatalog = {
-  prompts: [
-    { id: "base", kind: "base", builtin: "" },
-    { id: "base.anthropic", kind: "base", builtin: "You are OpenCode, the best coding agent on the planet." },
-    { id: "base.default", kind: "base", builtin: "You are opencode, an interactive CLI tool.", global: "Be terse." },
-    { id: "reminder.plan", kind: "reminder", builtin: "Plan mode is active. Do not edit files." },
-    { id: "notice.max-steps", kind: "notice", builtin: "Maximum steps reached.", project: "" },
-  ],
   tools: [
-    { id: "read", builtin: "Reads a file from the local filesystem.", project: "Reads files." },
+    { id: "read", builtin: "Reads a file from the local filesystem." },
     { id: "bash", builtin: "Runs a shell command." },
   ],
-  toggles: { environment: true, skills: true, mcp: true },
-  folders: { global: "/home/me/.config/opencode/prompts", project: `${directory}/.opencode/prompts` },
 }
 
 const section = (
@@ -396,9 +353,7 @@ export interface OperatorMock {
   readonly connects: string[]
   readonly sessionQueries: URLSearchParams[]
   readonly agentWrites: Array<{ method: string; url: string; body: unknown }>
-  readonly identityWrites: Array<{ method: string; url: string; body: unknown }>
   readonly sessionCreates: Array<{ url: string; body: unknown }>
-  readonly promptWrites: Array<{ method: string; url: string; body: unknown }>
   readonly folderWrites: Array<{ url: string; body: unknown }>
   readonly memoryWrites: Array<{ url: string; body: unknown }>
   readonly projectsOpened: string[]
@@ -421,9 +376,7 @@ export async function mockOperator(page: Page) {
     connects: [],
     sessionQueries: [],
     agentWrites: [],
-    identityWrites: [],
     sessionCreates: [],
-    promptWrites: [],
     folderWrites: [],
     memoryWrites: [],
     projectsOpened: [],
@@ -489,20 +442,6 @@ export async function mockOperator(page: Page) {
       return json(route, { path: `${directory}/.opencode/agents/new.md` })
     }
     if (url.pathname === "/operator/agent") return json(route, agents)
-    if (url.pathname === "/operator/identity") return json(route, identityLayers)
-    if (url.pathname === "/operator/identity/preview")
-      return json(route, {
-        text:
-          url.searchParams.get("agent") === "build"
-            ? "We build editors.\n\nThis repo uses Bun.\n\nUse tabs."
-            : "We build editors.\n\nThis repo uses Bun.",
-      })
-    if (url.pathname.startsWith("/operator/identity/")) {
-      state.identityWrites.push({ method, url: url.toString(), body: route.request().postDataJSON() })
-      if (url.pathname === "/operator/identity/reorder") return json(route, identityLayers)
-      if (method === "DELETE") return json(route, true)
-      return json(route, identityLayers[1])
-    }
     if (url.pathname === "/operator/tool")
       return json(route, [
         { id: "read", description: "Read a file", origin: "builtin" },
@@ -640,10 +579,6 @@ export async function mockOperator(page: Page) {
           ...promptPreview.sections.slice(2),
         ],
       })
-    }
-    if (url.pathname.startsWith("/operator/prompt/")) {
-      state.promptWrites.push({ method, url: url.toString(), body: route.request().postDataJSON() })
-      return json(route, true)
     }
     if (url.pathname === "/operator/folder/roots") return json(route, [workspace])
     if (url.pathname === "/operator/folder" && method === "GET")
