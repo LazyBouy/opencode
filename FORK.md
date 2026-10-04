@@ -26,7 +26,7 @@ Fork code lives in **fork-only paths**. Upstream never touches them, so they nev
 
 1. **Put new code in a fork-only path.**
 2. **Register through the existing aggregators instead of editing upstream again:**
-   - Routes: add a per-project group to `OperatorApi` in `packages/opencode/src/operator/http/api.ts`, or a server-wide one to `OperatorRootApi` (`http/groups/overview.ts`), and its handler to `http/handlers.ts`. Add its HTTP scenarios to `test/server/httpapi-exercise/operator.ts`.
+   - Routes: add a per-project group to `OperatorApi` in `packages/opencode/src/operator/http/api.ts`, or a server-wide one to `OperatorRootApi` (`http/groups/overview.ts`, as `http/groups/folders.ts` is), and its handler to `http/handlers.ts`. Add its HTTP scenarios to `test/server/httpapi-exercise/operator.ts`. A `GET` route must not have the same path as a web page (`/operator/memory` is a page, so its data is `/operator/memory/overview`): where the app and the API share an origin, the page would load as JSON.
    - Services the routes need: add them to `packages/opencode/src/operator/nodes.ts`.
    - Top-level config keys: add them to `fields` in `packages/core/src/v1/config/fork.ts`; agent keys to `agentFields` there.
    - Built-in plugins: add them to `operatorPlugins` in `packages/opencode/src/operator/plugins.ts`.
@@ -44,7 +44,7 @@ Re-check these after every upstream merge. **Risk** is how likely the file is to
 | File | Why | Risk |
 |---|---|---|
 | `packages/opencode/src/session/processor.ts` | merge: `origin` on parts, `consume()` for adapter streams, doom-loop skip | high |
-| `packages/opencode/src/session/prompt.ts` | merge: turn branch and `/merge` dispatch | medium |
+| `packages/opencode/src/session/prompt.ts` | merge: turn branch and `/merge` dispatch; operator: the step-limit notice comes from `OperatorPromptText.maxSteps`, so it can be overridden | medium |
 | `packages/opencode/src/permission/index.ts` | merge: `dismiss` for cancelled child asks | low |
 | `packages/opencode/src/session/message-v2.ts`, `packages/opencode/src/session/compaction.ts`, `packages/opencode/src/share/share-next.ts`, `packages/opencode/src/cli/cmd/export.ts` | merge: keep projected parts out of the model, shares and exports | low |
 | `packages/opencode/src/command/index.ts` | merge: built-in `/merge` command | low |
@@ -54,7 +54,7 @@ Re-check these after every upstream merge. **Risk** is how likely the file is to
 | `packages/core/src/session.ts`, `packages/core/src/session/sql.ts` | merge: binding table and V2 prompt guard | low |
 | `packages/core/src/v1/config/config.ts` | spread `ConfigForkV1.fields` (one line) | low |
 | `packages/core/src/v1/config/agent.ts` | spread `ConfigForkV1.agentFields` into the agent schema and `agentKeys` into `KNOWN_KEYS`, so fork agent keys (such as `home`) are not sent to providers as options | low |
-| `packages/opencode/src/plugin/index.ts` | add `operatorPlugins` (identity layers) to the built-in plugins; they are off when default plugins are disabled | low |
+| `packages/opencode/src/plugin/index.ts` | add `operatorPlugins` (identity layers, prompt overrides and section switches) to the built-in plugins; they are off when default plugins are disabled | low |
 | `packages/opencode/src/session/llm/request.ts`, `packages/plugin/src/index.ts` | pass the agent name to `experimental.chat.system.transform` (upstream-able) | low |
 | `packages/schema/src/event-manifest.ts`, `packages/schema/src/v1/session.ts` | merge: event and `origin` on parts | low |
 | `packages/server/src/handlers/session.ts` | merge: `MergedError` → 409 | low |
@@ -95,6 +95,13 @@ The script works in four stages:
    - typechecks the touched packages;
    - runs the merge and operator tests, the HttpApi coverage gate, and the app unit tests.
 4. It lists upstream files the fork now edits that are missing from the table above.
+
+**Prompt texts.** The Prompt Profile lists every text OpenCode adds to prompts, so new upstream texts must be added to it. After a merge, check `packages/opencode/src/session/system.ts`, `session/prompt/*.txt`, `session/reminders.ts` and the generated sections in `session/system.ts`:
+- a new prompt file or model family goes in `BUILTINS` in `packages/opencode/src/operator/prompt-text.ts` (and its description in `packages/app/src/operator/i18n/en.ts`);
+- a changed generated section (environment, skills, MCP) needs `SECTION_PATTERNS` there updated;
+- a new part of the system prompt needs a section in `OperatorPrompts.preview` (`operator/prompts.ts`).
+
+`test/operator/prompts-e2e.test.ts` fails when the preview no longer matches what is sent.
 
 Then run the browser suites:
 
