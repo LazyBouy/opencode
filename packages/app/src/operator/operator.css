@@ -795,3 +795,79 @@ html[data-theme="iphi"] [data-component="operator-inspector"] {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Expandable text: built-in prompt texts, raw system messages, compaction summaries. */
+[data-slot="operator-details"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+}
+[data-slot="operator-details"] > summary {
+  cursor: pointer;
+  color: var(--v2-text-text-muted);
+  padding: 4px 0;
+}
+[data-slot="operator-details"][open] > :not(summary) {
+  margin-top: 8px;
+}
+
+[data-slot="operator-prompt-section"] [data-slot="operator-panel-head"] {
+  gap: 12px;
+}
+
+/* Folder browser (Projects → Add project). */
+[data-component="operator-folders"] {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+[data-component="operator-folders"] [data-slot="operator-folders-path"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+[data-component="operator-folders"] [data-slot="operator-folders-crumbs"] {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--v2-text-text-muted);
+  word-break: break-all;
+}
+[data-component="operator-folders"] [data-slot="operator-folders-crumbs"] [aria-current] {
+  color: var(--v2-text-text-base);
+  font-weight: 500;
+}
+[data-component="operator-folders"] [data-component="operator-layers"] {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--v2-border-border-muted);
+  border-radius: 8px;
+  padding: 4px;
+}
+[data-component="operator-folders"] [data-slot="operator-folders-new"] {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+[data-component="operator-folders"] [data-slot="operator-folders-new"] > :first-child {
+  flex: 1;
+  min-width: 180px;
+}
+[data-component="operator-folders"] [data-slot="operator-folders-notice"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--v2-background-bg-layer-01);
+  font-size: 13px;
+  color: var(--v2-text-text-muted);
+}

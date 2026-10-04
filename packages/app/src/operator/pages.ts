@@ -23,6 +23,8 @@ export interface OperatorPage {
 
 // The operator console's pages, in sidebar order. Routes, the sidebar and the command palette all
 // read this list, so a new page is added here once.
+// Page paths must not equal a GET route of the server's /operator API: where the app and the API
+// share an origin, loading the page would return the API's JSON.
 export const operatorPages: readonly OperatorPage[] = [
   { id: "dashboard", path: "/operator", icon: "dot-grid" },
   { id: "projects", path: "/operator/projects", icon: "folder" },

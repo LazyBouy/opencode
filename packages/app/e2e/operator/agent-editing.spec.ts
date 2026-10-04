@@ -91,7 +91,7 @@ test("a file agent can be turned off and deleted", async ({ page }) => {
 
 test("the prompt profile lists layers, saves edits, reorders and previews per agent", async ({ page }) => {
   const state = await mockOperator(page)
-  await page.goto(`/operator/profile${dir}`)
+  await page.goto(`/operator/profile${dir}&tab=identity`)
   const layers = page.locator('[data-component="operator-layers"] li')
   await expect(layers).toHaveCount(3)
   await expect(layers.nth(0)).toContainText("Company")

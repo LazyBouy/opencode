@@ -149,6 +149,96 @@ export const pendingRequest = {
   },
 }
 
+export const workspace = "/workspace"
+
+export const promptCatalog = {
+  prompts: [
+    { id: "base", kind: "base", builtin: "" },
+    { id: "base.anthropic", kind: "base", builtin: "You are OpenCode, the best coding agent on the planet." },
+    { id: "base.default", kind: "base", builtin: "You are opencode, an interactive CLI tool.", global: "Be terse." },
+    { id: "reminder.plan", kind: "reminder", builtin: "Plan mode is active. Do not edit files." },
+    { id: "notice.max-steps", kind: "notice", builtin: "Maximum steps reached.", project: "" },
+  ],
+  tools: [
+    { id: "read", builtin: "Reads a file from the local filesystem.", project: "Reads files." },
+    { id: "bash", builtin: "Runs a shell command." },
+  ],
+  toggles: { environment: true, skills: true, mcp: true },
+  folders: { global: "/home/me/.config/opencode/prompts", project: `${directory}/.opencode/prompts` },
+}
+
+export const promptPreview = {
+  agent: "build",
+  model: "opencode/claude-opus-4-6",
+  base: "base.default",
+  sections: [
+    { kind: "identity", source: "identity", text: "We build editors." },
+    { kind: "base", source: "base.default", text: "Be terse." },
+    {
+      kind: "environment",
+      source: "generated",
+      text: "You are powered by the model named Claude Opus 4.6.\n<env>\n  Working directory: /repo\n</env>",
+    },
+    {
+      kind: "instructions",
+      source: `${directory}/AGENTS.md`,
+      text: `Instructions from: ${directory}/AGENTS.md\nUse Bun.`,
+    },
+    { kind: "skills", source: "generated", text: "<available_skills>\n  <skill>review</skill>\n</available_skills>" },
+  ],
+  system: ["We build editors.", "Be terse.\nYou are powered by the model named Claude Opus 4.6."],
+}
+
+export const memoryOverview = {
+  files: [
+    {
+      kind: "instructions",
+      scope: "project",
+      path: `${directory}/AGENTS.md`,
+      size: 1536,
+      modified: now - 600_000,
+      loaded: "always",
+      editable: true,
+    },
+    {
+      kind: "nested",
+      scope: "project",
+      path: `${directory}/packages/web/AGENTS.md`,
+      size: 200,
+      modified: now - 86_400_000,
+      loaded: "when-reading",
+      editable: true,
+    },
+    {
+      kind: "skill",
+      scope: "global",
+      path: "/home/me/.config/opencode/skills/review/SKILL.md",
+      size: 900,
+      loaded: "on-demand",
+      editable: true,
+    },
+    { kind: "url", scope: "project", path: "https://example.com/rules.md", loaded: "always", editable: false },
+  ],
+  creatable: [{ scope: "global", path: "/home/me/.config/opencode/AGENTS.md" }],
+  database: {
+    path: "/home/me/.local/share/opencode/opencode.db",
+    size: 5 * 1024 * 1024,
+    tables: [
+      { name: "message", rows: 120 },
+      { name: "part", rows: 900 },
+      { name: "session", rows: 12 },
+    ],
+  },
+  summaries: [
+    {
+      sessionID: "ses_op_1",
+      title: "Fix the parser",
+      time: now - 600_000,
+      text: "We fixed the tokenizer and added tests.",
+    },
+  ],
+}
+
 export interface OperatorMock {
   readonly replies: Array<{ url: string; body: unknown }>
   readonly writes: Array<{ url: string; body: unknown }>
@@ -157,6 +247,11 @@ export interface OperatorMock {
   readonly agentWrites: Array<{ method: string; url: string; body: unknown }>
   readonly identityWrites: Array<{ method: string; url: string; body: unknown }>
   readonly sessionCreates: Array<{ url: string; body: unknown }>
+  readonly promptWrites: Array<{ method: string; url: string; body: unknown }>
+  readonly folderWrites: Array<{ url: string; body: unknown }>
+  readonly memoryWrites: Array<{ url: string; body: unknown }>
+  readonly projectsOpened: string[]
+  readonly folders: Set<string>
   pending: (typeof pendingRequest)[]
   rejectWrite?: string
 }
@@ -170,8 +265,24 @@ export async function mockOperator(page: Page) {
     agentWrites: [],
     identityWrites: [],
     sessionCreates: [],
+    promptWrites: [],
+    folderWrites: [],
+    memoryWrites: [],
+    projectsOpened: [],
+    folders: new Set([`${workspace}/apps`, `${workspace}/site`]),
     pending: [pendingRequest],
   }
+  const repositories = new Set([`${workspace}/site`])
+  const listing = (path: string) => ({
+    path,
+    root: workspace,
+    ...(path === workspace ? {} : { parent: path.slice(0, path.lastIndexOf("/")) || "/" }),
+    project: repositories.has(path),
+    folders: [...state.folders]
+      .filter((folder) => folder.slice(0, folder.lastIndexOf("/")) === path)
+      .sort()
+      .map((folder) => ({ name: folder.slice(path.length + 1), path: folder, project: repositories.has(folder) })),
+  })
   const json = (route: Route, body: unknown, status = 200) =>
     route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) })
 
@@ -262,7 +373,54 @@ export async function mockOperator(page: Page) {
         )
       return json(route, { path: `${directory}/.opencode/opencode.jsonc`, changed: true })
     }
+    if (url.pathname === "/operator/config" && method === "PATCH") {
+      state.writes.push({ url: url.toString(), body: route.request().postDataJSON() })
+      return json(route, { path: `${directory}/.opencode/opencode.jsonc`, changed: true })
+    }
+    if (url.pathname === "/operator/prompt") return json(route, promptCatalog)
+    if (url.pathname === "/operator/prompt/preview") return json(route, promptPreview)
+    if (url.pathname.startsWith("/operator/prompt/")) {
+      state.promptWrites.push({ method, url: url.toString(), body: route.request().postDataJSON() })
+      return json(route, true)
+    }
+    if (url.pathname === "/operator/folder/roots") return json(route, [workspace])
+    if (url.pathname === "/operator/folder" && method === "GET")
+      return json(route, listing(url.searchParams.get("path") ?? workspace))
+    if (url.pathname === "/operator/folder" && method === "POST") {
+      const body = route.request().postDataJSON() as { parent: string; name: string; git?: boolean }
+      state.folderWrites.push({ url: url.toString(), body })
+      const created = `${body.parent}/${body.name}`
+      state.folders.add(created)
+      if (body.git) repositories.add(created)
+      return json(route, { path: created })
+    }
+    if (url.pathname === "/operator/folder/init") {
+      const body = route.request().postDataJSON() as { path: string }
+      state.folderWrites.push({ url: url.toString(), body })
+      repositories.add(body.path)
+      return json(route, { path: body.path })
+    }
+    if (url.pathname === "/operator/memory/overview") return json(route, memoryOverview)
+    if (url.pathname === "/operator/memory/file" && method === "GET")
+      return json(route, { path: url.searchParams.get("path"), text: "# Project rules\nUse Bun.\n" })
+    if (url.pathname === "/operator/memory/file") {
+      state.memoryWrites.push({ url: url.toString(), body: route.request().postDataJSON() })
+      return json(route, true)
+    }
     return route.fallback()
+  })
+
+  await page.route("**/project/current*", (route) => {
+    const opened = new URL(route.request().url()).searchParams.get("directory")
+    if (!opened?.startsWith(workspace)) return route.fallback()
+    state.projectsOpened.push(opened)
+    return json(route, {
+      id: "proj_new",
+      worktree: opened,
+      vcs: "git",
+      time: { created: now, updated: now },
+      sandboxes: [],
+    })
   })
 
   await page.route("**/session/*/children*", (route) =>

@@ -39,3 +39,20 @@ export function shortPath(value: string) {
 export function sessionFolder(session: { directory: string; project?: { worktree: string } | null }) {
   return session.project && session.project.worktree !== "/" ? session.project.worktree : session.directory
 }
+
+export function formatBytes(value: number, locale: string) {
+  const units = ["B", "KB", "MB", "GB"]
+  const power = value > 0 ? Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1) : 0
+  const amount = new Intl.NumberFormat(locale, { maximumFractionDigits: power ? 1 : 0 }).format(value / 1024 ** power)
+  return `${amount} ${units[power]}`
+}
+
+// The folders from a workspace root down to `path` (which is inside it), for breadcrumbs.
+export function crumbs(root: string, path: string) {
+  const base = root.replace(/\/+$/, "") || "/"
+  const rest = path.slice(base.length).split("/").filter(Boolean)
+  return [
+    { name: root, path: root },
+    ...rest.map((name, index) => ({ name, path: [base === "/" ? "" : base, ...rest.slice(0, index + 1)].join("/") })),
+  ]
+}

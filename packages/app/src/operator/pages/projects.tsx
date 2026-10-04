@@ -4,7 +4,6 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import type { OperatorProject } from "@opencode-ai/sdk/v2/client"
 import { useQuery, useQueryClient } from "@tanstack/solid-query"
 import { Show } from "solid-js"
-import { useDirectoryPicker } from "@/components/directory-picker"
 import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
 import { useServer } from "@/context/server"
@@ -13,6 +12,7 @@ import { showToast } from "@/utils/toast"
 import { useOperatorClient } from "../data"
 import { formatAgo, formatCost, formatCount } from "../format"
 import { DataTable } from "../ui/data-table"
+import { useFolderBrowser } from "../ui/folder-browser"
 import { PageHeader } from "../ui/page-header"
 import { requestError } from "./config-helpers"
 
@@ -26,7 +26,7 @@ export default function ProjectsPage() {
   const server = useServer()
   const global = useGlobal()
   const tabs = useTabs()
-  const pickDirectory = useDirectoryPicker()
+  const browse = useFolderBrowser()
   const locale = () => language.intl()
 
   const projects = useQuery(() => ({
@@ -58,18 +58,10 @@ export default function ProjectsPage() {
         showToast({ title: language.t("operator.projects.addFailed"), description: requestError(error) }),
       )
   }
-  const choose = () => {
-    const conn = server.current
-    if (!conn) return
-    pickDirectory({
-      server: conn,
-      title: language.t("command.project.open"),
-      multiple: true,
-      onSelect: (result) => {
-        if (Array.isArray(result)) return add(result)
-        if (result) add([result])
-      },
-    })
+  // Any folder in the server's workspace, including new ones created in the browser.
+  const choose = async () => {
+    const directory = await browse()
+    if (directory) add([directory])
   }
 
   return (
@@ -78,7 +70,7 @@ export default function ProjectsPage() {
         title={language.t("operator.page.projects.title")}
         description={language.t("operator.page.projects.description")}
         actions={
-          <ButtonV2 size="small" variant="contrast" onClick={choose}>
+          <ButtonV2 size="small" variant="contrast" onClick={() => void choose()}>
             {language.t("operator.projects.add")}
           </ButtonV2>
         }
