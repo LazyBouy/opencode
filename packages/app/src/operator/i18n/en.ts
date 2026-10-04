@@ -280,7 +280,8 @@ export const dict = {
   "operator.agentForm.hiddenHint": "Hide from the @ menu (subagents only)",
   "operator.agentForm.home": "Home folder",
   "operator.agentForm.homeHint": "Sessions started as this agent open in this folder. It is created if missing.",
-  "operator.agentForm.promptHint": "The agent's system prompt. Leave empty to use the model provider's default.",
+  "operator.agentForm.promptHint":
+    "The agent's own prompt. It goes last in Identity, after Purpose (org values and the project goal) and the identity layers.",
   "operator.agentForm.create": "Create agent",
   "operator.agentForm.saved": "{{name}} saved",
 

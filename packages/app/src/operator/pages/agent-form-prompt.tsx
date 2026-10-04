@@ -12,6 +12,10 @@ import { type AgentForm, GENERATED, type Generated, type PromptMode } from "./ag
 import { usePromptProfile, useProfileNames } from "./profile-data"
 import { allowedIn } from "./profile-model"
 
+// The profile option meaning "the project's default, else the global one" (unset). Profile ids are
+// slugs, so this cannot collide with one.
+const DEFAULT_CHAIN = "@defaults"
+
 // The agent's prompt mode: its profile as it is, the profile plus layers of its own, or a fully
 // custom prompt (Purpose and its own prompt, plus the generated sections it picks).
 export function PromptModeField(props: {
@@ -47,26 +51,29 @@ export function PromptModeField(props: {
       label={language.t("operator.agentForm.promptMode")}
       hint={language.t(`operator.agentForm.promptModeHint.${props.form.promptMode}`)}
     >
-      <SegmentedControlV2
-        value={props.form.promptMode}
-        onChange={(value) => value && props.set("promptMode", value as PromptMode)}
-      >
-        <SegmentedControlItemV2 value="profile">{language.t("operator.prompts.mode.profile")}</SegmentedControlItemV2>
-        <SegmentedControlItemV2 value="layers">{language.t("operator.prompts.mode.layers")}</SegmentedControlItemV2>
-        <SegmentedControlItemV2 value="custom">{language.t("operator.prompts.mode.custom")}</SegmentedControlItemV2>
-      </SegmentedControlV2>
+      <div style={{ "max-width": "420px" }}>
+        <SegmentedControlV2
+          class="segmented-control-v2--full-width"
+          value={props.form.promptMode}
+          onChange={(value) => value && props.set("promptMode", value as PromptMode)}
+        >
+          <SegmentedControlItemV2 value="profile">{language.t("operator.prompts.mode.profile")}</SegmentedControlItemV2>
+          <SegmentedControlItemV2 value="layers">{language.t("operator.prompts.mode.layers")}</SegmentedControlItemV2>
+          <SegmentedControlItemV2 value="custom">{language.t("operator.prompts.mode.custom")}</SegmentedControlItemV2>
+        </SegmentedControlV2>
+      </div>
       <Switch>
         <Match when={props.form.promptMode !== "custom"}>
           <Field group label={language.t("operator.agentForm.profile")}>
             <SelectV2<string>
               appearance="base"
-              options={["", ...(catalog()?.profiles ?? []).map((item) => item.id)]}
-              current={props.form.promptProfile}
+              options={[DEFAULT_CHAIN, ...(catalog()?.profiles ?? []).map((item) => item.id)]}
+              current={props.form.promptProfile || DEFAULT_CHAIN}
               label={(id) => {
                 const found = catalog()?.profiles.find((item) => item.id === id)
                 return found ? names.profile(found) : language.t("operator.agentForm.defaultProfile")
               }}
-              onSelect={(id) => props.set("promptProfile", id ?? "")}
+              onSelect={(id) => props.set("promptProfile", !id || id === DEFAULT_CHAIN ? "" : id)}
             />
           </Field>
           <Show when={props.form.promptMode === "layers"}>
