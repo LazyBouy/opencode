@@ -2,7 +2,7 @@ import { useNavigate } from "@solidjs/router"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
-import type { OperatorPromptSection } from "@opencode-ai/sdk/v2/client"
+import type { OperatorPromptAssembledSection } from "@opencode-ai/sdk/v2/client"
 import { useQuery } from "@tanstack/solid-query"
 import { createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -59,27 +59,31 @@ export function AgentPrompt(props: { agent: string; directory: string }) {
       `/operator/profile?dir=${encodeURIComponent(props.directory)}&tab=${tab}${text ? `&text=${encodeURIComponent(text)}` : ""}`,
     )
 
-  const source = (section: OperatorPromptSection) =>
+  const source = (section: OperatorPromptAssembledSection) =>
     section.source.startsWith("/") ? shortPath(section.source) : section.source
 
-  const action = (section: OperatorPromptSection) => {
-    if (section.kind === "identity")
-      return { label: language.t("operator.prompts.editLayers"), run: () => profile("identity") }
-    if (section.kind === "base")
-      return { label: language.t("operator.prompts.edit"), run: () => profile("texts", section.source) }
-    if (section.kind === "agent")
+  // Where to change a section's text.
+  const action = (section: OperatorPromptAssembledSection) => {
+    if (section.layer === "slot.agent")
       return {
         label: language.t("operator.prompts.editAgent"),
         run: () =>
           navigate(
-            `/operator/agents/${encodeURIComponent(section.source)}/edit?dir=${encodeURIComponent(props.directory)}`,
+            `/operator/agents/${encodeURIComponent(props.agent)}/edit?dir=${encodeURIComponent(props.directory)}`,
           ),
       }
-    if (section.kind === "instructions")
+    if (section.layer === "generated.instructions")
       return {
         label: language.t("operator.prompts.openMemory"),
         run: () => navigate(`/operator/memory?dir=${encodeURIComponent(props.directory)}`),
       }
+    if (section.section === "generated") return undefined
+    if (section.section === "identity")
+      return { label: language.t("operator.prompts.editLayers"), run: () => profile("identity") }
+    return {
+      label: language.t("operator.prompts.edit"),
+      run: () => profile("texts", section.overrides ?? section.layer),
+    }
   }
 
   return (
@@ -110,6 +114,14 @@ export function AgentPrompt(props: { agent: string; directory: string }) {
       <Show when={preview.data}>
         {(data) => (
           <>
+            <dl data-component="operator-facts">
+              <dt>{language.t("operator.prompts.project")}</dt>
+              <dd>{data().project.name}</dd>
+              <dt>{language.t("operator.prompts.profile")}</dt>
+              <dd>{data().profile.name}</dd>
+              <dt>{language.t("operator.prompts.mode")}</dt>
+              <dd>{language.t(`operator.prompts.mode.${data().mode}`)}</dd>
+            </dl>
             <p data-slot="operator-note">
               {language.t("operator.prompts.summary", {
                 model: data().model,
@@ -124,10 +136,12 @@ export function AgentPrompt(props: { agent: string; directory: string }) {
               {(section) => (
                 <section data-component="operator-panel" data-slot="operator-prompt-section">
                   <div data-slot="operator-panel-head">
-                    <span class="flex items-center gap-2 min-w-0">
-                      <Tag variant={section.kind === "identity" || section.kind === "agent" ? "accent" : "neutral"}>
-                        {language.t(`operator.prompts.section.${section.kind}`)}
-                      </Tag>
+                    <span class="flex items-center gap-2 min-w-0 flex-wrap">
+                      <Tag variant={section.message === 1 ? "accent" : "neutral"}>{section.groupName}</Tag>
+                      <span data-slot="operator-layer-name">{section.layerName}</span>
+                      <Show when={section.mandatory}>
+                        <Tag>{language.t("operator.prompts.mandatory")}</Tag>
+                      </Show>
                       <span data-slot="operator-cell-clamp" title={section.source}>
                         {source(section)}
                       </span>

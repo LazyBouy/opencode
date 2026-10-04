@@ -167,26 +167,58 @@ export const promptCatalog = {
   folders: { global: "/home/me/.config/opencode/prompts", project: `${directory}/.opencode/prompts` },
 }
 
+const section = (
+  groupName: string,
+  groupType: string,
+  layerName: string,
+  fields: { layer: string; section: string; text: string; source?: string; mandatory?: boolean; overrides?: string },
+) => ({
+  group: `builtin.${groupType}`,
+  groupName,
+  groupType,
+  entry: fields.layer,
+  layerName,
+  source: "generated",
+  mandatory: false,
+  message: ["purpose", "identity", "role", "platform"].includes(groupType) ? 1 : 2,
+  ...fields,
+})
+
 export const promptPreview = {
   agent: "build",
   model: "opencode/claude-opus-4-6",
   base: "base.default",
+  project: { key: "opencode", name: "OpenCode" },
+  profile: { id: "default", name: "Default" },
+  mode: "profile",
   sections: [
-    { kind: "identity", source: "identity", text: "We build editors." },
-    { kind: "base", source: "base.default", text: "Be terse." },
-    {
-      kind: "environment",
-      source: "generated",
+    section("Purpose", "purpose", "Terse", {
+      layer: "terse",
+      section: "base",
+      overrides: "base.default",
+      text: "Be terse.",
+      source: "terse",
+      mandatory: true,
+    }),
+    section("Identity", "identity", "voice", { layer: "file-voice", section: "identity", text: "We build editors." }),
+    section("Environment", "custom", "Environment", {
+      layer: "generated.environment",
+      section: "generated",
       text: "You are powered by the model named Claude Opus 4.6.\n<env>\n  Working directory: /repo\n</env>",
-    },
-    {
-      kind: "instructions",
-      source: `${directory}/AGENTS.md`,
+    }),
+    section("Project instructions", "custom", "Instructions", {
+      layer: "generated.instructions",
+      section: "generated",
       text: `Instructions from: ${directory}/AGENTS.md\nUse Bun.`,
-    },
-    { kind: "skills", source: "generated", text: "<available_skills>\n  <skill>review</skill>\n</available_skills>" },
+      source: `${directory}/AGENTS.md`,
+    }),
+    section("Capabilities", "capabilities", "Skills", {
+      layer: "generated.skills",
+      section: "generated",
+      text: "<available_skills>\n  <skill>review</skill>\n</available_skills>",
+    }),
   ],
-  system: ["We build editors.", "Be terse.\nYou are powered by the model named Claude Opus 4.6."],
+  system: ["Be terse.\nWe build editors.", "You are powered by the model named Claude Opus 4.6."],
 }
 
 export const memoryOverview = {
@@ -386,11 +418,13 @@ export async function mockOperator(page: Page) {
       return json(route, {
         ...promptPreview,
         agent: url.searchParams.get("agent"),
-        sections: promptPreview.sections.map((section) =>
-          section.kind === "base" && own
-            ? { kind: "agent", source: url.searchParams.get("agent"), text: own }
-            : section,
-        ),
+        sections: [
+          ...promptPreview.sections.slice(0, 2),
+          ...(own
+            ? [section("Identity", "identity", "Agent prompt", { layer: "slot.agent", section: "identity", text: own })]
+            : []),
+          ...promptPreview.sections.slice(2),
+        ],
       })
     }
     if (url.pathname.startsWith("/operator/prompt/")) {

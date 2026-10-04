@@ -22,20 +22,25 @@ test("an agent's Prompt tab shows every section with its source, and leads to it
 
   const sections = page.locator('[data-slot="operator-prompt-section"]')
   await expect(sections).toHaveCount(5)
-  await expect(sections.nth(0)).toContainText("Identity")
-  await expect(sections.nth(1)).toContainText("Base prompt")
-  await expect(sections.nth(1)).toContainText("Be terse.")
-  await expect(sections.nth(3)).toContainText("Instructions")
+  const facts = page.locator('[data-component="operator-facts"]')
+  await expect(facts).toContainText("OpenCode")
+  await expect(facts).toContainText("Default")
+  await expect(facts).toContainText("From profile")
+  await expect(sections.nth(0)).toContainText("Purpose")
+  await expect(sections.nth(0)).toContainText("Mandatory")
+  await expect(sections.nth(0)).toContainText("Be terse.")
+  await expect(sections.nth(1)).toContainText("Identity")
+  await expect(sections.nth(3)).toContainText("Project instructions")
   await expect(sections.nth(3)).toContainText("SmokeProject/AGENTS.md")
   await expect(sections.nth(4)).toContainText("<available_skills>")
   await expect(page.getByRole("switch")).toHaveCount(0)
 
   await page.getByText("Exactly as sent (2 system messages)").click()
   await expect(page.locator('[data-slot="operator-details"] [data-component="operator-code"]').first()).toHaveText(
-    "We build editors.",
+    "Be terse.\nWe build editors.",
   )
 
-  await sections.nth(1).getByRole("button", { name: "Edit" }).click()
+  await sections.nth(0).getByRole("button", { name: "Edit" }).click()
   await expect(page).toHaveURL(/\/operator\/profile\?/)
   await expect(page).toHaveURL(/tab=texts/)
   await expect(page).toHaveURL(/text=base\.default/)
