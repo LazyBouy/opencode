@@ -1,4 +1,4 @@
-import { useNavigate, useParams } from "@solidjs/router"
+import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
@@ -13,12 +13,17 @@ import { useConfirm } from "../ui/confirm"
 import { DataTable } from "../ui/data-table"
 import { EmptyState } from "../ui/empty-state"
 import { PageHeader } from "../ui/page-header"
+import { AgentPrompt } from "./agent-prompt"
 import { agentModel, useAgents } from "./agents"
 import { requestError } from "./config-helpers"
 
 export default function AgentPage() {
   const language = useLanguage()
   const params = useParams<{ name: string }>()
+  // The open tab is kept in the URL, so links can open the Prompt tab directly.
+  const [search, setSearch] = useSearchParams<{ tab?: string }>()
+  const tab = () =>
+    ["overview", "prompt", "permissions", "sessions"].includes(search.tab ?? "") ? search.tab! : "overview"
   const api = useOperatorClient()
   const openSession = useOpenSession()
   const directory = useScopedProject()
@@ -131,7 +136,7 @@ export default function AgentPage() {
               </span>
             }
           />
-          <TabsV2 defaultValue="overview">
+          <TabsV2 value={tab()} onChange={(value: string) => setSearch({ tab: value })}>
             <TabsV2.List>
               <TabsV2.Trigger value="overview">{language.t("operator.agent.tab.overview")}</TabsV2.Trigger>
               <TabsV2.Trigger value="prompt">{language.t("operator.agent.tab.prompt")}</TabsV2.Trigger>
@@ -158,12 +163,7 @@ export default function AgentPage() {
               </dl>
             </TabsV2.Content>
             <TabsV2.Content value="prompt">
-              <Show
-                when={current().prompt?.trim()}
-                fallback={<p data-slot="operator-note">{language.t("operator.agent.noPrompt")}</p>}
-              >
-                {(prompt) => <pre data-component="operator-code">{prompt()}</pre>}
-              </Show>
+              <Show when={directory()}>{(dir) => <AgentPrompt agent={current().name} directory={dir()} />}</Show>
             </TabsV2.Content>
             <TabsV2.Content value="permissions">
               <p data-slot="operator-note">{language.t("operator.agent.rulesHint")}</p>

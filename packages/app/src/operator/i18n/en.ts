@@ -70,7 +70,7 @@ export const dict = {
     "Settings forms for each section, badges for values set in this project, reset to the inherited value, and a raw JSONC editor.",
   "operator.page.profile.title": "Prompt Profile",
   "operator.page.profile.description":
-    "Everything that goes into an agent's prompts: the full system prompt, OpenCode's own texts, tool descriptions and identity layers. All of it can be changed.",
+    "OpenCode's own prompt texts, tool descriptions and identity layers. All of it can be changed. An agent's full prompt is on its page, under Prompt.",
   "operator.page.profile.planned":
     "Organization, user and project prompt layers you can write, reorder and preview for each agent.",
   "operator.page.models.title": "Providers & Models",
@@ -156,7 +156,6 @@ export const dict = {
   "operator.agent.temperature": "Temperature",
   "operator.agent.topP": "Top P",
   "operator.agent.steps": "Step limit",
-  "operator.agent.noPrompt": "This agent uses the model provider's default system prompt.",
   "operator.agent.rulesHint": "Rules are checked in order and the last one that matches a request decides it.",
   "operator.agent.noRules": "No rules; every request asks.",
   "operator.agent.noSessions": "No sessions in this project use this agent.",
@@ -333,19 +332,13 @@ export const dict = {
   "operator.profile.identityHint":
     "Identity layers are markdown files added at the very top of every system prompt, before anything else.",
 
-  "operator.prompts.tab.prompt": "Full prompt",
   "operator.prompts.tab.texts": "Built-in texts",
   "operator.prompts.tab.tools": "Tool descriptions",
   "operator.prompts.tab.identity": "Identity layers",
   "operator.prompts.modelHint": "Base prompts and the environment block depend on the model.",
+  "operator.prompts.folder": "Folder",
+  "operator.prompts.folderHint": "The environment, instruction files and skills depend on the folder.",
   "operator.prompts.agentModel": "The agent's model",
-  "operator.prompts.generated": "Generated sections",
-  "operator.prompts.generatedHint":
-    "OpenCode writes these from the project on every request. Turn one off to leave it out of every agent's prompt.",
-  "operator.prompts.toggle.environment": "Model, folder, platform and date",
-  "operator.prompts.toggle.skills": "List of available skills",
-  "operator.prompts.toggle.mcp": "Instructions from MCP servers",
-  "operator.prompts.switchFailed": "Couldn't change the setting",
   "operator.prompts.summary": "{{model}} · {{count}} sections · {{chars}} characters",
   "operator.prompts.chars": "{{count}} characters",
   "operator.prompts.section.identity": "Identity",
@@ -360,7 +353,6 @@ export const dict = {
   "operator.prompts.editLayers": "Edit layers",
   "operator.prompts.editAgent": "Edit agent",
   "operator.prompts.openMemory": "Open in Memory",
-  "operator.prompts.turnOff": "Turn off",
   "operator.prompts.perTurn": "Added to messages",
   "operator.prompts.perTurnHint":
     "Some texts are added to the conversation rather than the system prompt: plan-mode reminders, the switch back to building, the structured-output notice and the step-limit notice.",

@@ -16,9 +16,9 @@ test.beforeEach(async ({ page }) => {
   })
 })
 
-test("the full prompt shows every section with its source, and leads to its editor", async ({ page }) => {
+test("an agent's Prompt tab shows every section with its source, and leads to its editor", async ({ page }) => {
   const state = await mockOperator(page)
-  await page.goto(`/operator/profile${dir}`)
+  await page.goto(`/operator/agents/build${dir}&tab=prompt`)
 
   const sections = page.locator('[data-slot="operator-prompt-section"]')
   await expect(sections).toHaveCount(5)
@@ -28,6 +28,7 @@ test("the full prompt shows every section with its source, and leads to its edit
   await expect(sections.nth(3)).toContainText("Instructions")
   await expect(sections.nth(3)).toContainText("SmokeProject/AGENTS.md")
   await expect(sections.nth(4)).toContainText("<available_skills>")
+  await expect(page.getByRole("switch")).toHaveCount(0)
 
   await page.getByText("Exactly as sent (2 system messages)").click()
   await expect(page.locator('[data-slot="operator-details"] [data-component="operator-code"]').first()).toHaveText(
@@ -35,6 +36,7 @@ test("the full prompt shows every section with its source, and leads to its edit
   )
 
   await sections.nth(1).getByRole("button", { name: "Edit" }).click()
+  await expect(page).toHaveURL(/\/operator\/profile\?/)
   await expect(page).toHaveURL(/tab=texts/)
   await expect(page).toHaveURL(/text=base\.default/)
   const editor = page.getByLabel("Text", { exact: true })
@@ -48,15 +50,11 @@ test("the full prompt shows every section with its source, and leads to its edit
   expect(state.promptWrites[0].body).toEqual({ text: "Be terse and kind." })
 })
 
-test("generated sections can be switched off from the full prompt", async ({ page }) => {
-  const state = await mockOperator(page)
-  await page.goto(`/operator/profile${dir}`)
-  await expect(page.locator('[data-slot="operator-prompt-section"]')).toHaveCount(5)
-
-  await page.locator('[data-slot="operator-prompt-section"]').nth(4).getByRole("button", { name: "Turn off" }).click()
-  await expect.poll(() => state.writes.length).toBe(1)
-  expect(state.writes[0].url).toContain("scope=project")
-  expect(state.writes[0].body).toEqual({ prompts: { skills: false } })
+test("prompt profile no longer has a full prompt tab", async ({ page }) => {
+  await mockOperator(page)
+  await page.goto(`/operator/profile${dir}&tab=prompt`)
+  await expect(page.getByRole("tab", { name: "Built-in texts" })).toHaveAttribute("aria-selected", "true")
+  await expect(page.getByRole("tab", { name: "Full prompt" })).toHaveCount(0)
 })
 
 test("built-in texts show overrides, and tool descriptions can be reset", async ({ page }) => {

@@ -378,7 +378,21 @@ export async function mockOperator(page: Page) {
       return json(route, { path: `${directory}/.opencode/opencode.jsonc`, changed: true })
     }
     if (url.pathname === "/operator/prompt") return json(route, promptCatalog)
-    if (url.pathname === "/operator/prompt/preview") return json(route, promptPreview)
+    if (url.pathname === "/operator/prompt/preview") {
+      // An agent with its own prompt sends it instead of the base prompt.
+      const own = (
+        agents.find((agent) => agent.name === url.searchParams.get("agent")) as { prompt?: string } | undefined
+      )?.prompt
+      return json(route, {
+        ...promptPreview,
+        agent: url.searchParams.get("agent"),
+        sections: promptPreview.sections.map((section) =>
+          section.kind === "base" && own
+            ? { kind: "agent", source: url.searchParams.get("agent"), text: own }
+            : section,
+        ),
+      })
+    }
     if (url.pathname.startsWith("/operator/prompt/")) {
       state.promptWrites.push({ method, url: url.toString(), body: route.request().postDataJSON() })
       return json(route, true)

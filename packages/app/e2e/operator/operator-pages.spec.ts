@@ -54,7 +54,10 @@ test("the agents table filters, hides hidden agents and opens an agent", async (
   await expect(page).toHaveURL(/\/operator\/agents\/reviewer\?dir=/)
   await expect(page.getByRole("heading", { level: 1, name: "reviewer" })).toBeVisible()
   await page.getByRole("tab", { name: "Prompt" }).click()
-  await expect(page.locator('[data-component="operator-code"]')).toContainText("Review the diff carefully.")
+  await expect(page).toHaveURL(/tab=prompt/)
+  await expect(page.locator('[data-slot="operator-prompt-section"]').filter({ hasText: "Agent prompt" })).toContainText(
+    "Review the diff carefully.",
+  )
 })
 
 test("per-project pages use a project the server knows when none is open in the browser", async ({ page }) => {

@@ -2,40 +2,27 @@ import { useNavigate } from "@solidjs/router"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
-import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import type { OperatorPromptSection } from "@opencode-ai/sdk/v2/client"
-import { useQuery, useQueryClient } from "@tanstack/solid-query"
+import { useQuery } from "@tanstack/solid-query"
 import { createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
-import { showToast } from "@/utils/toast"
 import { useOperatorClient } from "../data"
 import { formatCount, shortPath } from "../format"
 import { Field } from "../ui/field"
-import { type Scope, ScopeSwitch } from "../ui/scope-switch"
-import { useAgents } from "./agents"
+import { ScopePicker } from "../ui/scope-picker"
 import { requestError } from "./config-helpers"
-import { usePromptCatalog } from "./profile-texts"
 
-type Toggle = "environment" | "skills" | "mcp"
 // The model option that means "whatever the agent uses".
 const AGENT_MODEL = "agent"
-const TOGGLES: Toggle[] = ["environment", "skills", "mcp"]
 
-// The section kinds a switch turns off; references go with the environment block.
-const toggleFor = (kind: OperatorPromptSection["kind"]): Toggle | undefined =>
-  kind === "references" ? "environment" : TOGGLES.find((item) => item === kind)
-
-// The whole system prompt an agent sends with a model in this project, section by section, with
-// where each part comes from and where to change it. Nothing is added that is not listed here.
-export function FullPrompt(props: { directory: string; onEdit: (tab: "texts" | "identity", id?: string) => void }) {
+// The whole system prompt an agent sends with a model from a folder, section by section, with where
+// each part comes from and where to change it. Nothing is added that is not listed here.
+export function AgentPrompt(props: { agent: string; directory: string }) {
   const language = useLanguage()
   const navigate = useNavigate()
   const api = useOperatorClient()
-  const queryClient = useQueryClient()
-  const agents = useAgents()
-  const catalog = usePromptCatalog(() => props.directory)
-  const [store, setStore] = createStore({ agent: "build", model: AGENT_MODEL, scope: "project" as Scope, busy: false })
+  const [store, setStore] = createStore({ model: AGENT_MODEL })
 
   const providers = useQuery(() => ({
     queryKey: api.key("providers", props.directory),
@@ -51,48 +38,35 @@ export function FullPrompt(props: { directory: string; onEdit: (tab: "texts" | "
       Object.values(provider.models).map((model) => `${provider.id}/${model.id}`),
     ),
   ])
-  const agentNames = createMemo(() => (agents.data ?? []).filter((agent) => !agent.disabled).map((agent) => agent.name))
 
   const preview = useQuery(() => ({
-    queryKey: api.key("prompt-preview", props.directory, store.agent, store.model),
+    queryKey: api.key("prompt-preview", props.directory, props.agent, store.model),
     queryFn: () => {
       const [provider, ...rest] = store.model.split("/")
       return api
         .client()
         .operator.prompt.preview({
           directory: props.directory,
-          agent: store.agent,
+          agent: props.agent,
           ...(store.model === AGENT_MODEL ? {} : { provider, model: rest.join("/") }),
         })
         .then((result) => result.data!)
     },
   }))
 
-  const toggle = async (name: Toggle, value: boolean) => {
-    setStore("busy", true)
-    await api
-      .client()
-      .operator.config.update({ directory: props.directory, scope: store.scope, body: { prompts: { [name]: value } } })
-      .then(() =>
-        Promise.all([
-          queryClient.invalidateQueries({ queryKey: api.key("prompt-catalog", props.directory) }),
-          queryClient.invalidateQueries({ queryKey: api.key("prompt-preview", props.directory) }),
-        ]),
-      )
-      .catch((error: unknown) =>
-        showToast({ title: language.t("operator.prompts.switchFailed"), description: requestError(error) }),
-      )
-      .finally(() => setStore("busy", false))
-  }
+  const profile = (tab: string, text?: string) =>
+    navigate(
+      `/operator/profile?dir=${encodeURIComponent(props.directory)}&tab=${tab}${text ? `&text=${encodeURIComponent(text)}` : ""}`,
+    )
 
   const source = (section: OperatorPromptSection) =>
     section.source.startsWith("/") ? shortPath(section.source) : section.source
 
   const action = (section: OperatorPromptSection) => {
     if (section.kind === "identity")
-      return { label: language.t("operator.prompts.editLayers"), run: () => props.onEdit("identity") }
+      return { label: language.t("operator.prompts.editLayers"), run: () => profile("identity") }
     if (section.kind === "base")
-      return { label: language.t("operator.prompts.edit"), run: () => props.onEdit("texts", section.source) }
+      return { label: language.t("operator.prompts.edit"), run: () => profile("texts", section.source) }
     if (section.kind === "agent")
       return {
         label: language.t("operator.prompts.editAgent"),
@@ -106,21 +80,14 @@ export function FullPrompt(props: { directory: string; onEdit: (tab: "texts" | "
         label: language.t("operator.prompts.openMemory"),
         run: () => navigate(`/operator/memory?dir=${encodeURIComponent(props.directory)}`),
       }
-    const name = toggleFor(section.kind)
-    if (name) return { label: language.t("operator.prompts.turnOff"), run: () => void toggle(name, false) }
   }
 
   return (
     <>
       <section data-component="operator-panel">
         <div data-slot="operator-form-row">
-          <Field group label={language.t("operator.column.agent")}>
-            <SelectV2<string>
-              appearance="base"
-              options={agentNames()}
-              current={store.agent}
-              onSelect={(name) => name && setStore("agent", name)}
-            />
+          <Field group label={language.t("operator.prompts.folder")} hint={language.t("operator.prompts.folderHint")}>
+            <ScopePicker />
           </Field>
           <Field group label={language.t("operator.column.model")} hint={language.t("operator.prompts.modelHint")}>
             <SelectV2<string>
@@ -131,26 +98,6 @@ export function FullPrompt(props: { directory: string; onEdit: (tab: "texts" | "
               onSelect={(value) => value && setStore("model", value)}
             />
           </Field>
-        </div>
-        <h2 data-slot="operator-panel-title">{language.t("operator.prompts.generated")}</h2>
-        <p data-slot="operator-note">{language.t("operator.prompts.generatedHint")}</p>
-        <div data-slot="operator-form-row">
-          <Field group label={language.t("operator.scope.label")}>
-            <ScopeSwitch value={store.scope} onChange={(scope) => setStore("scope", scope)} />
-          </Field>
-          <For each={TOGGLES}>
-            {(name) => (
-              <Field group label={language.t(`operator.prompts.section.${name}`)}>
-                <Switch
-                  checked={catalog.data?.toggles[name] ?? true}
-                  disabled={store.busy}
-                  onChange={(checked) => void toggle(name, checked)}
-                >
-                  {language.t(`operator.prompts.toggle.${name}`)}
-                </Switch>
-              </Field>
-            )}
-          </For>
         </div>
       </section>
 
@@ -204,7 +151,7 @@ export function FullPrompt(props: { directory: string; onEdit: (tab: "texts" | "
             <section data-component="operator-panel">
               <h2 data-slot="operator-panel-title">{language.t("operator.prompts.perTurn")}</h2>
               <p data-slot="operator-note">{language.t("operator.prompts.perTurnHint")}</p>
-              <ButtonV2 size="small" variant="outline" onClick={() => props.onEdit("texts", "reminder.plan")}>
+              <ButtonV2 size="small" variant="outline" onClick={() => profile("texts", "reminder.plan")}>
                 {language.t("operator.prompts.perTurnOpen")}
               </ButtonV2>
             </section>
