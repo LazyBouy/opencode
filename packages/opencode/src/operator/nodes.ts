@@ -3,7 +3,6 @@ import { MergeBinding } from "@/merge/binding"
 import { OperatorAgents } from "./agents"
 import { OperatorConfig } from "./config"
 import { OperatorFolders } from "./folders"
-import { OperatorIdentity } from "./identity"
 import { OperatorInbox } from "./inbox"
 import { OperatorMemory } from "./memory"
 import { OperatorOverview } from "./overview"
@@ -20,7 +19,6 @@ export const operatorNodes = [
   OperatorInbox.node,
   OperatorAgents.node,
   OperatorTools.node,
-  OperatorIdentity.node,
   OperatorPrompts.node,
   OperatorFolders.node,
   OperatorMemory.node,

@@ -1,6 +1,5 @@
 export * as OperatorPrompts from "./prompts"
 
-import fs from "fs/promises"
 import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -18,27 +17,13 @@ import { OperatorProfile } from "./profile"
 import { OperatorProfileStore } from "./profile-store"
 import { OperatorPromptText } from "./prompt-text"
 
-export const Entry = Schema.Struct({
-  id: Schema.String,
-  kind: OperatorPromptText.Kind,
-  builtin: Schema.String.annotate({ description: "OpenCode's own text" }),
-  global: Schema.optional(Schema.String).annotate({ description: "The global override, when there is one" }),
-  project: Schema.optional(Schema.String).annotate({ description: "The project override, when there is one" }),
-}).annotate({ identifier: "OperatorPrompt" })
-export type Entry = typeof Entry.Type
-
 export const ToolEntry = Schema.Struct({
   id: Schema.String,
-  builtin: Schema.String,
-  global: Schema.optional(Schema.String),
-  project: Schema.optional(Schema.String),
+  builtin: Schema.String.annotate({ description: "The tool's own description" }),
 }).annotate({ identifier: "OperatorPromptTool" })
 
 export const Catalog = Schema.Struct({
-  prompts: Schema.Array(Entry),
   tools: Schema.Array(ToolEntry),
-  toggles: OperatorPromptText.Toggles,
-  folders: Schema.Struct({ global: Schema.String, project: Schema.String }),
 }).annotate({ identifier: "OperatorPromptCatalog" })
 
 export const Preview = Schema.Struct({
@@ -66,9 +51,6 @@ export interface Interface {
     providerID?: string
     modelID?: string
   }) => Effect.Effect<Preview, NotFoundError>
-  /** Writes an override; an empty text turns the prompt off. */
-  readonly write: (scope: OperatorConfig.Scope, id: string, text: string) => Effect.Effect<void, NotFoundError>
-  readonly remove: (scope: OperatorConfig.Scope, id: string) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorPrompts") {}
@@ -83,46 +65,10 @@ const layer = Layer.effect(
     const registry = yield* ToolRegistry.Service
     const config = yield* Config.Service
 
-    const known = Effect.fnUntraced(function* (id: string) {
-      if (OperatorPromptText.BUILTINS.some((item) => item.id === id)) return true
-      if (!id.startsWith("tool.")) return false
-      return (yield* registry.ids()).includes(id.slice("tool.".length))
-    })
-
+    // The project's tools with their own descriptions; prompt profiles override them.
     const catalog = Effect.fn("OperatorPrompts.catalog")(function* () {
-      const ctx = yield* InstanceState.context
-      const folders = OperatorPromptText.promptFolders(ctx)
-      const read = (scope: OperatorConfig.Scope) =>
-        Effect.promise(async () => {
-          const names = await fs.readdir(folders[scope]).catch(() => [] as string[])
-          const entries = await Promise.all(
-            names
-              .filter((name) => name.endsWith(".md"))
-              .map(
-                async (name) =>
-                  [name.slice(0, -3), (await fs.readFile(path.join(folders[scope], name), "utf8")).trim()] as const,
-              ),
-          )
-          return new Map(entries)
-        })
-      const global = yield* read("global")
-      const project = folders.project === folders.global ? new Map<string, string>() : yield* read("project")
-      const scoped = (id: string) => ({
-        ...(global.has(id) ? { global: global.get(id) } : {}),
-        ...(project.has(id) ? { project: project.get(id) } : {}),
-      })
       const tools = (yield* registry.all()).filter((tool) => tool.id !== "invalid")
-      return {
-        prompts: OperatorPromptText.BUILTINS.map((item) => ({
-          id: item.id,
-          kind: item.kind,
-          builtin: item.text,
-          ...scoped(item.id),
-        })),
-        tools: tools.map((tool) => ({ id: tool.id, builtin: tool.description, ...scoped(`tool.${tool.id}`) })),
-        toggles: OperatorPromptText.toggles(yield* config.get()),
-        folders,
-      }
+      return { tools: tools.map((tool) => ({ id: tool.id, builtin: tool.description })) }
     })
 
     const preview = Effect.fn("OperatorPrompts.preview")(function* (input: {
@@ -181,28 +127,7 @@ const layer = Layer.effect(
       }
     })
 
-    const write = Effect.fn("OperatorPrompts.write")(function* (
-      scope: OperatorConfig.Scope,
-      id: string,
-      value: string,
-    ) {
-      if (!(yield* known(id))) return yield* new NotFoundError({ message: `No prompt "${id}"` })
-      const file = path.join(OperatorPromptText.promptFolders(yield* InstanceState.context)[scope], `${id}.md`)
-      yield* Effect.promise(async () => {
-        await fs.mkdir(path.dirname(file), { recursive: true })
-        await fs.writeFile(file, value.trim() ? `${value.trim()}\n` : "")
-      })
-    })
-
-    const remove = Effect.fn("OperatorPrompts.remove")(function* (scope: OperatorConfig.Scope, id: string) {
-      const file = path.join(
-        OperatorPromptText.promptFolders(yield* InstanceState.context)[scope],
-        `${path.basename(id)}.md`,
-      )
-      yield* Effect.promise(() => fs.rm(file, { force: true }))
-    })
-
-    return Service.of({ catalog, preview, write, remove })
+    return Service.of({ catalog, preview })
   }),
 )
 

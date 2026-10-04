@@ -3092,59 +3092,16 @@ export type OperatorTool = {
   source?: string
 }
 
-export type OperatorIdentityKind = "org" | "user" | "project"
-
-export type OperatorIdentityLayer = {
-  scope: OperatorConfigScope
-  /**
-   * File name inside the scope's identity folder
-   */
-  file: string
-  path: string
-  name: string
-  kind: OperatorIdentityKind
-  /**
-   * Lower comes first within a kind (default 50)
-   */
-  priority: number
-  agents?: Array<string>
-  maxLength?: number
-  enabled: boolean
-  content: string
-}
-
-export type OperatorPrompt = {
-  id: string
-  kind: "base" | "reminder" | "notice" | "generator"
-  /**
-   * OpenCode's own text
-   */
-  builtin: string
-  global?: string
-  project?: string
-}
-
 export type OperatorPromptTool = {
   id: string
+  /**
+   * The tool's own description
+   */
   builtin: string
-  global?: string
-  project?: string
-}
-
-export type OperatorPromptToggles = {
-  environment: boolean
-  skills: boolean
-  mcp: boolean
 }
 
 export type OperatorPromptCatalog = {
-  prompts: Array<OperatorPrompt>
   tools: Array<OperatorPromptTool>
-  toggles: OperatorPromptToggles
-  folders: {
-    global: string
-    project: string
-  }
 }
 
 export type OperatorPromptAssembledSection = {
@@ -12971,168 +12928,6 @@ export type OperatorToolListResponses = {
 
 export type OperatorToolListResponse = OperatorToolListResponses[keyof OperatorToolListResponses]
 
-export type OperatorIdentityListData = {
-  body?: never
-  path?: never
-  query?: {
-    directory?: string
-    workspace?: string
-  }
-  url: "/operator/identity"
-}
-
-export type OperatorIdentityListErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type OperatorIdentityListError = OperatorIdentityListErrors[keyof OperatorIdentityListErrors]
-
-export type OperatorIdentityListResponses = {
-  /**
-   * Identity layers in prompt order
-   */
-  200: Array<OperatorIdentityLayer>
-}
-
-export type OperatorIdentityListResponse = OperatorIdentityListResponses[keyof OperatorIdentityListResponses]
-
-export type OperatorIdentityRemoveData = {
-  body?: never
-  path?: never
-  query: {
-    directory?: string
-    workspace?: string
-    scope: OperatorConfigScope
-    file: string
-  }
-  url: "/operator/identity/layer"
-}
-
-export type OperatorIdentityRemoveErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type OperatorIdentityRemoveError = OperatorIdentityRemoveErrors[keyof OperatorIdentityRemoveErrors]
-
-export type OperatorIdentityRemoveResponses = {
-  /**
-   * Deleted
-   */
-  200: boolean
-}
-
-export type OperatorIdentityRemoveResponse = OperatorIdentityRemoveResponses[keyof OperatorIdentityRemoveResponses]
-
-export type OperatorIdentitySaveData = {
-  body?: {
-    scope: OperatorConfigScope
-    file?: string
-    name: string
-    kind?: OperatorIdentityKind
-    priority?: number
-    agents?: Array<string>
-    maxLength?: number
-    enabled?: boolean
-    content: string
-  }
-  path?: never
-  query?: {
-    directory?: string
-    workspace?: string
-  }
-  url: "/operator/identity/layer"
-}
-
-export type OperatorIdentitySaveErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type OperatorIdentitySaveError = OperatorIdentitySaveErrors[keyof OperatorIdentitySaveErrors]
-
-export type OperatorIdentitySaveResponses = {
-  /**
-   * The saved layer
-   */
-  200: OperatorIdentityLayer
-}
-
-export type OperatorIdentitySaveResponse = OperatorIdentitySaveResponses[keyof OperatorIdentitySaveResponses]
-
-export type OperatorIdentityReorderData = {
-  body?: {
-    scope: OperatorConfigScope
-    files: Array<string>
-  }
-  path?: never
-  query?: {
-    directory?: string
-    workspace?: string
-  }
-  url: "/operator/identity/reorder"
-}
-
-export type OperatorIdentityReorderErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type OperatorIdentityReorderError = OperatorIdentityReorderErrors[keyof OperatorIdentityReorderErrors]
-
-export type OperatorIdentityReorderResponses = {
-  /**
-   * Identity layers in prompt order
-   */
-  200: Array<OperatorIdentityLayer>
-}
-
-export type OperatorIdentityReorderResponse = OperatorIdentityReorderResponses[keyof OperatorIdentityReorderResponses]
-
-export type OperatorIdentityPreviewData = {
-  body?: never
-  path?: never
-  query?: {
-    directory?: string
-    workspace?: string
-    agent?: string
-  }
-  url: "/operator/identity/preview"
-}
-
-export type OperatorIdentityPreviewErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type OperatorIdentityPreviewError = OperatorIdentityPreviewErrors[keyof OperatorIdentityPreviewErrors]
-
-export type OperatorIdentityPreviewResponses = {
-  /**
-   * Identity text
-   */
-  200: {
-    text: string
-  }
-}
-
-export type OperatorIdentityPreviewResponse = OperatorIdentityPreviewResponses[keyof OperatorIdentityPreviewResponses]
-
 export type OperatorPromptCatalogData = {
   body?: never
   path?: never
@@ -13154,7 +12949,7 @@ export type OperatorPromptCatalogError = OperatorPromptCatalogErrors[keyof Opera
 
 export type OperatorPromptCatalogResponses = {
   /**
-   * Prompt texts, overrides and switches
+   * The project's tools
    */
   200: OperatorPromptCatalog
 }
@@ -13195,74 +12990,6 @@ export type OperatorPromptPreviewResponses = {
 }
 
 export type OperatorPromptPreviewResponse = OperatorPromptPreviewResponses[keyof OperatorPromptPreviewResponses]
-
-export type OperatorPromptRemoveData = {
-  body?: never
-  path: {
-    id: string
-  }
-  query: {
-    directory?: string
-    workspace?: string
-    scope: OperatorConfigScope
-  }
-  url: "/operator/prompt/{id}"
-}
-
-export type OperatorPromptRemoveErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type OperatorPromptRemoveError = OperatorPromptRemoveErrors[keyof OperatorPromptRemoveErrors]
-
-export type OperatorPromptRemoveResponses = {
-  /**
-   * Removed
-   */
-  200: boolean
-}
-
-export type OperatorPromptRemoveResponse = OperatorPromptRemoveResponses[keyof OperatorPromptRemoveResponses]
-
-export type OperatorPromptWriteData = {
-  body?: {
-    text: string
-  }
-  path: {
-    id: string
-  }
-  query: {
-    directory?: string
-    workspace?: string
-    scope: OperatorConfigScope
-  }
-  url: "/operator/prompt/{id}"
-}
-
-export type OperatorPromptWriteErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type OperatorPromptWriteError = OperatorPromptWriteErrors[keyof OperatorPromptWriteErrors]
-
-export type OperatorPromptWriteResponses = {
-  /**
-   * Saved
-   */
-  200: boolean
-}
-
-export type OperatorPromptWriteResponse = OperatorPromptWriteResponses[keyof OperatorPromptWriteResponses]
 
 export type OperatorMemoryOverviewData = {
   body?: never

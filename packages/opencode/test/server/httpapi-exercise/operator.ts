@@ -170,67 +170,16 @@ export const operatorScenarios: Scenario[] = [
     .status(400),
   http.protected.get("/operator/prompt", "operator.prompt.catalog").json(200, (body) => {
     object(body)
-    array(body.prompts)
     array(body.tools)
     check(
-      body.prompts.some((item) => isRecord(item) && item.id === "base.default"),
-      "the catalog should include the default base prompt",
+      body.tools.some((item) => isRecord(item) && item.id === "read" && typeof item.builtin === "string"),
+      "the catalog should list the read tool with its description",
     )
   }),
   http.protected
     .get("/operator/prompt/preview", "operator.prompt.preview")
     .at((ctx) => ({ path: "/operator/prompt/preview?agent=no-such-agent", headers: ctx.headers() }))
     .status(404),
-  http.protected
-    .put("/operator/prompt/{id}", "operator.prompt.write")
-    .mutating()
-    .at((ctx) => ({
-      path: route("/operator/prompt/{id}", { id: "reminder.plan" }) + "?scope=project",
-      headers: ctx.headers(),
-      body: { text: "Plan only." },
-    }))
-    .json(200, (body) => check(body === true, "the override should be saved"), "status"),
-  http.protected
-    .delete("/operator/prompt/{id}", "operator.prompt.remove")
-    .at((ctx) => ({
-      path: route("/operator/prompt/{id}", { id: "reminder.plan" }) + "?scope=project",
-      headers: ctx.headers(),
-    }))
-    .json(200, (body) => check(body === true, "removing an override should succeed")),
-  http.protected.get("/operator/identity", "operator.identity.list").json(200, array),
-  http.protected
-    .put("/operator/identity/layer", "operator.identity.save")
-    .mutating()
-    .at((ctx) => ({
-      path: "/operator/identity/layer",
-      headers: ctx.headers(),
-      body: { scope: "project", name: "HttpApi layer", content: "Speak plainly." },
-    }))
-    .json(
-      200,
-      (body) => {
-        object(body)
-        check(body.file === "httpapi-layer.md" && body.kind === "project", "the layer should be saved in the project")
-        check(!("maxLength" in body) && !("agents" in body), "unset optional fields should be left out, not null")
-      },
-      "status",
-    ),
-  http.protected
-    .delete("/operator/identity/layer", "operator.identity.remove")
-    .at((ctx) => ({ path: "/operator/identity/layer?scope=project&file=missing.md", headers: ctx.headers() }))
-    .status(404),
-  http.protected
-    .post("/operator/identity/reorder", "operator.identity.reorder")
-    .at((ctx) => ({
-      path: "/operator/identity/reorder",
-      headers: ctx.headers(),
-      body: { scope: "project", files: [] },
-    }))
-    .json(200, array),
-  http.protected.get("/operator/identity/preview", "operator.identity.preview").json(200, (body) => {
-    object(body)
-    check(typeof body.text === "string", "the preview should be text")
-  }),
   http.protected.get("/operator/tool", "operator.tool.list").json(200, (body) => {
     array(body)
     check(

@@ -140,17 +140,6 @@ import type {
   OperatorFolderListResponses,
   OperatorFolderRootsErrors,
   OperatorFolderRootsResponses,
-  OperatorIdentityKind,
-  OperatorIdentityListErrors,
-  OperatorIdentityListResponses,
-  OperatorIdentityPreviewErrors,
-  OperatorIdentityPreviewResponses,
-  OperatorIdentityRemoveErrors,
-  OperatorIdentityRemoveResponses,
-  OperatorIdentityReorderErrors,
-  OperatorIdentityReorderResponses,
-  OperatorIdentitySaveErrors,
-  OperatorIdentitySaveResponses,
   OperatorMemoryOverviewErrors,
   OperatorMemoryOverviewResponses,
   OperatorMemoryReadErrors,
@@ -190,11 +179,7 @@ import type {
   OperatorPromptProfileProfileUpdateErrors,
   OperatorPromptProfileProfileUpdateResponses,
   OperatorPromptProjects,
-  OperatorPromptRemoveErrors,
-  OperatorPromptRemoveResponses,
   OperatorPromptSetting,
-  OperatorPromptWriteErrors,
-  OperatorPromptWriteResponses,
   OperatorSessionListErrors,
   OperatorSessionListResponses,
   OperatorStatsErrors,
@@ -2504,221 +2489,11 @@ export class Tool extends HeyApiClient {
   }
 }
 
-export class Identity extends HeyApiClient {
-  /**
-   * List identity layers
-   *
-   * The global and project identity layers, in the order they are added to system prompts: org, user, project, then priority.
-   */
-  public list<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<
-      OperatorIdentityListResponses,
-      OperatorIdentityListErrors,
-      ThrowOnError
-    >({
-      url: "/operator/identity",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Delete an identity layer
-   *
-   * Delete an identity layer file.
-   */
-  public remove<ThrowOnError extends boolean = false>(
-    parameters: {
-      directory?: string
-      workspace?: string
-      scope: OperatorConfigScope
-      file: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "query", key: "scope" },
-            { in: "query", key: "file" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).delete<
-      OperatorIdentityRemoveResponses,
-      OperatorIdentityRemoveErrors,
-      ThrowOnError
-    >({
-      url: "/operator/identity/layer",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Save an identity layer
-   *
-   * Create or replace an identity layer file. Changes apply from the next request.
-   */
-  public save<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-      scope?: OperatorConfigScope
-      file?: string
-      name?: string
-      kind?: OperatorIdentityKind
-      priority?: number
-      agents?: Array<string>
-      maxLength?: number
-      enabled?: boolean
-      content?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "scope" },
-            { in: "body", key: "file" },
-            { in: "body", key: "name" },
-            { in: "body", key: "kind" },
-            { in: "body", key: "priority" },
-            { in: "body", key: "agents" },
-            { in: "body", key: "maxLength" },
-            { in: "body", key: "enabled" },
-            { in: "body", key: "content" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).put<
-      OperatorIdentitySaveResponses,
-      OperatorIdentitySaveErrors,
-      ThrowOnError
-    >({
-      url: "/operator/identity/layer",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Reorder identity layers
-   *
-   * Set a scope's layer order by rewriting their priorities (10, 20, 30, …).
-   */
-  public reorder<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-      scope?: OperatorConfigScope
-      files?: Array<string>
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "scope" },
-            { in: "body", key: "files" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      OperatorIdentityReorderResponses,
-      OperatorIdentityReorderErrors,
-      ThrowOnError
-    >({
-      url: "/operator/identity/reorder",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Preview an agent's identity
-   *
-   * The identity text added to the given agent's system prompt.
-   */
-  public preview<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-      agent?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "query", key: "agent" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<
-      OperatorIdentityPreviewResponses,
-      OperatorIdentityPreviewErrors,
-      ThrowOnError
-    >({
-      url: "/operator/identity/preview",
-      ...options,
-      ...params,
-    })
-  }
-}
-
 export class Prompt extends HeyApiClient {
   /**
-   * List prompt texts
+   * List tool descriptions
    *
-   * Every prompt text OpenCode adds on its own (base prompts per model family, reminders, notices, the agent generator, tool descriptions), with any global or project overrides, and the switches for generated sections.
+   * This project's tools with their own descriptions, which prompt profiles' Tool Group overrides. Every other prompt text is listed by GET /operator/prompt-profile.
    */
   public catalog<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -2786,85 +2561,6 @@ export class Prompt extends HeyApiClient {
       url: "/operator/prompt/preview",
       ...options,
       ...params,
-    })
-  }
-
-  /**
-   * Remove a prompt override
-   *
-   * Delete the scope's override so OpenCode's own text (or the global override) applies again.
-   */
-  public remove<ThrowOnError extends boolean = false>(
-    parameters: {
-      id: string
-      directory?: string
-      workspace?: string
-      scope: OperatorConfigScope
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "id" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "query", key: "scope" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).delete<
-      OperatorPromptRemoveResponses,
-      OperatorPromptRemoveErrors,
-      ThrowOnError
-    >({
-      url: "/operator/prompt/{id}",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Override a prompt text
-   *
-   * Write the global or project override for a prompt text (`tool.<id>` for a tool description). An empty text turns it off. Applies from the next request.
-   */
-  public write<ThrowOnError extends boolean = false>(
-    parameters: {
-      id: string
-      directory?: string
-      workspace?: string
-      scope: OperatorConfigScope
-      text?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "id" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "query", key: "scope" },
-            { in: "body", key: "text" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).put<OperatorPromptWriteResponses, OperatorPromptWriteErrors, ThrowOnError>({
-      url: "/operator/prompt/{id}",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
     })
   }
 }
@@ -3057,11 +2753,6 @@ export class Operator extends HeyApiClient {
   private _tool?: Tool
   get tool(): Tool {
     return (this._tool ??= new Tool({ client: this.client }))
-  }
-
-  private _identity?: Identity
-  get identity(): Identity {
-    return (this._identity ??= new Identity({ client: this.client }))
   }
 
   private _prompt?: Prompt

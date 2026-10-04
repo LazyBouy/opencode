@@ -1,7 +1,7 @@
 export * as OperatorPromptText from "./prompt-text"
 
 import path from "path"
-import { Effect, Schema } from "effect"
+import { Effect } from "effect"
 import { MAX_STEPS_PROMPT } from "@opencode-ai/core/session/runner/max-steps"
 import PROMPT_GENERATE from "@/agent/generate.txt"
 import { InstanceState } from "@/effect/instance-state"
@@ -29,8 +29,7 @@ import { OperatorConfig } from "./config"
 // Mirrors session/prompt.ts; kept in sync by the end-to-end prompt tests.
 export const STRUCTURED_OUTPUT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
-export const Kind = Schema.Literals(["base", "reminder", "notice", "generator"])
-export type Kind = typeof Kind.Type
+export type Kind = "base" | "reminder" | "notice" | "generator"
 
 interface Builtin {
   readonly id: string
@@ -105,12 +104,8 @@ export const maxSteps = Effect.gen(function* () {
   return OperatorProfile.folderOverride(layers, "notice.max-steps", project)?.text ?? MAX_STEPS_PROMPT
 })
 
-export const Toggles = Schema.Struct({
-  environment: Schema.Boolean,
-  skills: Schema.Boolean,
-  mcp: Schema.Boolean,
-}).annotate({ identifier: "OperatorPromptToggles" })
-export type Toggles = typeof Toggles.Type
+// The legacy `prompts` config switches: a switched-off generated section is left out.
+export type Toggles = { environment: boolean; skills: boolean; mcp: boolean }
 
 export function toggles(config: { prompts?: { environment?: boolean; skills?: boolean; mcp?: boolean } }): Toggles {
   return {

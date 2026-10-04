@@ -295,23 +295,10 @@ unix("overrides and the legacy switches change what the model receives", () =>
   ),
 )
 
-unix("the catalog lists every built-in prompt with this project's overrides", () =>
+unix("the tool catalog lists this project's tools with their own descriptions", () =>
   Effect.gen(function* () {
-    const { directory } = yield* TestInstance
-    const prompts = yield* OperatorPrompts.Service
-    yield* prompts.write("project", "reminder.plan", "Plan only.")
-
-    const catalog = yield* prompts.catalog()
-    expect(catalog.prompts.find((item) => item.id === "reminder.plan")).toMatchObject({ project: "Plan only." })
-    expect(catalog.prompts.find((item) => item.id === "base.kimi")?.builtin).toContain("You are OpenCode")
+    const catalog = yield* (yield* OperatorPrompts.Service).catalog()
     expect(catalog.tools.some((tool) => tool.id === "read" && tool.builtin.length > 0)).toBe(true)
-    expect(
-      yield* Effect.promise(() =>
-        fs.readFile(path.join(directory, ".opencode", "prompts", "reminder.plan.md"), "utf8"),
-      ),
-    ).toBe("Plan only.\n")
-    expect(yield* prompts.write("project", "not-a-prompt", "x").pipe(Effect.flip)).toBeInstanceOf(
-      OperatorPrompts.NotFoundError,
-    )
+    expect(catalog.tools.some((tool) => tool.id === "invalid")).toBe(false)
   }),
 )
