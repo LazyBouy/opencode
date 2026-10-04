@@ -304,4 +304,100 @@ export const operatorScenarios: Scenario[] = [
       body: { path: `${ctx.directory}/AGENTS.md`, text: "Written by the exerciser.\n" },
     }))
     .json(200, (body) => check(body === true, "AGENTS.md at the project root should be created"), "status"),
+  http.protected.get("/operator/prompt-profile", "operator.promptProfile.catalog").json(200, (body) => {
+    object(body)
+    array(body.layers)
+    array(body.groups)
+    array(body.profiles)
+    array(body.projects)
+    check(isRecord(body.projects[0]) && body.projects[0].key === "opencode", "OpenCode should be the first project")
+    check(
+      body.profiles.some((item) => isRecord(item) && item.id === "default" && item.builtin === true),
+      "the built-in Default profile should be listed",
+    )
+  }),
+  http.protected
+    .post("/operator/prompt-profile/layer", "operator.promptProfile.layer.create")
+    .mutating()
+    .at((ctx) => ({
+      path: "/operator/prompt-profile/layer",
+      headers: ctx.headers(),
+      body: { name: "HttpApi role", section: "role", projects: "*", text: "You check the API." },
+    }))
+    .json(
+      200,
+      (body) => {
+        object(body)
+        check(body.id === "httpapi-role" && body.origin === "profile", "the layer should be saved in profile/")
+      },
+      "status",
+    ),
+  http.protected
+    .put("/operator/prompt-profile/layer/{id}", "operator.promptProfile.layer.update")
+    .at((ctx) => ({
+      path: route("/operator/prompt-profile/layer/{id}", { id: "missing" }),
+      headers: ctx.headers(),
+      body: { name: "x", section: "role", projects: "*", text: "x" },
+    }))
+    .status(404),
+  http.protected
+    .delete("/operator/prompt-profile/layer/{id}", "operator.promptProfile.layer.remove")
+    .at((ctx) => ({ path: route("/operator/prompt-profile/layer/{id}", { id: "slot.base" }), headers: ctx.headers() }))
+    .status(404),
+  http.protected
+    .post("/operator/prompt-profile/group", "operator.promptProfile.group.create")
+    .at((ctx) => ({
+      path: "/operator/prompt-profile/group",
+      headers: ctx.headers(),
+      body: { name: "Bad", type: "platform", projects: "*", layers: ["slot.agent"] },
+    }))
+    .status(400),
+  http.protected
+    .put("/operator/prompt-profile/group/{id}", "operator.promptProfile.group.update")
+    .at((ctx) => ({
+      path: route("/operator/prompt-profile/group/{id}", { id: "builtin.role" }),
+      headers: ctx.headers(),
+      body: { name: "Role", type: "role", projects: "*", layers: [] },
+    }))
+    .status(400),
+  http.protected
+    .delete("/operator/prompt-profile/group/{id}", "operator.promptProfile.group.remove")
+    .at((ctx) => ({ path: route("/operator/prompt-profile/group/{id}", { id: "missing" }), headers: ctx.headers() }))
+    .status(404),
+  http.protected
+    .post("/operator/prompt-profile/profile", "operator.promptProfile.profile.create")
+    .at((ctx) => ({
+      path: "/operator/prompt-profile/profile",
+      headers: ctx.headers(),
+      body: { name: "No role", projects: "*", groups: ["builtin.purpose", "builtin.identity"] },
+    }))
+    .status(400),
+  http.protected
+    .put("/operator/prompt-profile/profile/{id}", "operator.promptProfile.profile.update")
+    .at((ctx) => ({
+      path: route("/operator/prompt-profile/profile/{id}", { id: "default" }),
+      headers: ctx.headers(),
+      body: { name: "Default", projects: "*", groups: ["builtin.purpose", "builtin.role", "builtin.identity"] },
+    }))
+    .status(400),
+  http.protected
+    .delete("/operator/prompt-profile/profile/{id}", "operator.promptProfile.profile.remove")
+    .at((ctx) => ({ path: route("/operator/prompt-profile/profile/{id}", { id: "missing" }), headers: ctx.headers() }))
+    .status(404),
+  http.protected
+    .put("/operator/prompt-profile/defaults", "operator.promptProfile.defaults")
+    .mutating()
+    .at((ctx) => ({
+      path: "/operator/prompt-profile/defaults",
+      headers: ctx.headers(),
+      body: { projects: {} },
+    }))
+    .json(
+      200,
+      (body) => {
+        object(body)
+        check(body.global === undefined && isRecord(body.projects), "the defaults should be saved as given")
+      },
+      "status",
+    ),
 ]

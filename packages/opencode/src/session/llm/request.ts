@@ -17,6 +17,16 @@ import { mergeDeep } from "remeda"
 
 const USER_AGENT = `opencode/${InstallationVersion}`
 
+// The sections the session loop writes for a request, kept apart so the system prompt plugin hook can
+// rebuild the prompt from them (fork: prompt profiles).
+export type SystemParts = {
+  readonly environment: string[]
+  readonly instructions: string[]
+  readonly mcp?: string
+  readonly skills?: string
+  readonly output?: string
+}
+
 type PrepareInput = {
   readonly user: SessionV1.User
   readonly sessionID: string
@@ -25,6 +35,7 @@ type PrepareInput = {
   readonly agent: Agent.Info
   readonly permission?: PermissionV1.Ruleset
   readonly system: string[]
+  readonly systemParts?: SystemParts
   readonly messages: ModelMessage[]
   readonly small?: boolean
   readonly tools: Record<string, Tool>
@@ -68,7 +79,22 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   const header = system[0]
   yield* input.plugin.trigger(
     "experimental.chat.system.transform",
-    { sessionID: input.sessionID, model: input.model, agent: input.agent.name },
+    {
+      sessionID: input.sessionID,
+      model: input.model,
+      agent: input.agent.name,
+      parts: {
+        agent: { prompt: input.agent.prompt, native: input.agent.native },
+        base: SystemPrompt.provider(input.model),
+        environment: input.systemParts?.environment ?? [],
+        instructions: input.systemParts?.instructions ?? [],
+        mcp: input.systemParts?.mcp,
+        skills: input.systemParts?.skills,
+        output: input.systemParts?.output,
+        user: input.user.system,
+        extra: input.systemParts ? [] : input.system,
+      },
+    },
     { system },
   )
   if (system.length > 2 && system[0] === header) {

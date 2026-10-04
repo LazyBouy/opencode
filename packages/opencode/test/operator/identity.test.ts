@@ -6,6 +6,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Global } from "@opencode-ai/core/global"
 import { OperatorIdentity } from "@/operator/identity"
 import { operatorPlugins } from "@/operator/plugins"
+import { OperatorPromptText } from "@/operator/prompt-text"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
@@ -88,24 +89,32 @@ it.instance("layers can be saved, reordered and deleted", () =>
   ),
 )
 
-it.instance("the identity plugin puts the agent's layers first in its system prompt", () =>
-  withGlobal(() =>
+it.instance("the prompt plugin puts the agent's identity layers in its first system message", () =>
+  withGlobal((global) =>
     Effect.gen(function* () {
       const { directory } = yield* TestInstance
-      yield* layer(path.join(directory, ".opencode"), "repo.md", "---\nagents: [build]\n---\nThis repo uses Bun.\n")
+      yield* layer(global, "voice.md", "---\nagents: [build]\n---\nThis repo uses Bun.\n")
       const hooks = yield* Effect.promise(() =>
         operatorPlugins[0]({ directory, worktree: directory } as Parameters<(typeof operatorPlugins)[0]>[0]),
       )
       const transform = hooks["experimental.chat.system.transform"]!
       const model = { providerID: "test", api: { id: "test-model" } } as Parameters<typeof transform>[0]["model"]
+      const parts = (native: boolean) => ({
+        agent: { native },
+        base: [],
+        environment: [],
+        instructions: [],
+        extra: [],
+      })
+      const base = OperatorPromptText.BUILTINS.find((item) => item.id === "base.default")!.text
 
-      const build = { system: ["Base prompt"] }
-      yield* Effect.promise(() => transform({ model, agent: "build" }, build))
-      const plan = { system: ["Base prompt"] }
-      yield* Effect.promise(() => transform({ model, agent: "plan" }, plan))
+      const build = { system: ["ignored"] }
+      yield* Effect.promise(() => transform({ model, agent: "build", parts: parts(true) }, build))
+      const plan = { system: ["ignored"] }
+      yield* Effect.promise(() => transform({ model, agent: "plan", parts: parts(true) }, plan))
 
-      expect(build.system).toEqual(["This repo uses Bun.", "Base prompt"])
-      expect(plan.system).toEqual(["Base prompt"])
+      expect(build.system).toEqual([`${base}\nThis repo uses Bun.`])
+      expect(plan.system).toEqual([base])
     }),
   ),
 )

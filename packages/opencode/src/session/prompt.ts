@@ -1292,6 +1292,13 @@ const layer = Layer.effect(
               sessionID,
               parentSessionID: session.parentID,
               system,
+              systemParts: {
+                environment: env,
+                instructions,
+                mcp: mcpInstructions,
+                skills,
+                output: format.type === "json_schema" ? STRUCTURED_OUTPUT_SYSTEM_PROMPT : undefined,
+              },
               messages: [
                 ...modelMsgs,
                 ...(isLastStep ? [{ role: "assistant" as const, content: yield* OperatorPromptText.maxSteps }] : []),

@@ -35,5 +35,24 @@ export const agentFields = {
   home: Schema.optional(Schema.String).annotate({
     description: "Folder this agent works in: new sessions started as this agent open there",
   }),
+  promptProfile: Schema.optional(
+    Schema.Struct({
+      mode: Schema.Literals(["profile", "layers", "custom"]).annotate({
+        description:
+          "profile: the prompt profile as it is; layers: the profile plus `layers`; custom: no profile, only Purpose, the agent's prompt and the `generated` sections",
+      }),
+      profile: Schema.optional(Schema.String).annotate({
+        description: "Prompt profile id; the project's, then the global default when unset",
+      }),
+      layers: Schema.optional(
+        Schema.mutable(Schema.Array(Schema.Struct({ layer: Schema.String, group: Schema.String }))),
+      ).annotate({
+        description: "layers mode: layers added to the end of the named group of the profile",
+      }),
+      generated: Schema.optional(
+        Schema.mutable(Schema.Array(Schema.Literals(["environment", "references", "instructions", "mcp", "skills"]))),
+      ).annotate({ description: "custom mode: the generated sections to include (default: all)" }),
+    }),
+  ).annotate({ description: "How this agent's system prompt is built from prompt profiles" }),
 }
 export const agentKeys = Object.keys(agentFields)

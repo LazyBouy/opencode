@@ -219,6 +219,25 @@ export type ProviderHook = {
 /** @deprecated Use AuthOAuthResult instead. */
 export type AuthOuathResult = AuthOAuthResult
 
+/**
+ * The system prompt's parts before they are joined, for plugins that rebuild it: the agent's own
+ * prompt, the base prompt for the model, and the sections OpenCode writes for the request.
+ */
+export type SystemParts = {
+  agent: { prompt?: string; native?: boolean }
+  base: string[]
+  environment: string[]
+  instructions: string[]
+  mcp?: string
+  skills?: string
+  /** The structured-output notice, when the message asks for JSON */
+  output?: string
+  /** The message's own system text */
+  user?: string
+  /** System text a caller passed without saying what it is */
+  extra: string[]
+}
+
 export interface Hooks {
   dispose?: () => Promise<void>
   event?: (input: { event: Event }) => Promise<void>
@@ -289,7 +308,7 @@ export interface Hooks {
     },
   ) => Promise<void>
   "experimental.chat.system.transform"?: (
-    input: { sessionID?: string; model: Model; agent?: string },
+    input: { sessionID?: string; model: Model; agent?: string; parts?: SystemParts },
     output: {
       system: string[]
     },

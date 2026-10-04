@@ -13,8 +13,9 @@ import { Provider } from "@/provider/provider"
 import { Instruction } from "@/session/instruction"
 import { SystemPrompt } from "@/session/system"
 import { ToolRegistry } from "@/tool/registry"
-import type { OperatorConfig } from "./config"
-import { OperatorIdentity } from "./identity"
+import { OperatorConfig } from "./config"
+import { OperatorProfile } from "./profile"
+import { OperatorProfileStore } from "./profile-store"
 import { OperatorPromptText } from "./prompt-text"
 
 export const Entry = Schema.Struct({
@@ -40,17 +41,16 @@ export const Catalog = Schema.Struct({
   folders: Schema.Struct({ global: Schema.String, project: Schema.String }),
 }).annotate({ identifier: "OperatorPromptCatalog" })
 
-export const PreviewSection = Schema.Struct({
-  kind: Schema.Literals(["identity", "agent", "base", "environment", "references", "instructions", "mcp", "skills"]),
-  source: Schema.String.annotate({ description: "Where the text comes from: an override id, file path or agent" }),
-  text: Schema.String,
-}).annotate({ identifier: "OperatorPromptSection" })
-
 export const Preview = Schema.Struct({
   agent: Schema.String,
   model: Schema.String.annotate({ description: "provider/model the preview was built for" }),
-  base: Schema.String.annotate({ description: "The base prompt id used for this model" }),
-  sections: Schema.Array(PreviewSection),
+  base: Schema.String.annotate({ description: "The Base Model Group layer for this model" }),
+  project: Schema.Struct({ key: Schema.String, name: Schema.String }).annotate({
+    description: "The project the agent belongs to, whose goal and layers apply",
+  }),
+  profile: Schema.Struct({ id: Schema.String, name: Schema.String }),
+  mode: OperatorProfile.Mode,
+  sections: Schema.Array(OperatorProfile.AssembledSection),
   system: Schema.Array(Schema.String).annotate({ description: "The system messages exactly as sent" }),
 }).annotate({ identifier: "OperatorPromptPreview" })
 export type Preview = typeof Preview.Type
@@ -140,55 +140,44 @@ const layer = Layer.effect(
       const model = yield* provider
         .getModel(ref.providerID, ref.modelID)
         .pipe(Effect.mapError(() => new NotFoundError({ message: `No model ${ref.providerID}/${ref.modelID}` })))
-      const overrides = yield* Effect.promise(() => OperatorPromptText.readOverrides(ctx))
-      const switches = OperatorPromptText.toggles(yield* config.get())
-      const [env, files, mcp, skills, identity] = yield* Effect.all([
-        system.environment(model),
-        instruction.system().pipe(Effect.orDie),
-        system.mcp(agent),
-        system.skills(agent),
-        Effect.promise(() => OperatorIdentity.readLayers(OperatorIdentity.folders(ctx))),
-      ])
-      const entry = OperatorPromptText.baseFor(model)
-      const head = agent.prompt
-        ? [{ kind: "agent" as const, source: agent.name, text: agent.prompt }]
-        : [
-            {
-              kind: "base" as const,
-              source: overrides.has(entry.id) ? entry.id : overrides.has("base") ? "base" : entry.id,
-              text: OperatorPromptText.baseText(model, overrides),
-            },
-          ]
-      const identityText = OperatorIdentity.render(identity, agent.name)
-      const sections = [
-        ...(identityText ? [{ kind: "identity" as const, source: "identity", text: identityText }] : []),
-        ...head.filter((item) => item.text),
-        ...(switches.environment
-          ? env.map((item, index) => ({
-              kind: index === 0 ? ("environment" as const) : ("references" as const),
-              source: "generated",
-              text: item,
-            }))
-          : []),
-        ...files.map((item) => ({
-          kind: "instructions" as const,
-          source: item.match(/^Instructions from: ([^\n]*)/)?.[1] ?? "instructions",
-          text: item,
-        })),
-        ...(mcp && switches.mcp ? [{ kind: "mcp" as const, source: "generated", text: mcp }] : []),
-        ...(skills && switches.skills ? [{ kind: "skills" as const, source: "generated", text: skills }] : []),
-      ]
-      // The same shape request preparation sends: identity first, then everything else joined.
-      const rest = sections
-        .filter((item) => item.kind !== "identity")
-        .map((item) => item.text)
-        .join("\n")
+      const cfg = yield* config.get()
+      // Title, summary and compaction calls carry no generated sections, only the agent's prompt.
+      const helper = OperatorProfile.HELPER_AGENTS.includes(agent.name)
+      const [env, files, mcp, skills] = helper
+        ? [[], [], undefined, undefined]
+        : yield* Effect.all([
+            system.environment(model),
+            instruction.system().pipe(Effect.orDie),
+            system.mcp(agent),
+            system.skills(agent),
+          ])
+      const project = yield* Effect.promise(() => OperatorProfile.agentProject(agent, ctx))
+      const key = OperatorProfile.projectKey(ctx)
+      const catalog = yield* Effect.promise(() =>
+        OperatorProfileStore.read([{ key, root: OperatorConfig.projectRoot(ctx) }]),
+      )
+      const settings = (cfg.agent?.[agent.name] as { promptProfile?: OperatorProfile.Settings } | undefined)
+        ?.promptProfile
+      const result = OperatorProfile.assemble({
+        catalog,
+        project,
+        agent: { name: agent.name, prompt: agent.prompt, settings },
+        model,
+        parts: { environment: env, instructions: files, mcp, skills, extra: [] },
+        toggles: OperatorPromptText.toggles(cfg),
+      })
       return {
         agent: agent.name,
         model: `${model.providerID}/${model.id}`,
-        base: entry.id,
-        sections,
-        system: [...(identityText ? [identityText] : []), ...(rest ? [rest] : [])],
+        base: OperatorPromptText.baseFor(model).id,
+        project: {
+          key: project,
+          name: project === OperatorProfile.OPENCODE ? "OpenCode" : (ctx.project.name ?? path.basename(project)),
+        },
+        profile: result.profile,
+        mode: result.mode,
+        sections: result.sections,
+        system: result.system,
       }
     })
 

@@ -7,6 +7,7 @@ import { OperatorIdentity } from "./identity"
 import { OperatorInbox } from "./inbox"
 import { OperatorMemory } from "./memory"
 import { OperatorOverview } from "./overview"
+import { OperatorProfileStore } from "./profile-store"
 import { OperatorPrompts } from "./prompts"
 import { OperatorTools } from "./tools"
 
@@ -23,4 +24,5 @@ export const operatorNodes = [
   OperatorPrompts.node,
   OperatorFolders.node,
   OperatorMemory.node,
+  OperatorProfileStore.node,
 ] as const

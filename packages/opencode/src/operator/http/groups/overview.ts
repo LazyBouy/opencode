@@ -8,6 +8,7 @@ import { QueryBoolean } from "@/server/routes/instance/httpapi/groups/query"
 import { Authorization } from "@/server/routes/instance/httpapi/middleware/authorization"
 import { SchemaErrorMiddleware } from "@/server/routes/instance/httpapi/middleware/schema-error"
 import { OperatorFolderGroup } from "./folders"
+import { OperatorPromptProfileGroup } from "./prompt-profile"
 
 export const OperatorOverviewPaths = {
   status: "/operator/status",
@@ -93,6 +94,7 @@ export const OperatorRootApi = HttpApi.make("operator-root")
       .annotateMerge(OpenApi.annotations({ title: "operator", description: "Server-wide operator routes." })),
   )
   .add(OperatorFolderGroup)
+  .add(OperatorPromptProfileGroup)
   .middleware(SchemaErrorMiddleware)
   .middleware(Authorization)
   .annotateMerge(

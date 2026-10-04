@@ -5,6 +5,7 @@ import { operatorMemoryHandlers } from "./handlers/memory"
 import { mergeHandlers } from "./handlers/merge"
 import { operatorOverviewHandlers } from "./handlers/overview"
 import { operatorProjectHandlers } from "./handlers/project"
+import { operatorPromptProfileHandlers } from "./handlers/prompt-profile"
 import { operatorPromptHandlers } from "./handlers/prompts"
 
 // Handler layers for OperatorApi (per project) and OperatorRootApi (server-wide), provided by
@@ -17,4 +18,8 @@ export const operatorHandlers = [
   operatorPromptHandlers,
   operatorMemoryHandlers,
 ] as const
-export const operatorRootHandlers = [operatorOverviewHandlers, operatorFolderHandlers] as const
+export const operatorRootHandlers = [
+  operatorOverviewHandlers,
+  operatorFolderHandlers,
+  operatorPromptProfileHandlers,
+] as const

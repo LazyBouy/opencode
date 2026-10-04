@@ -1,6 +1,5 @@
 export * as OperatorPromptText from "./prompt-text"
 
-import fs from "fs/promises"
 import path from "path"
 import { Effect, Schema } from "effect"
 import { MAX_STEPS_PROMPT } from "@opencode-ai/core/session/runner/max-steps"
@@ -23,13 +22,9 @@ import PROMPT_TRINITY from "@/session/prompt/trinity.txt"
 import { SystemPrompt } from "@/session/system"
 import { OperatorConfig } from "./config"
 
-// Prompt texts and the rules that apply their overrides. Kept free of service imports, because
-// session/prompt.ts and the plugin service import it, and services import those in turn.
-
-// Every prompt text OpenCode adds on its own, with an override file per scope:
-// `prompts/<id>.md` in the global config folder or the project's `.opencode` folder (project wins).
-// An empty override file turns the text off. Generated sections (environment, skills, MCP
-// instructions) are switched on and off with the `prompts` config key instead.
+// Every prompt text OpenCode adds on its own, and helpers for their overrides (which are layers of
+// prompt profiles, see profile.ts). Kept free of service imports, because session/prompt.ts and the
+// plugin service import it, and services import those in turn.
 
 // Mirrors session/prompt.ts; kept in sync by the end-to-end prompt tests.
 export const STRUCTURED_OUTPUT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
@@ -72,29 +67,9 @@ export function promptFolders(ctx: { directory: string; worktree: string }) {
   }
 }
 
-// Override files for a project; project files replace global ones with the same id.
-export async function readOverrides(ctx: { directory: string; worktree: string }) {
-  const folders = promptFolders(ctx)
-  const read = async (scope: OperatorConfig.Scope, dir: string) => {
-    const names = await fs.readdir(dir).catch(() => [] as string[])
-    return Promise.all(
-      names
-        .filter((name) => name.endsWith(".md"))
-        .map(
-          async (name) =>
-            [name.slice(0, -3), { scope, text: (await fs.readFile(path.join(dir, name), "utf8")).trim() }] as const,
-        ),
-    )
-  }
-  return new Map([
-    ...(await read("global", folders.global)),
-    ...(folders.project === folders.global ? [] : await read("project", folders.project)),
-  ])
-}
-
 // Plugin hooks see the SDK's model type; SystemPrompt.provider only reads these two fields.
-type ModelRef = { readonly providerID: string; readonly api: { readonly id: string } }
-const builtinBase = (model: ModelRef) => SystemPrompt.provider(model as Provider.Model)[0] ?? ""
+export type ModelRef = { readonly providerID: string; readonly api: { readonly id: string } }
+export const builtinBase = (model: ModelRef) => SystemPrompt.provider(model as Provider.Model)[0] ?? ""
 
 // The catalog entry for a model's base prompt, matching SystemPrompt.provider's choice by its text.
 export function baseFor(model: ModelRef) {
@@ -109,41 +84,26 @@ export function baseFor(model: ModelRef) {
   )
 }
 
-function renderMeta(text: string, model: ModelRef) {
+export function renderMeta(text: string, model: ModelRef) {
   return text.replaceAll("{{MODEL_NAME}}", model.api.id.includes("muse-glimmer") ? "Muse Glimmer" : "Muse Spark")
-}
-
-// The base prompt text sent for a model: its family's override, else the all-models override,
-// else the built-in text.
-export function baseText(model: ModelRef, overrides: Overrides) {
-  const entry = baseFor(model)
-  const text = overrides.get(entry.id)?.text ?? overrides.get("base")?.text ?? builtinBase(model)
-  return entry.id === "base.meta" ? renderMeta(text, model) : text
 }
 
 export function text(id: string, overrides: Overrides) {
   return overrides.get(id)?.text ?? BUILTINS.find((item) => item.id === id)?.text ?? ""
 }
 
-// Effectful lookup for code paths that need one override (the step-limit notice).
+// The step-limit notice for the session loop, which does not say which agent it runs. Profile
+// modules are imported lazily: they import this module.
 export const maxSteps = Effect.gen(function* () {
   const ctx = yield* InstanceState.context
-  const overrides = yield* Effect.promise(() => readOverrides(ctx))
-  return text("notice.max-steps", overrides)
+  const { OperatorProfile } = yield* Effect.promise(() => import("./profile"))
+  const { OperatorProfileStore } = yield* Effect.promise(() => import("./profile-store"))
+  const project = OperatorProfile.projectKey(ctx)
+  const layers = (yield* Effect.promise(() =>
+    OperatorProfileStore.read([{ key: project, root: OperatorConfig.projectRoot(ctx) }]),
+  )).layers
+  return OperatorProfile.folderOverride(layers, "notice.max-steps", project)?.text ?? MAX_STEPS_PROMPT
 })
-
-// Generated sections, as session/system.ts writes them. Removing one keeps the rest intact.
-export const SECTION_PATTERNS = {
-  environment: [
-    /You are powered by the model named [^\n]*\nHere is some useful information about the environment you are running in:\n<env>[\s\S]*?<\/env>\n?/,
-    /Project references provide additional directories that can be accessed when relevant\.\n<available_references>[\s\S]*?<\/available_references>\n?/,
-  ],
-  skills: [
-    /Skills provide specialized instructions and workflows for specific tasks\.\nUse the skill tool to load a skill when a task matches its description\.\n(?:<available_skills>[\s\S]*?<\/available_skills>|No skills are currently available\.)\n?/,
-  ],
-  mcp: [/<mcp_instructions>[\s\S]*?<\/mcp_instructions>\n?/],
-} as const
-export type Section = keyof typeof SECTION_PATTERNS
 
 export const Toggles = Schema.Struct({
   environment: Schema.Boolean,
@@ -158,24 +118,6 @@ export function toggles(config: { prompts?: { environment?: boolean; skills?: bo
     skills: config.prompts?.skills !== false,
     mcp: config.prompts?.mcp !== false,
   }
-}
-
-// Applies overrides and switches to a system prompt as request preparation built it.
-export function rewriteSystem(system: string, input: { model?: ModelRef; overrides: Overrides; toggles: Toggles }) {
-  const replaced = [
-    ...(input.model ? [{ from: builtinBase(input.model), to: baseText(input.model, input.overrides) }] : []),
-    { from: STRUCTURED_OUTPUT, to: text("notice.structured-output", input.overrides) },
-    { from: PROMPT_GENERATE, to: text("generator.agent", input.overrides) },
-  ].reduce(
-    (current, item) => (item.from && item.from !== item.to ? current.replace(item.from, () => item.to) : current),
-    system,
-  )
-  return (Object.keys(SECTION_PATTERNS) as Section[])
-    .filter((section) => !input.toggles[section])
-    .flatMap((section) => SECTION_PATTERNS[section])
-    .reduce((current, pattern) => current.replace(pattern, ""), replaced)
-    .replace(/\n{3,}/g, "\n\n")
-    .trim()
 }
 
 // Replaces a reminder that session/reminders.ts added; "" means it was turned off.

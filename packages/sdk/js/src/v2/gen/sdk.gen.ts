@@ -163,8 +163,33 @@ import type {
   OperatorProjectListResponses,
   OperatorPromptCatalogErrors,
   OperatorPromptCatalogResponses,
+  OperatorPromptGroupType,
+  OperatorPromptLayerSection,
   OperatorPromptPreviewErrors,
   OperatorPromptPreviewResponses,
+  OperatorPromptProfileCatalogErrors,
+  OperatorPromptProfileCatalogResponses,
+  OperatorPromptProfileDefaultsErrors,
+  OperatorPromptProfileDefaultsResponses,
+  OperatorPromptProfileGroupCreateErrors,
+  OperatorPromptProfileGroupCreateResponses,
+  OperatorPromptProfileGroupRemoveErrors,
+  OperatorPromptProfileGroupRemoveResponses,
+  OperatorPromptProfileGroupUpdateErrors,
+  OperatorPromptProfileGroupUpdateResponses,
+  OperatorPromptProfileLayerCreateErrors,
+  OperatorPromptProfileLayerCreateResponses,
+  OperatorPromptProfileLayerRemoveErrors,
+  OperatorPromptProfileLayerRemoveResponses,
+  OperatorPromptProfileLayerUpdateErrors,
+  OperatorPromptProfileLayerUpdateResponses,
+  OperatorPromptProfileProfileCreateErrors,
+  OperatorPromptProfileProfileCreateResponses,
+  OperatorPromptProfileProfileRemoveErrors,
+  OperatorPromptProfileProfileRemoveResponses,
+  OperatorPromptProfileProfileUpdateErrors,
+  OperatorPromptProfileProfileUpdateResponses,
+  OperatorPromptProjects,
   OperatorPromptRemoveErrors,
   OperatorPromptRemoveResponses,
   OperatorPromptWriteErrors,
@@ -1618,6 +1643,436 @@ export class Folder extends HeyApiClient {
   }
 }
 
+export class Layer extends HeyApiClient {
+  /**
+   * Create a prompt layer
+   *
+   * Write a layer, or an override of one of OpenCode's texts (set `overrides`). A project can have one goal and one project-scoped override of each text.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      name?: string
+      section?: OperatorPromptLayerSection
+      purpose?: "org" | "goal"
+      overrides?: string
+      projects?: OperatorPromptProjects
+      agents?: Array<string>
+      priority?: number
+      maxLength?: number
+      enabled?: boolean
+      text?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "name" },
+            { in: "body", key: "section" },
+            { in: "body", key: "purpose" },
+            { in: "body", key: "overrides" },
+            { in: "body", key: "projects" },
+            { in: "body", key: "agents" },
+            { in: "body", key: "priority" },
+            { in: "body", key: "maxLength" },
+            { in: "body", key: "enabled" },
+            { in: "body", key: "text" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorPromptProfileLayerCreateResponses,
+      OperatorPromptProfileLayerCreateErrors,
+      ThrowOnError
+    >({
+      url: "/operator/prompt-profile/layer",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Delete a prompt layer
+   *
+   * Delete a layer no group uses. Removing an override brings back OpenCode's text. Layers from existing files are never deleted.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
+    return (options?.client ?? this.client).delete<
+      OperatorPromptProfileLayerRemoveResponses,
+      OperatorPromptProfileLayerRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/operator/prompt-profile/layer/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Change a prompt layer
+   *
+   * Change a layer. A layer from an existing file is written back to that file, and keeps its scope.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      name?: string
+      section?: OperatorPromptLayerSection
+      purpose?: "org" | "goal"
+      overrides?: string
+      projects?: OperatorPromptProjects
+      agents?: Array<string>
+      priority?: number
+      maxLength?: number
+      enabled?: boolean
+      text?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "body", key: "name" },
+            { in: "body", key: "section" },
+            { in: "body", key: "purpose" },
+            { in: "body", key: "overrides" },
+            { in: "body", key: "projects" },
+            { in: "body", key: "agents" },
+            { in: "body", key: "priority" },
+            { in: "body", key: "maxLength" },
+            { in: "body", key: "enabled" },
+            { in: "body", key: "text" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorPromptProfileLayerUpdateResponses,
+      OperatorPromptProfileLayerUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/operator/prompt-profile/layer/{id}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Group extends HeyApiClient {
+  /**
+   * Create a prompt group
+   *
+   * Create an ordered list of layers.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      name?: string
+      type?: OperatorPromptGroupType
+      projects?: OperatorPromptProjects
+      layers?: Array<string>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "name" },
+            { in: "body", key: "type" },
+            { in: "body", key: "projects" },
+            { in: "body", key: "layers" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorPromptProfileGroupCreateResponses,
+      OperatorPromptProfileGroupCreateErrors,
+      ThrowOnError
+    >({
+      url: "/operator/prompt-profile/group",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Delete a prompt group
+   *
+   * Delete a group no profile uses.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
+    return (options?.client ?? this.client).delete<
+      OperatorPromptProfileGroupRemoveResponses,
+      OperatorPromptProfileGroupRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/operator/prompt-profile/group/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Change a prompt group
+   *
+   * Change a group.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      name?: string
+      type?: OperatorPromptGroupType
+      projects?: OperatorPromptProjects
+      layers?: Array<string>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "body", key: "name" },
+            { in: "body", key: "type" },
+            { in: "body", key: "projects" },
+            { in: "body", key: "layers" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorPromptProfileGroupUpdateResponses,
+      OperatorPromptProfileGroupUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/operator/prompt-profile/group/{id}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Profile extends HeyApiClient {
+  /**
+   * Create a prompt profile
+   *
+   * Create an ordered list of groups: Platform, Purpose, Role, Identity, Capabilities, custom groups, Output format, Tool. Purpose, Role and Identity are required.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      name?: string
+      projects?: OperatorPromptProjects
+      groups?: Array<string>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "name" },
+            { in: "body", key: "projects" },
+            { in: "body", key: "groups" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorPromptProfileProfileCreateResponses,
+      OperatorPromptProfileProfileCreateErrors,
+      ThrowOnError
+    >({
+      url: "/operator/prompt-profile/profile",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Delete a prompt profile
+   *
+   * Delete a profile that is not a default.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
+    return (options?.client ?? this.client).delete<
+      OperatorPromptProfileProfileRemoveResponses,
+      OperatorPromptProfileProfileRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/operator/prompt-profile/profile/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Change a prompt profile
+   *
+   * Change a profile.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      name?: string
+      projects?: OperatorPromptProjects
+      groups?: Array<string>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "body", key: "name" },
+            { in: "body", key: "projects" },
+            { in: "body", key: "groups" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorPromptProfileProfileUpdateResponses,
+      OperatorPromptProfileProfileUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/operator/prompt-profile/profile/{id}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class PromptProfile extends HeyApiClient {
+  /**
+   * List prompt profile resources
+   *
+   * Every prompt layer (OpenCode's own texts, slots, generated sections, layers you wrote and existing prompts/ and identity/ files), prompt group and profile, the default profiles, and the projects they can be scoped to. Tool descriptions are listed per project by GET /operator/prompt.
+   */
+  public catalog<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<
+      OperatorPromptProfileCatalogResponses,
+      OperatorPromptProfileCatalogErrors,
+      ThrowOnError
+    >({ url: "/operator/prompt-profile", ...options })
+  }
+
+  /**
+   * Set the default profiles
+   *
+   * The profile agents use when they name none: per project, else the global default, else the built-in Default (Helper for title, summary and compaction).
+   */
+  public defaults<ThrowOnError extends boolean = false>(
+    parameters?: {
+      global?: string
+      projects?: {
+        [key: string]: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "global" },
+            { in: "body", key: "projects" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorPromptProfileDefaultsResponses,
+      OperatorPromptProfileDefaultsErrors,
+      ThrowOnError
+    >({
+      url: "/operator/prompt-profile/defaults",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  private _layer?: Layer
+  get layer(): Layer {
+    return (this._layer ??= new Layer({ client: this.client }))
+  }
+
+  private _group?: Group
+  get group(): Group {
+    return (this._group ??= new Group({ client: this.client }))
+  }
+
+  private _profile?: Profile
+  get profile(): Profile {
+    return (this._profile ??= new Profile({ client: this.client }))
+  }
+}
+
 export class Config2 extends HeyApiClient {
   /**
    * List config layers
@@ -2575,6 +3030,11 @@ export class Operator extends HeyApiClient {
   private _folder?: Folder
   get folder(): Folder {
     return (this._folder ??= new Folder({ client: this.client }))
+  }
+
+  private _promptProfile?: PromptProfile
+  get promptProfile(): PromptProfile {
+    return (this._promptProfile ??= new PromptProfile({ client: this.client }))
   }
 
   private _config?: Config2

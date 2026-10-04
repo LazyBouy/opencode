@@ -1728,6 +1728,18 @@ export type AgentConfig = {
   maxSteps?: number
   permission?: PermissionConfig
   home?: string
+  promptProfile?: {
+    /**
+     * profile: the prompt profile as it is; layers: the profile plus `layers`; custom: no profile, only Purpose, the agent's prompt and the `generated` sections
+     */
+    mode: "profile" | "layers" | "custom"
+    profile?: string
+    layers?: Array<{
+      layer: string
+      group: string
+    }>
+    generated?: Array<"environment" | "references" | "instructions" | "mcp" | "skills">
+  }
   [key: string]:
     | unknown
     | string
@@ -1752,6 +1764,18 @@ export type AgentConfig = {
     | "info"
     | number
     | PermissionConfig
+    | {
+        /**
+         * profile: the prompt profile as it is; layers: the profile plus `layers`; custom: no profile, only Purpose, the agent's prompt and the `generated` sections
+         */
+        mode: "profile" | "layers" | "custom"
+        profile?: string
+        layers?: Array<{
+          layer: string
+          group: string
+        }>
+        generated?: Array<"environment" | "references" | "instructions" | "mcp" | "skills">
+      }
     | undefined
 }
 
@@ -2263,6 +2287,107 @@ export type OperatorFolderInvalidError = {
 
 export type OperatorFolderCreated = {
   path: string
+}
+
+export type OperatorPromptLayerSection =
+  | "base"
+  | "purpose"
+  | "role"
+  | "identity"
+  | "tool"
+  | "generated"
+  | "output"
+  | "custom"
+  | "message"
+
+export type OperatorPromptProjects = "*" | Array<string>
+
+export type OperatorPromptLayerOrigin = "builtin" | "slot" | "collection" | "generated" | "profile" | "file"
+
+export type OperatorPromptLayer = {
+  id: string
+  name: string
+  section: OperatorPromptLayerSection
+  purpose?: "org" | "goal"
+  overrides?: string
+  projects: OperatorPromptProjects
+  agents?: Array<string>
+  /**
+   * Lower comes first among layers added together (default 50)
+   */
+  priority: number
+  maxLength?: number
+  enabled: boolean
+  text: string
+  origin: OperatorPromptLayerOrigin
+  path?: string
+}
+
+export type OperatorPromptGroupType =
+  | "platform"
+  | "purpose"
+  | "role"
+  | "identity"
+  | "capabilities"
+  | "custom"
+  | "output"
+  | "tool"
+
+export type OperatorPromptGroup = {
+  id: string
+  name: string
+  type: OperatorPromptGroupType
+  projects: OperatorPromptProjects
+  layers: Array<string>
+  builtin: boolean
+}
+
+export type OperatorPromptProfile = {
+  id: string
+  name: string
+  projects: OperatorPromptProjects
+  groups: Array<string>
+  builtin: boolean
+}
+
+export type OperatorPromptDefaults = {
+  global?: string
+  projects: {
+    [key: string]: string
+  }
+}
+
+export type OperatorPromptProject = {
+  /**
+   * "opencode", or the project folder
+   */
+  key: string
+  name: string
+}
+
+export type OperatorPromptProfileCatalog = {
+  layers: Array<OperatorPromptLayer>
+  groups: Array<OperatorPromptGroup>
+  profiles: Array<OperatorPromptProfile>
+  defaults: OperatorPromptDefaults
+  /**
+   * OpenCode first, then every project the server knows
+   */
+  projects: Array<OperatorPromptProject>
+}
+
+export type OperatorProfileInvalidError = {
+  name: "OperatorProfileInvalidError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorProfileNotFoundError = {
+  name: "OperatorProfileNotFoundError"
+  data: {
+    message: string
+  }
 }
 
 export type Model = {
@@ -3010,13 +3135,33 @@ export type OperatorPromptCatalog = {
   }
 }
 
-export type OperatorPromptSection = {
-  kind: "identity" | "agent" | "base" | "environment" | "references" | "instructions" | "mcp" | "skills"
+export type OperatorPromptMode = "profile" | "layers" | "custom"
+
+export type OperatorPromptAssembledSection = {
+  group: string
+  groupName: string
+  groupType: OperatorPromptGroupType
   /**
-   * Where the text comes from: an override id, file path or agent
+   * The layer as the group lists it (a slot or collection, or a layer)
+   */
+  entry: string
+  /**
+   * The layer the text comes from
+   */
+  layer: string
+  layerName: string
+  section: OperatorPromptLayerSection
+  overrides?: string
+  /**
+   * A file path, or what wrote the text
    */
   source: string
   text: string
+  mandatory: boolean
+  /**
+   * 1 or 2: the system message the text is in
+   */
+  message: number
 }
 
 export type OperatorPromptPreview = {
@@ -3026,10 +3171,22 @@ export type OperatorPromptPreview = {
    */
   model: string
   /**
-   * The base prompt id used for this model
+   * The Base Model Group layer for this model
    */
   base: string
-  sections: Array<OperatorPromptSection>
+  /**
+   * The project the agent belongs to, whose goal and layers apply
+   */
+  project: {
+    key: string
+    name: string
+  }
+  profile: {
+    id: string
+    name: string
+  }
+  mode: OperatorPromptMode
+  sections: Array<OperatorPromptAssembledSection>
   /**
    * The system messages exactly as sent
    */
@@ -8152,6 +8309,400 @@ export type OperatorFolderInitResponses = {
 }
 
 export type OperatorFolderInitResponse = OperatorFolderInitResponses[keyof OperatorFolderInitResponses]
+
+export type OperatorPromptProfileCatalogData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/operator/prompt-profile"
+}
+
+export type OperatorPromptProfileCatalogErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorPromptProfileCatalogError =
+  OperatorPromptProfileCatalogErrors[keyof OperatorPromptProfileCatalogErrors]
+
+export type OperatorPromptProfileCatalogResponses = {
+  /**
+   * Layers, groups, profiles and defaults
+   */
+  200: OperatorPromptProfileCatalog
+}
+
+export type OperatorPromptProfileCatalogResponse =
+  OperatorPromptProfileCatalogResponses[keyof OperatorPromptProfileCatalogResponses]
+
+export type OperatorPromptProfileLayerCreateData = {
+  body?: {
+    name: string
+    section: OperatorPromptLayerSection
+    purpose?: "org" | "goal"
+    overrides?: string
+    projects: OperatorPromptProjects
+    agents?: Array<string>
+    priority?: number
+    maxLength?: number
+    enabled?: boolean
+    text: string
+  }
+  path?: never
+  query?: never
+  url: "/operator/prompt-profile/layer"
+}
+
+export type OperatorPromptProfileLayerCreateErrors = {
+  /**
+   * OperatorProfileInvalidError | InvalidRequestError
+   */
+  400: OperatorProfileInvalidError | InvalidRequestError
+  /**
+   * OperatorProfileNotFoundError
+   */
+  404: OperatorProfileNotFoundError
+}
+
+export type OperatorPromptProfileLayerCreateError =
+  OperatorPromptProfileLayerCreateErrors[keyof OperatorPromptProfileLayerCreateErrors]
+
+export type OperatorPromptProfileLayerCreateResponses = {
+  /**
+   * The layer
+   */
+  200: OperatorPromptLayer
+}
+
+export type OperatorPromptProfileLayerCreateResponse =
+  OperatorPromptProfileLayerCreateResponses[keyof OperatorPromptProfileLayerCreateResponses]
+
+export type OperatorPromptProfileLayerRemoveData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/operator/prompt-profile/layer/{id}"
+}
+
+export type OperatorPromptProfileLayerRemoveErrors = {
+  /**
+   * OperatorProfileInvalidError | InvalidRequestError
+   */
+  400: OperatorProfileInvalidError | InvalidRequestError
+  /**
+   * OperatorProfileNotFoundError
+   */
+  404: OperatorProfileNotFoundError
+}
+
+export type OperatorPromptProfileLayerRemoveError =
+  OperatorPromptProfileLayerRemoveErrors[keyof OperatorPromptProfileLayerRemoveErrors]
+
+export type OperatorPromptProfileLayerRemoveResponses = {
+  /**
+   * Removed
+   */
+  200: boolean
+}
+
+export type OperatorPromptProfileLayerRemoveResponse =
+  OperatorPromptProfileLayerRemoveResponses[keyof OperatorPromptProfileLayerRemoveResponses]
+
+export type OperatorPromptProfileLayerUpdateData = {
+  body?: {
+    name: string
+    section: OperatorPromptLayerSection
+    purpose?: "org" | "goal"
+    overrides?: string
+    projects: OperatorPromptProjects
+    agents?: Array<string>
+    priority?: number
+    maxLength?: number
+    enabled?: boolean
+    text: string
+  }
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/operator/prompt-profile/layer/{id}"
+}
+
+export type OperatorPromptProfileLayerUpdateErrors = {
+  /**
+   * OperatorProfileInvalidError | InvalidRequestError
+   */
+  400: OperatorProfileInvalidError | InvalidRequestError
+  /**
+   * OperatorProfileNotFoundError
+   */
+  404: OperatorProfileNotFoundError
+}
+
+export type OperatorPromptProfileLayerUpdateError =
+  OperatorPromptProfileLayerUpdateErrors[keyof OperatorPromptProfileLayerUpdateErrors]
+
+export type OperatorPromptProfileLayerUpdateResponses = {
+  /**
+   * The layer
+   */
+  200: OperatorPromptLayer
+}
+
+export type OperatorPromptProfileLayerUpdateResponse =
+  OperatorPromptProfileLayerUpdateResponses[keyof OperatorPromptProfileLayerUpdateResponses]
+
+export type OperatorPromptProfileGroupCreateData = {
+  body?: {
+    name: string
+    type: OperatorPromptGroupType
+    projects: OperatorPromptProjects
+    layers: Array<string>
+  }
+  path?: never
+  query?: never
+  url: "/operator/prompt-profile/group"
+}
+
+export type OperatorPromptProfileGroupCreateErrors = {
+  /**
+   * OperatorProfileInvalidError | InvalidRequestError
+   */
+  400: OperatorProfileInvalidError | InvalidRequestError
+  /**
+   * OperatorProfileNotFoundError
+   */
+  404: OperatorProfileNotFoundError
+}
+
+export type OperatorPromptProfileGroupCreateError =
+  OperatorPromptProfileGroupCreateErrors[keyof OperatorPromptProfileGroupCreateErrors]
+
+export type OperatorPromptProfileGroupCreateResponses = {
+  /**
+   * The group
+   */
+  200: OperatorPromptGroup
+}
+
+export type OperatorPromptProfileGroupCreateResponse =
+  OperatorPromptProfileGroupCreateResponses[keyof OperatorPromptProfileGroupCreateResponses]
+
+export type OperatorPromptProfileGroupRemoveData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/operator/prompt-profile/group/{id}"
+}
+
+export type OperatorPromptProfileGroupRemoveErrors = {
+  /**
+   * OperatorProfileInvalidError | InvalidRequestError
+   */
+  400: OperatorProfileInvalidError | InvalidRequestError
+  /**
+   * OperatorProfileNotFoundError
+   */
+  404: OperatorProfileNotFoundError
+}
+
+export type OperatorPromptProfileGroupRemoveError =
+  OperatorPromptProfileGroupRemoveErrors[keyof OperatorPromptProfileGroupRemoveErrors]
+
+export type OperatorPromptProfileGroupRemoveResponses = {
+  /**
+   * Removed
+   */
+  200: boolean
+}
+
+export type OperatorPromptProfileGroupRemoveResponse =
+  OperatorPromptProfileGroupRemoveResponses[keyof OperatorPromptProfileGroupRemoveResponses]
+
+export type OperatorPromptProfileGroupUpdateData = {
+  body?: {
+    name: string
+    type: OperatorPromptGroupType
+    projects: OperatorPromptProjects
+    layers: Array<string>
+  }
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/operator/prompt-profile/group/{id}"
+}
+
+export type OperatorPromptProfileGroupUpdateErrors = {
+  /**
+   * OperatorProfileInvalidError | InvalidRequestError
+   */
+  400: OperatorProfileInvalidError | InvalidRequestError
+  /**
+   * OperatorProfileNotFoundError
+   */
+  404: OperatorProfileNotFoundError
+}
+
+export type OperatorPromptProfileGroupUpdateError =
+  OperatorPromptProfileGroupUpdateErrors[keyof OperatorPromptProfileGroupUpdateErrors]
+
+export type OperatorPromptProfileGroupUpdateResponses = {
+  /**
+   * The group
+   */
+  200: OperatorPromptGroup
+}
+
+export type OperatorPromptProfileGroupUpdateResponse =
+  OperatorPromptProfileGroupUpdateResponses[keyof OperatorPromptProfileGroupUpdateResponses]
+
+export type OperatorPromptProfileProfileCreateData = {
+  body?: {
+    name: string
+    projects: OperatorPromptProjects
+    groups: Array<string>
+  }
+  path?: never
+  query?: never
+  url: "/operator/prompt-profile/profile"
+}
+
+export type OperatorPromptProfileProfileCreateErrors = {
+  /**
+   * OperatorProfileInvalidError | InvalidRequestError
+   */
+  400: OperatorProfileInvalidError | InvalidRequestError
+  /**
+   * OperatorProfileNotFoundError
+   */
+  404: OperatorProfileNotFoundError
+}
+
+export type OperatorPromptProfileProfileCreateError =
+  OperatorPromptProfileProfileCreateErrors[keyof OperatorPromptProfileProfileCreateErrors]
+
+export type OperatorPromptProfileProfileCreateResponses = {
+  /**
+   * The profile
+   */
+  200: OperatorPromptProfile
+}
+
+export type OperatorPromptProfileProfileCreateResponse =
+  OperatorPromptProfileProfileCreateResponses[keyof OperatorPromptProfileProfileCreateResponses]
+
+export type OperatorPromptProfileProfileRemoveData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/operator/prompt-profile/profile/{id}"
+}
+
+export type OperatorPromptProfileProfileRemoveErrors = {
+  /**
+   * OperatorProfileInvalidError | InvalidRequestError
+   */
+  400: OperatorProfileInvalidError | InvalidRequestError
+  /**
+   * OperatorProfileNotFoundError
+   */
+  404: OperatorProfileNotFoundError
+}
+
+export type OperatorPromptProfileProfileRemoveError =
+  OperatorPromptProfileProfileRemoveErrors[keyof OperatorPromptProfileProfileRemoveErrors]
+
+export type OperatorPromptProfileProfileRemoveResponses = {
+  /**
+   * Removed
+   */
+  200: boolean
+}
+
+export type OperatorPromptProfileProfileRemoveResponse =
+  OperatorPromptProfileProfileRemoveResponses[keyof OperatorPromptProfileProfileRemoveResponses]
+
+export type OperatorPromptProfileProfileUpdateData = {
+  body?: {
+    name: string
+    projects: OperatorPromptProjects
+    groups: Array<string>
+  }
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/operator/prompt-profile/profile/{id}"
+}
+
+export type OperatorPromptProfileProfileUpdateErrors = {
+  /**
+   * OperatorProfileInvalidError | InvalidRequestError
+   */
+  400: OperatorProfileInvalidError | InvalidRequestError
+  /**
+   * OperatorProfileNotFoundError
+   */
+  404: OperatorProfileNotFoundError
+}
+
+export type OperatorPromptProfileProfileUpdateError =
+  OperatorPromptProfileProfileUpdateErrors[keyof OperatorPromptProfileProfileUpdateErrors]
+
+export type OperatorPromptProfileProfileUpdateResponses = {
+  /**
+   * The profile
+   */
+  200: OperatorPromptProfile
+}
+
+export type OperatorPromptProfileProfileUpdateResponse =
+  OperatorPromptProfileProfileUpdateResponses[keyof OperatorPromptProfileProfileUpdateResponses]
+
+export type OperatorPromptProfileDefaultsData = {
+  body?: {
+    global?: string
+    projects: {
+      [key: string]: string
+    }
+  }
+  path?: never
+  query?: never
+  url: "/operator/prompt-profile/defaults"
+}
+
+export type OperatorPromptProfileDefaultsErrors = {
+  /**
+   * OperatorProfileInvalidError | InvalidRequestError
+   */
+  400: OperatorProfileInvalidError | InvalidRequestError
+  /**
+   * OperatorProfileNotFoundError
+   */
+  404: OperatorProfileNotFoundError
+}
+
+export type OperatorPromptProfileDefaultsError =
+  OperatorPromptProfileDefaultsErrors[keyof OperatorPromptProfileDefaultsErrors]
+
+export type OperatorPromptProfileDefaultsResponses = {
+  /**
+   * The defaults
+   */
+  200: OperatorPromptDefaults
+}
+
+export type OperatorPromptProfileDefaultsResponse =
+  OperatorPromptProfileDefaultsResponses[keyof OperatorPromptProfileDefaultsResponses]
 
 export type EventSubscribeData = {
   body?: never
