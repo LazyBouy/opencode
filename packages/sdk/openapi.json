@@ -11746,6 +11746,9 @@
                   "permission": {
                     "$ref": "#/components/schemas/PermissionConfig"
                   },
+                  "promptProfile": {
+                    "$ref": "#/components/schemas/OperatorPromptSetting"
+                  },
                   "reset": {
                     "type": "array",
                     "items": {
@@ -11763,7 +11766,8 @@
                         "disable",
                         "home",
                         "prompt",
-                        "permission"
+                        "permission",
+                        "promptProfile"
                       ]
                     }
                   }
@@ -11918,6 +11922,9 @@
                   "permission": {
                     "$ref": "#/components/schemas/PermissionConfig"
                   },
+                  "promptProfile": {
+                    "$ref": "#/components/schemas/OperatorPromptSetting"
+                  },
                   "reset": {
                     "type": "array",
                     "items": {
@@ -11935,7 +11942,8 @@
                         "disable",
                         "home",
                         "prompt",
-                        "permission"
+                        "permission",
+                        "promptProfile"
                       ]
                     }
                   }
@@ -27600,6 +27608,46 @@
         "required": ["name", "mode", "permission", "options", "source", "disabled", "settings", "sessions"],
         "additionalProperties": false
       },
+      "OperatorPromptMode": {
+        "type": "string",
+        "enum": ["profile", "layers", "custom"]
+      },
+      "OperatorPromptSetting": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/OperatorPromptMode"
+          },
+          "profile": {
+            "type": "string"
+          },
+          "layers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "layer": {
+                  "type": "string"
+                },
+                "group": {
+                  "type": "string"
+                }
+              },
+              "required": ["layer", "group"],
+              "additionalProperties": false
+            }
+          },
+          "generated": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["environment", "references", "instructions", "mcp", "skills"]
+            }
+          }
+        },
+        "required": ["mode"],
+        "additionalProperties": false
+      },
       "OperatorAgentWritten": {
         "type": "object",
         "properties": {
@@ -27832,10 +27880,6 @@
         },
         "required": ["prompts", "tools", "toggles", "folders"],
         "additionalProperties": false
-      },
-      "OperatorPromptMode": {
-        "type": "string",
-        "enum": ["profile", "layers", "custom"]
       },
       "OperatorPromptAssembledSection": {
         "type": "object",

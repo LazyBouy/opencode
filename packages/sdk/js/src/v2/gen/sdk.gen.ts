@@ -192,6 +192,7 @@ import type {
   OperatorPromptProjects,
   OperatorPromptRemoveErrors,
   OperatorPromptRemoveResponses,
+  OperatorPromptSetting,
   OperatorPromptWriteErrors,
   OperatorPromptWriteResponses,
   OperatorSessionListErrors,
@@ -2282,6 +2283,7 @@ export class Agent extends HeyApiClient {
       home?: string
       prompt?: string
       permission?: PermissionConfig
+      promptProfile?: OperatorPromptSetting
       reset?: Array<
         | "description"
         | "mode"
@@ -2296,6 +2298,7 @@ export class Agent extends HeyApiClient {
         | "home"
         | "prompt"
         | "permission"
+        | "promptProfile"
       >
     },
     options?: Options<never, ThrowOnError>,
@@ -2322,6 +2325,7 @@ export class Agent extends HeyApiClient {
             { in: "body", key: "home" },
             { in: "body", key: "prompt" },
             { in: "body", key: "permission" },
+            { in: "body", key: "promptProfile" },
             { in: "body", key: "reset" },
           ],
         },
@@ -2403,6 +2407,7 @@ export class Agent extends HeyApiClient {
       home?: string
       prompt?: string
       permission?: PermissionConfig
+      promptProfile?: OperatorPromptSetting
       reset?: Array<
         | "description"
         | "mode"
@@ -2417,6 +2422,7 @@ export class Agent extends HeyApiClient {
         | "home"
         | "prompt"
         | "permission"
+        | "promptProfile"
       >
     },
     options?: Options<never, ThrowOnError>,
@@ -2443,6 +2449,7 @@ export class Agent extends HeyApiClient {
             { in: "body", key: "home" },
             { in: "body", key: "prompt" },
             { in: "body", key: "permission" },
+            { in: "body", key: "promptProfile" },
             { in: "body", key: "reset" },
           ],
         },

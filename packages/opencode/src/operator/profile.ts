@@ -126,6 +126,16 @@ export type Mode = typeof Mode.Type
 export const GENERATED = ["environment", "references", "instructions", "mcp", "skills"] as const
 export type Generated = (typeof GENERATED)[number]
 
+// An agent's `promptProfile` setting, as the agent editor writes it.
+export const Setting = Schema.Struct({
+  mode: Mode,
+  profile: Schema.optional(Schema.String),
+  layers: Schema.optional(Schema.Array(Schema.Struct({ layer: Schema.String, group: Schema.String }))),
+  generated: Schema.optional(
+    Schema.Array(Schema.Literals(["environment", "references", "instructions", "mcp", "skills"])),
+  ),
+}).annotate({ identifier: "OperatorPromptSetting" })
+
 // An agent's `promptProfile` setting.
 export type Settings = {
   readonly mode?: Mode

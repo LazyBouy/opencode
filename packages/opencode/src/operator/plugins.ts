@@ -5,12 +5,22 @@ import { OperatorProfileStore } from "./profile-store"
 import { OperatorPromptText } from "./prompt-text"
 
 // Builds every request's system prompt from the agent's prompt profile (see profile.ts), and applies
-// overrides in scope to reminders, notices and tool descriptions. Profile files are read on every
+// overrides in scope to reminders, notices and tool descriptions. Profile files are read for every
 // request, so edits apply to the next message. The agent page's preview calls the same assembler.
 const PromptPlugin: Plugin = async (input) => {
   const ctx = { directory: input.directory, worktree: input.worktree }
   const project = OperatorProfile.projectKey(ctx)
-  const catalog = () => OperatorProfileStore.read([{ key: project, root: OperatorConfig.projectRoot(ctx) }])
+  // Profile files are read for every request; one read is shared for a second, since preparing one
+  // request asks for the catalog once per tool definition.
+  let recent: { at: number; read: Promise<OperatorProfile.Catalog> } | undefined
+  const catalog = () => {
+    if (recent && Date.now() - recent.at < 1000) return recent.read
+    recent = {
+      at: Date.now(),
+      read: OperatorProfileStore.read([{ key: project, root: OperatorConfig.projectRoot(ctx) }]),
+    }
+    return recent.read
+  }
   // Agent definitions load with the project, so which project an agent belongs to is kept until the
   // project reloads (which builds this plugin again).
   const projects = new Map<string, Promise<string>>()

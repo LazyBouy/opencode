@@ -203,6 +203,70 @@ unix("a goal, a role layer in a group and the project's default profile reach a 
   ),
 )
 
+// A project agent with a `promptProfile` setting, an org value and a role layer, then one request.
+const sendWithMode = (setting: string) =>
+  withGlobal((global) =>
+    Effect.gen(function* () {
+      const { directory, llm } = yield* configure()
+      yield* write(
+        path.join(directory, ".opencode", "agent", "triage.md"),
+        `---\nmode: primary\n${setting}---\nTriage issues.\n`,
+      )
+      yield* write(
+        path.join(global, "profile", "layers", "care.md"),
+        "---\nname: Care\nsection: purpose\npurpose: org\nprojects: '*'\n---\nWe value care.\n",
+      )
+      yield* write(
+        path.join(global, "profile", "layers", "reviewer.md"),
+        "---\nname: Reviewer\nsection: role\nprojects: '*'\n---\nYou review release notes.\n",
+      )
+      yield* write(path.join(directory, "AGENTS.md"), "Use Bun.\n")
+      yield* llm.text("ok")
+      yield* send((yield* session()).id, "hello", "triage")
+      const sent = systemMessages((yield* llm.inputs)[0])
+      const preview = yield* (yield* OperatorPrompts.Service).preview({ agent: "triage" })
+      expect(sent).toEqual([...preview.system])
+      return { sent, preview }
+    }),
+  )
+
+unix("From profile uses the agent's profile as it is", () =>
+  Effect.gen(function* () {
+    const result = yield* sendWithMode("promptProfile:\n  mode: profile\n  profile: helper\n")
+    expect(result.preview).toMatchObject({ mode: "profile", profile: { id: "helper" } })
+    expect(result.sent).toEqual([`We value care.\n${DEFAULT_BASE}\nTriage issues.`])
+  }),
+)
+
+unix("Profile + layers adds the agent's layers to the end of the named group", () =>
+  Effect.gen(function* () {
+    const result = yield* sendWithMode(
+      "promptProfile:\n  mode: layers\n  layers:\n    - layer: reviewer\n      group: builtin.role\n",
+    )
+    expect(result.preview).toMatchObject({ mode: "layers", profile: { id: "default" } })
+    expect(result.sent[0]).toBe(`We value care.\n${DEFAULT_BASE}\nYou review release notes.\nTriage issues.`)
+  }),
+)
+
+unix("Full custom still sends Purpose, then the agent's prompt and the chosen generated sections", () =>
+  Effect.gen(function* () {
+    const result = yield* sendWithMode("promptProfile:\n  mode: custom\n  generated: [instructions]\n")
+    expect(result.preview.mode).toBe("custom")
+    expect(result.sent).toHaveLength(2)
+    expect(result.sent[0]).toBe(`We value care.\n${DEFAULT_BASE}\nTriage issues.`)
+    expect(String(result.sent[1])).toStartWith("Instructions from:")
+    expect(String(result.sent[1])).not.toContain("<env>")
+  }),
+)
+
+unix("with no mode set, an agent follows the default chain", () =>
+  Effect.gen(function* () {
+    const result = yield* sendWithMode("")
+    expect(result.preview).toMatchObject({ mode: "profile", profile: { id: "default" } })
+    expect(String(result.sent[1])).toContain("<env>")
+  }),
+)
+
 unix("overrides and the legacy switches change what the model receives", () =>
   withGlobal((global) =>
     Effect.gen(function* () {

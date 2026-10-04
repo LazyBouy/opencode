@@ -3048,6 +3048,18 @@ export type OperatorAgent = {
   }
 }
 
+export type OperatorPromptMode = "profile" | "layers" | "custom"
+
+export type OperatorPromptSetting = {
+  mode: OperatorPromptMode
+  profile?: string
+  layers?: Array<{
+    layer: string
+    group: string
+  }>
+  generated?: Array<"environment" | "references" | "instructions" | "mcp" | "skills">
+}
+
 export type OperatorAgentWritten = {
   path: string
 }
@@ -3134,8 +3146,6 @@ export type OperatorPromptCatalog = {
     project: string
   }
 }
-
-export type OperatorPromptMode = "profile" | "layers" | "custom"
 
 export type OperatorPromptAssembledSection = {
   group: string
@@ -12771,6 +12781,7 @@ export type OperatorAgentCreateData = {
     home?: string
     prompt?: string
     permission?: PermissionConfig
+    promptProfile?: OperatorPromptSetting
     reset?: Array<
       | "description"
       | "mode"
@@ -12785,6 +12796,7 @@ export type OperatorAgentCreateData = {
       | "home"
       | "prompt"
       | "permission"
+      | "promptProfile"
     >
   }
   path?: never
@@ -12876,6 +12888,7 @@ export type OperatorAgentUpdateData = {
     home?: string
     prompt?: string
     permission?: PermissionConfig
+    promptProfile?: OperatorPromptSetting
     reset?: Array<
       | "description"
       | "mode"
@@ -12890,6 +12903,7 @@ export type OperatorAgentUpdateData = {
       | "home"
       | "prompt"
       | "permission"
+      | "promptProfile"
     >
   }
   path: {

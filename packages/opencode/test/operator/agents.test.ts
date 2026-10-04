@@ -119,12 +119,25 @@ it.instance("editing a built-in agent writes overrides into the scope's config",
     const { directory } = yield* TestInstance
     const agents = yield* OperatorAgents.Service
 
-    const file = yield* agents.update("project", "build", { temperature: 0.2, home: path.join(directory, "work") })
+    const file = yield* agents.update("project", "build", {
+      temperature: 0.2,
+      home: path.join(directory, "work"),
+      promptProfile: { mode: "custom", generated: ["instructions"] },
+    })
 
     expect(file).toBe(path.join(directory, ".opencode", "opencode.jsonc"))
     expect(JSON.parse(yield* Effect.promise(() => fs.readFile(file, "utf8")))).toEqual({
-      agent: { build: { temperature: 0.2, home: path.join(directory, "work") } },
+      agent: {
+        build: {
+          temperature: 0.2,
+          home: path.join(directory, "work"),
+          promptProfile: { mode: "custom", generated: ["instructions"] },
+        },
+      },
     })
+    // The key is known to the agent schema, so it is not sent to the model provider as an option.
+    yield* agents.update("project", "build", { reset: ["promptProfile"] })
+    expect(JSON.parse(yield* Effect.promise(() => fs.readFile(file, "utf8"))).agent.build.promptProfile).toBeUndefined()
   }),
 )
 
