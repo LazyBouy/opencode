@@ -281,4 +281,27 @@ export const operatorScenarios: Scenario[] = [
     .post("/operator/folder/init", "operator.folder.init")
     .at((ctx) => ({ path: "/operator/folder/init", headers: ctx.headers(), body: { path: "/" } }))
     .status(403),
+  http.protected.get("/operator/memory/overview", "operator.memory.overview").json(200, (body) => {
+    object(body)
+    array(body.files)
+    object(body.database)
+    array(body.database.tables)
+    check(
+      body.database.tables.some((table) => isRecord(table) && table.name === "session"),
+      "the session table should be counted",
+    )
+  }),
+  http.protected
+    .get("/operator/memory/file", "operator.memory.read")
+    .at((ctx) => ({ path: "/operator/memory/file?path=/etc/hostname", headers: ctx.headers() }))
+    .status(403),
+  http.protected
+    .put("/operator/memory/file", "operator.memory.write")
+    .mutating()
+    .at((ctx) => ({
+      path: "/operator/memory/file",
+      headers: ctx.headers(),
+      body: { path: `${ctx.directory}/AGENTS.md`, text: "Written by the exerciser.\n" },
+    }))
+    .json(200, (body) => check(body === true, "AGENTS.md at the project root should be created"), "status"),
 ]
