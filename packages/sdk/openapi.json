@@ -27983,7 +27983,7 @@
         "properties": {
           "kind": {
             "type": "string",
-            "enum": ["instructions", "nested", "url", "skill", "identity", "prompt"]
+            "enum": ["instructions", "nested", "url", "skill", "identity", "prompt", "profile"]
           },
           "scope": {
             "$ref": "#/components/schemas/OperatorConfigScope"
@@ -27999,8 +27999,8 @@
           },
           "loaded": {
             "type": "string",
-            "enum": ["always", "when-reading", "on-demand", "never"],
-            "description": "always: in every system prompt; when-reading: added when the agent reads a file in its folder; on-demand: loaded when the agent asks for it; never: another instruction file in the same folder comes first"
+            "enum": ["always", "when-reading", "on-demand", "never", "in-profile"],
+            "description": "always: in every system prompt; when-reading: added when the agent reads a file in its folder; on-demand: loaded when the agent asks for it; never: another instruction file in the same folder comes first; in-profile: used where a prompt profile includes it"
           },
           "editable": {
             "type": "boolean"

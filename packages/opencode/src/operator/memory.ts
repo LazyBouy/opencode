@@ -22,16 +22,16 @@ import { OperatorPromptText } from "./prompt-text"
 // nested AGENTS.md, skills, identity layers, prompt overrides) and what the database keeps
 // (sessions, messages, compaction summaries and the other tables).
 
-export const FileKind = Schema.Literals(["instructions", "nested", "url", "skill", "identity", "prompt"])
+export const FileKind = Schema.Literals(["instructions", "nested", "url", "skill", "identity", "prompt", "profile"])
 export const File = Schema.Struct({
   kind: FileKind,
   scope: OperatorConfig.Scope,
   path: Schema.String,
   size: Schema.optional(Schema.Finite),
   modified: Schema.optional(Schema.Finite),
-  loaded: Schema.Literals(["always", "when-reading", "on-demand", "never"]).annotate({
+  loaded: Schema.Literals(["always", "when-reading", "on-demand", "never", "in-profile"]).annotate({
     description:
-      "always: in every system prompt; when-reading: added when the agent reads a file in its folder; on-demand: loaded when the agent asks for it; never: another instruction file in the same folder comes first",
+      "always: in every system prompt; when-reading: added when the agent reads a file in its folder; on-demand: loaded when the agent asks for it; never: another instruction file in the same folder comes first; in-profile: used where a prompt profile includes it",
   }),
   editable: Schema.Boolean,
 }).annotate({ identifier: "OperatorMemoryFile" })
@@ -148,6 +148,10 @@ const layer = Layer.effect(
         ]
       })
 
+      // Prompt profile resources: layers, groups, profiles and the defaults.
+      const profile = yield* Effect.promise(() =>
+        glob("**/*.{md,json}", { cwd: path.join(Global.Path.config, "profile"), absolute: true, nodir: true }),
+      )
       const local = [
         ...always.map((file) => ({ kind: "instructions" as const, path: file, loaded: "always" as const })),
         ...nested.map((item) => ({
@@ -160,6 +164,7 @@ const layer = Layer.effect(
           .map((item) => ({ kind: "skill" as const, path: item.location, loaded: "on-demand" as const })),
         ...identity.map((item) => ({ kind: "identity" as const, path: item.path, loaded: "always" as const })),
         ...prompts.map((file) => ({ kind: "prompt" as const, path: file, loaded: "always" as const })),
+        ...profile.toSorted().map((file) => ({ kind: "profile" as const, path: file, loaded: "in-profile" as const })),
       ]
       const described = yield* Effect.forEach(local, (item) =>
         stat(item.path).pipe(Effect.map((info) => ({ ...item, ...info, scope: scopeOf(item.path), editable: true }))),

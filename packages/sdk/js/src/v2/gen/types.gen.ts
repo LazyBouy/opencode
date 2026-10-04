@@ -3201,15 +3201,15 @@ export type OperatorPromptNotFoundError = {
 }
 
 export type OperatorMemoryFile = {
-  kind: "instructions" | "nested" | "url" | "skill" | "identity" | "prompt"
+  kind: "instructions" | "nested" | "url" | "skill" | "identity" | "prompt" | "profile"
   scope: OperatorConfigScope
   path: string
   size?: number
   modified?: number
   /**
-   * always: in every system prompt; when-reading: added when the agent reads a file in its folder; on-demand: loaded when the agent asks for it; never: another instruction file in the same folder comes first
+   * always: in every system prompt; when-reading: added when the agent reads a file in its folder; on-demand: loaded when the agent asks for it; never: another instruction file in the same folder comes first; in-profile: used where a prompt profile includes it
    */
-  loaded: "always" | "when-reading" | "on-demand" | "never"
+  loaded: "always" | "when-reading" | "on-demand" | "never" | "in-profile"
   editable: boolean
 }
 

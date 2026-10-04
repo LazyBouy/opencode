@@ -4,6 +4,7 @@ import { expect } from "bun:test"
 import { Effect, Schedule } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Global } from "@opencode-ai/core/global"
+import { OperatorProfileStore } from "@/operator/profile-store"
 import { OperatorPrompts } from "@/operator/prompts"
 import { OperatorPromptText } from "@/operator/prompt-text"
 import { Session } from "@/session/session"
@@ -12,7 +13,9 @@ import { testEffect } from "../lib/effect"
 import { TestLLMServer } from "../lib/llm-server"
 import { configure, replacements, root, send, session } from "../merge/harness"
 
-const it = testEffect(LayerNode.compile(LayerNode.group([root, OperatorPrompts.node]), replacements))
+const it = testEffect(
+  LayerNode.compile(LayerNode.group([root, OperatorPrompts.node, OperatorProfileStore.node]), replacements),
+)
 const unix = process.platform !== "win32" ? it.instance : it.instance.skip
 
 const DEFAULT_BASE = OperatorPromptText.BUILTINS.find((item) => item.id === "base.default")!.text
@@ -147,6 +150,55 @@ unix("a project agent gets its project's goal instead of the base prompt", () =>
       expect(sent).toEqual([...preview.system])
       expect(sent[0]).toBe("Ship the release this week.\nTriage issues.")
       expect(preview.sections.find((item) => item.layer === "goal")?.mandatory).toBe(true)
+    }),
+  ),
+)
+
+unix("a goal, a role layer in a group and the project's default profile reach a real request", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      const { directory, llm } = yield* configure()
+      yield* write(path.join(directory, ".opencode", "agent", "triage.md"), "---\nmode: primary\n---\nTriage issues.\n")
+      const prompts = yield* OperatorPrompts.Service
+      const store = yield* OperatorProfileStore.Service
+      const project = (yield* prompts.preview({ agent: "triage" })).project.key
+
+      yield* store.saveLayer(undefined, {
+        name: "Release goal",
+        section: "purpose",
+        purpose: "goal",
+        projects: [project],
+        text: "Ship the release.",
+      })
+      const role = yield* store.saveLayer(undefined, {
+        name: "Reviewer",
+        section: "role",
+        projects: "*",
+        text: "You review release notes.",
+      })
+      const group = yield* store.saveGroup(undefined, {
+        name: "Release roles",
+        type: "role",
+        projects: "*",
+        layers: [role.id],
+      })
+      const profile = yield* store.saveProfile(undefined, {
+        name: "Release",
+        projects: "*",
+        groups: ["builtin.purpose", group.id, "builtin.identity", "builtin.instructions"],
+      })
+      yield* store.saveDefaults({ projects: { [project]: profile.id } })
+      yield* llm.text("ok")
+
+      yield* send((yield* session()).id, "hello", "triage")
+      const sent = systemMessages((yield* llm.inputs)[0])
+      const preview = yield* prompts.preview({ agent: "triage" })
+
+      expect(sent).toEqual([...preview.system])
+      expect(preview.profile).toEqual({ id: "release", name: "Release" })
+      expect(sent[0]).toBe("Ship the release.\nYou review release notes.\nTriage issues.")
+      // `build` belongs to OpenCode, so this project's default and goal do not reach it.
+      expect((yield* prompts.preview({ agent: "build" })).profile.id).toBe("default")
     }),
   ),
 )

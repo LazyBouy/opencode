@@ -3,6 +3,7 @@ import path from "path"
 import { expect } from "bun:test"
 import { Effect, Exit } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Global } from "@opencode-ai/core/global"
 import { OperatorMemory } from "@/operator/memory"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -48,6 +49,12 @@ it.instance("lists every file added to prompts, with how it is loaded", () =>
     expect(found(path.join(directory, "packages", "api", "CLAUDE.md"))?.loaded).toBe("when-reading")
     expect(found(path.join(directory, ".opencode", "identity", "voice.md"))?.kind).toBe("identity")
     expect(found(path.join(directory, ".opencode", "prompts", "reminder.plan.md"))?.kind).toBe("prompt")
+    const profileFile = path.join(Global.Path.config, "profile", "layers", "memory-test-role.md")
+    yield* write(profileFile, "---\nname: Role\nsection: role\n---\nYou review.\n")
+    expect(
+      (yield* (yield* OperatorMemory.Service).overview()).files.find((item) => item.path === profileFile),
+    ).toMatchObject({ kind: "profile", loaded: "in-profile", scope: "global" })
+    yield* Effect.promise(() => fs.rm(profileFile))
     expect(overview.creatable.map((item) => item.scope)).not.toContain("project")
   }),
 )
