@@ -11762,11 +11762,11 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "OperatorPromptNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/OperatorPromptNotFoundError"
                 }
               }
             }
@@ -26755,6 +26755,27 @@
           }
         },
         "required": ["agent", "model", "base", "sections", "system"],
+        "additionalProperties": false
+      },
+      "OperatorPromptNotFoundError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorPromptNotFoundError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
         "additionalProperties": false
       },
       "OperatorMemoryFile": {

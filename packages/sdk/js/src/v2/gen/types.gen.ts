@@ -3036,6 +3036,13 @@ export type OperatorPromptPreview = {
   system: Array<string>
 }
 
+export type OperatorPromptNotFoundError = {
+  name: "OperatorPromptNotFoundError"
+  data: {
+    message: string
+  }
+}
+
 export type OperatorMemoryFile = {
   kind: "instructions" | "nested" | "url" | "skill" | "identity" | "prompt"
   scope: OperatorConfigScope
@@ -12608,9 +12615,9 @@ export type OperatorPromptPreviewErrors = {
    */
   400: BadRequestError
   /**
-   * Not found
+   * OperatorPromptNotFoundError
    */
-  404: NotFoundError
+  404: OperatorPromptNotFoundError
 }
 
 export type OperatorPromptPreviewError = OperatorPromptPreviewErrors[keyof OperatorPromptPreviewErrors]

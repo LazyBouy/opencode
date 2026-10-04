@@ -105,6 +105,7 @@ export function AgentPrompt(props: { agent: string; directory: string }) {
         <pre data-slot="operator-error" role="alert">
           {requestError(preview.error)}
         </pre>
+        <p data-slot="operator-note">{language.t("operator.prompts.previewFailed")}</p>
       </Show>
       <Show when={preview.data}>
         {(data) => (

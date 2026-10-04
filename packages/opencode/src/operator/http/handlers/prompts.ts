@@ -2,6 +2,7 @@ import { OperatorPrompts } from "@/operator/prompts"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
+import { ApiPromptNotFoundError } from "../groups/prompts"
 
 export const operatorPromptHandlers = HttpApiBuilder.group(InstanceHttpApi, "operatorPrompt", (handlers) =>
   Effect.gen(function* () {
@@ -13,7 +14,12 @@ export const operatorPromptHandlers = HttpApiBuilder.group(InstanceHttpApi, "ope
       .handle("preview", (ctx) =>
         prompts
           .preview({ agent: ctx.query.agent, providerID: ctx.query.provider, modelID: ctx.query.model })
-          .pipe(Effect.mapError(notFound)),
+          .pipe(
+            Effect.mapError(
+              (error) =>
+                new ApiPromptNotFoundError({ name: "OperatorPromptNotFoundError", data: { message: error.message } }),
+            ),
+          ),
       )
       .handle("write", (ctx) =>
         prompts

@@ -336,6 +336,8 @@ export const dict = {
   "operator.prompts.tab.tools": "Tool descriptions",
   "operator.prompts.tab.identity": "Identity layers",
   "operator.prompts.modelHint": "Base prompts and the environment block depend on the model.",
+  "operator.prompts.previewFailed":
+    "The preview needs a model this server can use. If the agent's model is not offered by a connected provider, pick another model above.",
   "operator.prompts.folder": "Folder",
   "operator.prompts.folderHint": "The environment, instruction files and skills depend on the folder.",
   "operator.prompts.agentModel": "The agent's model",

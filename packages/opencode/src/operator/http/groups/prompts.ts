@@ -19,6 +19,14 @@ export const OperatorPromptPaths = {
 
 const ScopeQuery = Schema.Struct({ ...WorkspaceRoutingQueryFields, scope: OperatorConfig.Scope })
 
+export class ApiPromptNotFoundError extends Schema.ErrorClass<{
+  readonly name: "OperatorPromptNotFoundError"
+  readonly data: { readonly message: string }
+}>("OperatorPromptNotFoundError")(
+  { name: Schema.Literal("OperatorPromptNotFoundError"), data: Schema.Struct({ message: Schema.String }) },
+  { httpApiStatus: 404 },
+) {}
+
 export const OperatorPromptApi = HttpApi.make("operator-prompt")
   .add(
     HttpApiGroup.make("operatorPrompt")
@@ -42,7 +50,7 @@ export const OperatorPromptApi = HttpApi.make("operator-prompt")
             model: Schema.optional(Schema.String),
           }),
           success: described(OperatorPrompts.Preview, "The system prompt for an agent and model"),
-          error: HttpApiError.NotFound,
+          error: ApiPromptNotFoundError,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "operator.prompt.preview",
