@@ -16,6 +16,7 @@ import { configEntryNameFromPath } from "@/config/entry-name"
 import { InstanceState } from "@/effect/instance-state"
 import { OperatorProjects } from "./projects"
 import { OperatorConfig } from "./config"
+import { OperatorTrashFiles } from "./trash-files"
 
 export const Source = Schema.Struct({
   kind: Schema.Literals(["builtin", "config", "file"]),
@@ -262,12 +263,25 @@ const layer = Layer.effect(
       if (!agent) return yield* new NotFoundError({ message: `No agent named "${name}"` })
       if (agent.source.kind === "builtin")
         return yield* new InvalidError({ message: `"${name}" is built in; turn it off instead of deleting it` })
+      // To Trash: the agent's file, or its config entry (kept, to write back on restore).
+      const ctx = yield* InstanceState.context
       if (agent.source.kind === "file" && agent.source.path) {
         const file = agent.source.path
-        yield* Effect.promise(() => fs.rm(file, { force: true }))
+        yield* Effect.promise(() =>
+          OperatorTrashFiles.put({ kind: "agent", name, project: ctx.directory, paths: [file] }),
+        )
         return file
       }
-      return (yield* operatorConfig.update(scope, { agent: { [name]: null } })).path
+      const result = yield* operatorConfig.update(scope, { agent: { [name]: null } })
+      yield* Effect.promise(() =>
+        OperatorTrashFiles.put({
+          kind: "agent",
+          name,
+          project: ctx.directory,
+          config: { scope, key: ["agent", name], value: agent.settings },
+        }),
+      )
+      return result.path
     })
 
     return Service.of({ list, create, update, remove })

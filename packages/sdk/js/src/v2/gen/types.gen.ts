@@ -2454,6 +2454,59 @@ export type OperatorFolderArchiveResult = {
   archived: number
 }
 
+export type OperatorTrashKind =
+  | "project"
+  | "agent"
+  | "session"
+  | "type"
+  | "layer"
+  | "group"
+  | "profile"
+  | "namespace"
+  | "skill"
+  | "command"
+  | "tool"
+  | "mcp"
+  | "memory"
+
+export type OperatorTrashEntry = {
+  id: string
+  kind: OperatorTrashKind
+  name: string
+  deletedAt: number
+  project?: string
+  namespace?: string
+  /**
+   * Files and folders it took, by their original path
+   */
+  files: Array<{
+    path: string
+    stored: string
+  }>
+  config?: {
+    scope: "global" | "project"
+    key: Array<string>
+    value: unknown
+  }
+  settings?: {
+    project?: unknown
+    agents?: unknown
+  }
+  sessions?: Array<string>
+  archived?: Array<string>
+}
+
+export type OperatorTrashError = {
+  name: "OperatorTrashError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorTrashEmptied = {
+  purged: number
+}
+
 export type Model = {
   id: string
   providerID: string
@@ -3338,6 +3391,8 @@ export type OperatorAgentPromptView = {
     name: string
   }
 }
+
+export type OperatorTrashItemKind = "skill" | "command" | "tool" | "mcp" | "memory"
 
 export type UnauthorizedError = {
   _tag: "UnauthorizedError"
@@ -9306,6 +9361,167 @@ export type OperatorFolderSessionsArchiveResponses = {
 export type OperatorFolderSessionsArchiveResponse =
   OperatorFolderSessionsArchiveResponses[keyof OperatorFolderSessionsArchiveResponses]
 
+export type OperatorTrashEmptyData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/operator/trash"
+}
+
+export type OperatorTrashEmptyErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorTrashEmptyError = OperatorTrashEmptyErrors[keyof OperatorTrashEmptyErrors]
+
+export type OperatorTrashEmptyResponses = {
+  /**
+   * Emptied
+   */
+  200: OperatorTrashEmptied
+}
+
+export type OperatorTrashEmptyResponse = OperatorTrashEmptyResponses[keyof OperatorTrashEmptyResponses]
+
+export type OperatorTrashListData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/operator/trash"
+}
+
+export type OperatorTrashListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorTrashListError = OperatorTrashListErrors[keyof OperatorTrashListErrors]
+
+export type OperatorTrashListResponses = {
+  /**
+   * What is in Trash
+   */
+  200: Array<OperatorTrashEntry>
+}
+
+export type OperatorTrashListResponse = OperatorTrashListResponses[keyof OperatorTrashListResponses]
+
+export type OperatorTrashProjectData = {
+  body?: {
+    /**
+     * The project's folder
+     */
+    key: string
+  }
+  path?: never
+  query?: never
+  url: "/operator/trash/project"
+}
+
+export type OperatorTrashProjectErrors = {
+  /**
+   * OperatorTrashError | InvalidRequestError
+   */
+  400: OperatorTrashError | InvalidRequestError
+}
+
+export type OperatorTrashProjectError = OperatorTrashProjectErrors[keyof OperatorTrashProjectErrors]
+
+export type OperatorTrashProjectResponses = {
+  /**
+   * The Trash entry
+   */
+  200: OperatorTrashEntry
+}
+
+export type OperatorTrashProjectResponse = OperatorTrashProjectResponses[keyof OperatorTrashProjectResponses]
+
+export type OperatorTrashSessionData = {
+  body?: {
+    sessionID: string
+  }
+  path?: never
+  query?: never
+  url: "/operator/trash/session"
+}
+
+export type OperatorTrashSessionErrors = {
+  /**
+   * OperatorTrashError | InvalidRequestError
+   */
+  400: OperatorTrashError | InvalidRequestError
+}
+
+export type OperatorTrashSessionError = OperatorTrashSessionErrors[keyof OperatorTrashSessionErrors]
+
+export type OperatorTrashSessionResponses = {
+  /**
+   * The Trash entry
+   */
+  200: OperatorTrashEntry
+}
+
+export type OperatorTrashSessionResponse = OperatorTrashSessionResponses[keyof OperatorTrashSessionResponses]
+
+export type OperatorTrashRestoreData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/operator/trash/{id}/restore"
+}
+
+export type OperatorTrashRestoreErrors = {
+  /**
+   * OperatorTrashError | InvalidRequestError
+   */
+  400: OperatorTrashError | InvalidRequestError
+}
+
+export type OperatorTrashRestoreError = OperatorTrashRestoreErrors[keyof OperatorTrashRestoreErrors]
+
+export type OperatorTrashRestoreResponses = {
+  /**
+   * The restored entry
+   */
+  200: OperatorTrashEntry
+}
+
+export type OperatorTrashRestoreResponse = OperatorTrashRestoreResponses[keyof OperatorTrashRestoreResponses]
+
+export type OperatorTrashPurgeData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/operator/trash/{id}"
+}
+
+export type OperatorTrashPurgeErrors = {
+  /**
+   * OperatorTrashError | InvalidRequestError
+   */
+  400: OperatorTrashError | InvalidRequestError
+}
+
+export type OperatorTrashPurgeError = OperatorTrashPurgeErrors[keyof OperatorTrashPurgeErrors]
+
+export type OperatorTrashPurgeResponses = {
+  /**
+   * Deleted
+   */
+  200: boolean
+}
+
+export type OperatorTrashPurgeResponse = OperatorTrashPurgeResponses[keyof OperatorTrashPurgeResponses]
+
 export type EventSubscribeData = {
   body?: never
   path?: never
@@ -13865,6 +14081,37 @@ export type OperatorAgentPromptUpdateResponses = {
 
 export type OperatorAgentPromptUpdateResponse =
   OperatorAgentPromptUpdateResponses[keyof OperatorAgentPromptUpdateResponses]
+
+export type OperatorTrashItemData = {
+  body?: {
+    kind: OperatorTrashItemKind
+    name: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/trash/item"
+}
+
+export type OperatorTrashItemErrors = {
+  /**
+   * OperatorTrashError | InvalidRequestError
+   */
+  400: OperatorTrashError | InvalidRequestError
+}
+
+export type OperatorTrashItemError = OperatorTrashItemErrors[keyof OperatorTrashItemErrors]
+
+export type OperatorTrashItemResponses = {
+  /**
+   * The Trash entry
+   */
+  200: OperatorTrashEntry
+}
+
+export type OperatorTrashItemResponse = OperatorTrashItemResponses[keyof OperatorTrashItemResponses]
 
 export type V2HealthGetData = {
   body?: never

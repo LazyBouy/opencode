@@ -9,6 +9,7 @@ import { Authorization } from "@/server/routes/instance/httpapi/middleware/autho
 import { SchemaErrorMiddleware } from "@/server/routes/instance/httpapi/middleware/schema-error"
 import { OperatorFolderGroup } from "./folders"
 import { OperatorNamespaceGroup } from "./namespaces"
+import { OperatorTrashGroup } from "./trash"
 
 export const OperatorOverviewPaths = {
   status: "/operator/status",
@@ -95,6 +96,7 @@ export const OperatorRootApi = HttpApi.make("operator-root")
   )
   .add(OperatorFolderGroup)
   .add(OperatorNamespaceGroup)
+  .add(OperatorTrashGroup)
   .middleware(SchemaErrorMiddleware)
   .middleware(Authorization)
   .annotateMerge(

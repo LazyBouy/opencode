@@ -3046,6 +3046,310 @@
         ]
       }
     },
+    "/operator/trash": {
+      "get": {
+        "tags": ["operator trash"],
+        "operationId": "operator.trash.list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "What is in Trash",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorTrashEntry"
+                  },
+                  "description": "What is in Trash"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Everything deleted from the operator pages, newest first.",
+        "summary": "List Trash",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.trash.list({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "tags": ["operator trash"],
+        "operationId": "operator.trash.empty",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Emptied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTrashEmptied"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Delete everything in Trash for good. This cannot be undone.",
+        "summary": "Empty Trash",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.trash.empty({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/trash/project": {
+      "post": {
+        "tags": ["operator trash"],
+        "operationId": "operator.trash.project",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The Trash entry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTrashEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorTrashError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorTrashError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Move a project to Trash: its whole folder, its prompt and agent settings, and its sessions (archived). Restore puts them back; deleting it from Trash deletes them for good.",
+        "summary": "Move a project to Trash",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "description": "The project's folder"
+                  }
+                },
+                "required": ["key"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.trash.project({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/trash/session": {
+      "post": {
+        "tags": ["operator trash"],
+        "operationId": "operator.trash.session",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The Trash entry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTrashEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorTrashError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorTrashError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Move a session, with its subagents' sessions, to Trash: archived until restored, deleted for good with the entry.",
+        "summary": "Move a session to Trash",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string"
+                  }
+                },
+                "required": ["sessionID"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.trash.session({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/trash/{id}/restore": {
+      "post": {
+        "tags": ["operator trash"],
+        "operationId": "operator.trash.restore",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The restored entry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTrashEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorTrashError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorTrashError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Put an entry back where it was. Refused if something is there again.",
+        "summary": "Restore from Trash",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.trash.restore({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/trash/{id}": {
+      "delete": {
+        "tags": ["operator trash"],
+        "operationId": "operator.trash.purge",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Deleted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorTrashError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorTrashError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Delete an entry for good, with its files and sessions. This cannot be undone.",
+        "summary": "Delete permanently",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.trash.purge({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/event": {
       "get": {
         "tags": ["event"],
@@ -13922,6 +14226,86 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.agentPrompt.update({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/trash/item": {
+      "post": {
+        "tags": ["operator trash items"],
+        "operationId": "operator.trash.item",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The Trash entry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTrashEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorTrashError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorTrashError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Move a skill (its folder), a command or custom tool (its file), an MCP server or a command defined in config (its entry), or a memory file to Trash. OpenCode's built-in items, and items from plugins or other folders, cannot be deleted.",
+        "summary": "Move a project's item to Trash",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "$ref": "#/components/schemas/OperatorTrashItemKind"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": ["kind", "name"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.trash.item({\n  ...\n})"
           }
         ]
       }
@@ -26806,6 +27190,135 @@
         "required": ["archived"],
         "additionalProperties": false
       },
+      "OperatorTrashKind": {
+        "type": "string",
+        "enum": [
+          "project",
+          "agent",
+          "session",
+          "type",
+          "layer",
+          "group",
+          "profile",
+          "namespace",
+          "skill",
+          "command",
+          "tool",
+          "mcp",
+          "memory"
+        ]
+      },
+      "OperatorTrashEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/OperatorTrashKind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "deletedAt": {
+            "type": "number"
+          },
+          "project": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "stored": {
+                  "type": "string"
+                }
+              },
+              "required": ["path", "stored"],
+              "additionalProperties": false
+            },
+            "description": "Files and folders it took, by their original path"
+          },
+          "config": {
+            "type": "object",
+            "properties": {
+              "scope": {
+                "type": "string",
+                "enum": ["global", "project"]
+              },
+              "key": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "value": {}
+            },
+            "required": ["scope", "key", "value"],
+            "additionalProperties": false
+          },
+          "settings": {
+            "type": "object",
+            "properties": {
+              "project": {},
+              "agents": {}
+            },
+            "additionalProperties": false
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "archived": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["id", "kind", "name", "deletedAt", "files"],
+        "additionalProperties": false
+      },
+      "OperatorTrashError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorTrashError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorTrashEmptied": {
+        "type": "object",
+        "properties": {
+          "purged": {
+            "type": "number"
+          }
+        },
+        "required": ["purged"],
+        "additionalProperties": false
+      },
       "Model": {
         "type": "object",
         "properties": {
@@ -29229,6 +29742,10 @@
         },
         "required": ["setting", "namespace", "profile", "default"],
         "additionalProperties": false
+      },
+      "OperatorTrashItemKind": {
+        "type": "string",
+        "enum": ["skill", "command", "tool", "mcp", "memory"]
       },
       "UnauthorizedError": {
         "type": "object",
@@ -42804,6 +43321,10 @@
       "description": "Namespace and prompt profile routes."
     },
     {
+      "name": "operator trash",
+      "description": "Trash routes."
+    },
+    {
       "name": "event",
       "description": "Instance event stream route."
     },
@@ -42890,6 +43411,10 @@
     {
       "name": "operator agent prompts",
       "description": "Agent prompt routes."
+    },
+    {
+      "name": "operator trash items",
+      "description": "Trash routes."
     },
     {
       "name": "opencode HttpApi",

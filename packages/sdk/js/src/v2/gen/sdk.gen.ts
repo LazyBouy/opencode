@@ -226,6 +226,21 @@ import type {
   OperatorStatusResponses,
   OperatorToolListErrors,
   OperatorToolListResponses,
+  OperatorTrashEmptyErrors,
+  OperatorTrashEmptyResponses,
+  OperatorTrashItemErrors,
+  OperatorTrashItemKind,
+  OperatorTrashItemResponses,
+  OperatorTrashListErrors,
+  OperatorTrashListResponses,
+  OperatorTrashProjectErrors,
+  OperatorTrashProjectResponses,
+  OperatorTrashPurgeErrors,
+  OperatorTrashPurgeResponses,
+  OperatorTrashRestoreErrors,
+  OperatorTrashRestoreResponses,
+  OperatorTrashSessionErrors,
+  OperatorTrashSessionResponses,
   OutputFormat,
   Part as Part2,
   PartDeleteErrors,
@@ -2630,6 +2645,170 @@ export class FolderSessions extends HeyApiClient {
   }
 }
 
+export class Trash extends HeyApiClient {
+  /**
+   * Empty Trash
+   *
+   * Delete everything in Trash for good. This cannot be undone.
+   */
+  public empty<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).delete<OperatorTrashEmptyResponses, OperatorTrashEmptyErrors, ThrowOnError>(
+      { url: "/operator/trash", ...options },
+    )
+  }
+
+  /**
+   * List Trash
+   *
+   * Everything deleted from the operator pages, newest first.
+   */
+  public list<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<OperatorTrashListResponses, OperatorTrashListErrors, ThrowOnError>({
+      url: "/operator/trash",
+      ...options,
+    })
+  }
+
+  /**
+   * Move a project to Trash
+   *
+   * Move a project to Trash: its whole folder, its prompt and agent settings, and its sessions (archived). Restore puts them back; deleting it from Trash deletes them for good.
+   */
+  public project<ThrowOnError extends boolean = false>(
+    parameters?: {
+      key?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "key" }] }])
+    return (options?.client ?? this.client).post<
+      OperatorTrashProjectResponses,
+      OperatorTrashProjectErrors,
+      ThrowOnError
+    >({
+      url: "/operator/trash/project",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Move a session to Trash
+   *
+   * Move a session, with its subagents' sessions, to Trash: archived until restored, deleted for good with the entry.
+   */
+  public session<ThrowOnError extends boolean = false>(
+    parameters?: {
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "sessionID" }] }])
+    return (options?.client ?? this.client).post<
+      OperatorTrashSessionResponses,
+      OperatorTrashSessionErrors,
+      ThrowOnError
+    >({
+      url: "/operator/trash/session",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Restore from Trash
+   *
+   * Put an entry back where it was. Refused if something is there again.
+   */
+  public restore<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
+    return (options?.client ?? this.client).post<
+      OperatorTrashRestoreResponses,
+      OperatorTrashRestoreErrors,
+      ThrowOnError
+    >({
+      url: "/operator/trash/{id}/restore",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Delete permanently
+   *
+   * Delete an entry for good, with its files and sessions. This cannot be undone.
+   */
+  public purge<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
+    return (options?.client ?? this.client).delete<OperatorTrashPurgeResponses, OperatorTrashPurgeErrors, ThrowOnError>(
+      {
+        url: "/operator/trash/{id}",
+        ...options,
+        ...params,
+      },
+    )
+  }
+
+  /**
+   * Move a project's item to Trash
+   *
+   * Move a skill (its folder), a command or custom tool (its file), an MCP server or a command defined in config (its entry), or a memory file to Trash. OpenCode's built-in items, and items from plugins or other folders, cannot be deleted.
+   */
+  public item<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      kind?: OperatorTrashItemKind
+      name?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "kind" },
+            { in: "body", key: "name" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<OperatorTrashItemResponses, OperatorTrashItemErrors, ThrowOnError>({
+      url: "/operator/trash/item",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Config2 extends HeyApiClient {
   /**
    * List config layers
@@ -3485,6 +3664,11 @@ export class Operator extends HeyApiClient {
   private _folderSessions?: FolderSessions
   get folderSessions(): FolderSessions {
     return (this._folderSessions ??= new FolderSessions({ client: this.client }))
+  }
+
+  private _trash?: Trash
+  get trash(): Trash {
+    return (this._trash ??= new Trash({ client: this.client }))
   }
 
   private _config?: Config2

@@ -10,6 +10,7 @@ import { Global } from "@opencode-ai/core/global"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { Glob } from "@opencode-ai/core/util/glob"
 import { OperatorProfile } from "./profile"
+import { OperatorTrashFiles } from "./trash-files"
 
 // Prompt profile data is server-wide, in the global config folder; nothing goes into a project:
 //
@@ -241,6 +242,28 @@ export async function readAgents(): Promise<Record<string, Record<string, Operat
   )
 }
 
+// A project in Trash loses its prompt settings and its agents' settings (kept with the Trash entry).
+export async function forgetProject(key: string) {
+  const projects = await readProjects()
+  const agents = await readAgents()
+  if (key in projects) {
+    delete projects[key]
+    await writeJson(path.join(root(), "projects.json"), projects)
+  }
+  if (key in agents) {
+    delete agents[key]
+    await writeJson(path.join(root(), "agents.json"), agents)
+  }
+}
+
+// A project restored from Trash gets its settings back.
+export async function restoreProject(key: string, settings: { project?: unknown; agents?: unknown }) {
+  if (settings.project)
+    await writeJson(path.join(root(), "projects.json"), { ...(await readProjects()), [key]: settings.project })
+  if (settings.agents)
+    await writeJson(path.join(root(), "agents.json"), { ...(await readAgents()), [key]: settings.agents })
+}
+
 // The OpenCode namespace exists from the first start, with its record only.
 export async function ensure() {
   const file = path.join(root(), OperatorProfile.OPENCODE, "namespace.json")
@@ -284,7 +307,11 @@ const layer = Layer.effect(
           .filter((row) => row.worktree !== "/")
           .map((row) => [String(row.worktree), row.name || path.basename(row.worktree)]),
       )
-      const keys = [...new Set([...names.keys(), ...Object.keys(settings), ...Object.keys(agents)])]
+      // Projects in Trash are not listed.
+      const trashed = yield* Effect.promise(OperatorTrashFiles.trashedProjects)
+      const keys = [...new Set([...names.keys(), ...Object.keys(settings), ...Object.keys(agents)])].filter(
+        (key) => !trashed.has(key),
+      )
       return keys
         .map((key) => ({
           key,
@@ -419,7 +446,15 @@ const layer = Layer.effect(
           ? `${catalog.namespace.name} still has projects: ${projects.map((item) => item.name).join(", ")}`
           : undefined,
       )
-      yield* Effect.promise(() => fs.rm(path.join(root(), id), { recursive: true, force: true }))
+      // To Trash: the namespace's folder, its items with it.
+      yield* Effect.promise(() =>
+        OperatorTrashFiles.put({
+          kind: "namespace",
+          name: catalog.namespace.name,
+          namespace: id,
+          paths: [path.join(root(), id)],
+        }),
+      )
     })
 
     const catalog = Effect.fn("OperatorProfileStore.catalog")(function* (ns: string) {
@@ -596,7 +631,11 @@ const layer = Layer.effect(
       yield* existing(items as ReadonlyArray<{ id: string }>, kind, id)
       const users = yield* usedBy(found, kind, id)
       yield* refuse(users ? `Still used by ${users}` : undefined)
-      yield* Effect.promise(() => fs.rm(itemFile(ns, kind, id), { force: true }))
+      const name = (items as ReadonlyArray<{ id: string; name: string }>).find((item) => item.id === id)?.name ?? id
+      // To Trash, from where it can be restored.
+      yield* Effect.promise(() =>
+        OperatorTrashFiles.put({ kind, name, namespace: ns, paths: [itemFile(ns, kind, id)] }),
+      )
     })
 
     const copyTo = Effect.fn("OperatorProfileStore.copyTo")(function* (

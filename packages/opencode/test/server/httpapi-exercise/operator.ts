@@ -460,6 +460,28 @@ export const operatorScenarios: Scenario[] = [
     }))
     .status(400),
   http.protected.get("/operator/project-settings", "operator.projectSettings.list").json(200, array),
+  http.protected.get("/operator/trash", "operator.trash.list").json(200, array),
+  http.protected
+    .post("/operator/trash/project", "operator.trash.project")
+    .at((ctx) => ({ path: "/operator/trash/project", headers: ctx.headers(), body: { key: "/" } }))
+    .status(400),
+  http.protected
+    .post("/operator/trash/session", "operator.trash.session")
+    .at((ctx) => ({ path: "/operator/trash/session", headers: ctx.headers(), body: { sessionID: "ses_missing" } }))
+    .status(400),
+  http.protected
+    .post("/operator/trash/{id}/restore", "operator.trash.restore")
+    .at((ctx) => ({ path: route("/operator/trash/{id}/restore", { id: "missing" }), headers: ctx.headers() }))
+    .status(400),
+  http.protected
+    .delete("/operator/trash/{id}", "operator.trash.purge")
+    .at((ctx) => ({ path: route("/operator/trash/{id}", { id: "missing" }), headers: ctx.headers() }))
+    .status(400),
+  http.protected.delete("/operator/trash", "operator.trash.empty").json(200, object),
+  http.protected
+    .post("/operator/trash/item", "operator.trash.item")
+    .at((ctx) => ({ path: "/operator/trash/item", headers: ctx.headers(), body: { kind: "skill", name: "missing" } }))
+    .status(400),
   http.protected
     .put("/operator/project-settings", "operator.projectSettings.update")
     .at((ctx) => ({

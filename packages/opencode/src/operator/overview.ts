@@ -9,6 +9,7 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { Session } from "@/session/session"
+import { OperatorTrashFiles } from "./trash-files"
 
 export const Status = Schema.Struct({
   version: Schema.String,
@@ -256,8 +257,12 @@ const layer = Layer.effect(
             .all()
             .pipe(Effect.orDie)
         : []
+      // Projects in Trash are not listed (nor the folders they held).
+      const trashed = [...(yield* Effect.promise(OperatorTrashFiles.trashedProjects))]
+      const gone = (folder: string) =>
+        trashed.some((key) => folder === key || folder.startsWith(key.endsWith(path.sep) ? key : key + path.sep))
       const listed = rows
-        .filter((row) => row.worktree !== "/")
+        .filter((row) => row.worktree !== "/" && !gone(row.worktree))
         .map((row): ProjectSummary => {
           const used = byProject.get(row.id)
           return {
@@ -274,19 +279,21 @@ const layer = Layer.effect(
         })
       return [
         ...listed,
-        ...folders.map(
-          (row): ProjectSummary => ({
-            id: `folder:${row.directory}`,
-            name: path.basename(row.directory) || row.directory,
-            worktree: row.directory,
-            global: false,
-            folder: true,
-            sessions: row.sessions,
-            cost: Number(row.cost ?? 0),
-            ...(row.lastActivity ? { lastActivity: row.lastActivity } : {}),
-            created: Number(row.created ?? 0),
-          }),
-        ),
+        ...folders
+          .filter((row) => !gone(row.directory))
+          .map(
+            (row): ProjectSummary => ({
+              id: `folder:${row.directory}`,
+              name: path.basename(row.directory) || row.directory,
+              worktree: row.directory,
+              global: false,
+              folder: true,
+              sessions: row.sessions,
+              cost: Number(row.cost ?? 0),
+              ...(row.lastActivity ? { lastActivity: row.lastActivity } : {}),
+              created: Number(row.created ?? 0),
+            }),
+          ),
       ].sort((a, b) => (b.lastActivity ?? b.created) - (a.lastActivity ?? a.created))
     })
 

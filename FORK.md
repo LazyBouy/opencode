@@ -119,6 +119,8 @@ System text that a caller passes without a label arrives in `SystemParts.extra` 
 
 Namespaces, their layers, groups and profiles, project links and agent settings are files under `~/.config/opencode/namespaces/` (`operator/profile-store.ts`); upstream never reads them.
 
+**Trash.** Every delete in the operator pages moves the item to Trash (`operator/trash-files.ts` on disk, `operator/trash.ts` and `operator/trash-items.ts` as services; routes under `/operator/trash`): files and folders are moved into the data folder's `operator/trash/<id>/` (a project's whole folder, with its prompt settings kept and its sessions archived), and config entries (MCP servers, agents and commands defined in config) are removed and kept, to be written back on restore. Deleting from Trash is for good (sessions with it). The folder OpenCode runs from, the home folder and folders holding OpenCode's data cannot be moved. Upstream has no unarchive (its session projector leaves the archive time when an update has none), so restoring clears it in the session row and then publishes the update; if upstream adds unarchive, use it. The Trash page is `/operator/deleted`, since `/operator/trash` is an API route.
+
 Then run the browser suites:
 
 ```sh
