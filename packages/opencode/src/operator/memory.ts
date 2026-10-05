@@ -15,13 +15,12 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Instruction } from "@/session/instruction"
 import { Skill } from "@/skill"
 import { OperatorConfig } from "./config"
-import { OperatorPromptText } from "./prompt-text"
 
 // Everything OpenCode remembers today, in one view: the files added to prompts (instruction files,
 // nested AGENTS.md, skills, identity layers, prompt overrides) and what the database keeps
 // (sessions, messages, compaction summaries and the other tables).
 
-export const FileKind = Schema.Literals(["instructions", "nested", "url", "skill", "identity", "prompt", "profile"])
+export const FileKind = Schema.Literals(["instructions", "nested", "url", "skill", "profile"])
 export const File = Schema.Struct({
   kind: FileKind,
   scope: OperatorConfig.Scope,
@@ -134,32 +133,9 @@ const layer = Layer.effect(
           used: path.dirname(file) !== path.resolve(ctx.directory) && first.get(path.dirname(file)) === file,
         }))
       const skills = yield* skill.all()
-      // Identity layers from before prompt profiles, read in place by the profile store.
-      const identity = yield* Effect.promise(async () => {
-        const dirs = [
-          ...new Set(
-            (["global", "project"] as const).map((scope) =>
-              path.join(OperatorConfig.scopeDirectory(scope, ctx), "identity"),
-            ),
-          ),
-        ]
-        return (await Promise.all(dirs.map((cwd) => glob("*.md", { cwd, absolute: true, nodir: true })))).flat()
-      })
-      const folders = OperatorPromptText.promptFolders(ctx)
-      const prompts = yield* Effect.promise(async () => {
-        const read = async (dir: string) =>
-          (await fs.readdir(dir).catch(() => [] as string[]))
-            .filter((name) => name.endsWith(".md"))
-            .map((name) => path.join(dir, name))
-        return [
-          ...(await read(folders.global)),
-          ...(folders.project === folders.global ? [] : await read(folders.project)),
-        ]
-      })
-
-      // Prompt profile resources: layers, groups, profiles and the defaults.
+      // Prompt profile data: namespaces, their types, layers, groups and profiles, project and agent settings.
       const profile = yield* Effect.promise(() =>
-        glob("**/*.{md,json}", { cwd: path.join(Global.Path.config, "profile"), absolute: true, nodir: true }),
+        glob("**/*.{md,json}", { cwd: path.join(Global.Path.config, "namespaces"), absolute: true, nodir: true }),
       )
       const local = [
         ...always.map((file) => ({ kind: "instructions" as const, path: file, loaded: "always" as const })),
@@ -171,8 +147,6 @@ const layer = Layer.effect(
         ...skills
           .filter((item) => path.isAbsolute(item.location))
           .map((item) => ({ kind: "skill" as const, path: item.location, loaded: "on-demand" as const })),
-        ...identity.map((file) => ({ kind: "identity" as const, path: file, loaded: "in-profile" as const })),
-        ...prompts.map((file) => ({ kind: "prompt" as const, path: file, loaded: "always" as const })),
         ...profile.toSorted().map((file) => ({ kind: "profile" as const, path: file, loaded: "in-profile" as const })),
       ]
       const described = yield* Effect.forEach(local, (item) =>

@@ -4,10 +4,16 @@ import { expect } from "bun:test"
 import { Effect, Schedule } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Global } from "@opencode-ai/core/global"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { promptAudit } from "@/operator/plugins"
+import { OperatorProfile } from "@/operator/profile"
 import { OperatorProfileStore } from "@/operator/profile-store"
 import { OperatorPrompts } from "@/operator/prompts"
 import { OperatorPromptText } from "@/operator/prompt-text"
+import { SessionCompaction } from "@/session/compaction"
 import { Session } from "@/session/session"
+import { ToolRegistry } from "@/tool/registry"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { TestLLMServer } from "../lib/llm-server"
@@ -17,8 +23,8 @@ const it = testEffect(
   LayerNode.compile(LayerNode.group([root, OperatorPrompts.node, OperatorProfileStore.node]), replacements),
 )
 const unix = process.platform !== "win32" ? it.instance : it.instance.skip
-
-const DEFAULT_BASE = OperatorPromptText.BUILTINS.find((item) => item.id === "base.default")!.text
+const P = OperatorProfile.PREFIX
+const PLAN_REMINDER = OperatorPromptText.BUILTINS.find((item) => item.id === "reminder.plan")!.text
 
 type Input = Record<string, unknown> | undefined
 const systemMessages = (input: Input) =>
@@ -36,7 +42,7 @@ const write = (file: string, text: string) =>
     await fs.writeFile(file, text)
   })
 
-// Points the global config folder (where profile/ lives) inside the test project for one test.
+// Points the global config folder (where namespaces/ lives) inside the test project for one test.
 const withGlobal = <A, E, R>(body: (dir: string) => Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
     const dir = path.join((yield* TestInstance).directory, "global-config")
@@ -50,247 +56,192 @@ const withGlobal = <A, E, R>(body: (dir: string) => Effect.Effect<A, E, R>) =>
       (previous) =>
         Effect.sync(() => {
           ;(Global.Path as { config: string }).config = previous
+          promptAudit.listen = undefined
         }),
     )
   })
 
-unix("build sends the base prompt, then capabilities, the environment and AGENTS.md; the preview matches", () =>
-  withGlobal((global) =>
+// Waits for a request whose body contains `text` (title and compaction run on their own fibers).
+const request = (text: string) =>
+  Effect.gen(function* () {
+    const server = yield* TestLLMServer
+    const found = (yield* server.inputs).find((input) => JSON.stringify(input).includes(text))
+    if (!found) return yield* Effect.fail("not yet")
+    return found
+  }).pipe(Effect.retry({ times: 100, schedule: Schedule.spaced("50 millis") }), Effect.orDie)
+
+unix("OpenCode is unchanged: every agent sends upstream's system prompt, tools and reminders", () =>
+  withGlobal(() =>
     Effect.gen(function* () {
       const { directory, llm } = yield* configure()
       yield* write(path.join(directory, "AGENTS.md"), "Use Bun for everything.\n")
-      yield* write(path.join(global, "identity", "voice.md"), "Be brief.\n")
-      // Scoped to this project, which built-in agents do not belong to.
-      yield* write(path.join(directory, ".opencode", "identity", "repo.md"), "Repo agents only.\n")
-      yield* llm.text("ok")
+      yield* write(path.join(directory, ".opencode", "agent", "triage.md"), "---\nmode: primary\n---\nTriage issues.\n")
+      const seen: Array<{ agent: string; upstream: string[]; sent: string[] }> = []
+      promptAudit.listen = (entry) => seen.push(entry)
+      for (let index = 0; index < 10; index++) yield* llm.text("ok")
 
-      yield* send((yield* session()).id, "hello", "build")
-      const sent = systemMessages((yield* llm.inputs)[0])
-      const preview = yield* (yield* OperatorPrompts.Service).preview({ agent: "build" })
+      for (const agent of ["build", "plan", "general", "explore", "triage"])
+        yield* send((yield* session()).id, "hello", agent)
+      // Title generation runs for a session that still has its default title.
+      const titled = yield* (yield* Session.Service).create({})
+      yield* send(titled.id, "hello", "build")
+      yield* request("Generate a title")
+      // Compaction of that session.
+      const sessions = yield* Session.Service
+      const compaction = yield* SessionCompaction.Service
+      yield* compaction.create({
+        sessionID: titled.id,
+        agent: "build",
+        model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test-model") },
+        auto: false,
+      })
+      const messages = yield* sessions.messages({ sessionID: titled.id })
+      yield* compaction.process({ parentID: messages.at(-1)!.info.id, messages, sessionID: titled.id, auto: false })
 
-      expect(sent).toEqual([...preview.system])
-      expect(preview.project.key).toBe("opencode")
-      expect(preview.profile.id).toBe("default")
-      expect(preview.sections.map((item) => [item.groupName, item.layerName])).toEqual([
-        ["Purpose", "base.default"],
-        ["Identity", "voice"],
-        ["Capabilities", "Skills"],
-        ["Environment", "Environment"],
-        ["Project instructions", "Instructions"],
+      expect(seen.map((item) => item.agent).toSorted()).toEqual([
+        "build",
+        "build",
+        "compaction",
+        "explore",
+        "general",
+        "plan",
+        "title",
+        "triage",
       ])
-      expect(preview.sections.filter((item) => item.mandatory).map((item) => item.entry)).toEqual(["purpose.goal"])
-      expect(sent).toHaveLength(2)
-      expect(sent[0]).toBe(`${DEFAULT_BASE}\nBe brief.`)
-      expect(String(sent[1])).toStartWith("Skills provide specialized instructions")
-      expect(String(sent[1])).toContain("Use Bun for everything.")
-      expect(JSON.stringify(sent)).not.toContain("Repo agents only.")
+      for (const item of seen)
+        expect({ agent: item.agent, system: item.sent }).toEqual({ agent: item.agent, system: item.upstream })
+
+      // Tool descriptions are the registry's own, and the plan reminder is OpenCode's.
+      const inputs = yield* llm.inputs
+      const registry = yield* ToolRegistry.Service
+      const own = yield* registry.all()
+      for (const name of ["read", "bash", "edit", "glob"])
+        expect(toolDescription(inputs[0], name)).toBe(own.find((tool) => tool.id === name)!.description)
+      expect(JSON.stringify(inputs[1])).toContain(JSON.stringify(PLAN_REMINDER).slice(1, -1))
     }),
   ),
 )
 
-unix("an agent with its own prompt sends the base prompt in Purpose and its prompt in Identity", () =>
+unix("the preview is exactly what is sent, for build, explore and title", () =>
   withGlobal(() =>
     Effect.gen(function* () {
       const { llm } = yield* configure()
-      yield* llm.text("ok")
-
+      const seen: Array<{ agent: string; sent: string[] }> = []
+      promptAudit.listen = (entry) => seen.push(entry)
+      for (let index = 0; index < 4; index++) yield* llm.text("ok")
+      yield* send((yield* session()).id, "hello", "build")
       yield* send((yield* session()).id, "hello", "explore")
-      const sent = systemMessages((yield* llm.inputs)[0])
-      const preview = yield* (yield* OperatorPrompts.Service).preview({ agent: "explore" })
-
-      expect(sent).toEqual([...preview.system])
-      expect(String(sent[0])).toStartWith(DEFAULT_BASE)
-      expect(preview.sections.find((item) => item.layer === "slot.agent")?.groupName).toBe("Identity")
-    }),
-  ),
-)
-
-unix("title generation sends the base prompt before the title prompt; the preview matches", () =>
-  withGlobal(() =>
-    Effect.gen(function* () {
-      const { llm } = yield* configure()
-      yield* llm.text("ok")
-      yield* llm.text("A short title")
-
-      const created = yield* (yield* Session.Service).create({})
-      yield* send(created.id, "hello", "build")
-      const server = yield* TestLLMServer
-      const titled = yield* Effect.gen(function* () {
-        const found = (yield* server.inputs).find((input) => JSON.stringify(input).includes("Generate a title"))
-        if (!found) return yield* Effect.fail("not yet")
-        return found
-      }).pipe(Effect.retry({ times: 100, schedule: Schedule.spaced("50 millis") }), Effect.orDie)
-      const preview = yield* (yield* OperatorPrompts.Service).preview({ agent: "title" })
-
-      expect(preview.profile.id).toBe("helper")
-      expect(systemMessages(titled)).toEqual([...preview.system])
-      expect(String(preview.system[0])).toStartWith(DEFAULT_BASE)
-    }),
-  ),
-)
-
-unix("a project agent gets its project's goal instead of the base prompt", () =>
-  withGlobal((global) =>
-    Effect.gen(function* () {
-      const { directory, llm } = yield* configure()
-      yield* write(path.join(directory, ".opencode", "agent", "triage.md"), "---\nmode: primary\n---\nTriage issues.\n")
+      yield* send((yield* (yield* Session.Service).create({})).id, "hello", "build")
+      yield* request("Generate a title")
       const prompts = yield* OperatorPrompts.Service
-      const project = (yield* prompts.preview({ agent: "triage" })).project.key
-      expect(project).not.toBe("opencode")
-      yield* write(
-        path.join(global, "profile", "layers", "goal.md"),
-        `---\nname: Goal\nsection: purpose\npurpose: goal\nprojects:\n  - ${project}\n---\nShip the release this week.\n`,
-      )
-      yield* llm.text("ok")
-
-      yield* send((yield* session()).id, "hello", "triage")
-      const sent = systemMessages((yield* llm.inputs)[0])
-      const preview = yield* prompts.preview({ agent: "triage" })
-
-      expect(sent).toEqual([...preview.system])
-      expect(sent[0]).toBe("Ship the release this week.\nTriage issues.")
-      expect(preview.sections.find((item) => item.layer === "goal")?.mandatory).toBe(true)
+      for (const agent of ["build", "explore", "title"]) {
+        const preview = yield* prompts.preview({ agent })
+        expect(seen.find((item) => item.agent === agent)?.sent).toEqual([...preview.system])
+      }
+      expect((yield* prompts.preview({ agent: "title" })).profile).toMatchObject({
+        id: OperatorProfile.HELPER_PROFILE,
+        source: "helper",
+      })
     }),
   ),
 )
 
-unix("a goal, a role layer in a group and the project's default profile reach a real request", () =>
+unix("Purpose comes first for every agent: the namespace's purpose, then the project's", () =>
   withGlobal(() =>
     Effect.gen(function* () {
       const { directory, llm } = yield* configure()
-      yield* write(path.join(directory, ".opencode", "agent", "triage.md"), "---\nmode: primary\n---\nTriage issues.\n")
-      const prompts = yield* OperatorPrompts.Service
       const store = yield* OperatorProfileStore.Service
-      const project = (yield* prompts.preview({ agent: "triage" })).project.key
-
-      yield* store.saveLayer(undefined, {
-        name: "Release goal",
+      const prompts = yield* OperatorPrompts.Service
+      const key = (yield* prompts.preview({ agent: "build" })).project.key
+      yield* store.updateNamespace("opencode", { purpose: "We value care." })
+      const goal = yield* store.saveLayer("opencode", undefined, {
+        name: "Goal",
+        type: "purpose",
         section: "purpose",
-        purpose: "goal",
-        projects: [project],
         text: "Ship the release.",
       })
-      const role = yield* store.saveLayer(undefined, {
-        name: "Reviewer",
-        section: "role",
-        projects: "*",
-        text: "You review release notes.",
-      })
-      const group = yield* store.saveGroup(undefined, {
-        name: "Release roles",
-        type: "role",
-        projects: "*",
-        layers: [role.id],
-      })
-      const profile = yield* store.saveProfile(undefined, {
-        name: "Release",
-        projects: "*",
-        groups: ["builtin.purpose", group.id, "builtin.identity", "builtin.instructions"],
-      })
-      yield* store.saveDefaults({ projects: { [project]: profile.id } })
-      yield* llm.text("ok")
-
-      yield* send((yield* session()).id, "hello", "triage")
-      const sent = systemMessages((yield* llm.inputs)[0])
-      const preview = yield* prompts.preview({ agent: "triage" })
-
-      expect(sent).toEqual([...preview.system])
-      expect(preview.profile).toEqual({ id: "release", name: "Release" })
-      expect(sent[0]).toBe("Ship the release.\nYou review release notes.\nTriage issues.")
-      // `build` belongs to OpenCode, so this project's default and goal do not reach it.
-      expect((yield* prompts.preview({ agent: "build" })).profile.id).toBe("default")
+      yield* store.setProject(key, { purpose: goal.id })
+      const seen: Array<{ agent: string; sent: string[] }> = []
+      promptAudit.listen = (entry) => seen.push(entry)
+      for (let index = 0; index < 3; index++) yield* llm.text("ok")
+      yield* send((yield* (yield* Session.Service).create({})).id, "hello", "build")
+      yield* request("Generate a title")
+      for (const agent of ["build", "title"])
+        expect(seen.find((item) => item.agent === agent)?.sent[0]).toStartWith("We value care.\nShip the release.\n")
+      const preview = yield* prompts.preview({ agent: "build" })
+      expect(preview.sections.filter((item) => item.automatic).map((item) => item.text)).toEqual([
+        "We value care.",
+        "Ship the release.",
+      ])
+      expect(directory).toBeTruthy()
     }),
   ),
 )
 
-// A project agent with a `promptProfile` setting, an org value and a role layer, then one request.
-const sendWithMode = (setting: string) =>
-  withGlobal((global) =>
+unix("editable copies change only agents whose profile holds them", () =>
+  withGlobal(() =>
     Effect.gen(function* () {
-      const { directory, llm } = yield* configure()
-      yield* write(
-        path.join(directory, ".opencode", "agent", "triage.md"),
-        `---\nmode: primary\n${setting}---\nTriage issues.\n`,
-      )
-      yield* write(
-        path.join(global, "profile", "layers", "care.md"),
-        "---\nname: Care\nsection: purpose\npurpose: org\nprojects: '*'\n---\nWe value care.\n",
-      )
-      yield* write(
-        path.join(global, "profile", "layers", "reviewer.md"),
-        "---\nname: Reviewer\nsection: role\nprojects: '*'\n---\nYou review release notes.\n",
-      )
-      yield* write(path.join(directory, "AGENTS.md"), "Use Bun.\n")
-      yield* llm.text("ok")
-      yield* send((yield* session()).id, "hello", "triage")
-      const sent = systemMessages((yield* llm.inputs)[0])
-      const preview = yield* (yield* OperatorPrompts.Service).preview({ agent: "triage" })
-      expect(sent).toEqual([...preview.system])
-      return { sent, preview }
-    }),
-  )
-
-unix("From profile uses the agent's profile as it is", () =>
-  Effect.gen(function* () {
-    const result = yield* sendWithMode("promptProfile:\n  mode: profile\n  profile: helper\n")
-    expect(result.preview).toMatchObject({ mode: "profile", profile: { id: "helper" } })
-    expect(result.sent).toEqual([`We value care.\n${DEFAULT_BASE}\nTriage issues.`])
-  }),
-)
-
-unix("Profile + layers adds the agent's layers to the end of the named group", () =>
-  Effect.gen(function* () {
-    const result = yield* sendWithMode(
-      "promptProfile:\n  mode: layers\n  layers:\n    - layer: reviewer\n      group: builtin.role\n",
-    )
-    expect(result.preview).toMatchObject({ mode: "layers", profile: { id: "default" } })
-    expect(result.sent[0]).toBe(`We value care.\n${DEFAULT_BASE}\nYou review release notes.\nTriage issues.`)
-  }),
-)
-
-unix("Full custom still sends Purpose, then the agent's prompt and the chosen generated sections", () =>
-  Effect.gen(function* () {
-    const result = yield* sendWithMode("promptProfile:\n  mode: custom\n  generated: [instructions]\n")
-    expect(result.preview.mode).toBe("custom")
-    expect(result.sent).toHaveLength(2)
-    expect(result.sent[0]).toBe(`We value care.\n${DEFAULT_BASE}\nTriage issues.`)
-    expect(String(result.sent[1])).toStartWith("Instructions from:")
-    expect(String(result.sent[1])).not.toContain("<env>")
-  }),
-)
-
-unix("with no mode set, an agent follows the default chain", () =>
-  Effect.gen(function* () {
-    const result = yield* sendWithMode("")
-    expect(result.preview).toMatchObject({ mode: "profile", profile: { id: "default" } })
-    expect(String(result.sent[1])).toContain("<env>")
-  }),
-)
-
-unix("overrides and the legacy switches change what the model receives", () =>
-  withGlobal((global) =>
-    Effect.gen(function* () {
-      const { directory, llm } = yield* configure({ prompts: { environment: false, skills: false } })
-      yield* write(
-        path.join(global, "profile", "layers", "terse.md"),
-        "---\nname: Terse\nsection: base\noverrides: base.default\nprojects:\n  - opencode\n---\nYou are a test assistant.\n",
-      )
-      yield* write(path.join(directory, ".opencode", "prompts", "tool.read.md"), "Reads a file, briefly.\n")
-      yield* llm.text("ok")
-
+      const { llm } = yield* configure()
+      const store = yield* OperatorProfileStore.Service
+      const prompts = yield* OperatorPrompts.Service
+      const key = (yield* prompts.preview({ agent: "build" })).project.key
+      const base = yield* store.copyBuiltin("opencode", `${P}base.default`)
+      yield* store.saveLayer("opencode", base.id, {
+        name: base.name,
+        type: "identity",
+        text: "You are a test assistant.",
+      })
+      const bash = yield* store.copyBuiltin("opencode", `${P}tool.bash`, "Run commands.")
+      const opencode = OperatorProfile.BUILTIN_PROFILES.find((item) => item.id === OperatorProfile.OPENCODE_PROFILE)!
+      const profile = yield* store.saveProfile("opencode", undefined, {
+        name: "Brief",
+        group: opencode.group,
+        slots: {
+          ...opencode.slots,
+          identity: [`${P}slot.agent-or-base`, base.id],
+          capabilities: [...opencode.slots.capabilities!, bash.id],
+        },
+      })
+      yield* store.setProject(key, { defaultProfile: profile.id })
+      // plan keeps OpenCode's profile.
+      yield* store.setAgent(key, "plan", { profile: OperatorProfile.OPENCODE_PROFILE })
+      for (let index = 0; index < 2; index++) yield* llm.text("ok")
       yield* send((yield* session()).id, "hello", "build")
-      const input = (yield* llm.inputs)[0]
-      const system = JSON.stringify(systemMessages(input))
+      yield* send((yield* session()).id, "hello", "plan")
+      const inputs = yield* llm.inputs
+      expect(String(systemMessages(inputs[0])[0])).toStartWith("You are a test assistant.\n")
+      expect(toolDescription(inputs[0], "bash")).toBe("Run commands.")
+      expect(String(systemMessages(inputs[1])[0])).not.toContain("You are a test assistant.")
+      expect(toolDescription(inputs[1], "bash")).not.toBe("Run commands.")
+    }),
+  ),
+)
 
-      expect(system).toContain("You are a test assistant.")
-      expect(system).not.toContain(JSON.stringify(DEFAULT_BASE.slice(0, 60)).slice(1, -1))
-      expect(system).not.toContain("<env>")
-      expect(system).not.toContain("available_skills")
-      expect(toolDescription(input, "read")).toBe("Reads a file, briefly.")
-
-      const preview = yield* (yield* OperatorPrompts.Service).preview({ agent: "build" })
-      expect(systemMessages(input)).toEqual([...preview.system])
-      expect(preview.sections[0]).toMatchObject({ layer: "terse", overrides: "base.default" })
+unix("an agent's override changes its own slots only", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      const { llm } = yield* configure()
+      const store = yield* OperatorProfileStore.Service
+      const prompts = yield* OperatorPrompts.Service
+      const key = (yield* prompts.preview({ agent: "build" })).project.key
+      const role = yield* store.saveLayer("opencode", undefined, {
+        name: "Reviewer",
+        type: "role",
+        section: "role",
+        text: "You review release notes.",
+      })
+      yield* store.setAgent(key, "build", { override: { slots: { role: [role.id] } } })
+      yield* llm.text("ok")
+      yield* send((yield* session()).id, "hello", "build")
+      const sent = systemMessages((yield* llm.inputs)[0])
+      const preview = yield* prompts.preview({ agent: "build" })
+      expect(sent).toEqual([...preview.system])
+      expect(String(sent[0])).toStartWith("You review release notes.\n")
+      expect(preview.override).toEqual(["role"])
+      expect(preview.sections.find((item) => item.type === "role")).toMatchObject({ layer: role.id, changed: true })
+      // Previewing a profile on the agent leaves its override out.
+      const plain = yield* prompts.preview({ agent: "build", profile: OperatorProfile.OPENCODE_PROFILE })
+      expect(plain.override).toEqual([])
     }),
   ),
 )

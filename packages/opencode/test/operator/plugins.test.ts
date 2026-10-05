@@ -1,17 +1,19 @@
-import fs from "fs/promises"
 import path from "path"
 import { expect } from "bun:test"
 import { Effect } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Global } from "@opencode-ai/core/global"
-import { OperatorProfileStore } from "@/operator/profile-store"
 import { operatorPlugins } from "@/operator/plugins"
+import { OperatorProfile } from "@/operator/profile"
+import { OperatorProfileStore } from "@/operator/profile-store"
 import { OperatorPromptText } from "@/operator/prompt-text"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-// The prompt plugin on its own, called the way request preparation calls it.
+// The prompt plugin on its own, called the way request preparation and the tool registry call it.
 const it = testEffect(LayerNode.compile(OperatorProfileStore.node))
+const P = OperatorProfile.PREFIX
+const BASE = OperatorPromptText.BUILTINS.find((item) => item.id === "base.default")!.text
 
 // Points the global config folder inside the test project for the duration of a test.
 const withGlobal = <A, E, R>(body: (dir: string) => Effect.Effect<A, E, R>) =>
@@ -31,66 +33,48 @@ const withGlobal = <A, E, R>(body: (dir: string) => Effect.Effect<A, E, R>) =>
     )
   })
 
-const layer = (dir: string, file: string, text: string) =>
-  Effect.promise(async () => {
-    await fs.mkdir(path.join(dir, "identity"), { recursive: true })
-    await fs.writeFile(path.join(dir, "identity", file), text)
-  })
+const hooks = Effect.fnUntraced(function* () {
+  const { directory } = yield* TestInstance
+  return yield* Effect.promise(() =>
+    operatorPlugins[0]({ directory, worktree: directory } as Parameters<(typeof operatorPlugins)[0]>[0]),
+  )
+})
+const parts = { agent: { native: true }, base: [], environment: ["<env/>"], instructions: [], extra: [] }
+const model = { providerID: "test", api: { id: "test-model" } } as never
 
-it.instance("the prompt plugin puts the agent's identity layers in its first system message", () =>
-  withGlobal((global) =>
+it.instance("the system prompt is rebuilt from the agent's profile, with the namespace's purpose first", () =>
+  withGlobal(() =>
     Effect.gen(function* () {
-      const { directory } = yield* TestInstance
-      yield* layer(global, "voice.md", "---\nagents: [build]\n---\nThis repo uses Bun.\n")
-      const hooks = yield* Effect.promise(() =>
-        operatorPlugins[0]({ directory, worktree: directory } as Parameters<(typeof operatorPlugins)[0]>[0]),
-      )
-      const transform = hooks["experimental.chat.system.transform"]!
-      const model = { providerID: "test", api: { id: "test-model" } } as Parameters<typeof transform>[0]["model"]
-      const parts = (native: boolean) => ({
-        agent: { native },
-        base: [],
-        environment: [],
-        instructions: [],
-        extra: [],
-      })
-      const base = OperatorPromptText.BUILTINS.find((item) => item.id === "base.default")!.text
-
-      const build = { system: ["ignored"] }
-      yield* Effect.promise(() => transform({ model, agent: "build", parts: parts(true) }, build))
-      const plan = { system: ["ignored"] }
-      yield* Effect.promise(() => transform({ model, agent: "plan", parts: parts(true) }, plan))
-
-      expect(build.system).toEqual([`${base}\nThis repo uses Bun.`])
-      expect(plan.system).toEqual([base])
+      const store = yield* OperatorProfileStore.Service
+      yield* store.updateNamespace("opencode", { purpose: "We value care." })
+      const transform = (yield* hooks())["experimental.chat.system.transform"]!
+      const output = { system: [`${BASE}\n<env/>`] }
+      yield* Effect.promise(() => transform({ model, agent: "build", parts }, output))
+      expect(output.system).toEqual([`We value care.\n${BASE}\n<env/>`])
     }),
   ),
 )
 
-it.instance("identity layers from before profiles keep their order: org, user, then priority", () =>
-  withGlobal((global) =>
+it.instance("a tool's description is the copy in the agent's profile, else OpenCode's", () =>
+  withGlobal(() =>
     Effect.gen(function* () {
       const { directory } = yield* TestInstance
-      yield* layer(global, "voice.md", "---\nname: Voice\npriority: 20\n---\nBe brief.\n")
-      yield* layer(global, "habits.md", "---\npriority: 10\n---\nRun tests first.\n")
-      yield* layer(global, "off.md", "---\nenabled: false\n---\nIgnored.\n")
-      const hooks = yield* Effect.promise(() =>
-        operatorPlugins[0]({ directory, worktree: directory } as Parameters<(typeof operatorPlugins)[0]>[0]),
-      )
-      const transform = hooks["experimental.chat.system.transform"]!
-      const model = { providerID: "test", api: { id: "test-model" } } as Parameters<typeof transform>[0]["model"]
-      const output = { system: [] as string[] }
-      yield* Effect.promise(() =>
-        transform(
-          {
-            model,
-            agent: "build",
-            parts: { agent: { native: true }, base: [], environment: [], instructions: [], extra: [] },
-          },
-          output,
-        ),
-      )
-      expect(output.system[0]).toEndWith("Run tests first.\nBe brief.")
+      const store = yield* OperatorProfileStore.Service
+      const bash = yield* store.copyBuiltin("opencode", `${P}tool.bash`, "Run commands.")
+      const spec = OperatorProfile.BUILTIN_PROFILES.find((item) => item.id === `${P}profile.spec`)!
+      const profile = yield* store.saveProfile("opencode", undefined, {
+        name: "Tools",
+        group: spec.group,
+        slots: { ...spec.slots, capabilities: [...spec.slots.capabilities!, bash.id] },
+      })
+      yield* store.setAgent(directory, "build", { profile: profile.id })
+      const definition = (yield* hooks())["tool.definition"]!
+      const build = { description: "Runs a command.", parameters: {} }
+      yield* Effect.promise(() => definition({ toolID: "bash", agent: "build" }, build))
+      const plan = { description: "Runs a command.", parameters: {} }
+      yield* Effect.promise(() => definition({ toolID: "bash", agent: "plan" }, plan))
+      expect(build.description).toBe("Run commands.")
+      expect(plan.description).toBe("Runs a command.")
     }),
   ),
 )

@@ -15,7 +15,6 @@ import { Config } from "@/config/config"
 import { configEntryNameFromPath } from "@/config/entry-name"
 import { InstanceState } from "@/effect/instance-state"
 import { OperatorConfig } from "./config"
-import { OperatorProfile } from "./profile"
 
 export const Source = Schema.Struct({
   kind: Schema.Literals(["builtin", "config", "file"]),
@@ -52,7 +51,6 @@ export const ResetKey = Schema.Literals([
   "home",
   "prompt",
   "permission",
-  "promptProfile",
 ])
 export type ResetKey = typeof ResetKey.Type
 
@@ -71,9 +69,6 @@ export const Patch = Schema.Struct({
   home: Schema.optional(Schema.String),
   prompt: Schema.optional(Schema.String),
   permission: Schema.optional(ConfigPermissionV1.Info),
-  promptProfile: Schema.optional(OperatorProfile.Setting).annotate({
-    description: "How the agent's system prompt is built from prompt profiles",
-  }),
   reset: Schema.optional(Schema.Array(ResetKey)).annotate({
     description: "Settings to remove so their defaults apply",
   }),

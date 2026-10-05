@@ -26,8 +26,6 @@ it.instance("lists every file added to prompts, with how it is loaded", () =>
     yield* write(path.join(directory, "CLAUDE.md"), "Shadowed by AGENTS.md.\n")
     yield* write(path.join(directory, "packages", "web", "CLAUDE.md"), "Shadowed too.\n")
     yield* write(path.join(directory, "packages", "api", "CLAUDE.md"), "Used here.\n")
-    yield* write(path.join(directory, ".opencode", "identity", "voice.md"), "Be brief.\n")
-    yield* write(path.join(directory, ".opencode", "prompts", "reminder.plan.md"), "Plan only.\n")
 
     const overview = yield* (yield* OperatorMemory.Service).overview()
     const found = (file: string) => overview.files.find((item) => item.path === file)
@@ -47,10 +45,8 @@ it.instance("lists every file added to prompts, with how it is loaded", () =>
     expect(found(path.join(directory, "CLAUDE.md"))?.loaded).toBe("never")
     expect(found(path.join(directory, "packages", "web", "CLAUDE.md"))?.loaded).toBe("never")
     expect(found(path.join(directory, "packages", "api", "CLAUDE.md"))?.loaded).toBe("when-reading")
-    expect(found(path.join(directory, ".opencode", "identity", "voice.md"))?.kind).toBe("identity")
-    expect(found(path.join(directory, ".opencode", "prompts", "reminder.plan.md"))?.kind).toBe("prompt")
-    const profileFile = path.join(Global.Path.config, "profile", "layers", "memory-test-role.md")
-    yield* write(profileFile, "---\nname: Role\nsection: role\n---\nYou review.\n")
+    const profileFile = path.join(Global.Path.config, "namespaces", "memory-test", "layers", "role.md")
+    yield* write(profileFile, "---\nname: Role\ntype: role\nsection: role\n---\nYou review.\n")
     expect(
       (yield* (yield* OperatorMemory.Service).overview()).files.find((item) => item.path === profileFile),
     ).toMatchObject({ kind: "profile", loaded: "in-profile", scope: "global" })

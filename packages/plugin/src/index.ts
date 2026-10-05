@@ -350,5 +350,8 @@ export interface Hooks {
   /**
    * Modify tool definitions (description and parameters) sent to LLM
    */
-  "tool.definition"?: (input: { toolID: string }, output: { description: string; parameters: any }) => Promise<void>
+  "tool.definition"?: (
+    input: { toolID: string; agent?: string },
+    output: { description: string; parameters: any },
+  ) => Promise<void>
 }

@@ -6,13 +6,11 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { Agent } from "@/agent/agent"
-import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
 import { Provider } from "@/provider/provider"
 import { Instruction } from "@/session/instruction"
 import { SystemPrompt } from "@/session/system"
 import { ToolRegistry } from "@/tool/registry"
-import { OperatorConfig } from "./config"
 import { OperatorProfile } from "./profile"
 import { OperatorProfileStore } from "./profile-store"
 import { OperatorPromptText } from "./prompt-text"
@@ -30,11 +28,18 @@ export const Preview = Schema.Struct({
   agent: Schema.String,
   model: Schema.String.annotate({ description: "provider/model the preview was built for" }),
   base: Schema.String.annotate({ description: "The Base Model Group layer for this model" }),
-  project: Schema.Struct({ key: Schema.String, name: Schema.String }).annotate({
-    description: "The project the agent belongs to, whose goal and layers apply",
+  namespace: Schema.Struct({ id: Schema.String, name: Schema.String }),
+  project: Schema.Struct({ key: Schema.String, name: Schema.String }),
+  profile: Schema.Struct({
+    id: Schema.String,
+    name: Schema.String,
+    source: Schema.Literals(["agent", "helper", "project", "namespace"]).annotate({
+      description:
+        "Where the profile comes from: the agent's setting, the helper rule, the project default or the namespace default",
+    }),
   }),
-  profile: Schema.Struct({ id: Schema.String, name: Schema.String }),
-  mode: OperatorProfile.Mode,
+  group: Schema.Struct({ id: Schema.String, name: Schema.String }),
+  override: Schema.Array(Schema.String).annotate({ description: "The types whose slots the agent's override changed" }),
   sections: Schema.Array(OperatorProfile.AssembledSection),
   system: Schema.Array(Schema.String).annotate({ description: "The system messages exactly as sent" }),
 }).annotate({ identifier: "OperatorPromptPreview" })
@@ -50,6 +55,8 @@ export interface Interface {
     agent: string
     providerID?: string
     modelID?: string
+    /** Preview this profile on the agent instead of its own (without its override). */
+    profile?: string
   }) => Effect.Effect<Preview, NotFoundError>
 }
 
@@ -63,7 +70,6 @@ const layer = Layer.effect(
     const system = yield* SystemPrompt.Service
     const instruction = yield* Instruction.Service
     const registry = yield* ToolRegistry.Service
-    const config = yield* Config.Service
 
     // The project's tools with their own descriptions; prompt profiles override them.
     const catalog = Effect.fn("OperatorPrompts.catalog")(function* () {
@@ -75,6 +81,7 @@ const layer = Layer.effect(
       agent: string
       providerID?: string
       modelID?: string
+      profile?: string
     }) {
       const ctx = yield* InstanceState.context
       const agent = yield* agents.get(input.agent)
@@ -86,7 +93,6 @@ const layer = Layer.effect(
       const model = yield* provider
         .getModel(ref.providerID, ref.modelID)
         .pipe(Effect.mapError(() => new NotFoundError({ message: `No model ${ref.providerID}/${ref.modelID}` })))
-      const cfg = yield* config.get()
       // Title, summary and compaction calls carry no generated sections, only the agent's prompt.
       const helper = OperatorProfile.HELPER_AGENTS.includes(agent.name)
       const [env, files, mcp, skills] = helper
@@ -97,31 +103,30 @@ const layer = Layer.effect(
             system.mcp(agent),
             system.skills(agent),
           ])
-      const project = yield* Effect.promise(() => OperatorProfile.agentProject(agent, ctx))
       const key = OperatorProfile.projectKey(ctx)
-      const catalog = yield* Effect.promise(() =>
-        OperatorProfileStore.read([{ key, root: OperatorConfig.projectRoot(ctx) }]),
-      )
-      const settings = (cfg.agent?.[agent.name] as { promptProfile?: OperatorProfile.Settings } | undefined)
-        ?.promptProfile
+      const loaded = yield* Effect.promise(() => OperatorProfileStore.forProject(key))
+      if (input.profile && !OperatorProfile.profiles(loaded.catalog).some((item) => item.id === input.profile))
+        return yield* new NotFoundError({
+          message: `No profile "${input.profile}" in ${loaded.catalog.namespace.name}`,
+        })
       const result = OperatorProfile.assemble({
-        catalog,
-        project,
-        agent: { name: agent.name, prompt: agent.prompt, settings },
+        catalog: loaded.catalog,
+        project: loaded.project,
+        agent: { name: agent.name, prompt: agent.prompt },
+        setting: loaded.agents[agent.name],
+        profile: input.profile,
         model,
         parts: { environment: env, instructions: files, mcp, skills, extra: [] },
-        toggles: OperatorPromptText.toggles(cfg),
       })
       return {
         agent: agent.name,
         model: `${model.providerID}/${model.id}`,
         base: OperatorPromptText.baseFor(model).id,
-        project: {
-          key: project,
-          name: project === OperatorProfile.OPENCODE ? "OpenCode" : (ctx.project.name ?? path.basename(project)),
-        },
+        namespace: { id: loaded.catalog.namespace.id, name: loaded.catalog.namespace.name },
+        project: { key, name: ctx.project.name ?? path.basename(key) },
         profile: result.profile,
-        mode: result.mode,
+        group: result.group,
+        override: result.changed,
         sections: result.sections,
         system: result.system,
       }
@@ -134,5 +139,5 @@ const layer = Layer.effect(
 export const node = LayerNode.make({
   service: Service,
   layer,
-  deps: [Agent.node, Provider.node, SystemPrompt.node, Instruction.node, ToolRegistry.node, Config.node],
+  deps: [Agent.node, Provider.node, SystemPrompt.node, Instruction.node, ToolRegistry.node],
 })

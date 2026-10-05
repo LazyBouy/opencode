@@ -11,60 +11,73 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { Glob } from "@opencode-ai/core/util/glob"
 import { OperatorProfile } from "./profile"
 
-// Prompt profile resources are server-wide files in the global config folder:
+// Prompt profile data is server-wide, in the global config folder; nothing goes into a project:
 //
-//   profile/layers/<id>.md      frontmatter: the layer's fields; body: its text
-//   profile/groups/<id>.json    { name, type, projects, layers }
-//   profile/profiles/<id>.json  { name, projects, groups }
-//   profile/defaults.json       { global?, projects: { <project>: profileId } }
+//   namespaces/<ns>/namespace.json      { id, name, purpose, defaultProfile?, createdAt, updatedAt }
+//   namespaces/<ns>/types/<id>.json     { id, name, description }
+//   namespaces/<ns>/layers/<id>.md      frontmatter { id, name, type, section, replaces? }; body: the text
+//   namespaces/<ns>/groups/<id>.json    { id, name, types }
+//   namespaces/<ns>/profiles/<id>.json  { id, name, group, slots }
+//   namespaces/projects.json            { <projectKey>: { namespace, purpose?, defaultProfile? } }
+//   namespaces/agents.json              { <projectKey>: { <agentName>: { profile?, override? } } }
 //
-// Files from before profiles are read in place and written back to the same file; they are never
-// moved or deleted: prompts/<id>.md overrides (global: all projects; <project>/.opencode/prompts:
-// that project) and identity/*.md layers (likewise).
+// A project missing from projects.json is in OpenCode, with no Project Purpose and no default.
+
+export const Kind = Schema.Literals(["type", "layer", "group", "profile"]).annotate({
+  identifier: "OperatorPromptItemKind",
+})
+export type Kind = typeof Kind.Type
+
+export const Copied = Schema.Struct({ kind: Kind, id: Schema.String, name: Schema.String }).annotate({
+  identifier: "OperatorPromptCopied",
+})
+export type Copied = typeof Copied.Type
 
 export const ProjectInfo = Schema.Struct({
-  key: Schema.String.annotate({ description: '"opencode", or the project folder' }),
+  key: Schema.String.annotate({ description: "The project's folder (its worktree, or the folder outside git)" }),
   name: Schema.String,
+  namespace: Schema.String,
+  purpose: Schema.optional(Schema.String),
+  defaultProfile: Schema.optional(Schema.String),
 }).annotate({ identifier: "OperatorPromptProject" })
+export type ProjectInfo = typeof ProjectInfo.Type
+
+export const AgentInfo = Schema.Struct({
+  project: Schema.String,
+  name: Schema.String,
+  profile: Schema.optional(Schema.String),
+  override: Schema.optional(OperatorProfile.Override),
+}).annotate({ identifier: "OperatorPromptAgentSetting" })
+
+export const AgentPrompt = Schema.Struct({
+  setting: OperatorProfile.AgentSetting,
+  namespace: Schema.Struct({ id: Schema.String, name: Schema.String }),
+  profile: Schema.Struct({
+    id: Schema.String,
+    name: Schema.String,
+    source: Schema.Literals(["agent", "helper", "project", "namespace"]),
+  }),
+  default: Schema.Struct({ id: Schema.String, name: Schema.String }).annotate({
+    description: "The profile the agent uses without a setting of its own",
+  }),
+}).annotate({ identifier: "OperatorAgentPromptView" })
+export type AgentPrompt = typeof AgentPrompt.Type
+
+export const NamespaceSummary = Schema.Struct({
+  namespace: OperatorProfile.Namespace,
+  projects: Schema.Array(Schema.String).annotate({ description: "Keys of the namespace's projects" }),
+}).annotate({ identifier: "OperatorNamespaceSummary" })
 
 export const CatalogInfo = Schema.Struct({
+  namespace: OperatorProfile.Namespace,
+  types: Schema.Array(OperatorProfile.GroupType),
   layers: Schema.Array(OperatorProfile.Layer),
-  groups: Schema.Array(OperatorProfile.PromptGroup),
+  groups: Schema.Array(OperatorProfile.Group),
   profiles: Schema.Array(OperatorProfile.Profile),
-  defaults: OperatorProfile.Defaults,
-  projects: Schema.Array(ProjectInfo).annotate({ description: "OpenCode first, then every project the server knows" }),
-}).annotate({ identifier: "OperatorPromptProfileCatalog" })
+  projects: Schema.Array(ProjectInfo).annotate({ description: "The namespace's projects" }),
+  agents: Schema.Array(AgentInfo).annotate({ description: "Prompt settings of the agents of those projects" }),
+}).annotate({ identifier: "OperatorPromptCatalog" })
 export type CatalogInfo = typeof CatalogInfo.Type
-
-// What a layer save may set. Not named in the API document, so the client takes flat parameters.
-export const LayerInput = Schema.Struct({
-  name: Schema.String,
-  section: OperatorProfile.Section,
-  purpose: Schema.optional(Schema.Literals(["org", "goal"])),
-  overrides: Schema.optional(Schema.String),
-  projects: OperatorProfile.Projects,
-  agents: Schema.optional(Schema.Array(Schema.String)),
-  priority: Schema.optional(Schema.Finite),
-  maxLength: Schema.optional(Schema.Finite),
-  enabled: Schema.optional(Schema.Boolean),
-  text: Schema.String,
-})
-export type LayerInput = typeof LayerInput.Type
-
-export const GroupInput = Schema.Struct({
-  name: Schema.String,
-  type: OperatorProfile.GroupType,
-  projects: OperatorProfile.Projects,
-  layers: Schema.Array(Schema.String),
-})
-export type GroupInput = typeof GroupInput.Type
-
-export const ProfileInput = Schema.Struct({
-  name: Schema.String,
-  projects: OperatorProfile.Projects,
-  groups: Schema.Array(Schema.String),
-})
-export type ProfileInput = typeof ProfileInput.Type
 
 export class InvalidError extends Schema.TaggedErrorClass<InvalidError>()("OperatorProfileInvalid", {
   message: Schema.String,
@@ -72,251 +85,815 @@ export class InvalidError extends Schema.TaggedErrorClass<InvalidError>()("Opera
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("OperatorProfileNotFound", {
   message: Schema.String,
 }) {}
+type Failure = InvalidError | NotFoundError
 
 export interface Interface {
-  readonly catalog: () => Effect.Effect<CatalogInfo>
+  readonly namespaces: () => Effect.Effect<ReadonlyArray<typeof NamespaceSummary.Type>>
+  readonly createNamespace: (input: {
+    name: string
+    purpose?: string
+  }) => Effect.Effect<OperatorProfile.Namespace, Failure>
+  readonly updateNamespace: (
+    id: string,
+    input: { name?: string; purpose?: string; defaultProfile?: string },
+  ) => Effect.Effect<OperatorProfile.Namespace, Failure>
+  readonly removeNamespace: (id: string) => Effect.Effect<void, Failure>
+  readonly catalog: (ns: string) => Effect.Effect<CatalogInfo, Failure>
+  readonly saveType: (
+    ns: string,
+    id: string | undefined,
+    input: { name: string; description?: string },
+  ) => Effect.Effect<OperatorProfile.GroupType, Failure>
   readonly saveLayer: (
+    ns: string,
     id: string | undefined,
-    input: LayerInput,
-  ) => Effect.Effect<OperatorProfile.Layer, InvalidError | NotFoundError>
-  readonly removeLayer: (id: string) => Effect.Effect<void, InvalidError | NotFoundError>
+    input: { name: string; type: string; section?: OperatorProfile.Section; text: string },
+  ) => Effect.Effect<OperatorProfile.Layer, Failure>
+  /** Makes an editable copy of one of OpenCode's texts; `text` gives a tool description's text. */
+  readonly copyBuiltin: (ns: string, id: string, text?: string) => Effect.Effect<OperatorProfile.Layer, Failure>
   readonly saveGroup: (
+    ns: string,
     id: string | undefined,
-    input: GroupInput,
-  ) => Effect.Effect<OperatorProfile.PromptGroup, InvalidError | NotFoundError>
-  readonly removeGroup: (id: string) => Effect.Effect<void, InvalidError | NotFoundError>
+    input: { name: string; types: ReadonlyArray<string> },
+  ) => Effect.Effect<OperatorProfile.Group, Failure>
   readonly saveProfile: (
+    ns: string,
     id: string | undefined,
-    input: ProfileInput,
-  ) => Effect.Effect<OperatorProfile.Profile, InvalidError | NotFoundError>
-  readonly removeProfile: (id: string) => Effect.Effect<void, InvalidError | NotFoundError>
-  readonly saveDefaults: (defaults: OperatorProfile.Defaults) => Effect.Effect<OperatorProfile.Defaults, InvalidError>
+    input: { name: string; group: string; slots: OperatorProfile.Slots },
+  ) => Effect.Effect<OperatorProfile.Profile, Failure>
+  readonly remove: (ns: string, kind: Kind, id: string) => Effect.Effect<void, Failure>
+  /** Copies an item, and what it uses that the target lacks, to another namespace. */
+  readonly copyTo: (ns: string, kind: Kind, id: string, target: string) => Effect.Effect<Copied[], Failure>
+  readonly projects: () => Effect.Effect<ProjectInfo[]>
+  /** Changes a project's links; a new namespace moves it, copying what it uses. */
+  readonly setProject: (
+    key: string,
+    input: { namespace?: string; purpose?: string; defaultProfile?: string; dryRun?: boolean },
+  ) => Effect.Effect<{ project: ProjectInfo; copied: Copied[] }, Failure>
+  readonly agent: (project: string, name: string) => Effect.Effect<OperatorProfile.AgentSetting>
+  /** An agent's setting, with the profile it uses and where that comes from. */
+  readonly agentPrompt: (project: string, name: string) => Effect.Effect<AgentPrompt>
+  readonly setAgent: (
+    project: string,
+    name: string,
+    setting: OperatorProfile.AgentSetting,
+  ) => Effect.Effect<OperatorProfile.AgentSetting, Failure>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorProfileStore") {}
 
-export function folder() {
-  return path.join(Global.Path.config, "profile")
+export function root() {
+  return path.join(Global.Path.config, "namespaces")
 }
 
-// The stored layers, groups, profiles and defaults, with the old files of the given projects. Built-in
-// resources are not included; OperatorProfile adds them where it needs them.
-export async function read(projects: ReadonlyArray<{ key: string; root: string }>): Promise<OperatorProfile.Catalog> {
-  const dir = folder()
-  const projectDirs = projects
-    .map((project) => ({ key: project.key, dir: path.join(project.root, ".opencode") }))
-    .filter((project) => project.dir !== Global.Path.config)
-  const [stored, groups, profiles, defaults, legacy] = await Promise.all([
+// Everything a request in a project needs: its namespace's items, its links, its agents' settings.
+export async function forProject(key: string) {
+  await ensure()
+  const projects = await readProjects()
+  const project = projects[key]
+  const catalog = (await readNamespace(project?.namespace ?? OperatorProfile.OPENCODE)) ??
+    (await readNamespace(OperatorProfile.OPENCODE)) ??
+      // The config folder cannot be written: OpenCode as it is.
+      {
+        namespace: { id: OperatorProfile.OPENCODE, name: "OpenCode", purpose: "", createdAt: 0, updatedAt: 0 },
+        types: [],
+        layers: [],
+        groups: [],
+        profiles: [],
+      }
+  return {
+    catalog,
+    project: project && catalog.namespace.id === project.namespace ? project : undefined,
+    agents: (await readAgents())[key] ?? {},
+  }
+}
+
+export async function readNamespace(id: string): Promise<OperatorProfile.Catalog | undefined> {
+  const dir = path.join(root(), id)
+  const namespace = await readNamespaceRecord(id)
+  if (!namespace) return undefined
+  const [types, layers, groups, profiles] = await Promise.all([
+    readJsonDir(path.join(dir, "types"), (data) => ({
+      id: String(data.id),
+      name: String(data.name ?? data.id),
+      description: String(data.description ?? ""),
+      builtin: false,
+    })),
     readLayers(path.join(dir, "layers")),
-    readJson(path.join(dir, "groups"), (id, data) => toGroup(id, data)),
-    readJson(path.join(dir, "profiles"), (id, data) => toProfile(id, data)),
-    Bun.file(path.join(dir, "defaults.json"))
-      .json()
-      .then(toDefaults)
-      .catch(() => ({ projects: {} })),
-    Promise.all([
-      readOldFiles(Global.Path.config, "*"),
-      ...projectDirs.map((project) => readOldFiles(project.dir, [project.key])),
-    ]),
+    readJsonDir(path.join(dir, "groups"), (data) => ({
+      id: String(data.id),
+      name: String(data.name ?? data.id),
+      types: strings(data.types),
+      builtin: false,
+    })),
+    readJsonDir(path.join(dir, "profiles"), (data) => ({
+      id: String(data.id),
+      name: String(data.name ?? data.id),
+      group: String(data.group ?? OperatorProfile.BUILTIN_GROUPS[1]!.id),
+      slots: slotsOf(data.slots),
+      builtin: false,
+    })),
   ])
-  return { layers: [...stored, ...legacy.flat()], groups, profiles, defaults }
+  return { namespace, types, layers, groups, profiles }
+}
+
+export async function readProjects(): Promise<Record<string, OperatorProfile.ProjectSetting>> {
+  const data = await Bun.file(path.join(root(), "projects.json"))
+    .json()
+    .catch(() => ({}))
+  return Object.fromEntries(
+    Object.entries(data as Record<string, Record<string, unknown>>)
+      .filter((pair) => pair[1] && typeof pair[1].namespace === "string")
+      .map((pair) => [
+        pair[0],
+        {
+          namespace: String(pair[1].namespace),
+          ...(typeof pair[1].purpose === "string" ? { purpose: pair[1].purpose } : {}),
+          ...(typeof pair[1].defaultProfile === "string" ? { defaultProfile: pair[1].defaultProfile } : {}),
+        },
+      ]),
+  )
+}
+
+export async function readAgents(): Promise<Record<string, Record<string, OperatorProfile.AgentSetting>>> {
+  const data = await Bun.file(path.join(root(), "agents.json"))
+    .json()
+    .catch(() => ({}))
+  return Object.fromEntries(
+    Object.entries(data as Record<string, Record<string, Record<string, unknown>>>).map((project) => [
+      project[0],
+      Object.fromEntries(Object.entries(project[1] ?? {}).map((agent) => [agent[0], agentSetting(agent[1])])),
+    ]),
+  )
+}
+
+// The OpenCode namespace exists from the first start, with its record only.
+export async function ensure() {
+  const file = path.join(root(), OperatorProfile.OPENCODE, "namespace.json")
+  if (await Bun.file(file).exists()) return
+  const now = Date.now()
+  await writeJson(file, {
+    id: OperatorProfile.OPENCODE,
+    name: "OpenCode",
+    purpose: "",
+    createdAt: now,
+    updatedAt: now,
+  }).catch(() => undefined)
 }
 
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const db = (yield* Database.Service).db
+    yield* Effect.promise(ensure)
 
-    const projects = Effect.fnUntraced(function* () {
+    const refuse = (message: string | undefined) => (message ? Effect.fail(new InvalidError({ message })) : Effect.void)
+
+    const load = Effect.fnUntraced(function* (ns: string) {
+      yield* Effect.promise(ensure)
+      const found = yield* Effect.promise(() => readNamespace(ns))
+      if (!found) return yield* new NotFoundError({ message: `No namespace "${ns}"` })
+      return found
+    })
+
+    // Every project the server knows (git projects), and every project with project or agent settings.
+    const known = Effect.fnUntraced(function* () {
       const rows = yield* db
         .select({ worktree: ProjectTable.worktree, name: ProjectTable.name })
         .from(ProjectTable)
         .all()
         .pipe(Effect.orDie)
-      return rows
-        .filter((row) => row.worktree !== "/")
-        .map((row) => ({ key: row.worktree, name: row.name || path.basename(row.worktree) }))
+      const settings = yield* Effect.promise(readProjects)
+      const agents = yield* Effect.promise(readAgents)
+      const names = new Map<string, string>(
+        rows
+          .filter((row) => row.worktree !== "/")
+          .map((row) => [String(row.worktree), row.name || path.basename(row.worktree)]),
+      )
+      const keys = [...new Set([...names.keys(), ...Object.keys(settings), ...Object.keys(agents)])]
+      return keys
+        .map((key) => ({
+          key,
+          name: names.get(key) ?? path.basename(key),
+          ...(settings[key] ?? { namespace: OperatorProfile.OPENCODE }),
+        }))
         .toSorted((a, b) => a.name.localeCompare(b.name))
     })
 
-    const load = Effect.fnUntraced(function* () {
-      const known = yield* projects()
-      return {
-        known,
-        catalog: yield* Effect.promise(() => read(known.map((project) => ({ key: project.key, root: project.key })))),
+    // What uses an item, in words, or undefined when nothing does.
+    const usedBy = Effect.fnUntraced(function* (catalog: OperatorProfile.Catalog, kind: Kind, id: string) {
+      const projects = (yield* known()).filter((item) => item.namespace === catalog.namespace.id)
+      const agents = yield* Effect.promise(readAgents)
+      const settings = projects.flatMap((project) =>
+        Object.entries(agents[project.key] ?? {}).map((agent) => ({ project, name: agent[0], setting: agent[1] })),
+      )
+      const users: string[] = []
+      if (kind === "type") {
+        users.push(...catalog.layers.filter((item) => item.type === id).map((item) => `layer "${item.name}"`))
+        users.push(...catalog.groups.filter((item) => item.types.includes(id)).map((item) => `group "${item.name}"`))
       }
+      if (kind === "layer") {
+        users.push(
+          ...catalog.profiles
+            .filter((item) => Object.values(item.slots).flat().includes(id))
+            .map((item) => `profile "${item.name}"`),
+        )
+        users.push(
+          ...settings
+            .filter((item) =>
+              Object.values(item.setting.override?.slots ?? {})
+                .flat()
+                .includes(id),
+            )
+            .map((item) => `the override of ${item.name} in ${item.project.name}`),
+        )
+        users.push(...projects.filter((item) => item.purpose === id).map((item) => `project ${item.name}`))
+      }
+      if (kind === "group") {
+        users.push(...catalog.profiles.filter((item) => item.group === id).map((item) => `profile "${item.name}"`))
+        users.push(
+          ...settings
+            .filter((item) => item.setting.override?.group === id)
+            .map((item) => `the override of ${item.name} in ${item.project.name}`),
+        )
+      }
+      if (kind === "profile") {
+        users.push(
+          ...settings
+            .filter((item) => item.setting.profile === id)
+            .map((item) => `${item.name} in ${item.project.name}`),
+        )
+        users.push(...projects.filter((item) => item.defaultProfile === id).map((item) => `project ${item.name}`))
+        if (catalog.namespace.defaultProfile === id) users.push("the namespace default")
+      }
+      return users.length ? users.join(", ") : undefined
     })
 
-    const catalog = Effect.fn("OperatorProfileStore.catalog")(function* () {
-      const loaded = yield* load()
-      return {
-        layers: [...OperatorProfile.BUILTIN_LAYERS, ...loaded.catalog.layers],
-        groups: [...OperatorProfile.BUILTIN_GROUPS, ...loaded.catalog.groups],
-        profiles: [...OperatorProfile.BUILTIN_PROFILES, ...loaded.catalog.profiles],
-        defaults: loaded.catalog.defaults,
-        projects: [{ key: OperatorProfile.OPENCODE, name: "OpenCode" }, ...loaded.known],
-      }
+    const namespaces = Effect.fn("OperatorProfileStore.namespaces")(function* () {
+      yield* Effect.promise(ensure)
+      const ids = yield* Effect.promise(() => fs.readdir(root()).catch(() => [] as string[]))
+      const records = yield* Effect.promise(() => Promise.all(ids.map(readNamespaceRecord)))
+      const projects = yield* known()
+      return records
+        .filter((item): item is OperatorProfile.Namespace => item !== undefined)
+        .toSorted((a, b) =>
+          a.id === OperatorProfile.OPENCODE ? -1 : b.id === OperatorProfile.OPENCODE ? 1 : a.name.localeCompare(b.name),
+        )
+        .map((namespace) => ({
+          namespace,
+          projects: projects.filter((item) => item.namespace === namespace.id).map((item) => item.key),
+        }))
     })
 
-    const refuse = (message: string | undefined) => (message ? Effect.fail(new InvalidError({ message })) : Effect.void)
-
-    const saveLayer = Effect.fn("OperatorProfileStore.saveLayer")(function* (
-      id: string | undefined,
-      input: LayerInput,
-    ) {
-      const current = (yield* load()).catalog
-      const existing = id ? current.layers.find((item) => item.id === id) : undefined
-      if (id && !existing) {
-        if (OperatorProfile.findLayer(current, id))
-          yield* refuse("OpenCode's own layers cannot be changed; override the text instead")
-        return yield* new NotFoundError({ message: `No layer "${id}"` })
-      }
-      if (existing?.origin === "file" && JSON.stringify(existing.projects) !== JSON.stringify(input.projects))
-        yield* refuse(`This layer is the file ${existing.path}; its scope is where the file is`)
-      if (existing?.origin === "file" && existing.overrides !== input.overrides)
-        yield* refuse(`This layer is the file ${existing.path}; it always replaces ${existing.overrides ?? "nothing"}`)
-      const next: OperatorProfile.Layer = {
-        id: existing?.id ?? (yield* Effect.promise(() => freeId(path.join(folder(), "layers"), input.name, ".md"))),
+    // A new namespace is a copy of OpenCode: its own items are copied, built-ins stay shared.
+    const createNamespace = Effect.fn("OperatorProfileStore.createNamespace")(function* (input: {
+      name: string
+      purpose?: string
+    }) {
+      yield* refuse(input.name.trim() ? undefined : "A namespace needs a name")
+      const source = yield* load(OperatorProfile.OPENCODE)
+      const id = yield* Effect.promise(() => freeId(root(), input.name, ""))
+      const now = Date.now()
+      const namespace: OperatorProfile.Namespace = {
+        id,
         name: input.name.trim(),
-        section: input.section,
-        ...(input.purpose ? { purpose: input.purpose } : {}),
-        ...(input.overrides ? { overrides: input.overrides } : {}),
-        projects: input.projects,
-        ...(input.agents?.length ? { agents: [...input.agents] } : {}),
-        priority: input.priority ?? existing?.priority ?? 50,
-        ...(input.maxLength ? { maxLength: input.maxLength } : {}),
-        enabled: input.enabled ?? existing?.enabled ?? true,
-        text: input.text,
-        origin: existing?.origin ?? "profile",
-        ...(existing?.path ? { path: existing.path } : {}),
+        purpose: input.purpose ?? "",
+        ...(source.namespace.defaultProfile ? { defaultProfile: source.namespace.defaultProfile } : {}),
+        createdAt: now,
+        updatedAt: now,
       }
-      yield* refuse(OperatorProfile.checkLayer(current, next))
-      yield* Effect.promise(() => writeLayer(next))
+      yield* Effect.promise(() => writeNamespace(namespace))
+      const target = yield* load(id)
+      yield* Effect.promise(() =>
+        copyItems(source, target, [
+          ...source.types.map((item) => ({ kind: "type" as const, id: item.id })),
+          ...source.layers.map((item) => ({ kind: "layer" as const, id: item.id })),
+          ...source.groups.map((item) => ({ kind: "group" as const, id: item.id })),
+          ...source.profiles.map((item) => ({ kind: "profile" as const, id: item.id })),
+        ]),
+      )
+      return namespace
+    })
+
+    const updateNamespace = Effect.fn("OperatorProfileStore.updateNamespace")(function* (
+      id: string,
+      input: { name?: string; purpose?: string; defaultProfile?: string },
+    ) {
+      const catalog = yield* load(id)
+      if (input.name !== undefined) yield* refuse(input.name.trim() ? undefined : "A namespace needs a name")
+      if (input.defaultProfile && !OperatorProfile.profiles(catalog).some((item) => item.id === input.defaultProfile))
+        yield* refuse(`No profile "${input.defaultProfile}" in ${catalog.namespace.name}`)
+      const next = {
+        ...catalog.namespace,
+        ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+        ...(input.purpose !== undefined ? { purpose: input.purpose } : {}),
+        ...(input.defaultProfile !== undefined ? { defaultProfile: input.defaultProfile || undefined } : {}),
+        updatedAt: Date.now(),
+      }
+      yield* Effect.promise(() => writeNamespace(next))
       return next
     })
 
-    const removeLayer = Effect.fn("OperatorProfileStore.removeLayer")(function* (id: string) {
-      const current = (yield* load()).catalog
-      const existing = current.layers.find((item) => item.id === id)
-      if (!existing) return yield* new NotFoundError({ message: `No layer "${id}"` })
-      if (existing.origin === "file")
-        yield* refuse(`This layer is the file ${existing.path}; turn it off here, or delete the file yourself`)
-      const user = current.groups.find((item) => item.layers.includes(id))
-      if (user) yield* refuse(`The group "${user.name}" uses this layer; take it out first`)
-      yield* Effect.promise(() => fs.rm(path.join(folder(), "layers", `${id}.md`), { force: true }))
+    const removeNamespace = Effect.fn("OperatorProfileStore.removeNamespace")(function* (id: string) {
+      yield* refuse(id === OperatorProfile.OPENCODE ? "OpenCode is built in and cannot be deleted" : undefined)
+      const catalog = yield* load(id)
+      const projects = (yield* known()).filter((item) => item.namespace === id)
+      yield* refuse(
+        projects.length
+          ? `${catalog.namespace.name} still has projects: ${projects.map((item) => item.name).join(", ")}`
+          : undefined,
+      )
+      yield* Effect.promise(() => fs.rm(path.join(root(), id), { recursive: true, force: true }))
+    })
+
+    const catalog = Effect.fn("OperatorProfileStore.catalog")(function* (ns: string) {
+      const found = yield* load(ns)
+      const projects = (yield* known()).filter((item) => item.namespace === ns)
+      const agents = yield* Effect.promise(readAgents)
+      return {
+        namespace: found.namespace,
+        types: OperatorProfile.types(found),
+        layers: [...OperatorProfile.BUILTIN_LAYERS, ...found.layers],
+        groups: OperatorProfile.groups(found),
+        profiles: OperatorProfile.profiles(found),
+        projects,
+        agents: projects.flatMap((project) =>
+          Object.entries(agents[project.key] ?? {}).map((agent) => ({
+            project: project.key,
+            name: agent[0],
+            ...agent[1],
+          })),
+        ),
+      }
+    })
+
+    const existing = <T extends { id: string }>(items: ReadonlyArray<T>, kind: Kind, id: string | undefined) =>
+      Effect.gen(function* () {
+        if (!id) return undefined
+        if (OperatorProfile.isBuiltin(id))
+          return yield* new InvalidError({ message: "OpenCode's own items cannot be changed" })
+        const found = items.find((item) => item.id === id)
+        if (!found) return yield* new NotFoundError({ message: `No ${kind} "${id}"` })
+        return found
+      })
+
+    const saveType = Effect.fn("OperatorProfileStore.saveType")(function* (
+      ns: string,
+      id: string | undefined,
+      input: { name: string; description?: string },
+    ) {
+      const found = yield* load(ns)
+      yield* existing(found.types, "type", id)
+      yield* refuse(input.name.trim() ? undefined : "A group type needs a name")
+      const next = {
+        id: id ?? (yield* Effect.promise(() => freeId(path.join(root(), ns, "types"), input.name, ".json"))),
+        name: input.name.trim(),
+        description: input.description ?? "",
+        builtin: false,
+      }
+      yield* Effect.promise(() => writeItem(ns, "type", next))
+      return next
+    })
+
+    const saveLayer = Effect.fn("OperatorProfileStore.saveLayer")(function* (
+      ns: string,
+      id: string | undefined,
+      input: { name: string; type: string; section?: OperatorProfile.Section; text: string },
+    ) {
+      const found = yield* load(ns)
+      const before = yield* existing(found.layers, "layer", id)
+      // A copy keeps its type and section; a layer's type changes only in Custom.
+      const type = before?.replaces ? before.type : input.type
+      const section = before?.section ?? input.section ?? sectionFor(type)
+      yield* refuse(
+        before && !before.replaces && before.type !== type && before.section !== "custom"
+          ? "Only Custom layers can change type"
+          : undefined,
+      )
+      yield* refuse(OperatorProfile.checkLayer(found, { name: input.name, type, replaces: before?.replaces }))
+      yield* refuse(type === "purpose" && section !== "purpose" ? "Purpose layers are Project Purposes" : undefined)
+      if (before && before.type !== type) yield* refuse(yield* usedBy(found, "layer", before.id))
+      const next: OperatorProfile.Layer = {
+        id: id ?? (yield* Effect.promise(() => freeId(path.join(root(), ns, "layers"), input.name, ".md"))),
+        name: input.name.trim(),
+        type,
+        section,
+        ...(before?.replaces ? { replaces: before.replaces } : {}),
+        text: input.text,
+        origin: "user",
+      }
+      yield* Effect.promise(() => writeItem(ns, "layer", next))
+      return next
+    })
+
+    const copyBuiltin = Effect.fn("OperatorProfileStore.copyBuiltin")(function* (
+      ns: string,
+      id: string,
+      text?: string,
+    ) {
+      const found = yield* load(ns)
+      const original = OperatorProfile.findLayer(found, id)
+      if (!original || original.origin !== "builtin")
+        return yield* new InvalidError({ message: `"${id}" is not one of OpenCode's texts` })
+      const name = `${original.name} – copy`
+      const next: OperatorProfile.Layer = {
+        id: yield* Effect.promise(() => freeId(path.join(root(), ns, "layers"), name, ".md")),
+        name,
+        type: original.type,
+        section: original.section,
+        replaces: original.id,
+        text: text ?? original.text,
+        origin: "user",
+      }
+      yield* Effect.promise(() => writeItem(ns, "layer", next))
+      return next
     })
 
     const saveGroup = Effect.fn("OperatorProfileStore.saveGroup")(function* (
+      ns: string,
       id: string | undefined,
-      input: GroupInput,
+      input: { name: string; types: ReadonlyArray<string> },
     ) {
-      const current = (yield* load()).catalog
-      if (id && OperatorProfile.BUILTIN_GROUPS.some((item) => item.id === id))
-        yield* refuse("Built-in groups cannot be changed; make your own group")
-      if (id && !current.groups.some((item) => item.id === id))
-        return yield* new NotFoundError({ message: `No group "${id}"` })
-      const next: OperatorProfile.PromptGroup = {
-        id: id ?? (yield* Effect.promise(() => freeId(path.join(folder(), "groups"), input.name, ".json"))),
+      const found = yield* load(ns)
+      yield* existing(found.groups, "group", id)
+      yield* refuse(OperatorProfile.checkGroup(found, input))
+      const next = {
+        id: id ?? (yield* Effect.promise(() => freeId(path.join(root(), ns, "groups"), input.name, ".json"))),
         name: input.name.trim(),
-        type: input.type,
-        projects: input.projects,
-        layers: [...input.layers],
+        types: [...input.types],
         builtin: false,
       }
-      yield* refuse(OperatorProfile.checkGroup(current, next))
-      const after = { ...current, groups: [...current.groups.filter((item) => item.id !== next.id), next] }
-      const broken = current.profiles.find(
-        (item) => item.groups.includes(next.id) && OperatorProfile.checkProfile(after, item),
+      // Profiles on this group must still be valid.
+      const after = { ...found, groups: [...found.groups.filter((item) => item.id !== next.id), next] }
+      const broken = found.profiles.find(
+        (item) => item.group === next.id && OperatorProfile.checkSlots(after, { group: item.group, slots: item.slots }),
       )
       if (broken)
-        yield* refuse(`The profile "${broken.name}" uses this group: ${OperatorProfile.checkProfile(after, broken)}`)
-      yield* Effect.promise(() =>
-        writeJson(path.join(folder(), "groups", `${next.id}.json`), {
-          name: next.name,
-          type: next.type,
-          projects: next.projects,
-          layers: next.layers,
-        }),
-      )
+        yield* refuse(
+          `The profile "${broken.name}" uses this group: ${OperatorProfile.checkSlots(after, { group: broken.group, slots: broken.slots })}`,
+        )
+      yield* Effect.promise(() => writeItem(ns, "group", next))
       return next
-    })
-
-    const removeGroup = Effect.fn("OperatorProfileStore.removeGroup")(function* (id: string) {
-      const current = (yield* load()).catalog
-      if (!current.groups.some((item) => item.id === id))
-        return yield* new NotFoundError({ message: `No group "${id}"` })
-      const user = current.profiles.find((item) => item.groups.includes(id))
-      if (user) yield* refuse(`The profile "${user.name}" uses this group; take it out first`)
-      yield* Effect.promise(() => fs.rm(path.join(folder(), "groups", `${id}.json`), { force: true }))
     })
 
     const saveProfile = Effect.fn("OperatorProfileStore.saveProfile")(function* (
+      ns: string,
       id: string | undefined,
-      input: ProfileInput,
+      input: { name: string; group: string; slots: OperatorProfile.Slots },
     ) {
-      const current = (yield* load()).catalog
-      if (id && OperatorProfile.BUILTIN_PROFILES.some((item) => item.id === id))
-        yield* refuse("Built-in profiles cannot be changed; duplicate one instead")
-      if (id && !current.profiles.some((item) => item.id === id))
-        return yield* new NotFoundError({ message: `No profile "${id}"` })
-      const next: OperatorProfile.Profile = {
-        id: id ?? (yield* Effect.promise(() => freeId(path.join(folder(), "profiles"), input.name, ".json"))),
+      const found = yield* load(ns)
+      yield* existing(found.profiles, "profile", id)
+      yield* refuse(input.name.trim() ? undefined : "A profile needs a name")
+      yield* refuse(OperatorProfile.checkSlots(found, input))
+      const group = OperatorProfile.groups(found).find((item) => item.id === input.group)!
+      const next = {
+        id: id ?? (yield* Effect.promise(() => freeId(path.join(root(), ns, "profiles"), input.name, ".json"))),
         name: input.name.trim(),
-        projects: input.projects,
-        groups: [...input.groups],
+        group: input.group,
+        // Only the group's types are kept, in its order.
+        slots: Object.fromEntries(
+          group.types.filter((type) => type !== "purpose").map((type) => [type, [...(input.slots[type] ?? [])]]),
+        ),
         builtin: false,
       }
-      yield* refuse(OperatorProfile.checkProfile(current, next))
-      yield* refuse(
-        OperatorProfile.checkDefaults(
-          { ...current, profiles: [...current.profiles.filter((item) => item.id !== next.id), next] },
-          current.defaults,
-        ),
-      )
-      yield* Effect.promise(() =>
-        writeJson(path.join(folder(), "profiles", `${next.id}.json`), {
-          name: next.name,
-          projects: next.projects,
-          groups: next.groups,
-        }),
-      )
+      yield* Effect.promise(() => writeItem(ns, "profile", next))
       return next
     })
 
-    const removeProfile = Effect.fn("OperatorProfileStore.removeProfile")(function* (id: string) {
-      const current = (yield* load()).catalog
-      if (!current.profiles.some((item) => item.id === id))
-        return yield* new NotFoundError({ message: `No profile "${id}"` })
-      if (current.defaults.global === id || Object.values(current.defaults.projects).includes(id))
-        yield* refuse("This profile is a default; choose another default first")
-      yield* Effect.promise(() => fs.rm(path.join(folder(), "profiles", `${id}.json`), { force: true }))
+    const remove = Effect.fn("OperatorProfileStore.remove")(function* (ns: string, kind: Kind, id: string) {
+      const found = yield* load(ns)
+      const items = { type: found.types, layer: found.layers, group: found.groups, profile: found.profiles }[kind]
+      yield* existing(items as ReadonlyArray<{ id: string }>, kind, id)
+      const users = yield* usedBy(found, kind, id)
+      yield* refuse(users ? `Still used by ${users}` : undefined)
+      yield* Effect.promise(() => fs.rm(itemFile(ns, kind, id), { force: true }))
     })
 
-    const saveDefaults = Effect.fn("OperatorProfileStore.saveDefaults")(function* (defaults: OperatorProfile.Defaults) {
-      const current = (yield* load()).catalog
-      yield* refuse(OperatorProfile.checkDefaults(current, defaults))
-      const next = { ...(defaults.global ? { global: defaults.global } : {}), projects: { ...defaults.projects } }
-      yield* Effect.promise(() => writeJson(path.join(folder(), "defaults.json"), next))
+    const copyTo = Effect.fn("OperatorProfileStore.copyTo")(function* (
+      ns: string,
+      kind: Kind,
+      id: string,
+      target: string,
+    ) {
+      yield* refuse(ns === target ? "Choose another namespace" : undefined)
+      const source = yield* load(ns)
+      const destination = yield* load(target)
+      yield* refuse(OperatorProfile.isBuiltin(id) ? "OpenCode's own items are in every namespace already" : undefined)
+      return (yield* Effect.promise(() => copyItems(source, destination, [{ kind, id }], { kind, id }))).copied
+    })
+
+    const projects = Effect.fn("OperatorProfileStore.projects")(function* () {
+      return yield* known()
+    })
+
+    const setProject = Effect.fn("OperatorProfileStore.setProject")(function* (
+      key: string,
+      input: { namespace?: string; purpose?: string; defaultProfile?: string; dryRun?: boolean },
+    ) {
+      const current = (yield* known()).find((item) => item.key === key) ?? {
+        key,
+        name: path.basename(key),
+        namespace: OperatorProfile.OPENCODE,
+      }
+      const target = input.namespace ?? current.namespace
+      const destination = yield* load(target)
+      const moving = target !== current.namespace
+      const agents = yield* Effect.promise(readAgents)
+      // Moving copies what the project uses into the new namespace, so it behaves as before.
+      const moved = moving
+        ? yield* Effect.promise(async () => {
+            const source = (await readNamespace(current.namespace))!
+            const own = agents[key] ?? {}
+            const roots = [
+              ...(current.purpose ? [{ kind: "layer" as const, id: current.purpose }] : []),
+              ...(current.defaultProfile ? [{ kind: "profile" as const, id: current.defaultProfile }] : []),
+              ...Object.values(own).flatMap((setting) => [
+                ...(setting.profile ? [{ kind: "profile" as const, id: setting.profile }] : []),
+                ...(setting.override?.group ? [{ kind: "group" as const, id: setting.override.group }] : []),
+                ...Object.values(setting.override?.slots ?? {})
+                  .flat()
+                  .map((layer) => ({ kind: "layer" as const, id: layer })),
+              ]),
+            ]
+            return copyItems(source, destination, roots, undefined, input.dryRun)
+          })
+        : { copied: [] as Copied[], ids: new Map<string, string>() }
+      const map = (kind: Kind, id: string | undefined) => (id ? (moved.ids.get(`${kind}:${id}`) ?? id) : undefined)
+      // An empty string clears a link; a missing one keeps it (pointed at its copy after a move).
+      const purpose = input.purpose === undefined ? map("layer", current.purpose) : input.purpose || undefined
+      const defaultProfile =
+        input.defaultProfile === undefined ? map("profile", current.defaultProfile) : input.defaultProfile || undefined
+      const next: OperatorProfile.ProjectSetting = {
+        namespace: target,
+        ...(purpose ? { purpose } : {}),
+        ...(defaultProfile ? { defaultProfile } : {}),
+      }
+      if (input.dryRun) return { project: { ...current, ...next }, copied: moved.copied }
+      const after = (yield* Effect.promise(() => readNamespace(target)))!
+      if (next.purpose) {
+        const linked = after.layers.find((item) => item.id === next.purpose)
+        yield* refuse(
+          !linked || linked.type !== "purpose"
+            ? `No Project Purpose "${next.purpose}" in ${after.namespace.name}`
+            : undefined,
+        )
+      }
+      if (next.defaultProfile && !OperatorProfile.profiles(after).some((item) => item.id === next.defaultProfile))
+        yield* refuse(`No profile "${next.defaultProfile}" in ${after.namespace.name}`)
+      yield* Effect.promise(async () => {
+        const all = await readProjects()
+        await writeJson(path.join(root(), "projects.json"), { ...all, [key]: next })
+        if (!moving || !agents[key]) return
+        const remapped = Object.fromEntries(
+          Object.entries(agents[key]!).map((agent) => [
+            agent[0],
+            {
+              ...(agent[1].profile ? { profile: map("profile", agent[1].profile) } : {}),
+              ...(agent[1].override
+                ? {
+                    override: {
+                      ...(agent[1].override.group ? { group: map("group", agent[1].override.group) } : {}),
+                      ...(agent[1].override.slots
+                        ? {
+                            slots: Object.fromEntries(
+                              Object.entries(agent[1].override.slots).map((slot) => [
+                                slot[0],
+                                slot[1].map((id) => map("layer", id)!),
+                              ]),
+                            ),
+                          }
+                        : {}),
+                    },
+                  }
+                : {}),
+            },
+          ]),
+        )
+        await writeJson(path.join(root(), "agents.json"), { ...agents, [key]: remapped })
+      })
+      return { project: { ...current, ...next }, copied: moved.copied }
+    })
+
+    const agent = Effect.fn("OperatorProfileStore.agent")(function* (project: string, name: string) {
+      return (yield* Effect.promise(readAgents))[project]?.[name] ?? {}
+    })
+
+    const agentPrompt = Effect.fn("OperatorProfileStore.agentPrompt")(function* (project: string, name: string) {
+      const loaded = yield* Effect.promise(() => forProject(project))
+      const setting = loaded.agents[name] ?? {}
+      const chosen = OperatorProfile.profileFor(loaded.catalog, { agent: name, setting, project: loaded.project })
+      const fallback = OperatorProfile.profileFor(loaded.catalog, { agent: name, project: loaded.project })
+      return {
+        setting,
+        namespace: { id: loaded.catalog.namespace.id, name: loaded.catalog.namespace.name },
+        profile: { id: chosen.profile.id, name: chosen.profile.name, source: chosen.source },
+        default: { id: fallback.profile.id, name: fallback.profile.name },
+      }
+    })
+
+    const setAgent = Effect.fn("OperatorProfileStore.setAgent")(function* (
+      project: string,
+      name: string,
+      setting: OperatorProfile.AgentSetting,
+    ) {
+      const context = yield* Effect.promise(() => forProject(project))
+      const found = context.catalog
+      if (setting.profile && !OperatorProfile.profiles(found).some((item) => item.id === setting.profile))
+        yield* refuse(`No profile "${setting.profile}" in ${found.namespace.name}`)
+      if (setting.override) {
+        const chosen = OperatorProfile.profileFor(found, { agent: name, setting, project: context.project })
+        const shape = OperatorProfile.effective(found, chosen.profile, setting.override)
+        yield* refuse(OperatorProfile.checkSlots(found, { group: shape.group.id, slots: shape.slots }))
+        if (
+          setting.override.group &&
+          !OperatorProfile.groups(found).some((item) => item.id === setting.override!.group)
+        )
+          yield* refuse(`No group "${setting.override.group}"`)
+      }
+      const next = {
+        ...(setting.profile ? { profile: setting.profile } : {}),
+        ...(setting.override && (setting.override.group || Object.keys(setting.override.slots ?? {}).length)
+          ? { override: setting.override }
+          : {}),
+      }
+      yield* Effect.promise(async () => {
+        const all = await readAgents()
+        const agents = { ...(all[project] ?? {}) }
+        if (Object.keys(next).length) agents[name] = next
+        else delete agents[name]
+        await writeJson(path.join(root(), "agents.json"), { ...all, [project]: agents })
+      })
       return next
     })
 
     return Service.of({
+      namespaces,
+      createNamespace,
+      updateNamespace,
+      removeNamespace,
       catalog,
+      saveType,
       saveLayer,
-      removeLayer,
+      copyBuiltin,
       saveGroup,
-      removeGroup,
       saveProfile,
-      removeProfile,
-      saveDefaults,
+      remove,
+      copyTo,
+      projects,
+      setProject,
+      agent,
+      agentPrompt,
+      setAgent,
     })
   }),
 )
 
 export const node = LayerNode.make({ service: Service, layer, deps: [Database.node] })
 
-async function readLayers(dir: string) {
-  const files = await Glob.scan("*.md", { cwd: dir, absolute: true, dot: false, symlink: true }).catch(() => [])
+// The section a new layer of a type shows in.
+function sectionFor(type: string): OperatorProfile.Section {
+  if (type === "purpose") return "purpose"
+  if (type === "role") return "role"
+  if (type === "identity") return "identity"
+  return "custom"
+}
+
+type Ref = { kind: Kind; id: string }
+
+// Copies items from one namespace to another, with what they use that the target lacks. An item the
+// target already has (same id, same content) is reused; one it has under the same id but with other
+// content, and `fresh` (the item asked for), get a new id. A name the target already uses gets
+// " (copy)". Returns what was copied and how ids changed.
+async function copyItems(
+  from: OperatorProfile.Catalog,
+  to: OperatorProfile.Catalog,
+  roots: ReadonlyArray<Ref>,
+  fresh?: Ref,
+  dryRun?: boolean,
+) {
+  const ns = to.namespace.id
+  const ids = new Map<string, string>()
+  const copied: Copied[] = []
+  const lists = {
+    type: [...to.types] as Array<{ id: string; name: string }>,
+    layer: [...to.layers] as Array<{ id: string; name: string }>,
+    group: [...to.groups] as Array<{ id: string; name: string }>,
+    profile: [...to.profiles] as Array<{ id: string; name: string }>,
+  }
+  const sources = { type: from.types, layer: from.layers, group: from.groups, profile: from.profiles }
+  const visit = async (ref: Ref): Promise<string> => {
+    if (OperatorProfile.isBuiltin(ref.id)) return ref.id
+    const known = ids.get(`${ref.kind}:${ref.id}`)
+    if (known) return known
+    const item = (sources[ref.kind] as ReadonlyArray<{ id: string; name: string }>).find((entry) => entry.id === ref.id)
+    if (!item) return ref.id
+    const content = await remap(ref.kind, item)
+    const there = lists[ref.kind].find((entry) => entry.id === ref.id)
+    const isFresh = fresh?.kind === ref.kind && fresh.id === ref.id
+    if (there && !isFresh && same(ref.kind, there, content)) {
+      ids.set(`${ref.kind}:${ref.id}`, ref.id)
+      return ref.id
+    }
+    const id = there
+      ? await freeId(
+          path.join(root(), ns, folders[ref.kind]),
+          item.name,
+          extensions[ref.kind],
+          lists[ref.kind].map((entry) => entry.id),
+        )
+      : ref.id
+    const name = lists[ref.kind].some((entry) => entry.name === item.name) ? `${item.name} (copy)` : item.name
+    const next = { ...content, id, name }
+    lists[ref.kind].push(next)
+    ids.set(`${ref.kind}:${ref.id}`, id)
+    copied.push({ kind: ref.kind, id, name })
+    if (!dryRun) await writeItem(ns, ref.kind, next as never)
+    return id
+  }
+  // An item with what it uses copied first and its references pointed at the copies.
+  const remap = async (kind: Kind, item: { id: string; name: string }) => {
+    if (kind === "layer") {
+      const value = item as OperatorProfile.Layer
+      return { ...value, type: OperatorProfile.isBuiltin(value.type) ? value.type : await visitType(value.type) }
+    }
+    if (kind === "group") {
+      const value = item as OperatorProfile.Group
+      return { ...value, types: await Promise.all(value.types.map(visitType)) }
+    }
+    if (kind === "profile") {
+      const value = item as OperatorProfile.Profile
+      const slots: Record<string, string[]> = {}
+      for (const [type, layers] of Object.entries(value.slots)) {
+        const ids = []
+        for (const id of layers) ids.push(await visit({ kind: "layer", id }))
+        slots[await visitType(type)] = ids
+      }
+      return { ...value, group: await visit({ kind: "group", id: value.group }), slots }
+    }
+    return item
+  }
+  const visitType = (type: string) =>
+    OperatorProfile.builtinTypes.some((item) => item.id === type)
+      ? Promise.resolve(type)
+      : visit({ kind: "type", id: type })
+  for (const ref of roots) await visit(ref)
+  // New ids by "<kind>:<old id>".
+  return { copied, ids }
+}
+
+function same(kind: Kind, a: object, b: object) {
+  const strip = (value: object) => JSON.stringify({ ...value, id: undefined, name: undefined })
+  return kind === "type" ? true : strip(a) === strip(b)
+}
+
+const folders: Record<Kind, string> = { type: "types", layer: "layers", group: "groups", profile: "profiles" }
+const extensions: Record<Kind, string> = { type: ".json", layer: ".md", group: ".json", profile: ".json" }
+
+function itemFile(ns: string, kind: Kind, id: string) {
+  return path.join(root(), ns, folders[kind], `${id}${extensions[kind]}`)
+}
+
+async function writeItem(
+  ns: string,
+  kind: Kind,
+  item: OperatorProfile.GroupType | OperatorProfile.Layer | OperatorProfile.Group | OperatorProfile.Profile,
+) {
+  const file = itemFile(ns, kind, item.id)
+  if (kind === "layer") {
+    const value = item as OperatorProfile.Layer
+    const data = {
+      id: value.id,
+      name: value.name,
+      type: value.type,
+      section: value.section,
+      ...(value.replaces ? { replaces: value.replaces } : {}),
+    }
+    return write(file, matter.stringify(value.text.endsWith("\n") ? value.text : `${value.text}\n`, data))
+  }
+  return writeJson(file, Object.fromEntries(Object.entries(item).filter((pair) => pair[0] !== "builtin")))
+}
+
+async function writeNamespace(namespace: OperatorProfile.Namespace) {
+  return writeJson(path.join(root(), namespace.id, "namespace.json"), namespace)
+}
+
+async function readNamespaceRecord(id: string): Promise<OperatorProfile.Namespace | undefined> {
+  const data = (await Bun.file(path.join(root(), id, "namespace.json"))
+    .json()
+    .catch(() => undefined)) as Record<string, unknown> | undefined
+  if (!data) return undefined
+  return {
+    id,
+    name: typeof data.name === "string" ? data.name : id,
+    purpose: typeof data.purpose === "string" ? data.purpose : "",
+    ...(typeof data.defaultProfile === "string" ? { defaultProfile: data.defaultProfile } : {}),
+    createdAt: typeof data.createdAt === "number" ? data.createdAt : 0,
+    updatedAt: typeof data.updatedAt === "number" ? data.updatedAt : 0,
+  }
+}
+
+async function readLayers(dir: string): Promise<OperatorProfile.Layer[]> {
+  const files = await Glob.scan("*.md", { cwd: dir, absolute: true, symlink: true }).catch(() => [] as string[])
   const layers = await Promise.all(
     files.map(async (file): Promise<OperatorProfile.Layer | undefined> => {
       const parsed = await Bun.file(file)
@@ -326,80 +903,21 @@ async function readLayers(dir: string) {
       if (!parsed) return undefined
       const data = parsed.data as Record<string, unknown>
       const section = Schema.decodeUnknownOption(OperatorProfile.Section)(data.section)
-      if (section._tag === "None") return undefined
-      const purpose = data.purpose === "org" || data.purpose === "goal" ? data.purpose : undefined
       return {
         id: path.basename(file, ".md"),
         name: typeof data.name === "string" ? data.name : path.basename(file, ".md"),
-        section: section.value,
-        ...(purpose ? { purpose } : {}),
-        ...(typeof data.overrides === "string" ? { overrides: data.overrides } : {}),
-        projects: toProjects(data.projects),
-        ...agentsField(data.agents),
-        priority: typeof data.priority === "number" ? data.priority : 50,
-        ...maxLengthField(data.max_length),
-        enabled: data.enabled !== false,
+        type: typeof data.type === "string" ? data.type : "identity",
+        section: section._tag === "Some" ? section.value : "custom",
+        ...(typeof data.replaces === "string" ? { replaces: data.replaces } : {}),
         text: parsed.content.replace(/\n$/, ""),
-        origin: "profile",
+        origin: "user",
       }
     }),
   )
   return layers.filter((item) => item !== undefined)
 }
 
-// prompts/<id>.md overrides and identity/*.md layers in one config folder.
-async function readOldFiles(dir: string, projects: OperatorProfile.Projects) {
-  const prompts = await Glob.scan("*.md", { cwd: path.join(dir, "prompts"), absolute: true, symlink: true }).catch(
-    () => [] as string[],
-  )
-  const identity = await Glob.scan("*.md", { cwd: path.join(dir, "identity"), absolute: true, symlink: true }).catch(
-    () => [] as string[],
-  )
-  const overrides = await Promise.all(
-    prompts
-      .filter((file) => OperatorProfile.isBuiltinText(path.basename(file, ".md")))
-      .map(async (file) => {
-        const id = path.basename(file, ".md")
-        return {
-          id: fileId(file),
-          name: id,
-          section: OperatorProfile.sectionOf(id),
-          overrides: id,
-          projects,
-          priority: 50,
-          enabled: true,
-          text: (await Bun.file(file).text()).trim(),
-          origin: "file" as const,
-          path: file,
-        } satisfies OperatorProfile.Layer
-      }),
-  )
-  const layers = await Promise.all(
-    identity.map(async (file) => {
-      const parsed = matter(await Bun.file(file).text())
-      const data = parsed.data as Record<string, unknown>
-      return {
-        id: fileId(file),
-        name: typeof data.name === "string" ? data.name : path.basename(file, ".md"),
-        section: "identity" as const,
-        projects,
-        ...agentsField(data.agents),
-        priority: typeof data.priority === "number" ? data.priority : 50,
-        ...maxLengthField(data.max_length),
-        enabled: data.enabled !== false,
-        text: parsed.content.trim(),
-        origin: "file" as const,
-        path: file,
-      } satisfies OperatorProfile.Layer
-    }),
-  )
-  return [...overrides, ...layers]
-}
-
-async function readJson<T>(
-  dir: string,
-  decode: (id: string, data: Record<string, unknown>) => T | undefined,
-): Promise<T[]> {
+async function readJsonDir<T>(dir: string, decode: (data: Record<string, unknown>) => T): Promise<T[]> {
   const files = await Glob.scan("*.json", { cwd: dir, absolute: true, symlink: true }).catch(() => [] as string[])
   const items = await Promise.all(
     files.map(
@@ -408,76 +926,13 @@ async function readJson<T>(
           .json()
           .then((data: unknown) =>
             data && typeof data === "object"
-              ? decode(path.basename(file, ".json"), data as Record<string, unknown>)
+              ? decode({ id: path.basename(file, ".json"), ...(data as Record<string, unknown>) })
               : undefined,
           )
           .catch(() => undefined),
     ),
   )
   return items.filter((item) => item !== undefined)
-}
-
-function toGroup(id: string, data: Record<string, unknown>): OperatorProfile.PromptGroup | undefined {
-  const type = Schema.decodeUnknownOption(OperatorProfile.GroupType)(data.type)
-  if (type._tag === "None") return undefined
-  return {
-    id,
-    name: typeof data.name === "string" ? data.name : id,
-    type: type.value,
-    projects: toProjects(data.projects),
-    layers: strings(data.layers),
-    builtin: false,
-  }
-}
-
-function toProfile(id: string, data: Record<string, unknown>): OperatorProfile.Profile {
-  return {
-    id,
-    name: typeof data.name === "string" ? data.name : id,
-    projects: toProjects(data.projects),
-    groups: strings(data.groups),
-    builtin: false,
-  }
-}
-
-function toDefaults(data: unknown): OperatorProfile.Defaults {
-  const value = (data && typeof data === "object" ? data : {}) as Record<string, unknown>
-  const projects = value.projects && typeof value.projects === "object" ? value.projects : {}
-  return {
-    ...(typeof value.global === "string" ? { global: value.global } : {}),
-    projects: Object.fromEntries(
-      Object.entries(projects).filter((pair): pair is [string, string] => typeof pair[1] === "string"),
-    ),
-  }
-}
-
-async function writeLayer(layer: OperatorProfile.Layer) {
-  if (layer.origin === "file" && layer.path && layer.section !== "identity") return write(layer.path, `${layer.text}\n`)
-  if (layer.origin === "file" && layer.path) {
-    // Keep the old file's other keys (such as `layer: org`) as they were.
-    const before = matter(await Bun.file(layer.path).text()).data as Record<string, unknown>
-    const data: Record<string, unknown> = {
-      ...without(before, ["name", "priority", "agents", "max_length", "enabled"]),
-      name: layer.name,
-      priority: layer.priority,
-      ...(layer.agents?.length ? { agents: [...layer.agents] } : {}),
-      ...(layer.maxLength ? { max_length: layer.maxLength } : {}),
-      ...(layer.enabled ? {} : { enabled: false }),
-    }
-    return write(layer.path, matter.stringify(`${layer.text.trim()}\n`, data))
-  }
-  const data = {
-    name: layer.name,
-    section: layer.section,
-    ...(layer.purpose ? { purpose: layer.purpose } : {}),
-    ...(layer.overrides ? { overrides: layer.overrides } : {}),
-    projects: layer.projects,
-    ...(layer.agents?.length ? { agents: [...layer.agents] } : {}),
-    priority: layer.priority,
-    ...(layer.maxLength ? { max_length: layer.maxLength } : {}),
-    enabled: layer.enabled,
-  }
-  return write(path.join(folder(), "layers", `${layer.id}.md`), matter.stringify(`${layer.text}\n`, data))
 }
 
 async function writeJson(file: string, data: unknown) {
@@ -489,51 +944,47 @@ async function write(file: string, text: string) {
   await Bun.write(file, text)
 }
 
-// An id made from the name that no file in `dir` uses yet.
-async function freeId(dir: string, name: string, ext: string) {
-  const base =
+// An id made from the name that no file in `dir` (and none of `taken`) uses yet.
+async function freeId(dir: string, name: string, ext: string, taken: ReadonlyArray<string> = []) {
+  const slug =
     name
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "")
       .slice(0, 50) || "item"
-  // Ids of built-in resources and old files are kept free.
-  const taken = (id: string) =>
-    id === "default" ||
-    id === "helper" ||
-    id.startsWith("builtin.") ||
-    id.startsWith("file-") ||
-    Bun.file(path.join(dir, `${id}${ext}`)).exists()
   const next = async (index: number): Promise<string> => {
-    const id = index === 1 ? base : `${base}-${index}`
-    return (await taken(id)) ? next(index + 1) : id
+    const id = index === 1 ? slug : `${slug}-${index}`
+    const used =
+      taken.includes(id) ||
+      (await fs.stat(path.join(dir, `${id}${ext}`)).then(
+        () => true,
+        () => false,
+      ))
+    return used ? next(index + 1) : id
   }
   return next(1)
-}
-
-// Old files get an id from their path, so the same file keeps its id.
-function fileId(file: string) {
-  return `file-${Bun.hash(file).toString(36)}`
-}
-
-function toProjects(value: unknown): OperatorProfile.Projects {
-  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string")
-  return "*"
 }
 
 function strings(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []
 }
 
-function agentsField(value: unknown) {
-  const agents = strings(value)
-  return agents.length ? { agents } : {}
+function slotsOf(value: unknown): OperatorProfile.Slots {
+  if (!value || typeof value !== "object") return {}
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>).map((pair) => [pair[0], strings(pair[1])]))
 }
 
-function maxLengthField(value: unknown) {
-  return typeof value === "number" && value > 0 ? { maxLength: value } : {}
-}
-
-function without(data: Record<string, unknown>, keys: string[]) {
-  return Object.fromEntries(Object.entries(data).filter((pair) => !keys.includes(pair[0])))
+function agentSetting(value: Record<string, unknown> | undefined): OperatorProfile.AgentSetting {
+  const override = value?.override as Record<string, unknown> | undefined
+  return {
+    ...(typeof value?.profile === "string" ? { profile: value.profile } : {}),
+    ...(override
+      ? {
+          override: {
+            ...(typeof override.group === "string" ? { group: override.group } : {}),
+            ...(override.slots ? { slots: slotsOf(override.slots) } : {}),
+          },
+        }
+      : {}),
+  }
 }

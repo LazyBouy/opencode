@@ -4,11 +4,15 @@ import { expect } from "bun:test"
 import { Effect } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Global } from "@opencode-ai/core/global"
+import { OperatorProfile } from "@/operator/profile"
 import { OperatorProfileStore } from "@/operator/profile-store"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(LayerNode.compile(OperatorProfileStore.node))
+const P = OperatorProfile.PREFIX
+const model = { providerID: "test", api: { id: "test-model" } }
+const parts = { environment: ["<env/>"], instructions: [] }
 
 // Points the global config folder inside the test project for the duration of a test.
 const withGlobal = <A, E, R>(body: (dir: string) => Effect.Effect<A, E, R>) =>
@@ -28,131 +32,217 @@ const withGlobal = <A, E, R>(body: (dir: string) => Effect.Effect<A, E, R>) =>
     )
   })
 
-const write = (file: string, text: string) =>
-  Effect.promise(async () => {
-    await fs.mkdir(path.dirname(file), { recursive: true })
-    await fs.writeFile(file, text)
-  })
-const read = (file: string) => Effect.promise(() => fs.readFile(file, "utf8"))
+const refused = <A, E>(effect: Effect.Effect<A, E>) =>
+  effect.pipe(
+    Effect.flip,
+    Effect.map((error) => (error as { message: string }).message),
+  )
 
-it.instance("lists built-in resources, OpenCode first among projects, and old files in place", () =>
+// A small set of items in OpenCode: a custom type, layers, a group and a profile using them.
+const seed = Effect.fnUntraced(function* () {
+  const store = yield* OperatorProfileStore.Service
+  const rules = yield* store.saveType("opencode", undefined, { name: "House rules", description: "Team rules" })
+  const rule = yield* store.saveLayer("opencode", undefined, { name: "Be kind", type: rules.id, text: "Be kind." })
+  const role = yield* store.saveLayer("opencode", undefined, {
+    name: "Reviewer",
+    type: "role",
+    section: "role",
+    text: "You review.",
+  })
+  const group = yield* store.saveGroup("opencode", undefined, {
+    name: "With rules",
+    types: ["purpose", rules.id, "role", "identity"],
+  })
+  const profile = yield* store.saveProfile("opencode", undefined, {
+    name: "Reviewing",
+    group: group.id,
+    slots: { [rules.id]: [rule.id], role: [role.id], identity: [`${P}slot.agent-or-base`] },
+  })
+  return { store, rules, rule, role, group, profile }
+})
+
+it.instance("the OpenCode namespace exists from the start, and new items are written as files", () =>
   withGlobal((global) =>
     Effect.gen(function* () {
-      yield* write(path.join(global, "prompts", "base.kimi.md"), "Kimi, be brief.\n")
-      yield* write(path.join(global, "prompts", "not-a-text.md"), "ignored\n")
-      yield* write(
-        path.join(global, "identity", "company.md"),
-        "---\nname: Company\nlayer: org\n---\nWe build editors.\n",
-      )
-      const store = yield* OperatorProfileStore.Service
-      const catalog = yield* store.catalog()
-
-      expect(catalog.projects[0]).toEqual({ key: "opencode", name: "OpenCode" })
-      expect(catalog.profiles.map((item) => item.id)).toEqual(["default", "helper"])
-      expect(catalog.layers.some((item) => item.id === "slot.base")).toBe(true)
-      const kimi = catalog.layers.find((item) => item.overrides === "base.kimi")
-      expect(kimi).toMatchObject({ origin: "file", projects: "*", section: "base", text: "Kimi, be brief." })
-      expect(catalog.layers.some((item) => item.name === "not-a-text")).toBe(false)
-      expect(catalog.layers.find((item) => item.name === "Company")).toMatchObject({
-        section: "identity",
-        origin: "file",
-        path: path.join(global, "identity", "company.md"),
-      })
+      const items = yield* seed()
+      const catalog = yield* items.store.catalog("opencode")
+      expect(catalog.namespace).toMatchObject({ id: "opencode", name: "OpenCode", purpose: "" })
+      expect(catalog.profiles.map((item) => item.id)).toContain(items.profile.id)
+      expect(catalog.profiles.filter((item) => item.builtin)).toHaveLength(3)
+      expect(catalog.types.filter((item) => item.builtin)).toHaveLength(7)
+      const file = path.join(global, "namespaces", "opencode", "layers", `${items.role.id}.md`)
+      expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toContain("type: role")
     }),
   ),
 )
 
-it.instance("saves layers, groups, profiles and defaults as files, and refuses broken saves", () =>
-  withGlobal((global) =>
+it.instance("an editable copy keeps the built-in's type and text, and a profile holds one copy of each", () =>
+  withGlobal(() =>
     Effect.gen(function* () {
       const store = yield* OperatorProfileStore.Service
-      const role = yield* store.saveLayer(undefined, {
-        name: "Reviewer",
-        section: "role",
-        projects: "*",
-        text: "You review drafts.",
+      const copy = yield* store.copyBuiltin("opencode", `${P}base.gemini`)
+      expect(copy).toMatchObject({
+        type: "identity",
+        section: "base",
+        replaces: `${P}base.gemini`,
+        name: "base.gemini – copy",
       })
-      expect(role.id).toBe("reviewer")
-      expect(yield* read(path.join(global, "profile", "layers", "reviewer.md"))).toContain("section: role")
-
-      const group = yield* store.saveGroup(undefined, {
-        name: "Review",
-        type: "role",
-        projects: "*",
-        layers: ["reviewer"],
-      })
-      const profile = yield* store.saveProfile(undefined, {
-        name: "Reviewing",
-        projects: "*",
-        groups: ["builtin.purpose", group.id, "builtin.identity"],
-      })
-      yield* store.saveDefaults({ global: profile.id, projects: {} })
-      expect(JSON.parse(yield* read(path.join(global, "profile", "defaults.json")))).toEqual({
-        global: "reviewing",
-        projects: {},
-      })
-
-      const catalog = yield* store.catalog()
-      expect(catalog.groups.find((item) => item.id === "review")?.layers).toEqual(["reviewer"])
-      expect(catalog.defaults.global).toBe("reviewing")
-
-      const refused = (effect: Effect.Effect<unknown, unknown>) =>
-        effect.pipe(
-          Effect.flip,
-          Effect.map((error) => (error as { message: string }).message),
-        )
-      expect(yield* refused(store.removeLayer("reviewer"))).toContain("uses this layer")
-      expect(yield* refused(store.removeGroup("review"))).toContain("uses this group")
-      expect(yield* refused(store.removeProfile("reviewing"))).toContain("is a default")
-      expect(
-        yield* refused(store.saveGroup("builtin.role", { name: "x", type: "role", projects: "*", layers: [] })),
-      ).toContain("Built-in groups")
+      expect(copy.text.length).toBeGreaterThan(100)
+      const tool = yield* store.copyBuiltin("opencode", `${P}tool.bash`, "Run commands.")
+      expect(tool).toMatchObject({ type: "capabilities", section: "tool", text: "Run commands." })
+      const second = yield* store.copyBuiltin("opencode", `${P}base.gemini`)
       expect(
         yield* refused(
-          store.saveLayer(undefined, {
-            name: "Goal",
-            section: "purpose",
-            purpose: "goal",
-            projects: ["opencode"],
-            text: "x",
+          store.saveProfile("opencode", undefined, {
+            name: "Twice",
+            group: `${P}group.spec`,
+            slots: { identity: [copy.id, second.id] },
           }),
         ),
-      ).toContain("Base Model Group")
-      // A group change that would break a profile using it is refused.
-      expect(
-        yield* refused(store.saveGroup("review", { name: "Review", type: "identity", projects: "*", layers: [] })),
-      ).toContain("Reviewing")
+      ).toContain("one copy of base.gemini")
+      expect(yield* refused(store.copyBuiltin("opencode", `${P}slot.base`))).toContain("not one of OpenCode's texts")
     }),
   ),
 )
 
-it.instance("an old file layer is written back to its file and is never deleted", () =>
-  withGlobal((global) =>
+it.instance("a new namespace copies OpenCode's own items and shares the built-ins", () =>
+  withGlobal(() =>
     Effect.gen(function* () {
-      const file = path.join(global, "identity", "company.md")
-      yield* write(file, "---\nname: Company\nlayer: org\npriority: 10\n---\nWe build editors.\n")
-      const store = yield* OperatorProfileStore.Service
-      const company = (yield* store.catalog()).layers.find((item) => item.path === file)!
-
-      yield* store.saveLayer(company.id, {
-        name: "Company",
-        section: "identity",
-        projects: "*",
-        enabled: false,
-        text: "We build fast editors.",
+      const items = yield* seed()
+      yield* items.store.updateNamespace("opencode", { defaultProfile: items.profile.id })
+      const team = yield* items.store.createNamespace({ name: "Team", purpose: "We build editors." })
+      const catalog = yield* items.store.catalog(team.id)
+      expect(catalog.namespace).toMatchObject({
+        name: "Team",
+        purpose: "We build editors.",
+        defaultProfile: items.profile.id,
       })
-      const text = yield* read(file)
-      expect(text).toContain("layer: org")
-      expect(text).toContain("enabled: false")
-      expect(text).toContain("We build fast editors.")
+      expect(catalog.profiles.filter((item) => !item.builtin).map((item) => item.id)).toEqual([items.profile.id])
+      expect(
+        catalog.layers
+          .filter((item) => item.origin === "user")
+          .map((item) => item.id)
+          .toSorted(),
+      ).toEqual([items.rule.id, items.role.id].toSorted())
+      expect(catalog.types.filter((item) => !item.builtin).map((item) => item.id)).toEqual([items.rules.id])
+      expect(catalog.projects).toEqual([])
+      // Changing the copy leaves OpenCode's item alone.
+      yield* items.store.saveLayer(team.id, items.role.id, { name: "Reviewer", type: "role", text: "Team review." })
+      expect((yield* items.store.catalog("opencode")).layers.find((item) => item.id === items.role.id)?.text).toBe(
+        "You review.",
+      )
+    }),
+  ),
+)
 
-      const moved = yield* store
-        .saveLayer(company.id, { name: "Company", section: "identity", projects: ["/x"], text: "x" })
-        .pipe(Effect.flip)
-      expect(moved.message).toContain("its scope is where the file is")
-      const removed = yield* store.removeLayer(company.id).pipe(Effect.flip)
-      expect(removed.message).toContain("delete the file yourself")
-      expect(yield* Effect.promise(() => Bun.file(file).exists())).toBe(true)
+it.instance("Copy to namespace brings what is missing and renames a clash", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      const items = yield* seed()
+      const empty = yield* items.store.createNamespace({ name: "Empty" })
+      // Empty starts as a copy; remove its items so the copy has to bring them.
+      for (const kind of ["profile", "group", "layer", "layer", "type"] as const) {
+        const ids = {
+          profile: [items.profile.id],
+          group: [items.group.id],
+          layer: [items.rule.id, items.role.id],
+          type: [items.rules.id],
+        }[kind]
+        for (const id of ids) yield* items.store.remove(empty.id, kind, id).pipe(Effect.ignore)
+      }
+      const copied = yield* items.store.copyTo("opencode", "profile", items.profile.id, empty.id)
+      expect(copied.map((item) => item.kind).toSorted()).toEqual(["group", "layer", "layer", "profile", "type"])
+      const again = yield* items.store.copyTo("opencode", "profile", items.profile.id, empty.id)
+      expect(again).toEqual([{ kind: "profile", id: `${items.profile.id}-2`, name: "Reviewing (copy)" }])
+    }),
+  ),
+)
+
+it.instance("moving a project copies what it uses and keeps its prompt the same", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      const items = yield* seed()
+      const key = "/work/app"
+      const purpose = yield* items.store.saveLayer("opencode", undefined, {
+        name: "App goal",
+        type: "purpose",
+        section: "purpose",
+        text: "Ship the app.",
+      })
+      yield* items.store.setProject(key, { purpose: purpose.id, defaultProfile: items.profile.id })
+      yield* items.store.setAgent(key, "build", { override: { slots: { role: [] } } })
+      const before = yield* Effect.promise(() => OperatorProfileStore.forProject(key))
+      const prompt = (loaded: typeof before) =>
+        OperatorProfile.assemble({
+          catalog: loaded.catalog,
+          project: loaded.project,
+          agent: { name: "build" },
+          setting: loaded.agents.build,
+          model,
+          parts,
+        }).system
+
+      const target = yield* items.store.createNamespace({ name: "Moved" })
+      // The new namespace starts as a copy; take out what the move has to bring.
+      yield* items.store.remove(target.id, "profile", items.profile.id)
+      yield* items.store.remove(target.id, "layer", purpose.id)
+      const plan = yield* items.store.setProject(key, { namespace: target.id, dryRun: true })
+      expect(plan.copied.map((item) => item.name)).toEqual(["App goal", "Reviewing"])
+      expect((yield* items.store.projects()).find((item) => item.key === key)?.namespace).toBe("opencode")
+
+      const moved = yield* items.store.setProject(key, { namespace: target.id })
+      expect(moved.project).toMatchObject({
+        namespace: target.id,
+        purpose: purpose.id,
+        defaultProfile: items.profile.id,
+      })
+      const after = yield* Effect.promise(() => OperatorProfileStore.forProject(key))
+      expect(after.catalog.namespace.id).toBe(target.id)
+      expect(prompt(after)).toEqual(prompt(before))
+    }),
+  ),
+)
+
+it.instance("items in use cannot be deleted, and the error says by what", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      const items = yield* seed()
+      const key = "/work/app"
+      yield* items.store.setAgent(key, "build", { profile: items.profile.id })
+      expect(yield* refused(items.store.remove("opencode", "type", items.rules.id))).toContain('layer "Be kind"')
+      expect(yield* refused(items.store.remove("opencode", "layer", items.role.id))).toContain('profile "Reviewing"')
+      expect(yield* refused(items.store.remove("opencode", "group", items.group.id))).toContain('profile "Reviewing"')
+      expect(yield* refused(items.store.remove("opencode", "profile", items.profile.id))).toContain("build in app")
+      expect(yield* refused(items.store.remove("opencode", "profile", `${P}profile.opencode`))).toContain(
+        "OpenCode's own",
+      )
+      expect(yield* refused(items.store.removeNamespace("opencode"))).toContain("cannot be deleted")
+
+      const team = yield* items.store.createNamespace({ name: "Team" })
+      yield* items.store.setProject(key, { namespace: team.id })
+      expect(yield* refused(items.store.removeNamespace(team.id))).toContain("still has projects")
+      yield* items.store.setProject(key, { namespace: "opencode" })
+      yield* items.store.removeNamespace(team.id)
+      expect((yield* items.store.namespaces()).map((item) => item.namespace.id)).toEqual(["opencode"])
+    }),
+  ),
+)
+
+it.instance("the same agent name in two projects is two agents", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      const items = yield* seed()
+      yield* items.store.setAgent("/work/a", "build", { profile: items.profile.id })
+      yield* items.store.setAgent("/work/b", "build", { profile: `${P}profile.spec` })
+      expect(yield* items.store.agent("/work/a", "build")).toEqual({ profile: items.profile.id })
+      expect(yield* items.store.agent("/work/b", "build")).toEqual({ profile: `${P}profile.spec` })
+      expect(
+        yield* refused(
+          items.store.setAgent("/work/a", "build", { override: { slots: { identity: [items.role.id] } } }),
+        ),
+      ).toContain("not Agent identity")
+      yield* items.store.setAgent("/work/a", "build", {})
+      expect(yield* items.store.agent("/work/a", "build")).toEqual({})
     }),
   ),
 )
