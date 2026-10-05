@@ -203,6 +203,16 @@ export interface OperatorMock {
   readonly prompt: PromptMock
   pending: (typeof pendingRequest)[]
   rejectWrite?: string
+  // Trash: what is in it, and every call to it.
+  trash: Array<{
+    id: string
+    kind: string
+    name: string
+    deletedAt: number
+    files: { path: string; stored: string }[]
+    project?: string
+  }>
+  trashWrites: Array<{ method: string; path: string; body: unknown }>
 }
 
 export async function mockOperator(page: Page) {
@@ -224,6 +234,8 @@ export async function mockOperator(page: Page) {
     folders: new Set([`${workspace}/apps`, `${workspace}/site`]),
     prompt: prompt.state,
     pending: [pendingRequest],
+    trash: [],
+    trashWrites: [],
   }
   const repositories = new Set([`${workspace}/site`])
   const listing = (path: string) => ({
@@ -283,6 +295,34 @@ export async function mockOperator(page: Page) {
           created: now,
         })),
       ])
+    if (url.pathname === "/operator/trash" || url.pathname.startsWith("/operator/trash/")) {
+      const body = method === "GET" || method === "DELETE" ? null : route.request().postDataJSON()
+      if (method !== "GET") state.trashWrites.push({ method, path: url.pathname, body })
+      if (method === "GET") return json(route, state.trash)
+      if (method === "DELETE" && url.pathname === "/operator/trash") {
+        const purged = state.trash.length
+        state.trash.length = 0
+        return json(route, { purged })
+      }
+      const id = url.pathname.split("/")[3]
+      if (method === "DELETE" || url.pathname.endsWith("/restore")) {
+        const entry = state.trash.find((item) => item.id === id)
+        state.trash.splice(state.trash.indexOf(entry!), 1)
+        return json(route, method === "DELETE" ? true : entry)
+      }
+      const input = body as { key?: string; sessionID?: string; kind?: string; name?: string }
+      const kind = id === "project" ? "project" : id === "session" ? "session" : (input.kind ?? "item")
+      const entry = {
+        id: `trash-${state.trash.length + 1}`,
+        kind,
+        name: input.name ?? input.key?.split("/").at(-1) ?? input.sessionID ?? "",
+        deletedAt: now,
+        files: input.key ? [{ path: input.key, stored: "files/0" }] : [],
+        ...(input.key ? { project: input.key } : {}),
+      }
+      state.trash.push(entry)
+      return json(route, entry)
+    }
     if (url.pathname === "/operator/session") {
       state.sessionQueries.push(url.searchParams)
       const search = url.searchParams.get("search")?.toLowerCase()

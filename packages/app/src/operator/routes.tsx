@@ -16,6 +16,7 @@ const built: Partial<Record<OperatorPage["id"], Component>> = {
   capabilities: lazy(() => import("./pages/capabilities")),
   profile: lazy(() => import("./pages/profile")),
   memory: lazy(() => import("./pages/memory")),
+  trash: lazy(() => import("./pages/trash")),
 }
 const AgentPage = lazy(() => import("./pages/agent"))
 const AgentFormPage = lazy(() => import("./pages/agent-form"))

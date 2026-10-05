@@ -23,6 +23,7 @@ import { requestError } from "./config-helpers"
 import { useProfileNames } from "./profile-data"
 import { namespaceDefault, OPENCODE } from "./profile-model"
 import { RegisterProject } from "../project-gate"
+import { useMoveToTrash } from "../ui/confirm"
 import { ProjectPromptForm, useProjectSettings } from "./project-prompt"
 
 // A project as the page lists it: a git project the server knows, or a folder outside git — a
@@ -372,6 +373,7 @@ function ProjectOverlay() {
             copying={copying()}
             onCopying={setCopying}
             onOpen={(key) => setParams({ project: key, block: undefined, edit: undefined })}
+            onGone={() => setParams({ project: undefined, block: found().ns, edit: undefined })}
             onDone={() => {
               setEditing(false)
               setParams({ edit: undefined })
@@ -398,6 +400,7 @@ function ProjectRecord(props: {
   copying: boolean
   onCopying: (copying: boolean) => void
   onOpen: (key: string) => void
+  onGone: () => void
   onDone: () => void
 }) {
   const language = useLanguage()
@@ -408,6 +411,24 @@ function ProjectRecord(props: {
   const scoped = (page: string) => navigate(`/operator/${page}?dir=${encodeURIComponent(props.row.key)}`)
 
   const name = () => nameOf(props.row)
+  const api = useOperatorClient()
+  const queryClient = useQueryClient()
+  const moveToTrash = useMoveToTrash()
+  // To Trash: the project's whole folder, its settings and (archived) its sessions.
+  const remove = () =>
+    moveToTrash(name(), () =>
+      api
+        .client()
+        .operator.trash.project({ key: props.row.key }, { throwOnError: true })
+        .then(async () => {
+          showToast({ title: language.t("operator.trash.moved", { name: name() }) })
+          props.onGone()
+          await queryClient.invalidateQueries({ queryKey: api.key() })
+        })
+        .catch((error: unknown) =>
+          showToast({ title: language.t("operator.trash.failed"), description: requestError(error) }),
+        ),
+    )
 
   return (
     <Show
@@ -461,6 +482,9 @@ function ProjectRecord(props: {
                 </ButtonV2>
                 <ButtonV2 variant="neutral" onClick={() => props.onCopying(true)}>
                   {language.t("operator.projects.copy")}
+                </ButtonV2>
+                <ButtonV2 variant="danger" onClick={() => void remove()}>
+                  {language.t("operator.trash.delete")}
                 </ButtonV2>
               </Show>
               <ButtonV2 variant="neutral" onClick={() => scoped("sessions")}>

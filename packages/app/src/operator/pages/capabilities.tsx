@@ -16,6 +16,7 @@ import { DataTable } from "../ui/data-table"
 import { EmptyState } from "../ui/empty-state"
 import { PageHeader } from "../ui/page-header"
 import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOverlay } from "../ui/record-overlay"
+import { useTrashItem } from "./trash"
 import { ScopePicker } from "../ui/scope-picker"
 
 type Server = { name: string; status: McpStatus }
@@ -330,6 +331,13 @@ function CapabilityOverlay() {
   const { directory, tools, skills, commands, servers } = useCapabilities()
   const mcpToggle = useMcpToggle(directory)
   const [params, setParams] = useSearchParams<Params>()
+  const trash = useTrashItem(directory)
+  const gone = () => setParams({ item: undefined })
+  const deleteButton = (kind: "skill" | "command" | "tool" | "mcp", name: string, label = name) => (
+    <ButtonV2 variant="danger" onClick={() => void trash(kind, name, label, gone)}>
+      {language.t("operator.trash.delete")}
+    </ButtonV2>
+  )
   const kind = (): Kind =>
     ["tools", "skills", "commands", "mcp"].includes(params.kind ?? "") ? (params.kind as Kind) : "tools"
   const blocks = createMemo<OverlayBlock[]>(() => [
@@ -379,7 +387,12 @@ function CapabilityOverlay() {
     >
       <Show when={tool()}>
         {(found) => (
-          <RecordView title={<code>{found().id}</code>}>
+          <RecordView
+            title={<code>{found().id}</code>}
+            actions={
+              found().origin !== "builtin" && found().origin !== "mcp" ? deleteButton("tool", found().id) : undefined
+            }
+          >
             <dl data-component="record-fields">
               <RecordField label={language.t("operator.column.source")} help={language.t("operator.help.toolSource")}>
                 {language.t(`operator.capabilities.origin.${found().origin}`)}
@@ -397,7 +410,7 @@ function CapabilityOverlay() {
       </Show>
       <Show when={skill()}>
         {(found) => (
-          <RecordView title={found().name}>
+          <RecordView title={found().name} actions={deleteButton("skill", found().name)}>
             <dl data-component="record-fields">
               <RecordField
                 label={language.t("operator.column.description")}
@@ -417,7 +430,12 @@ function CapabilityOverlay() {
       </Show>
       <Show when={command()}>
         {(found) => (
-          <RecordView title={<code>/{found().name}</code>}>
+          <RecordView
+            title={<code>/{found().name}</code>}
+            actions={
+              found().source === "command" ? deleteButton("command", found().name, `/${found().name}`) : undefined
+            }
+          >
             <dl data-component="record-fields">
               <RecordField
                 label={language.t("operator.column.description")}
@@ -453,15 +471,18 @@ function CapabilityOverlay() {
           <RecordView
             title={found().name}
             actions={
-              <ButtonV2
-                variant="outline"
-                disabled={mcpToggle.busy() === found().name}
-                onClick={() => void mcpToggle.toggle(found())}
-              >
-                {found().status.status === "connected"
-                  ? language.t("operator.capabilities.disconnect")
-                  : language.t("operator.capabilities.connect")}
-              </ButtonV2>
+              <>
+                <ButtonV2
+                  variant="outline"
+                  disabled={mcpToggle.busy() === found().name}
+                  onClick={() => void mcpToggle.toggle(found())}
+                >
+                  {found().status.status === "connected"
+                    ? language.t("operator.capabilities.disconnect")
+                    : language.t("operator.capabilities.connect")}
+                </ButtonV2>
+                {deleteButton("mcp", found().name)}
+              </>
             }
           >
             <dl data-component="record-fields">

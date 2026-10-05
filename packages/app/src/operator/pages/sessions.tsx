@@ -2,11 +2,12 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import type { GlobalSession } from "@opencode-ai/sdk/v2/client"
-import { useInfiniteQuery } from "@tanstack/solid-query"
+import { useInfiniteQuery, useQueryClient } from "@tanstack/solid-query"
 import { createMemo, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
+import { showToast } from "@/utils/toast"
 import { useOpenSession, useOperatorClient } from "../data"
 import { formatAgo, formatCost, formatCount, sessionFolder, shortPath } from "../format"
 import { useOperatorScope } from "../scope"
@@ -14,6 +15,8 @@ import { type Column, DataTable } from "../ui/data-table"
 import { PageHeader } from "../ui/page-header"
 import { ScopePicker } from "../ui/scope-picker"
 import { FieldHelp } from "../ui/field-help"
+import { useMoveToTrash } from "../ui/confirm"
+import { requestError } from "./config-helpers"
 
 const PAGE = 50
 
@@ -104,7 +107,41 @@ export default function SessionsPage() {
       value: (session) => session.time.updated,
       cell: (session) => formatAgo(session.time.updated, locale()),
     },
+    {
+      id: "actions",
+      header: "",
+      align: "end",
+      cell: (session) => (
+        <ButtonV2
+          size="small"
+          variant="ghost"
+          onClick={(event: MouseEvent) => {
+            event.stopPropagation()
+            void remove(session)
+          }}
+        >
+          {language.t("operator.trash.delete")}
+        </ButtonV2>
+      ),
+    },
   ]
+
+  // To Trash: archived (with its subagents' sessions) until restored or deleted for good.
+  const moveToTrash = useMoveToTrash()
+  const queryClient = useQueryClient()
+  const remove = (session: GlobalSession) =>
+    moveToTrash(session.title, () =>
+      api
+        .client()
+        .operator.trash.session({ sessionID: session.id }, { throwOnError: true })
+        .then(async () => {
+          showToast({ title: language.t("operator.trash.moved", { name: session.title }) })
+          await queryClient.invalidateQueries({ queryKey: api.key() })
+        })
+        .catch((error: unknown) =>
+          showToast({ title: language.t("operator.trash.failed"), description: requestError(error) }),
+        ),
+    )
 
   return (
     <>

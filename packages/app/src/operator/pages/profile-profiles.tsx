@@ -337,7 +337,7 @@ function ProfileRecord(props: {
     const ok = await confirm({
       title: language.t("operator.profile.deleteTitle", { name: source()?.name ?? "" }),
       description: language.t("operator.profile.deleteProfileBody"),
-      confirm: language.t("operator.agent.delete"),
+      confirm: language.t("operator.trash.moveConfirm"),
       danger: true,
     })
     if (!ok) return

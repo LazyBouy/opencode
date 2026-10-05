@@ -17,6 +17,7 @@ export interface OperatorPage {
     | "capabilities"
     | "integrations"
     | "memory"
+    | "trash"
   readonly path: string
   readonly icon: IconName
 }
@@ -38,6 +39,8 @@ export const operatorPages: readonly OperatorPage[] = [
   { id: "capabilities", path: "/operator/capabilities", icon: "mcp" },
   { id: "integrations", path: "/operator/integrations", icon: "link" },
   { id: "memory", path: "/operator/memory", icon: "archive" },
+  // Not /operator/trash: that is the API's list of Trash.
+  { id: "trash", path: "/operator/deleted", icon: "trash" },
 ]
 
 export function isActivePage(page: OperatorPage, pathname: string) {

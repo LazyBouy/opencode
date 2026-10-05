@@ -16,6 +16,7 @@ import { DataTable } from "../ui/data-table"
 import { EmptyState } from "../ui/empty-state"
 import { PageHeader } from "../ui/page-header"
 import { type OverlayBlock, RecordOverlay, RecordView, useRecordOverlay } from "../ui/record-overlay"
+import { useTrashItem } from "./trash"
 import { ScopePicker } from "../ui/scope-picker"
 import { StatTile } from "../ui/stat-tile"
 import { requestError } from "./config-helpers"
@@ -244,6 +245,7 @@ function MemoryOverlay() {
   const [params, setParams] = useSearchParams<{ file?: string; summary?: string }>()
   const [store, setStore] = createStore({ text: "", saved: "", error: "", busy: false, editing: false })
   const locale = () => language.intl()
+  const trash = useTrashItem(directory)
   const selected = createMemo(() => memory.data?.files.find((file) => file.path === params.file))
   const creating = createMemo(() => memory.data?.creatable.find((item) => item.path === params.file))
   const summary = createMemo(() => memory.data?.summaries.find((item) => item.sessionID === params.summary))
@@ -340,6 +342,14 @@ function MemoryOverlay() {
                 <Show when={selected()?.editable}>
                   <ButtonV2 variant="contrast" onClick={() => setStore("editing", true)}>
                     {language.t("operator.profile.edit")}
+                  </ButtonV2>
+                  <ButtonV2
+                    variant="danger"
+                    onClick={() =>
+                      void trash("memory", params.file!, shortPath(params.file!), () => setParams({ file: undefined }))
+                    }
+                  >
+                    {language.t("operator.trash.delete")}
                   </ButtonV2>
                 </Show>
               }

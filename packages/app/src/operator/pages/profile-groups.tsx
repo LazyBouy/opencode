@@ -352,7 +352,7 @@ function TypeRecord(props: {
     const ok = await confirm({
       title: language.t("operator.profile.deleteTitle", { name: type()?.name ?? "" }),
       description: language.t("operator.profile.deleteTypeBody"),
-      confirm: language.t("operator.agent.delete"),
+      confirm: language.t("operator.trash.moveConfirm"),
       danger: true,
     })
     if (!ok) return
@@ -510,7 +510,7 @@ function GroupRecord(props: {
     const ok = await confirm({
       title: language.t("operator.profile.deleteTitle", { name: source()?.name ?? "" }),
       description: language.t("operator.profile.deleteGroupBody"),
-      confirm: language.t("operator.agent.delete"),
+      confirm: language.t("operator.trash.moveConfirm"),
       danger: true,
     })
     if (!ok) return

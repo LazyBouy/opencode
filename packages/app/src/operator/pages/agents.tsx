@@ -1,4 +1,5 @@
 import { useNavigate, useSearchParams } from "@solidjs/router"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
@@ -295,6 +296,7 @@ function AgentOverlay(props: { rows: () => ReadonlyArray<Row> }) {
   const scope = useOperatorScope()
   const projects = useOperatorProjects()
   const [params, setParams] = useSearchParams<{ agent?: string; adir?: string; atab?: string }>()
+  const dialog = useDialog()
   const directory = () => params.adir ?? scope.directory() ?? projects()[0]?.directory ?? ""
   const tab = () => (AGENT_TABS.includes(params.atab as (typeof AGENT_TABS)[number]) ? params.atab! : "overview")
   const keyOf = (project: string, name: string) => `${project}|${name}`
@@ -322,7 +324,8 @@ function AgentOverlay(props: { rows: () => ReadonlyArray<Row> }) {
         name={params.agent ?? ""}
         directory={directory()}
         tab={tab()}
-        onGone={() => setParams({ agent: undefined, adir: undefined, atab: undefined })}
+        // Deleted: the overlay closes (and the page clears its URL state).
+        onGone={() => dialog.close()}
       />
     </DetailOverlay>
   )

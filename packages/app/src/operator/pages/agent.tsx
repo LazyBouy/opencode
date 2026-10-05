@@ -90,7 +90,7 @@ export function AgentDetail(props: { name: string; directory: string; tab: strin
     const ok = await confirm({
       title: language.t("operator.agent.deleteTitle", { name }),
       description: language.t("operator.agent.deleteBody"),
-      confirm: language.t("operator.agent.delete"),
+      confirm: language.t("operator.trash.moveConfirm"),
       danger: true,
     })
     if (!ok) return

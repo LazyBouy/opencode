@@ -406,7 +406,7 @@ function LayerRecord(props: {
     const ok = await confirm({
       title: language.t("operator.profile.deleteTitle", { name: found.name }),
       description: language.t("operator.profile.deleteLayerBody"),
-      confirm: language.t("operator.agent.delete"),
+      confirm: language.t("operator.trash.moveConfirm"),
       danger: true,
     })
     if (!ok) return

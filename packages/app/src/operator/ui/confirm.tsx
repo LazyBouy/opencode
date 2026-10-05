@@ -16,11 +16,17 @@ export function useConfirm() {
   const language = useLanguage()
   return (input: ConfirmInput) =>
     new Promise<boolean>((resolve) => {
+      // Answered once the question has closed (dialogs close over 100ms), so what follows can open
+      // or close dialogs, such as the overlay it was asked over. Closing it any other way is a no.
+      let answer = false
       const finish = (value: boolean) => {
-        resolve(value)
+        answer = value
         dialog.close()
       }
-      void dialog.show(
+      const closed = () => setTimeout(() => resolve(answer), 120)
+      // Over an open dialog (a record's overlay) the question stacks on it, so the overlay stays.
+      const open = dialog.active ? dialog.push : dialog.show
+      void open(
         () => (
           <Dialog fit>
             <DialogHeader hideClose={true}>
@@ -37,7 +43,39 @@ export function useConfirm() {
             </DialogFooter>
           </Dialog>
         ),
-        () => resolve(false),
+        closed,
       )
     })
+}
+
+// Every delete moves the item to Trash, after asking. `run` does the move.
+export function useMoveToTrash() {
+  const confirm = useConfirm()
+  const language = useLanguage()
+  return async (name: string, run: () => Promise<unknown>) => {
+    const ok = await confirm({
+      title: language.t("operator.trash.moveTitle", { name }),
+      description: language.t("operator.trash.moveBody"),
+      confirm: language.t("operator.trash.moveConfirm"),
+      danger: true,
+    })
+    if (ok) await run()
+    return ok
+  }
+}
+
+// Deleting for good (from Trash) cannot be undone, and says so.
+export function useDeleteForGood() {
+  const confirm = useConfirm()
+  const language = useLanguage()
+  return async (name: string, run: () => Promise<unknown>) => {
+    const ok = await confirm({
+      title: language.t("operator.trash.purgeTitle", { name }),
+      description: language.t("operator.trash.purgeBody"),
+      confirm: language.t("operator.trash.purgeConfirm"),
+      danger: true,
+    })
+    if (ok) await run()
+    return ok
+  }
 }

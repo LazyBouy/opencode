@@ -83,9 +83,12 @@ test("a file agent can be turned off and deleted", async ({ page }) => {
   await expect.poll(() => state.agentWrites.length).toBe(1)
   expect(state.agentWrites[0].body).toEqual({ disable: true })
 
-  await page.getByRole("button", { name: "Delete" }).click()
-  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click()
+  // Delete moves it to Trash, after asking over the overlay.
+  await page.getByRole("button", { name: "Delete", exact: true }).click()
+  await expect(page.getByRole("heading", { name: "Move reviewer to Trash?" })).toBeVisible()
+  await page.getByRole("button", { name: "Yes, move to Trash" }).click()
   await expect.poll(() => state.agentWrites.length).toBe(2)
   expect(state.agentWrites[1].method).toBe("DELETE")
   await expect(page).toHaveURL(/\/operator\/agents\?dir=/)
+  await expect(page).not.toHaveURL(/agent=/)
 })
