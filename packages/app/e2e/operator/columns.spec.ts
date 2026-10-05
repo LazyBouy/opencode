@@ -60,7 +60,7 @@ test("the agent's Overview shows its profile and where it comes from", async ({ 
 test("a helper agent's Overview shows the helper profile", async ({ page }) => {
   await mockOperator(page)
   await page.goto(`/operator/agents/title${dir}`)
-  await expect(page.locator('[data-component="operator-facts"]')).toContainText("OpenCode helper (from: helper)")
+  await expect(page.locator('[data-component="operator-facts"]')).toContainText("Title (from: helper)")
 })
 
 test("Profile Definition has no Used by column", async ({ page }) => {

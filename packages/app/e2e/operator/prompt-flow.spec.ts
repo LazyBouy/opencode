@@ -81,9 +81,9 @@ test("a namespace, a moved project, a custom type and group, a profile, a projec
   // 3. A Project Purpose, layers, a custom group type and a group using it.
   await page.goto("/operator/profile?ns=acme")
   await layer(page, "purpose", "New Project Purpose", "Ship CLI", "Ship the CLI.")
-  await layer(page, "role", "New layer", "Reviewer", "You review.")
-  await layer(page, "identity", "New layer", "Voice", "Speak plainly.")
-  await layer(page, "identity", "New layer", "Rules", "Use Bun.")
+  await layer(page, "role", "New Role", "Reviewer", "You review.")
+  await layer(page, "identity", "New Identity", "Voice", "Speak plainly.")
+  await layer(page, "identity", "New Identity", "Rules", "Use Bun.")
   await page.getByRole("tab", { name: "Group Definition" }).click()
   await page.getByRole("button", { name: "New type" }).click()
   const overlay = page.getByRole("dialog")

@@ -47,9 +47,11 @@ export const builtinTypes: GroupType[] = [
   type("purpose", "Purpose"),
   type("role", "Agent role"),
   type("identity", "Agent identity"),
+  type("dynamic", "Dynamic"),
   type("capabilities", "Stable capability boundaries"),
   type("additional", "Optional additional blocks"),
   type("output", "Output format"),
+  type("helper", "Helper"),
 ]
 
 export const builtinLayers: Layer[] = [
@@ -62,14 +64,18 @@ export const builtinLayers: Layer[] = [
     "You are OpenCode, the best coding agent.",
   ),
   builtin("base.default", "base.default", "identity", "base", "builtin", "You are opencode, an interactive CLI tool."),
-  builtin("slot.base", "Base prompt (by model)", "identity", "base", "slot"),
-  builtin("slot.agent-or-base", "Agent prompt, else base prompt", "identity", "base", "slot"),
-  builtin("slot.agent", "Agent prompt", "identity", "identity", "slot"),
-  builtin("generated.mcp", "MCP instructions", "capabilities", "generated", "generated"),
-  builtin("generated.skills", "Skills", "capabilities", "generated", "generated"),
-  builtin("generated.environment", "Environment", "additional", "generated", "generated"),
-  builtin("generated.references", "References", "additional", "generated", "generated"),
-  builtin("generated.instructions", "Instructions", "additional", "generated", "generated"),
+  builtin("slot.base", "Base prompt (by model)", "dynamic", "dynamic", "slot"),
+  builtin("slot.agent-or-base", "Agent prompt, else base prompt", "dynamic", "dynamic", "slot"),
+  builtin("slot.agent", "Agent prompt", "dynamic", "dynamic", "slot"),
+  builtin("generated.mcp", "MCP instructions", "dynamic", "dynamic", "generated"),
+  builtin("generated.skills", "Skills", "dynamic", "dynamic", "generated"),
+  builtin("generated.environment", "Environment", "dynamic", "dynamic", "generated"),
+  builtin("generated.references", "References", "dynamic", "dynamic", "generated"),
+  builtin("generated.instructions", "Instructions", "dynamic", "dynamic", "generated"),
+  builtin("helper.title", "title", "helper", "helper", "builtin", "You are a title generator."),
+  builtin("helper.summary", "summary", "helper", "helper", "builtin", "Summarize what was done."),
+  builtin("helper.compaction", "compaction", "helper", "helper", "builtin", "Summarize the conversation."),
+  builtin("helper.agent-generator", "agent-generator", "helper", "helper", "builtin", "Write an agent."),
   builtin(
     "notice.structured-output",
     "notice.structured-output",
@@ -93,15 +99,16 @@ export const builtinGroups: Group[] = [
   {
     id: `${PREFIX}group.spec`,
     name: "Default",
-    types: ["platform", "purpose", "role", "identity", "capabilities", "additional", "output"],
+    types: ["platform", "purpose", "role", "identity", "dynamic", "capabilities", "additional", "output"],
     builtin: true,
   },
   {
     id: `${PREFIX}group.opencode`,
     name: "OpenCode",
-    types: ["purpose", "role", "identity", "additional", "capabilities", "output"],
+    types: ["purpose", "role", "identity", "dynamic", "additional", "capabilities", "output"],
     builtin: true,
   },
+  { id: `${PREFIX}group.helper`, name: "Helper", types: ["helper"], builtin: true },
 ]
 
 const environment = [
@@ -117,20 +124,19 @@ export const builtinProfiles: Profile[] = [
     group: `${PREFIX}group.opencode`,
     slots: {
       role: [],
-      identity: [`${PREFIX}slot.agent-or-base`],
-      additional: environment,
-      capabilities,
+      identity: [],
+      dynamic: [`${PREFIX}slot.agent-or-base`, ...environment, ...capabilities],
       output: [`${PREFIX}notice.structured-output`],
     },
     builtin: true,
   },
-  {
-    id: `${PREFIX}profile.helper`,
-    name: "OpenCode helper",
-    group: `${PREFIX}group.opencode`,
-    slots: { identity: [`${PREFIX}slot.agent-or-base`] },
+  ...["title", "summary", "compaction", "agent-generator"].map((name) => ({
+    id: `${PREFIX}profile.helper.${name}`,
+    name: (name.charAt(0).toUpperCase() + name.slice(1)).replace("-", " "),
+    group: `${PREFIX}group.helper`,
+    slots: { helper: [`${PREFIX}helper.${name}`] },
     builtin: true,
-  },
+  })),
   {
     id: `${PREFIX}profile.spec`,
     name: "Spec",
@@ -138,9 +144,8 @@ export const builtinProfiles: Profile[] = [
     slots: {
       platform: [],
       role: [],
-      identity: [`${PREFIX}slot.base`, `${PREFIX}slot.agent`],
-      capabilities,
-      additional: environment,
+      identity: [],
+      dynamic: [`${PREFIX}slot.base`, `${PREFIX}slot.agent`, ...capabilities, ...environment],
       output: [`${PREFIX}notice.structured-output`],
     },
     builtin: true,
@@ -243,14 +248,15 @@ export function createPromptMock(
     const link = state.projects[project] ?? { namespace: "opencode" }
     const loaded = catalog(link.namespace)
     const find = (id: string | undefined) => loaded.profiles.find((item) => item.id === id)
+    const helpers = ["title", "summary", "compaction", "agent-generator"]
     const fallback =
-      (["title", "summary", "compaction"].includes(name) ? find(`${PREFIX}profile.helper`) : undefined) ??
+      (helpers.includes(name) ? find(`${PREFIX}profile.helper.${name}`) : undefined) ??
       find(link.defaultProfile) ??
       find(loaded.namespace.defaultProfile) ??
       builtinProfiles[0]!
     const source = setting.profile
       ? "agent"
-      : ["title", "summary", "compaction"].includes(name)
+      : helpers.includes(name)
         ? "helper"
         : find(link.defaultProfile)
           ? "project"
@@ -311,6 +317,7 @@ export function createPromptMock(
               ]
             const written = extra[entry]
             if (written) return [section(type, entry, layer, written.text, written.source)]
+            if (layer.type === "helper") return [section(type, entry, layer, layer.text, "OpenCode")]
             if (layer.origin !== "user" || layer.replaces) return []
             return [section(type, entry, layer, layer.text, layer.name)]
           }),
@@ -338,6 +345,20 @@ export function createPromptMock(
     if (method !== "GET") state.writes.push({ method, path: url.pathname, body })
 
     if (url.pathname === "/operator/prompt/preview") return json(route, preview(url))
+    // A Dynamic layer's sample: what it fills in for the agent of the project.
+    if (url.pathname === "/operator/prompt/sample") {
+      const layer = url.searchParams.get("layer") ?? ""
+      const agent = url.searchParams.get("agent") ?? "build"
+      const written = generated(url.searchParams.get("directory") ?? "")[layer]
+      const base = {
+        text: builtinLayers.find((item) => item.id === `${PREFIX}base.default`)!.text,
+        source: "base.default",
+      }
+      const found =
+        written ??
+        (layer === `${PREFIX}slot.base` || layer === `${PREFIX}slot.agent-or-base` ? base : { text: "", source: "" })
+      return json(route, { agent, model: "opencode/claude-opus-4-6", layer, ...found })
+    }
     if (url.pathname === "/operator/project-settings/resolve") {
       const folder = url.searchParams.get("directory") ?? ""
       if (git(folder)) return json(route, { directory: folder, project: { key: folder, git: true } })

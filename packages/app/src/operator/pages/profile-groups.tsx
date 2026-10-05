@@ -17,7 +17,16 @@ import { OrderedList } from "../ui/ordered-list"
 import { NamespaceAction } from "../ui/namespace-picker"
 import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOverlay } from "../ui/record-overlay"
 import { usePromptRefresh, useProfileNames, useScopeCatalogs } from "./profile-data"
-import { ALL, type Catalog, copyName, type Group, type GroupType, groupProblem, REQUIRED } from "./profile-model"
+import {
+  ALL,
+  type Catalog,
+  copyName,
+  type Group,
+  type GroupType,
+  groupProblem,
+  HELPER,
+  REQUIRED,
+} from "./profile-model"
 
 type Block = "types" | "groups"
 type Params = { type?: string; group?: string; rns?: string; block?: string }
@@ -558,7 +567,7 @@ function GroupRecord(props: {
                 label={language.t("operator.profile.order")}
                 items={store.types}
                 name={(id) => names.typeId(props.catalog, id)}
-                required={(id) => REQUIRED.includes(id)}
+                required={(id) => !store.types.includes(HELPER) && REQUIRED.includes(id)}
                 onChange={(types) => setStore("types", types)}
               />
               <SelectV2<string>
@@ -567,16 +576,25 @@ function GroupRecord(props: {
                 placeholder={language.t("operator.profile.addType")}
                 options={props.catalog.types.map((type) => type.id).filter((id) => !store.types.includes(id))}
                 label={(id) => names.typeId(props.catalog, id)}
-                onSelect={(id) => id && setStore("types", [...store.types, id])}
+                // The Helper type is a group of its own.
+                onSelect={(id) => {
+                  if (!id) return
+                  if (id === HELPER) return setStore("types", [HELPER])
+                  if (store.types.includes(HELPER))
+                    return setStore("types", [...REQUIRED.filter((type) => type !== id), id])
+                  setStore("types", [...store.types, id])
+                }}
               />
             </Field>
           </div>
           <Show when={problem()}>
             {(found) => (
               <p data-slot="operator-error" role="alert">
-                {found().kind === "required"
-                  ? language.t("operator.profile.needsType", { type: names.typeId(props.catalog, found().type!) })
-                  : language.t("operator.profile.typeTwice")}
+                {found().kind === "helper"
+                  ? language.t("operator.profile.helperOnly")
+                  : found().kind === "required"
+                    ? language.t("operator.profile.needsType", { type: names.typeId(props.catalog, found().type!) })
+                    : language.t("operator.profile.typeTwice")}
               </p>
             )}
           </Show>

@@ -8,16 +8,19 @@ import type { OperatorNamespaceSummary } from "@opencode-ai/sdk/v2/client"
 import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
+import { useQuery } from "@tanstack/solid-query"
 import { useOperatorClient } from "../data"
 import { shortPath } from "../format"
+import { useOperatorProjects } from "../project"
 import { CopyToNamespace } from "../ui/copy-to"
 import { useConfirm } from "../ui/confirm"
 import { DataTable } from "../ui/data-table"
 import { Field } from "../ui/field"
 import { NamespaceAction } from "../ui/namespace-picker"
 import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOverlay } from "../ui/record-overlay"
+import { requestError } from "./config-helpers"
 import { usePromptRefresh, useProfileNames, useScopeCatalogs, useToolLayers } from "./profile-data"
-import { ALL, type Catalog, type Layer, origin, profilesUsing, type Section, SECTIONS, WRITTEN } from "./profile-model"
+import { ALL, type Catalog, type Layer, origin, PREFIX, type Section, SECTIONS, WRITTEN } from "./profile-model"
 
 // Each Layer Definition section's icon in the overlay's menu.
 const ICONS: Record<Section, OverlayBlock["icon"]> = {
@@ -26,7 +29,8 @@ const ICONS: Record<Section, OverlayBlock["icon"]> = {
   role: "subagent",
   identity: "brain",
   tool: "console",
-  generated: "code-lines",
+  dynamic: "code-lines",
+  helper: "help",
   output: "align-right",
   custom: "pencil-line",
   message: "speech-bubble",
@@ -56,8 +60,8 @@ function useLayers(ns: () => string, namespaces: () => ReadonlyArray<OperatorNam
 // The key of a row in the overlay: the id, with its namespace when all namespaces are shown.
 const keyOf = (row: Row, all: boolean) => (all && row.ns ? `${row.ns}|${row.item.id}` : row.item.id)
 
-// Where a layer comes from, and what uses it, in words.
-function useLayerWords(catalogs: () => ReadonlyArray<Catalog>, rows: () => ReadonlyArray<Row>, all: () => boolean) {
+// Where a layer comes from, in words.
+function useLayerWords(rows: () => ReadonlyArray<Row>) {
   const language = useLanguage()
   const names = useProfileNames()
   return {
@@ -68,20 +72,6 @@ function useLayerWords(catalogs: () => ReadonlyArray<Catalog>, rows: () => Reado
       return language.t("operator.profile.origin.copy", {
         name: original ? names.layer(original) : (layer.replaces ?? ""),
       })
-    },
-    usedIn: (row: Row) => {
-      const used = new Set<string>()
-      for (const catalog of catalogs().filter((item) => !row.ns || item.namespace.id === row.ns)) {
-        for (const profile of profilesUsing(catalog, row.item.id))
-          used.add(
-            profile.builtin || !all()
-              ? names.profile(profile)
-              : `${names.profile(profile)} (${catalog.namespace.name})`,
-          )
-        for (const project of catalog.projects.filter((item) => item.purpose === row.item.id))
-          used.add(language.t("operator.profile.projectName", { name: project.name }))
-      }
-      return [...used].join(", ")
     },
   }
 }
@@ -95,7 +85,7 @@ export function LayerDefinition(props: { ns: string; namespaces: ReadonlyArray<O
     () => props.ns,
     () => props.namespaces,
   )
-  const words = useLayerWords(catalogs.list, rows, all)
+  const words = useLayerWords(rows)
   const nsName = (id: string | undefined) =>
     id
       ? (props.namespaces.find((item) => item.namespace.id === id)?.namespace.name ?? id)
@@ -137,11 +127,7 @@ export function LayerDefinition(props: { ns: string; namespaces: ReadonlyArray<O
               <Show when={WRITTEN.includes(section.id)}>
                 <NamespaceAction
                   size="small"
-                  label={
-                    section.id === "purpose"
-                      ? language.t("operator.profile.newPurpose")
-                      : language.t("operator.profile.newLayer")
-                  }
+                  label={language.t(`operator.profile.new.${section.id}` as "operator.profile.new.role")}
                   ns={all() ? undefined : props.ns}
                   namespaces={props.namespaces}
                   run={(ns) => setParams({ layer: `new:${section.id}`, rns: ns, block: section.id })}
@@ -198,12 +184,6 @@ export function LayerDefinition(props: { ns: string; namespaces: ReadonlyArray<O
                   header: language.t("operator.profile.origin"),
                   cell: (row) => words.origin(row.item),
                 },
-                {
-                  id: "used",
-                  optional: true,
-                  header: language.t("operator.profile.usedIn"),
-                  cell: (row) => <span data-slot="operator-cell-clamp">{words.usedIn(row)}</span>,
-                },
               ]}
             />
           </section>
@@ -222,7 +202,7 @@ function LayerOverlay(props: { ns: string; namespaces: ReadonlyArray<OperatorNam
     () => props.ns,
     () => props.namespaces,
   )
-  const [params, setParams] = useSearchParams<{ layer?: string; rns?: string; block?: string }>()
+  const [params, setParams] = useSearchParams<{ layer?: string; rns?: string; block?: string; edit?: string }>()
   const [editing, setEditing] = createSignal(false)
   // The record's namespace: the one the page shows, or (all of them) the one in the URL.
   const recordNs = () => (all() ? params.rns : props.ns)
@@ -242,10 +222,7 @@ function LayerOverlay(props: { ns: string; namespaces: ReadonlyArray<OperatorNam
         section.id === "purpose" ? language.t("operator.profile.noPurposes") : language.t("operator.profile.noLayers"),
       create: WRITTEN.includes(section.id)
         ? {
-            label:
-              section.id === "purpose"
-                ? language.t("operator.profile.newPurpose")
-                : language.t("operator.profile.newLayer"),
+            label: language.t(`operator.profile.new.${section.id}` as "operator.profile.new.role"),
             ns: all() ? undefined : props.ns,
             run: (ns: string) => setParams({ layer: `new:${section.id}`, rns: ns, block: section.id }),
           }
@@ -262,11 +239,17 @@ function LayerOverlay(props: { ns: string; namespaces: ReadonlyArray<OperatorNam
         })),
     })),
   )
-  const open = (key: string | undefined, ns?: string) => {
-    if (!key) return setParams({ layer: undefined, rns: undefined, block: block() })
+  // `edit` opens the record in edit mode (an editable copy just made).
+  const open = (key: string | undefined, ns?: string, edit?: boolean) => {
+    if (!key) return setParams({ layer: undefined, rns: undefined, block: block(), edit: undefined })
     const [first, second] = key.split("|")
-    if (second) return setParams({ layer: second, rns: first, block: undefined })
-    setParams({ layer: first, rns: ns ?? (all() ? undefined : props.ns), block: undefined })
+    if (second) return setParams({ layer: second, rns: first, block: undefined, edit: undefined })
+    setParams({
+      layer: first,
+      rns: ns ?? (all() ? undefined : props.ns),
+      block: undefined,
+      edit: edit ? "1" : undefined,
+    })
   }
 
   return (
@@ -292,8 +275,9 @@ function LayerOverlay(props: { ns: string; namespaces: ReadonlyArray<OperatorNam
             layers={rows()
               .filter((item) => !item.ns || item.ns === recordNs())
               .map((item) => item.item)}
+            edit={params.edit === "1"}
             onEditing={setEditing}
-            onSelect={(layer, ns) => open(layer, ns)}
+            onSelect={(layer, ns, edit) => open(layer, ns, edit)}
           />
         )}
       </Show>
@@ -301,8 +285,10 @@ function LayerOverlay(props: { ns: string; namespaces: ReadonlyArray<OperatorNam
   )
 }
 
-// One layer: read-only, with Edit for the namespace's own layers (Cancel or Save then), and Make
-// editable copy for OpenCode's texts. A new layer opens straight in edit mode.
+// One layer: read-only, with Edit for the namespace's own layers (Cancel or Save then), and Edit a
+// copy for OpenCode's texts, which opens the copy in edit mode. OpenCode's Dynamic layers are filled
+// in per request: Generate sample shows what one fills in, and Edit at source opens where it comes
+// from. A new layer opens straight in edit mode.
 function LayerRecord(props: {
   // The layer's namespace; none for OpenCode's layers while all namespaces are shown.
   ns: string | undefined
@@ -310,8 +296,10 @@ function LayerRecord(props: {
   selected: string
   catalog: Catalog
   layers: ReadonlyArray<Layer>
+  // Open in edit mode.
+  edit: boolean
   onEditing: (editing: boolean) => void
-  onSelect: (layer: string | undefined, ns?: string) => void
+  onSelect: (layer: string | undefined, ns?: string, edit?: boolean) => void
 }) {
   const language = useLanguage()
   const navigate = useNavigate()
@@ -320,11 +308,7 @@ function LayerRecord(props: {
   const api = useOperatorClient()
   const client = () => api.client().operator.namespace
   const confirm = useConfirm()
-  const words = useLayerWords(
-    () => [props.catalog],
-    () => props.layers.map((item) => ({ ns: props.ns, item })),
-    () => false,
-  )
+  const words = useLayerWords(() => props.layers.map((item) => ({ ns: props.ns, item })))
   const creating = () => SECTIONS.find((item) => `new:${item.id}` === props.selected)?.id
   const layer = createMemo(() => props.layers.find((item) => item.id === props.selected))
   const [store, setStore] = createStore({ name: "", type: "", text: "", busy: false, editing: false })
@@ -334,7 +318,7 @@ function LayerRecord(props: {
       name: found?.name ?? "",
       type: found?.type ?? SECTIONS.find((item) => item.id === creating())?.type ?? "identity",
       text: found?.text ?? "",
-      editing: !!creating(),
+      editing: !!creating() || (props.edit && found?.origin === "user"),
     })
   }
   // Only a change of record resets the form (not a refresh of the data around it).
@@ -342,6 +326,8 @@ function LayerRecord(props: {
   createEffect(on(record, reset))
   createEffect(() => props.onEditing(store.editing))
   const editable = () => layer()?.origin === "user"
+  // OpenCode's texts filled in per request.
+  const dynamic = () => layer()?.origin === "slot" || layer()?.origin === "generated"
   // A layer's type changes only in Custom; copies keep their built-in's type.
   const typeEditable = () => (creating() ?? layer()?.section) === "custom" && !layer()?.replaces
   const types = () => props.catalog.types.filter((type) => type.id !== "purpose")
@@ -350,6 +336,9 @@ function LayerRecord(props: {
   const cancel = () => {
     if (creating()) return props.onSelect(undefined)
     reset()
+    setStore("editing", false)
+    // A copy opened in edit mode: back to its view.
+    if (props.edit) props.onSelect(props.selected, props.ns)
   }
   const save = async () => {
     setStore("busy", true)
@@ -375,7 +364,7 @@ function LayerRecord(props: {
       .layer.copy({ ns, id: found.id, ...(found.section === "tool" ? { text: found.text } : {}) })
       .then(async (result) => {
         await data.refresh()
-        props.onSelect(result.data?.id, ns)
+        props.onSelect(result.data?.id, ns, true)
       })
       .catch(data.fail)
       .finally(() => setStore("busy", false))
@@ -442,9 +431,7 @@ function LayerRecord(props: {
         <RecordView
           title={
             creating()
-              ? creating() === "purpose"
-                ? language.t("operator.profile.newPurpose")
-                : language.t("operator.profile.newIn", { section: names.section(creating()!) })
+              ? language.t(`operator.profile.new.${creating()!}` as "operator.profile.new.role")
               : language.t("operator.profile.editing", { name: layer()?.name ?? "" })
           }
           actions={
@@ -533,9 +520,6 @@ function LayerRecord(props: {
                   </RecordField>
                 )}
               </Show>
-              <RecordField label={language.t("operator.profile.usedIn")} help={language.t("operator.help.layerUsedIn")}>
-                {words.usedIn({ ns: props.ns, item: found() }) || "—"}
-              </RecordField>
               <Show when={linked().length}>
                 <RecordField
                   label={language.t("operator.profile.linkedByLabel")}
@@ -559,12 +543,17 @@ function LayerRecord(props: {
                   </RecordField>
                 )}
               </Show>
-              <Show when={found().text}>
+              <Show when={!dynamic()}>
                 <RecordField label={language.t("operator.prompts.text")} help={language.t("operator.help.layerText")}>
-                  <pre data-component="operator-code">{found().text}</pre>
+                  <Show when={found().text} fallback="—">
+                    <pre data-component="operator-code">{found().text}</pre>
+                  </Show>
                 </RecordField>
               </Show>
             </dl>
+            <Show when={dynamic()}>
+              <LayerSample layer={found()} catalog={props.catalog} onSelect={(id) => props.onSelect(id)} />
+            </Show>
             <Show when={found().origin === "builtin"}>
               <p data-slot="operator-note">{language.t("operator.profile.copyNote")}</p>
             </Show>
@@ -572,5 +561,161 @@ function LayerRecord(props: {
         )}
       </Show>
     </Show>
+  )
+}
+
+// What one of OpenCode's Dynamic layers fills in for an agent of a project, made on request, and where
+// to change it: the agent, the base prompt layer for the model, Memory, Capabilities or Config.
+function LayerSample(props: { layer: Layer; catalog: Catalog; onSelect: (id: string) => void }) {
+  const language = useLanguage()
+  const navigate = useNavigate()
+  const api = useOperatorClient()
+  const projects = useOperatorProjects()
+  const names = useProfileNames()
+  const [store, setStore] = createStore({
+    project: undefined as string | undefined,
+    agent: "build",
+    busy: false,
+    error: "",
+    sample: undefined as { text: string; source: string; agent: string; project: string } | undefined,
+  })
+  createEffect(
+    on(
+      () => props.layer.id,
+      () => setStore({ sample: undefined, error: "" }),
+      { defer: true },
+    ),
+  )
+  const project = () =>
+    store.project ?? props.catalog.projects.find((item) => item.registered)?.key ?? projects()[0]?.directory
+  const projectName = (key: string) => projects().find((item) => item.directory === key)?.label ?? shortPath(key)
+  const agents = useQuery(() => ({
+    queryKey: api.key("agents", project()),
+    enabled: !!project(),
+    queryFn: () =>
+      api
+        .client()
+        .operator.agent.list({ directory: project() })
+        .then((result) => result.data ?? []),
+  }))
+  const suffix = () => props.layer.id.slice(PREFIX.length)
+  const generate = async () => {
+    const directory = project()
+    if (!directory) return
+    setStore({ busy: true, error: "" })
+    await api
+      .client()
+      .operator.prompt.sample({ directory, agent: store.agent, layer: props.layer.id })
+      .then((result) => {
+        if (!result.data) return
+        setStore("sample", {
+          text: result.data.text,
+          source: result.data.source,
+          agent: result.data.agent,
+          project: directory,
+        })
+      })
+      .catch((error: unknown) => setStore("error", requestError(error)))
+      .finally(() => setStore("busy", false))
+  }
+  const scoped = (page: string) => navigate(`/operator/${page}?dir=${encodeURIComponent(project() ?? "")}`)
+  // The base prompt layer a sample came from (Base prompt by model, or an agent without a prompt).
+  const base = () => (store.sample?.source.startsWith("base.") ? `${PREFIX}${store.sample.source}` : undefined)
+
+  return (
+    <section data-component="operator-form" aria-label={language.t("operator.profile.sample")}>
+      <div class="flex items-end gap-2 flex-wrap">
+        <Field
+          group
+          label={language.t("operator.profile.sampleProject")}
+          hint={language.t("operator.help.sampleProject")}
+        >
+          <SelectV2<string>
+            appearance="base"
+            aria-label={language.t("operator.profile.sampleProject")}
+            options={projects().map((item) => item.directory)}
+            current={project()}
+            label={projectName}
+            onSelect={(key) => key && setStore({ project: key, sample: undefined })}
+          />
+        </Field>
+        <Field group label={language.t("operator.profile.sampleAgent")} hint={language.t("operator.help.sampleAgent")}>
+          <SelectV2<string>
+            appearance="base"
+            aria-label={language.t("operator.profile.sampleAgent")}
+            options={(agents.data ?? []).map((agent) => agent.name)}
+            current={store.agent}
+            label={(name) => name}
+            onSelect={(name) => name && setStore({ agent: name, sample: undefined })}
+          />
+        </Field>
+        <ButtonV2 variant="contrast" disabled={store.busy || !project()} onClick={() => void generate()}>
+          {language.t("operator.profile.sample")}
+        </ButtonV2>
+      </div>
+      <Show when={store.error}>
+        <p data-slot="operator-error" role="alert">
+          {store.error}
+        </p>
+      </Show>
+      <Show when={store.sample}>
+        {(sample) => (
+          <div class="flex flex-col gap-2" role="status">
+            <h4 data-slot="operator-panel-title">
+              {language.t("operator.profile.sampleFor", {
+                agent: sample().agent,
+                project: projectName(sample().project),
+              })}
+            </h4>
+            <Show
+              when={sample().text}
+              fallback={<p data-slot="operator-note">{language.t("operator.profile.sampleEmpty")}</p>}
+            >
+              <pre data-component="operator-code">{sample().text}</pre>
+            </Show>
+            <p data-slot="operator-note">{language.t("operator.profile.sampleNote")}</p>
+          </div>
+        )}
+      </Show>
+      <div data-slot="operator-actions">
+        <Show when={suffix() === "slot.agent" || suffix() === "slot.agent-or-base"}>
+          <ButtonV2
+            variant="outline"
+            onClick={() =>
+              navigate(`/operator/agents/${encodeURIComponent(store.agent)}?dir=${encodeURIComponent(project() ?? "")}`)
+            }
+          >
+            {language.t("operator.profile.source.agent")}
+          </ButtonV2>
+        </Show>
+        <Show when={base()}>
+          {(id) => (
+            <ButtonV2 variant="outline" onClick={() => props.onSelect(id())}>
+              {language.t("operator.profile.source.base", {
+                name: names.layer({ id: id(), name: store.sample!.source }),
+              })}
+            </ButtonV2>
+          )}
+        </Show>
+        <Show when={suffix() === "generated.instructions"}>
+          <ButtonV2 variant="outline" onClick={() => scoped("memory")}>
+            {language.t("operator.profile.source.instructions")}
+          </ButtonV2>
+        </Show>
+        <Show when={suffix() === "generated.skills" || suffix() === "generated.mcp"}>
+          <ButtonV2 variant="outline" onClick={() => scoped("capabilities")}>
+            {language.t("operator.profile.source.skills")}
+          </ButtonV2>
+        </Show>
+        <Show when={suffix() === "generated.references"}>
+          <ButtonV2 variant="outline" onClick={() => scoped("config")}>
+            {language.t("operator.profile.source.references")}
+          </ButtonV2>
+        </Show>
+      </div>
+      <Show when={suffix() === "generated.environment"}>
+        <p data-slot="operator-note">{language.t("operator.profile.source.environment")}</p>
+      </Show>
+    </section>
   )
 }

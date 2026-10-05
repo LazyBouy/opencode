@@ -11,7 +11,7 @@ import { Field } from "../ui/field"
 import { RecordView } from "../ui/record-overlay"
 import { requestError } from "./config-helpers"
 import { useNamespaces, useProfileNames } from "./profile-data"
-import { namespaceDefault, OPENCODE } from "./profile-model"
+import { isHelper, namespaceDefault, OPENCODE } from "./profile-model"
 
 // The option that means "no link" (not a possible layer or profile id).
 const NONE = "@none"
@@ -62,7 +62,8 @@ export function ProjectPromptForm(props: { project: OperatorPromptProject; added
   const nsName = (id: string) => list().find((item) => item.namespace.id === id)?.namespace.name ?? id
   const purposes = () =>
     (catalog.data?.layers ?? []).filter((layer) => layer.type === "purpose" && layer.origin === "user")
-  const profiles = () => catalog.data?.profiles ?? []
+  // A helper profile is for an agent, never a project's default.
+  const profiles = () => (catalog.data?.profiles ?? []).filter((profile) => !isHelper(catalog.data!, profile))
   const fallback = () => {
     const loaded = catalog.data
     if (!loaded) return ""

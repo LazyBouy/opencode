@@ -16,7 +16,7 @@ import { Field } from "../ui/field"
 import { requestError } from "./config-helpers"
 import { useAllLayers, usePromptCatalog, useProfileNames } from "./profile-data"
 import { SlotEditor, type SlotValue } from "./profile-editor"
-import { type Catalog, copySlots, PREFIX, type Profile, slotProblem, type Slots } from "./profile-model"
+import { type Catalog, copySlots, isHelper, PREFIX, type Profile, slotProblem, type Slots } from "./profile-model"
 import { FieldHelp } from "../ui/field-help"
 
 // The model option that means "whatever the agent uses".
@@ -105,25 +105,37 @@ export function AgentPrompt(props: { agent: string; directory: string }) {
                     ? language.t("operator.prompts.useDefault", {
                         name: profileName(loaded().catalog, loaded().view.default),
                       })
-                    : profileName(loaded().catalog, { id, name: id })
+                    : helperOf(loaded().catalog, id)
+                      ? language.t("operator.prompts.helperProfile", {
+                          name: profileName(loaded().catalog, { id, name: id }),
+                        })
+                      : profileName(loaded().catalog, { id, name: id })
                 }
                 onSelect={(id) => {
                   if (id === null) return
+                  // A helper agent has no override.
                   void save({
                     profile: id === DEFAULT ? undefined : id,
-                    override: loaded().view.setting.override,
+                    override: helperOf(loaded().catalog, id) ? undefined : loaded().view.setting.override,
                   }).catch(data.fail)
                 }}
               />
             </Field>
           </section>
-          <Override
-            ns={loaded().view.namespace.id}
-            catalog={loaded().catalog}
-            profile={loaded().catalog.profiles.find((item) => item.id === loaded().view.profile.id)}
-            setting={loaded().view.setting}
-            onSave={save}
-          />
+          <Show
+            when={!helperOf(loaded().catalog, loaded().view.profile.id)}
+            fallback={
+              <p data-slot="operator-note">{language.t("operator.prompts.helperAgent", { name: props.agent })}</p>
+            }
+          >
+            <Override
+              ns={loaded().view.namespace.id}
+              catalog={loaded().catalog}
+              profile={loaded().catalog.profiles.find((item) => item.id === loaded().view.profile.id)}
+              setting={loaded().view.setting}
+              onSave={save}
+            />
+          </Show>
           <Show when={previewed()}>
             {(profile) => (
               <section data-component="operator-panel" data-slot="operator-previewing" role="status">
@@ -157,6 +169,11 @@ export function AgentPrompt(props: { agent: string; directory: string }) {
       )}
     </Show>
   )
+
+  function helperOf(loaded: Catalog, id: string) {
+    const found = loaded.profiles.find((item) => item.id === id)
+    return !!found && isHelper(loaded, found)
+  }
 
   function profileName(loaded: Catalog, profile: { id: string; name: string }) {
     const found = loaded.profiles.find((item) => item.id === profile.id)
@@ -257,6 +274,7 @@ function Override(props: {
           catalog={props.catalog}
           layers={layers()}
           value={value()}
+          noHelper
           changed={(type) => type in store.slots}
           groupChanged={!!store.group}
           onReset={(type) =>

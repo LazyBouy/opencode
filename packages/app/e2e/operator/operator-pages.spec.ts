@@ -60,11 +60,22 @@ test("the agents table filters, hides hidden agents and opens an agent", async (
   )
 })
 
-test("per-project pages use a project the server knows when none is open in the browser", async ({ page }) => {
+test("Agents lists every project's agents with their project, and New agent asks which project", async ({ page }) => {
   await mockOperator(page)
   await page.goto("/operator/agents")
-  await expect(page.locator('[data-component="operator-table"]')).toContainText("reviewer")
-  await expect(page.getByRole("button", { name: "New agent" })).toBeVisible()
+  const table = page.locator('[data-component="operator-table"]')
+  await expect(table).toContainText("reviewer")
+  await expect(table.getByRole("columnheader", { name: "Project" })).toBeVisible()
+  await expect(table.getByRole("row", { name: /reviewer/ })).toContainText("smoke-project")
+  await expect(page.locator('[data-component="select-v2"]').first()).toContainText("All projects")
+  await page.getByRole("button", { name: "New agent" }).click()
+  await page.getByRole("menuitem", { name: "smoke-project" }).click()
+  await expect(page).toHaveURL(/\/operator\/agents\/new\?dir=/)
+})
+
+test("per-project pages use a project the server knows when none is open in the browser", async ({ page }) => {
+  await mockOperator(page)
+  await page.goto("/operator/config")
   await expect(page.locator('[data-component="select-v2"]').first()).toContainText("smoke-project")
 })
 

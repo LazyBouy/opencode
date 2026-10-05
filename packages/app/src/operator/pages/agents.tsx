@@ -1,23 +1,24 @@
 import { useNavigate } from "@solidjs/router"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import type { OperatorAgent } from "@opencode-ai/sdk/v2/client"
-import { useQuery } from "@tanstack/solid-query"
+import { useQueries, useQuery } from "@tanstack/solid-query"
 import { createMemo, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
 import { useOperatorClient } from "../data"
 import { formatAgo, formatCount } from "../format"
-import { useScopedProject } from "../project"
-import { usePromptCatalog, useProfileNames } from "./profile-data"
-import { OPENCODE, profileFor } from "./profile-model"
+import { useOperatorProjects, useScopedProject } from "../project"
+import { useOperatorScope } from "../scope"
+import { useNamespaces, useProfileNames } from "./profile-data"
+import { type Catalog, OPENCODE, profileFor } from "./profile-model"
 import { useProjectSettings } from "./project-prompt"
 import { type Column, DataTable } from "../ui/data-table"
 import { EmptyState } from "../ui/empty-state"
 import { PageHeader } from "../ui/page-header"
+import { ProjectAction } from "../ui/project-action"
 import { ScopePicker } from "../ui/scope-picker"
 import { FieldHelp } from "../ui/field-help"
 
@@ -35,6 +36,58 @@ export function useAgents() {
   }))
 }
 
+// An agent as the page lists it: with its project, since all projects can be shown at once.
+type Row = OperatorAgent & { project: string }
+
+// The agents of the project in `?dir=`, or of every project without one.
+function usePageAgents() {
+  const api = useOperatorClient()
+  const scope = useOperatorScope()
+  const projects = useOperatorProjects()
+  const folders = () => {
+    const one = scope.directory()
+    return one ? [one] : projects().map((project) => project.directory)
+  }
+  const queries = useQueries(() => ({
+    queries: folders().map((directory) => ({
+      queryKey: api.key("agents", directory),
+      queryFn: () =>
+        api
+          .client()
+          .operator.agent.list({ directory })
+          .then((result) => result.data ?? []),
+    })),
+  }))
+  return {
+    folders,
+    pending: () => queries.some((query) => query.isPending),
+    rows: createMemo<Row[]>(() =>
+      folders().flatMap((project, index) => (queries[index]?.data ?? []).map((agent) => ({ ...agent, project }))),
+    ),
+  }
+}
+
+// Every namespace's catalog, for the profile each agent uses.
+function useCatalogs() {
+  const api = useOperatorClient()
+  const namespaces = useNamespaces()
+  const ids = () => (namespaces.data ?? []).map((item) => item.namespace.id)
+  const query = useQuery(() => ({
+    queryKey: api.key("prompt-catalog", "all", ids()),
+    enabled: ids().length > 0,
+    queryFn: () =>
+      Promise.all(
+        ids().map((ns) =>
+          api
+            .client()
+            .operator.namespace.catalog({ ns })
+            .then((result) => result.data!),
+        ),
+      ),
+  }))
+  return (ns: string): Catalog | undefined => query.data?.find((item) => item.namespace.id === ns)
+}
+
 export function agentModel(agent: OperatorAgent) {
   return agent.model ? `${agent.model.providerID}/${agent.model.modelID}` : ""
 }
@@ -42,25 +95,29 @@ export function agentModel(agent: OperatorAgent) {
 export default function AgentsPage() {
   const language = useLanguage()
   const navigate = useNavigate()
-  const directory = useScopedProject()
-  const agents = useAgents()
+  const scope = useOperatorScope()
+  const directory = () => scope.directory()
+  const projects = useOperatorProjects()
+  const agents = usePageAgents()
   const [store, setStore] = persisted(Persist.global("operator.agents"), createStore({ showHidden: false }))
   const [filter, setFilter] = createStore({ text: "" })
 
-  const rows = createMemo(() => (agents.data ?? []).filter((agent) => store.showHidden || !agent.hidden))
+  const rows = createMemo(() => agents.rows().filter((agent) => store.showHidden || !agent.hidden))
   const sourceLabel = (agent: OperatorAgent) => language.t(`operator.agents.source.${agent.source.kind}`)
-  // The profile each agent of this project uses: resolved from its namespace's catalog.
+  const projectName = (key: string) =>
+    projects().find((item) => item.directory === key)?.label ?? key.split("/").filter(Boolean).at(-1) ?? key
+  // The profile each agent uses: resolved from its project's namespace's catalog.
   const names = useProfileNames()
   const settings = useProjectSettings()
-  const namespace = () => settings.data?.find((item) => item.key === directory())?.namespace ?? OPENCODE
-  const prompts = usePromptCatalog(namespace)
-  const profileOf = (agent: OperatorAgent) => {
-    const catalog = prompts.query.data
-    const found = catalog && directory() ? profileFor(catalog, directory()!, agent.name) : undefined
+  const catalogOf = useCatalogs()
+  const profileOf = (agent: Row) => {
+    const namespace = settings.data?.find((item) => item.key === agent.project)?.namespace ?? OPENCODE
+    const catalog = catalogOf(namespace)
+    const found = catalog ? profileFor(catalog, agent.project, agent.name) : undefined
     return found ? { name: names.profile(found.profile), source: found.source } : undefined
   }
 
-  const columns: Column<OperatorAgent>[] = [
+  const columns = (): Column<Row>[] => [
     {
       id: "name",
       header: language.t("operator.column.name"),
@@ -78,6 +135,16 @@ export default function AgentsPage() {
         </span>
       ),
     },
+    ...(directory()
+      ? []
+      : [
+          {
+            id: "project",
+            header: language.t("operator.column.project"),
+            value: (agent: Row) => projectName(agent.project),
+            cell: (agent: Row) => projectName(agent.project),
+          },
+        ]),
     {
       id: "mode",
       optional: true,
@@ -156,21 +223,21 @@ export default function AgentsPage() {
         description={language.t("operator.page.agents.description")}
         actions={
           <>
-            <ScopePicker />
-            <Show when={directory()}>
-              <ButtonV2
+            <ScopePicker all />
+            <Show when={agents.folders().length}>
+              <ProjectAction
                 size="small"
                 variant="contrast"
-                onClick={() => navigate(`/operator/agents/new?dir=${encodeURIComponent(directory() ?? "")}`)}
-              >
-                {language.t("operator.agents.new")}
-              </ButtonV2>
+                label={language.t("operator.agents.new")}
+                directory={directory()}
+                run={(folder) => navigate(`/operator/agents/new?dir=${encodeURIComponent(folder)}`)}
+              />
             </Show>
           </>
         }
       />
       <Show
-        when={directory()}
+        when={agents.folders().length}
         fallback={
           <EmptyState
             icon="brain"
@@ -199,13 +266,13 @@ export default function AgentsPage() {
           columnsKey="agents"
           label={language.t("operator.page.agents.title")}
           rows={rows()}
-          columns={columns}
+          columns={columns()}
           filter={filter.text}
           search={(agent) => `${agent.name} ${agent.description ?? ""} ${agentModel(agent)}`}
-          loading={agents.isPending}
+          loading={agents.pending()}
           initialSort={{ column: "name", direction: "asc" }}
           onRowClick={(agent) =>
-            navigate(`/operator/agents/${encodeURIComponent(agent.name)}?dir=${encodeURIComponent(directory() ?? "")}`)
+            navigate(`/operator/agents/${encodeURIComponent(agent.name)}?dir=${encodeURIComponent(agent.project)}`)
           }
         />
       </Show>

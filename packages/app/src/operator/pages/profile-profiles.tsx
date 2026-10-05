@@ -23,6 +23,7 @@ import {
   type Catalog,
   copyName,
   copySlots,
+  isHelper,
   type Layer,
   namespaceDefault,
   PREFIX,
@@ -276,7 +277,12 @@ function ProfileRecord(props: {
   const record = createMemo(() => `${props.ns ?? ""}|${props.selected}`)
   createEffect(on(record, reset))
   createEffect(() => props.onEditing(store.editing))
-  const problem = () => slotProblem(props.catalog, store.value.slots)
+  const problem = () =>
+    slotProblem(
+      props.catalog,
+      store.value.slots,
+      props.catalog.groups.find((item) => item.id === store.value.group)?.types,
+    )
   const groupName = (id: string) => {
     const found = props.catalog.groups.find((group) => group.id === id)
     return found ? names.group(found) : id
@@ -405,7 +411,11 @@ function ProfileRecord(props: {
                   namespaces={props.namespaces}
                   run={(ns) => props.onSelect(`copy:${found().id}`, ns)}
                 />
-                <Show when={!props.ns || namespaceDefault(props.catalog) !== found().id}>
+                <Show
+                  when={
+                    !isHelper(props.catalog, found()) && (!props.ns || namespaceDefault(props.catalog) !== found().id)
+                  }
+                >
                   <NamespaceAction
                     variant="neutral"
                     label={language.t("operator.profile.makeDefault")}

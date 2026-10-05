@@ -11,7 +11,17 @@ import { useConfirm } from "../ui/confirm"
 import { Field } from "../ui/field"
 import { OrderedList } from "../ui/ordered-list"
 import { usePromptCatalog, useProfileNames } from "./profile-data"
-import { type Catalog, type Layer, layersOfType, regroup, type Section, slotProblem, type Slots } from "./profile-model"
+import {
+  type Catalog,
+  DYNAMIC,
+  HELPER,
+  type Layer,
+  layersOfType,
+  regroup,
+  type Section,
+  slotProblem,
+  type Slots,
+} from "./profile-model"
 
 export type SlotValue = { group: string; slots: Slots }
 
@@ -26,6 +36,8 @@ export function SlotEditor(props: {
   disabled?: boolean
   /** Leave out the group select (a read-only view shows the group elsewhere). */
   hideGroup?: boolean
+  /** Leave helper groups out of the group select (an agent's override cannot make it a helper). */
+  noHelper?: boolean
   changed?: (type: string) => boolean
   groupChanged?: boolean
   onReset?: (type: string) => void
@@ -40,7 +52,7 @@ export function SlotEditor(props: {
     const found = props.layers.find((layer) => layer.id === id)
     return found ? names.layer(found) : id
   }
-  const problem = () => slotProblem(props.catalog, props.value.slots)
+  const problem = () => slotProblem(props.catalog, props.value.slots, group()?.types)
 
   const pickGroup = async (id: string) => {
     const next = props.catalog.groups.find((item) => item.id === id)
@@ -70,7 +82,9 @@ export function SlotEditor(props: {
               appearance="base"
               aria-label={language.t("operator.profile.group")}
               disabled={props.disabled}
-              options={props.catalog.groups.map((item) => item.id)}
+              options={props.catalog.groups
+                .filter((item) => !props.noHelper || !item.types.includes(HELPER))
+                .map((item) => item.id)}
               current={props.value.group}
               label={(id) => {
                 const found = props.catalog.groups.find((item) => item.id === id)
@@ -146,7 +160,8 @@ export function SlotEditor(props: {
                   options={layersOfType(props.layers, type).filter(
                     (layer) => !(props.value.slots[type] ?? []).includes(layer.id),
                   )}
-                  onAdd={(id) => setSlot(type, [...(props.value.slots[type] ?? []), id])}
+                  // A helper profile holds one helper layer: a new one replaces it.
+                  onAdd={(id) => setSlot(type, type === HELPER ? [id] : [...(props.value.slots[type] ?? []), id])}
                 />
               </Show>
             </Show>
@@ -156,9 +171,11 @@ export function SlotEditor(props: {
       <Show when={problem()}>
         {(found) => (
           <p data-slot="operator-error" role="alert">
-            {found().kind === "repeated"
-              ? language.t("operator.profile.repeated", { layer: layerName(found().layer) })
-              : language.t("operator.profile.twoCopies", { layer: found().layer.replace("opencode:", "") })}
+            {found().kind === "helper"
+              ? language.t("operator.profile.oneHelper")
+              : found().kind === "repeated"
+                ? language.t("operator.profile.repeated", { layer: layerName(found().layer) })
+                : language.t("operator.profile.twoCopies", { layer: found().layer.replace("opencode:", "") })}
           </p>
         )}
       </Show>
@@ -168,7 +185,7 @@ export function SlotEditor(props: {
 
 // The section a layer created inside a slot is filed under in Layer Definition.
 function sectionFor(type: string): Section {
-  if (type === "role" || type === "identity") return type
+  if (type === "role" || type === "identity" || type === HELPER) return type
   return "custom"
 }
 
@@ -224,9 +241,12 @@ function AddLayer(props: {
             }}
             onSelect={(id) => id && props.onAdd(id)}
           />
-          <ButtonV2 size="small" variant="ghost" onClick={() => setCreating(true)}>
-            {language.t("operator.profile.createLayer")}
-          </ButtonV2>
+          {/* Dynamic layers people write come with a prompt (not yet). */}
+          <Show when={props.type !== DYNAMIC}>
+            <ButtonV2 size="small" variant="ghost" onClick={() => setCreating(true)}>
+              {language.t("operator.profile.createLayer")}
+            </ButtonV2>
+          </Show>
         </div>
       }
     >

@@ -44,7 +44,7 @@ test("the Prompt tab shows the profile, where it comes from, and every section w
 
   const sections = page.locator('[data-slot="operator-prompt-section"]')
   await expect(sections).toHaveCount(4)
-  await expect(sections.nth(0)).toContainText("Agent identity")
+  await expect(sections.nth(0)).toContainText("Dynamic")
   await expect(sections.nth(0)).toContainText("You are opencode, an interactive CLI tool.")
   await expect(sections.nth(1)).toContainText("Environment")
   await expect(sections.nth(2)).toContainText("SmokeProject/AGENTS.md")
@@ -57,7 +57,7 @@ test("the Prompt tab shows the profile, where it comes from, and every section w
 
   await sections.nth(0).getByRole("button", { name: "Edit" }).click()
   await expect(page).toHaveURL(/\/operator\/profile\?ns=opencode&tab=layers&layer=opencode(:|%3A)base\.default/)
-  await expect(page.getByRole("button", { name: "Make editable copy" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Edit a copy" })).toBeVisible()
 })
 
 test("an agent picks a profile, overrides one slot, and the preview shows purpose, the override and the rest", async ({
@@ -75,7 +75,7 @@ test("an agent picks a profile, overrides one slot, and the preview shows purpos
     id: "release",
     name: "Release",
     group: "opencode:group.spec",
-    slots: { role: ["reviewer"], identity: ["voice"], additional: ["opencode:generated.environment"] },
+    slots: { role: ["reviewer"], identity: ["voice"], dynamic: ["opencode:generated.environment"] },
     builtin: false,
   })
   state.prompt.projects[directory] = { namespace: "opencode", purpose: "goal" }

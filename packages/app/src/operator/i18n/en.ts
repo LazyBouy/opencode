@@ -205,6 +205,7 @@ export const dict = {
   "operator.column.title": "Title",
   "operator.column.name": "Name",
   "operator.column.project": "Project",
+  "operator.project.in": "In project",
   "operator.column.agent": "Agent",
   "operator.column.model": "Model",
   "operator.column.mode": "Mode",
@@ -549,7 +550,11 @@ export const dict = {
   "operator.prompts.id.reminder.build-switch": "Added when a session switches from the plan agent to building.",
   "operator.prompts.id.notice.structured-output": "Added to the system prompt when a structured answer is required.",
   "operator.prompts.id.notice.max-steps": "Sent when an agent reaches its step limit.",
-  "operator.prompts.id.generator.agent": "Used to write new agents from a description.",
+  "operator.prompts.id.helper.title": "The title agent's prompt: it names each session from its first message.",
+  "operator.prompts.id.helper.summary": "The summary agent's prompt: it summarises a session's changes.",
+  "operator.prompts.id.helper.compaction": "The compaction agent's prompt: it condenses a long session to continue it.",
+  "operator.prompts.id.helper.agent-generator":
+    "The agent generator's prompt: it writes a new agent from a description.",
 
   "operator.folders.title": "Add project",
   "operator.folders.hint":
@@ -627,9 +632,11 @@ export const dict = {
   "operator.profile.copiedNothing": "The namespace already had everything.",
 
   "operator.profile.searchLayers": "Search layers",
-  "operator.profile.newLayer": "New layer",
-  "operator.profile.newPurpose": "New Project Purpose",
-  "operator.profile.newIn": "New layer: {{section}}",
+  "operator.profile.new.purpose": "New Project Purpose",
+  "operator.profile.new.role": "New Role",
+  "operator.profile.new.identity": "New Identity",
+  "operator.profile.new.helper": "New Helper",
+  "operator.profile.new.custom": "New Custom layer",
   "operator.profile.noLayers": "No layers here yet.",
   "operator.profile.noPurposes": "No Project Purposes yet.",
   "operator.profile.noSuchLayer": "This layer no longer exists.",
@@ -642,7 +649,30 @@ export const dict = {
   "operator.profile.projectName": "Project {{name}}",
   "operator.profile.delivery.tool": "Sent with the tool",
   "operator.profile.delivery.conversation": "Sent in the conversation",
-  "operator.profile.makeCopy": "Make editable copy",
+  "operator.profile.makeCopy": "Edit a copy",
+  "operator.profile.oneHelper": "A helper profile holds one helper layer.",
+  "operator.profile.helperOnly": "A group with the Helper type holds no other type.",
+  "operator.prompts.helperAgent":
+    "{{name}} uses a helper profile, so it is a helper agent: its whole prompt is the profile's helper layer, and it has no override.",
+  "operator.prompts.helperProfile": "{{name}} (helper)",
+  "operator.profile.sample": "Generate sample",
+  "operator.profile.sampleFor": "Sample for {{agent}} in {{project}}",
+  "operator.profile.sampleNote":
+    "Filled in for each request; this is what it fills in for this agent and project now. Change it where it comes from.",
+  "operator.profile.sampleEmpty": "It adds nothing for this agent and project.",
+  "operator.profile.sampleAgent": "Agent",
+  "operator.profile.sampleProject": "Project",
+  "operator.help.sampleProject": "The project whose files, skills and instructions the sample is made from.",
+  "operator.help.sampleAgent": "The agent whose prompt, model and permissions the sample is made for.",
+  "operator.profile.editAtSource": "Edit at source",
+  "operator.profile.source.agent": "Edit the agent",
+  "operator.profile.source.base": "Open {{name}}",
+  "operator.profile.source.instructions": "Open Memory",
+  "operator.profile.source.skills": "Open Capabilities",
+  "operator.profile.source.mcp": "Open Capabilities",
+  "operator.profile.source.environment":
+    "OpenCode writes this from the model, the project folder, git and the date; it has no source to edit.",
+  "operator.profile.source.references": "Open Config",
   "operator.profile.copyNote":
     "A copy is used instead of OpenCode's text only in the profiles that hold it. A profile holds at most one copy of each text.",
   "operator.profile.copyOf": "Editable copy of",
@@ -708,7 +738,8 @@ export const dict = {
   "operator.layerSection.role": "Role",
   "operator.layerSection.identity": "Identity Groups",
   "operator.layerSection.tool": "Tool Group",
-  "operator.layerSection.generated": "Generated",
+  "operator.layerSection.dynamic": "Dynamic",
+  "operator.layerSection.helper": "Helper",
   "operator.layerSection.output": "Output format",
   "operator.layerSection.custom": "Custom",
   "operator.layerSection.message": "Message texts",
@@ -720,8 +751,10 @@ export const dict = {
   "operator.layerSection.about.identity": "Who the agents are and how they work.",
   "operator.layerSection.about.tool":
     "Tool descriptions. They are sent with the tools; a profile only chooses which version is used.",
-  "operator.layerSection.about.generated":
-    "Written by OpenCode for every request. A profile decides whether they are sent.",
+  "operator.layerSection.about.dynamic":
+    "Texts filled in for each request: the agent's own prompt, the base prompt for the model, the environment, references, instruction files, skills and MCP instructions. A profile holds them in its Dynamic slot.",
+  "operator.layerSection.about.helper":
+    "The whole prompt of a helper agent. A helper profile holds one of these; an agent that uses a helper profile is a helper agent, with no override.",
   "operator.layerSection.about.output": "The notice sent when a message asks for a structured (JSON) answer.",
   "operator.layerSection.about.custom": "Layers of any type, including your own types.",
   "operator.layerSection.about.message":
@@ -734,6 +767,11 @@ export const dict = {
   "operator.type.capabilities": "Stable capability boundaries",
   "operator.type.additional": "Optional additional blocks",
   "operator.type.output": "Output format",
+  "operator.type.dynamic": "Dynamic",
+  "operator.type.helper": "Helper",
+  "operator.type.about.dynamic":
+    "Texts filled in for each request: the agent's prompt, the base prompt for the model, the environment, skills and more.",
+  "operator.type.about.helper": "A helper agent's whole prompt. A group with this type holds no other type.",
   "operator.type.about.platform": "Rules of the platform the agents run on, such as safety and system constraints.",
   "operator.type.about.purpose":
     "Why the agents exist: the org purpose, then the project's purpose. Filled in automatically.",
@@ -746,8 +784,12 @@ export const dict = {
 
   "operator.group.spec": "Default",
   "operator.group.opencode": "OpenCode",
+  "operator.group.helper": "Helper",
   "operator.profileName.opencode": "OpenCode",
-  "operator.profileName.helper": "OpenCode helper",
+  "operator.profileName.helper.title": "Title",
+  "operator.profileName.helper.summary": "Summary",
+  "operator.profileName.helper.compaction": "Compaction",
+  "operator.profileName.helper.agent-generator": "Agent generator",
   "operator.profileName.spec": "Spec",
 
   "operator.layer.slot.base": "Base prompt (by model)",

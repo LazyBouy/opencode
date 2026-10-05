@@ -1,7 +1,6 @@
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { createMemo } from "solid-js"
 import { useLanguage } from "@/context/language"
-import { shortPath } from "../format"
 import { useOperatorProjects, useScopedProject } from "../project"
 import { useOperatorScope } from "../scope"
 import { FieldHelp } from "./field-help"
@@ -24,7 +23,7 @@ export function ScopePicker(props: { all?: boolean }) {
       ...(props.all ? [{ label: language.t("operator.scope.all") }] : []),
       ...listed,
       ...(current && !listed.some((option) => option.directory === current)
-        ? [{ directory: current, label: shortPath(current) }]
+        ? [{ directory: current, label: current.split(/[\\/]/).filter(Boolean).at(-1) ?? current }]
         : []),
     ]
   })

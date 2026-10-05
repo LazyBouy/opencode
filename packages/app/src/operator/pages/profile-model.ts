@@ -22,9 +22,25 @@ export const OPENCODE = "opencode"
 // "All namespaces" in a namespace scope.
 export const ALL = "*"
 export const PREFIX = "opencode:"
-export const HELPER_AGENTS = ["title", "summary", "compaction"]
 export const REQUIRED = ["purpose", "role", "identity"]
-export const BUILTIN_TYPES = ["platform", "purpose", "role", "identity", "capabilities", "additional", "output"]
+export const BUILTIN_TYPES = [
+  "platform",
+  "purpose",
+  "role",
+  "identity",
+  "dynamic",
+  "capabilities",
+  "additional",
+  "output",
+  "helper",
+]
+// Texts filled in per request; a helper agent's whole prompt (see the server's profile.ts).
+export const DYNAMIC = "dynamic"
+export const HELPER = "helper"
+// OpenCode's helper agents and the helper profile each uses unless it names one.
+export const HELPER_DEFAULTS: ReadonlyMap<string, string> = new Map(
+  ["title", "summary", "compaction", "agent-generator"].map((name) => [name, `${PREFIX}profile.helper.${name}`]),
+)
 
 // Layer Definition's sections, in order, with the type a new layer in each gets.
 export const SECTIONS: ReadonlyArray<{ id: Section; type?: string }> = [
@@ -33,13 +49,14 @@ export const SECTIONS: ReadonlyArray<{ id: Section; type?: string }> = [
   { id: "role", type: "role" },
   { id: "identity", type: "identity" },
   { id: "tool", type: "capabilities" },
-  { id: "generated" },
+  { id: "dynamic", type: DYNAMIC },
+  { id: "helper", type: HELPER },
   { id: "output", type: "output" },
   { id: "custom", type: "identity" },
   { id: "message", type: "platform" },
 ]
 // Sections people write layers in.
-export const WRITTEN: readonly Section[] = ["purpose", "role", "identity", "custom"]
+export const WRITTEN: readonly Section[] = ["purpose", "role", "identity", "helper", "custom"]
 
 export function isBuiltin(id: string) {
   return id.startsWith(PREFIX)
@@ -56,6 +73,11 @@ export function origin(layer: Layer): "opencode" | "copy" | "yours" {
 export function layersOfType(layers: ReadonlyArray<Layer>, type: string) {
   if (type === "purpose") return []
   return layers.filter((layer) => layer.type === type && layer.origin !== "automatic")
+}
+
+// A helper profile: its group holds the Helper type. An agent that uses one is a helper agent.
+export function isHelper(catalog: Catalog, profile: { group: string }) {
+  return catalog.groups.some((group) => group.id === profile.group && group.types.includes(HELPER))
 }
 
 // The profiles whose slots hold a layer.
@@ -77,14 +99,15 @@ export function profileUsers(catalog: Catalog, profile: string) {
   }
 }
 
-// The profile an agent of `project` uses, and where that comes from: its own setting, the helper rule
-// (title, summary, compaction), the project's default, else the namespace's (the server's profileFor).
+// The profile an agent of `project` uses, and where that comes from: its own setting, its helper
+// profile (OpenCode's helper agents), the project's default, else the namespace's (the server's
+// profileFor).
 export function profileFor(catalog: Catalog, project: string, agent: string) {
   const find = (id: string | undefined) => (id ? catalog.profiles.find((profile) => profile.id === id) : undefined)
   const own = find(catalog.agents.find((item) => item.project === project && item.name === agent)?.profile)
   if (own) return { profile: own, source: "agent" as const }
-  const helper = find(`${PREFIX}profile.helper`)
-  if (HELPER_AGENTS.includes(agent) && helper) return { profile: helper, source: "helper" as const }
+  const helper = find(HELPER_DEFAULTS.get(agent))
+  if (helper) return { profile: helper, source: "helper" as const }
   const fallback = find(catalog.projects.find((item) => item.key === project)?.defaultProfile)
   if (fallback) return { profile: fallback, source: "project" as const }
   const named = find(namespaceDefault(catalog)) ?? find(`${PREFIX}profile.opencode`)
@@ -104,8 +127,10 @@ export function copySlots(slots: Slots): Slots {
   return Object.fromEntries(Object.entries(slots).map(([type, ids]) => [type, [...ids]]))
 }
 
-// Why a profile's slots cannot be saved, or undefined.
-export function slotProblem(catalog: Catalog, slots: Slots) {
+// Why a profile's slots cannot be saved, or undefined. `types` is the group's: a helper profile holds
+// one helper layer.
+export function slotProblem(catalog: Catalog, slots: Slots, types: ReadonlyArray<string> = []) {
+  if (types.includes(HELPER) && (slots[HELPER] ?? []).length !== 1) return { kind: "helper" as const, layer: "" }
   const all = Object.values(slots).flat()
   const repeated = all.find((id, index) => all.indexOf(id) !== index)
   if (repeated) return { kind: "repeated" as const, layer: repeated }
@@ -117,8 +142,9 @@ export function slotProblem(catalog: Catalog, slots: Slots) {
   return undefined
 }
 
-// Why a group cannot be saved, or undefined.
+// Why a group cannot be saved, or undefined. A group with the Helper type holds only it.
 export function groupProblem(types: ReadonlyArray<string>) {
+  if (types.includes(HELPER)) return types.length === 1 ? undefined : { kind: "helper" as const }
   const absent = REQUIRED.find((type) => !types.includes(type))
   if (absent) return { kind: "required" as const, type: absent }
   if (new Set(types).size !== types.length) return { kind: "repeated" as const }
