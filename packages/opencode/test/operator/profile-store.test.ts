@@ -105,7 +105,7 @@ it.instance("an editable copy keeps the built-in's type and text, and a profile 
   ),
 )
 
-it.instance("a new namespace copies OpenCode's own items and shares the built-ins", () =>
+it.instance("a new namespace gets its own copies of OpenCode's built-ins and of OpenCode's own items", () =>
   withGlobal(() =>
     Effect.gen(function* () {
       const items = yield* seed()
@@ -117,10 +117,23 @@ it.instance("a new namespace copies OpenCode's own items and shares the built-in
         purpose: "We build editors.",
         defaultProfile: items.profile.id,
       })
-      expect(catalog.profiles.filter((item) => !item.builtin).map((item) => item.id)).toEqual([items.profile.id])
+      // Built-ins belong to OpenCode: the namespace has its own copies, as "<id>" for "opencode:<id>".
+      expect(catalog.profiles.some((item) => item.builtin)).toBe(false)
+      expect(catalog.groups.some((item) => item.builtin)).toBe(false)
+      expect(catalog.layers.some((item) => item.origin !== "user")).toBe(false)
+      expect(catalog.profiles.map((item) => item.id).toSorted()).toEqual(
+        [...OperatorProfile.BUILTIN_PROFILES.map((item) => OperatorProfile.own(item.id)), items.profile.id].toSorted(),
+      )
+      expect(catalog.layers.find((item) => item.id === "base.default")).toMatchObject({
+        replaces: `${P}base.default`,
+        origin: "user",
+      })
+      expect(catalog.profiles.find((item) => item.id === "profile.opencode")?.slots.dynamic?.[0]).toBe(
+        "slot.agent-or-base",
+      )
       expect(
         catalog.layers
-          .filter((item) => item.origin === "user")
+          .filter((item) => !item.replaces)
           .map((item) => item.id)
           .toSorted(),
       ).toEqual([items.rule.id, items.role.id].toSorted())
@@ -310,6 +323,67 @@ it.instance("a Dynamic layer of yours holds a prompt, kept in its file", () =>
         text: "",
         prompt: "Say when the release is.",
       })
+    }),
+  ),
+)
+
+it.instance("a namespace made before gets its own copies once, its settings pointed at them", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      const store = yield* OperatorProfileStore.Service
+      const dir = path.join(OperatorProfileStore.root(), "older")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(path.join(dir, "profiles"), { recursive: true })
+        await fs.writeFile(
+          path.join(dir, "namespace.json"),
+          JSON.stringify({
+            id: "older",
+            name: "Older",
+            purpose: "",
+            defaultProfile: `${P}profile.spec`,
+            createdAt: 1,
+            updatedAt: 1,
+          }),
+        )
+        await fs.writeFile(
+          path.join(dir, "profiles", "mine.json"),
+          JSON.stringify({
+            id: "mine",
+            name: "Mine",
+            group: `${P}group.spec`,
+            slots: { dynamic: [`${P}slot.base`, `${P}generated.skills`] },
+          }),
+        )
+      })
+      const catalog = yield* store.catalog("older")
+      expect(catalog.namespace.defaultProfile).toBe("profile.spec")
+      expect(catalog.profiles.find((item) => item.id === "mine")).toMatchObject({
+        group: "group.spec",
+        slots: { dynamic: ["slot.base", "generated.skills"] },
+      })
+      // A copy it deletes is not made again.
+      yield* store.remove("older", "layer", "notice.max-steps")
+      expect((yield* store.catalog("older")).layers.map((item) => item.id)).not.toContain("notice.max-steps")
+    }),
+  ),
+)
+
+it.instance("a copy of OpenCode's text whose original changed is marked, and takes the new text", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      const store = yield* OperatorProfileStore.Service
+      const team = yield* store.createNamespace({ name: "Team" })
+      const file = path.join(OperatorProfileStore.root(), team.id, "layers", "base.default.md")
+      // As if OpenCode's text changed since the copy was made: its fingerprint no longer matches.
+      yield* Effect.promise(async () =>
+        fs.writeFile(file, (await fs.readFile(file, "utf8")).replace(/basedOn: .*/, "basedOn: old")),
+      )
+      expect((yield* store.catalog(team.id)).layers.find((item) => item.id === "base.default")?.outdated).toBe(true)
+      const synced = yield* store.syncLayer(team.id, "base.default")
+      expect(synced.text).toBe(OperatorProfile.BUILTIN_LAYERS.find((item) => item.id === `${P}base.default`)!.text)
+      expect(
+        (yield* store.catalog(team.id)).layers.find((item) => item.id === "base.default")?.outdated,
+      ).toBeUndefined()
     }),
   ),
 )

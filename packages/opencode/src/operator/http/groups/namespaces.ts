@@ -15,6 +15,7 @@ export const OperatorNamespacePaths = {
   layers: "/operator/namespaces/:ns/layers",
   layer: "/operator/namespaces/:ns/layers/:id",
   copyLayer: "/operator/namespaces/:ns/layers/:id/copy",
+  syncLayer: "/operator/namespaces/:ns/layers/:id/sync",
   groups: "/operator/namespaces/:ns/groups",
   group: "/operator/namespaces/:ns/groups/:id",
   profiles: "/operator/namespaces/:ns/profiles",
@@ -103,7 +104,7 @@ export const OperatorNamespaceGroup = HttpApiGroup.make("operatorNamespace")
       doc(
         "operator.namespace.create",
         "Create a namespace",
-        "Create a namespace as a copy of OpenCode: OpenCode's own types, layers, groups and profiles are copied, and built-in items stay shared. It starts with no projects.",
+        "Create a namespace as a copy of OpenCode: it gets its own copies of OpenCode's built-in layers, groups and profiles (built-ins belong to OpenCode), and of OpenCode's own types, layers, groups and profiles. It starts with no projects.",
       ),
     ),
     HttpApiEndpoint.get("get", OperatorNamespacePaths.namespace, {
@@ -216,6 +217,17 @@ export const OperatorNamespaceGroup = HttpApiGroup.make("operatorNamespace")
         "operator.namespace.layer.copy",
         "Make an editable copy",
         "Copy one of OpenCode's texts into the namespace. The copy does nothing until a profile includes it; OpenCode's text stays as it is.",
+      ),
+    ),
+    HttpApiEndpoint.post("layerSync", OperatorNamespacePaths.syncLayer, {
+      params: item,
+      success: described(OperatorProfile.Layer, "The copy, with OpenCode's current text"),
+      error: errors,
+    }).annotateMerge(
+      doc(
+        "operator.namespace.layer.sync",
+        "Take OpenCode's text",
+        "A copy of one of OpenCode's texts takes OpenCode's current text, after a release changed it (the copy is marked outdated).",
       ),
     ),
     HttpApiEndpoint.post("groupCreate", OperatorNamespacePaths.groups, {

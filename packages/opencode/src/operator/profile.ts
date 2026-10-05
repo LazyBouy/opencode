@@ -80,6 +80,12 @@ export const Layer = Schema.Struct({
   delivery: Schema.optional(Schema.Literals(["tool", "conversation"])).annotate({
     description: "Texts not sent in the system prompt: with the tool, or in the conversation",
   }),
+  basedOn: Schema.optional(Schema.String).annotate({
+    description: "A copy of OpenCode's text: a fingerprint of the text it was made from",
+  }),
+  outdated: Schema.optional(Schema.Boolean).annotate({
+    description: "A copy of OpenCode's text that OpenCode has changed since (a release); it can take the new text",
+  }),
   prompt: Schema.optional(Schema.String).annotate({
     description: "Your Dynamic layers: what the dynamic generator writes for each session",
   }),
@@ -281,19 +287,53 @@ export function isBuiltin(id: string) {
   return id.startsWith(PREFIX)
 }
 
-// Every type, layer, group and profile visible in a namespace: its own and the built-ins.
+// OpenCode's built-in layers, groups and profiles belong to the OpenCode namespace. Every other
+// namespace has its own copies of them (made when it is created; see the store), editable there: its
+// own version of the built-in "opencode:<x>" has the id "<x>" (an id names can never make, since
+// names are slugged without dots or colons), and keeps `replaces` (layers) as its link to OpenCode's.
+export function isOpenCode(catalog: Catalog) {
+  return catalog.namespace.id === OPENCODE
+}
+export function own(id: string) {
+  return isBuiltin(id) ? id.slice(PREFIX.length) : id
+}
+// The id a namespace uses for a built-in: the built-in itself in OpenCode, its own version elsewhere.
+export function versionId(catalog: Catalog, builtin: string) {
+  return isOpenCode(catalog) ? builtin : own(builtin)
+}
+// The built-in an item is, or is a namespace's own version of; undefined for anything else.
+export function builtinOf(kind: "layer" | "group" | "profile", id: string) {
+  const full = isBuiltin(id) ? id : `${PREFIX}${id}`
+  if (kind === "layer")
+    return BUILTIN_LAYERS.some((item) => item.id === full) || full.startsWith(base("tool.")) ? full : undefined
+  if (kind === "group") return BUILTIN_GROUPS.some((item) => item.id === full) ? full : undefined
+  return BUILTIN_PROFILES.some((item) => item.id === full) ? full : undefined
+}
+
+// Every type, layer, group and profile visible in a namespace: its own, and in OpenCode the built-ins.
+// The built-in types are shared: they are the structure the code relies on.
 export function types(catalog: Catalog) {
   return [...builtinTypes, ...catalog.types]
 }
 export function groups(catalog: Catalog) {
-  return [...BUILTIN_GROUPS, ...catalog.groups]
+  return isOpenCode(catalog) ? [...BUILTIN_GROUPS, ...catalog.groups] : [...catalog.groups]
 }
 export function profiles(catalog: Catalog) {
-  return [...BUILTIN_PROFILES, ...catalog.profiles]
+  return isOpenCode(catalog) ? [...BUILTIN_PROFILES, ...catalog.profiles] : [...catalog.profiles]
+}
+// The built-in a layer is, or stands in for: itself, or the one its copy replaces.
+export function builtinLayer(layer: Layer) {
+  const id = layer.origin === "user" ? layer.replaces : layer.id
+  return id ? BUILTIN_LAYERS.find((item) => item.id === id) : undefined
+}
+// A layer filled in per request (the agent's prompt, the environment, ...): OpenCode's, or a copy.
+export function isPerRequest(layer: Layer | undefined) {
+  const builtin = layer ? builtinLayer(layer) : undefined
+  return builtin?.origin === "slot" || builtin?.origin === "generated"
 }
 // A Dynamic layer of yours: the dynamic generator writes its text for each session from its prompt.
 export function isWrittenDynamic(layer: Layer | undefined): boolean {
-  return layer?.type === DYNAMIC && layer.origin === "user"
+  return layer?.type === DYNAMIC && layer.origin === "user" && !layer.replaces
 }
 
 // A helper profile: its group holds the Helper type.
@@ -303,7 +343,14 @@ export function isHelper(catalog: Catalog, profile: { group: string }) {
 // Tool descriptions are built in for every tool id (`opencode:tool.<id>`); their text comes from the
 // tool registry, so here it is empty.
 export function findLayer(catalog: Catalog, id: string) {
-  const known = BUILTIN_LAYERS.find((item) => item.id === id) ?? catalog.layers.find((item) => item.id === id)
+  const mine = catalog.layers.find((item) => item.id === id)
+  if (mine || !isOpenCode(catalog)) return mine
+  return builtinLayerById(id)
+}
+
+// One of OpenCode's built-in layers, whichever namespace asks (to copy it, or to check a copy).
+export function builtinLayerById(id: string): Layer | undefined {
+  const known = BUILTIN_LAYERS.find((item) => item.id === id)
   if (known) return known
   if (!id.startsWith(base("tool."))) return undefined
   return { ...layer(id, id.slice(PREFIX.length), "capabilities", "tool", "builtin"), delivery: "tool" as const }
@@ -320,11 +367,17 @@ export function profileFor(
   const find = (id: string | undefined) => (id ? profiles(catalog).find((item) => item.id === id) : undefined)
   const own = find(input.setting?.profile)
   if (own) return { profile: own, source: "agent" }
-  const helper = find(HELPER_DEFAULTS.get(input.agent))
+  const helperDefault = HELPER_DEFAULTS.get(input.agent)
+  const helper = find(helperDefault && versionId(catalog, helperDefault))
   if (helper) return { profile: helper, source: "helper" }
   const project = find(input.project?.defaultProfile)
   if (project) return { profile: project, source: "project" }
-  return { profile: find(catalog.namespace.defaultProfile) ?? find(OPENCODE_PROFILE)!, source: "namespace" }
+  return { profile: find(catalog.namespace.defaultProfile) ?? fallbackProfile(catalog), source: "namespace" }
+}
+
+// The OpenCode profile (a namespace's own version of it), else OpenCode's built-in.
+function fallbackProfile(catalog: Catalog) {
+  return profiles(catalog).find((item) => item.id === versionId(catalog, OPENCODE_PROFILE)) ?? BUILTIN_PROFILES[0]!
 }
 
 // A profile with an agent's override applied: the override's group if it has one, and its slots for
@@ -334,6 +387,7 @@ export function effective(catalog: Catalog, profile: Profile, given?: Override) 
   const override = isHelper(catalog, profile) ? undefined : given
   const group =
     groups(catalog).find((item) => item.id === (override?.group ?? profile.group)) ??
+    groups(catalog).find((item) => item.id === versionId(catalog, base("group.opencode"))) ??
     BUILTIN_GROUPS.find((item) => item.id === base("group.opencode"))!
   const slots = Object.fromEntries(
     group.types.map((type) => [type, override?.slots?.[type] ?? profile.slots[type] ?? []] as const),
@@ -378,7 +432,7 @@ export function assemble(input: AssembleInput) {
   const chosen = input.profile
     ? { profile: profiles(input.catalog).find((item) => item.id === input.profile), source: "agent" as const }
     : profileFor(input.catalog, { agent: input.agent.name, setting: input.setting, project: input.project })
-  const profile = chosen.profile ?? profiles(input.catalog).find((item) => item.id === OPENCODE_PROFILE)!
+  const profile = chosen.profile ?? fallbackProfile(input.catalog)
   const shape = effective(input.catalog, profile, input.profile ? undefined : input.setting?.override)
   const names = new Map(types(input.catalog).map((item) => [item.id, item.name]))
   const copies = copiesIn(input.catalog, shape.slots)
@@ -422,7 +476,7 @@ export function sample(input: AssembleInput, id: string) {
   if (!found) return undefined
   if (found.origin === "automatic")
     return { text: input.catalog.namespace.purpose, source: input.catalog.namespace.name }
-  if (found.replaces || found.type === HELPER) return { text: found.text, source: found.name }
+  if ((found.replaces && !isPerRequest(found)) || found.type === HELPER) return { text: found.text, source: found.name }
   if (isWrittenDynamic(found)) return { text: input.dynamic?.get(found.id) ?? "", source: found.name }
   const items = resolve(input, new Map(), id)
   return { text: items.map((item) => item.text).join("\n"), source: items[0]?.source ?? "" }
@@ -432,7 +486,10 @@ export function sample(input: AssembleInput, id: string) {
 // OpenCode's. Tool descriptions are copies in Stable capability boundaries; reminders, notices and
 // the agent generator are copies in Platform/system constraints.
 export function versionOf(input: { catalog: Catalog; slots: Slots; builtin: string }) {
-  return copiesIn(input.catalog, input.slots).get(input.builtin)?.text
+  return (
+    copiesIn(input.catalog, input.slots).get(input.builtin)?.text ??
+    (isOpenCode(input.catalog) ? undefined : input.catalog.layers.find((item) => item.id === own(input.builtin))?.text)
+  )
 }
 
 // What a profile-or-agent combination looks like once resolved, for texts that are not in the
@@ -444,7 +501,7 @@ export function slotsFor(
   if (!input.agent) {
     const find = (id: string | undefined) => (id ? profiles(catalog).find((item) => item.id === id) : undefined)
     const profile =
-      find(input.project?.defaultProfile) ?? find(catalog.namespace.defaultProfile) ?? find(OPENCODE_PROFILE)!
+      find(input.project?.defaultProfile) ?? find(catalog.namespace.defaultProfile) ?? fallbackProfile(catalog)
     return effective(catalog, profile).slots
   }
   const chosen = profileFor(catalog, { agent: input.agent, setting: input.setting, project: input.project })
@@ -478,24 +535,31 @@ function purpose(input: AssembleInput): Found[] {
 
 // The text a slot entry stands for in this request.
 function resolve(input: AssembleInput, copies: Map<string, Layer>, entry: string): Found[] {
-  const found = findLayer(input.catalog, entry)
-  if (!found) return []
-  const one = (text: string | undefined, source: string, layer: Layer = found): Found[] =>
+  const listed = findLayer(input.catalog, entry)
+  if (!listed) return []
+  // A namespace's own version of a built-in (outside OpenCode) works as the built-in, with its text.
+  const standard = !isOpenCode(input.catalog) && listed.replaces !== undefined && listed.id === own(listed.replaces)
+  const builtin = standard || isPerRequest(listed) ? builtinLayer(listed) : undefined
+  const found: Layer = builtin ? { ...builtin, name: listed.name, text: listed.text } : listed
+  const one = (text: string | undefined, source: string, layer: Layer = listed): Found[] =>
     text ? [{ layer, text, source }] : []
-  // A family's base prompt, or the copy of it the profile holds.
+  // A family's base prompt: the copy of it the profile holds, else the namespace's own version, else
+  // OpenCode's.
   const family = (id: string) => {
-    const copy = copies.get(id)
-    const text = copy?.text ?? findLayer(input.catalog, id)?.text ?? ""
+    const copy =
+      copies.get(id) ??
+      (isOpenCode(input.catalog) ? undefined : input.catalog.layers.find((item) => item.id === own(id)))
+    const text = copy?.text ?? BUILTIN_LAYERS.find((item) => item.id === id)?.text ?? ""
     return { text: id === base("base.meta") ? OperatorPromptText.renderMeta(text, input.model) : text, layer: copy }
   }
   const model = () => {
     const id = base(OperatorPromptText.baseFor(input.model).id)
     const chosen = family(id)
-    return one(chosen.text, chosen.layer?.name ?? id.slice(PREFIX.length), chosen.layer ?? found)
+    return one(chosen.text, chosen.layer?.name ?? id.slice(PREFIX.length), chosen.layer ?? listed)
   }
   // Copies stand in for their built-in where it is used; on their own they add nothing.
   // A helper agent's prompt is its helper layer, a copy or OpenCode's.
-  if (found.type === HELPER) return one(found.text, found.origin === "builtin" ? "OpenCode" : found.name)
+  if (found.type === HELPER) return one(listed.text, listed.origin === "builtin" ? "OpenCode" : listed.name)
   if (isWrittenDynamic(found)) return one(input.dynamic?.get(found.id), found.name)
   if (found.replaces) {
     if (found.replaces !== base("notice.structured-output") || !input.parts.output) return []
@@ -503,7 +567,7 @@ function resolve(input: AssembleInput, copies: Map<string, Layer>, entry: string
   }
   if (found.section === "base" && found.origin === "builtin") {
     const chosen = family(found.id)
-    return one(chosen.text, chosen.layer?.name ?? "OpenCode", chosen.layer ?? found)
+    return one(chosen.text, chosen.layer?.name ?? "OpenCode", chosen.layer ?? listed)
   }
   if (found.id === base("slot.base")) return model()
   if (found.id === base("slot.agent")) return one(input.agent.prompt, input.agent.name)
@@ -517,8 +581,10 @@ function resolve(input: AssembleInput, copies: Map<string, Layer>, entry: string
     return input.parts.instructions.flatMap((text) =>
       one(text, text.match(/^Instructions from: ([^\n]*)/)?.[1] ?? "generated"),
     )
-  if (found.id === base("notice.structured-output"))
-    return input.parts.output && !copies.has(found.id) ? one(input.parts.output, "OpenCode") : []
+  if (found.id === base("notice.structured-output")) {
+    if (!input.parts.output || (copies.has(found.id) && copies.get(found.id) !== listed)) return []
+    return standard ? one(listed.text, listed.name) : one(input.parts.output, "OpenCode")
+  }
   // Tool descriptions and message texts are sent elsewhere; the org purpose only in Purpose.
   if (found.delivery || found.origin === "automatic") return []
   return one(found.text, found.name)
@@ -570,8 +636,9 @@ export function checkLayer(catalog: Catalog, input: { name: string; type: string
   if (!input.name.trim()) return "A layer needs a name"
   if (!types(catalog).some((item) => item.id === input.type)) return `No group type "${input.type}"`
   if (!input.replaces) return undefined
-  const original = findLayer(catalog, input.replaces)
-  if (!original || original.origin !== "builtin") return `"${input.replaces}" is not one of OpenCode's texts`
+  const original = builtinLayerById(input.replaces)
+  if (!original || original.origin === "automatic" || original.origin === "user")
+    return `"${input.replaces}" is not one of OpenCode's texts`
   if (original.type !== input.type) return `A copy of ${original.name} keeps its type`
   return undefined
 }
@@ -658,4 +725,9 @@ function text(id: string) {
 
 function layer(id: string, name: string, type: string, section: Section, origin: Origin, value = ""): Layer {
   return { id, name, type, section, text: value, origin }
+}
+
+// A fingerprint of a text, to tell when OpenCode's text changed since a copy was made of it.
+export function fingerprint(text: string) {
+  return Bun.hash(text).toString(36)
 }

@@ -174,6 +174,8 @@ import type {
   OperatorNamespaceLayerCreateResponses,
   OperatorNamespaceLayerRemoveErrors,
   OperatorNamespaceLayerRemoveResponses,
+  OperatorNamespaceLayerSyncErrors,
+  OperatorNamespaceLayerSyncResponses,
   OperatorNamespaceLayerUpdateErrors,
   OperatorNamespaceLayerUpdateResponses,
   OperatorNamespaceListErrors,
@@ -1973,6 +1975,40 @@ export class Layer extends HeyApiClient {
       },
     })
   }
+
+  /**
+   * Take OpenCode's text
+   *
+   * A copy of one of OpenCode's texts takes OpenCode's current text, after a release changed it (the copy is marked outdated).
+   */
+  public sync<ThrowOnError extends boolean = false>(
+    parameters: {
+      ns: string
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "ns" },
+            { in: "path", key: "id" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorNamespaceLayerSyncResponses,
+      OperatorNamespaceLayerSyncErrors,
+      ThrowOnError
+    >({
+      url: "/operator/namespaces/{ns}/layers/{id}/sync",
+      ...options,
+      ...params,
+    })
+  }
 }
 
 export class Group extends HeyApiClient {
@@ -2236,7 +2272,7 @@ export class Namespace extends HeyApiClient {
   /**
    * Create a namespace
    *
-   * Create a namespace as a copy of OpenCode: OpenCode's own types, layers, groups and profiles are copied, and built-in items stay shared. It starts with no projects.
+   * Create a namespace as a copy of OpenCode: it gets its own copies of OpenCode's built-in layers, groups and profiles (built-ins belong to OpenCode), and of OpenCode's own types, layers, groups and profiles. It starts with no projects.
    */
   public create<ThrowOnError extends boolean = false>(
     parameters?: {

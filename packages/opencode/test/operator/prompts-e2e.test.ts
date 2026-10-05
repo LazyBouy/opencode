@@ -336,3 +336,32 @@ unix("the purpose generator drafts a project purpose from its files and a brief"
     }),
   ),
 )
+
+unix("a project in another namespace sends OpenCode's prompt from that namespace's own copies, byte for byte", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      const { llm } = yield* configure()
+      const store = yield* OperatorProfileStore.Service
+      const prompts = yield* OperatorPrompts.Service
+      const before = yield* prompts.preview({ agent: "build" })
+      const acme = yield* store.createNamespace({ name: "Acme" })
+      yield* store.setProject(before.project.key, { namespace: acme.id })
+      const after = yield* prompts.preview({ agent: "build" })
+      expect(after.namespace.id).toBe(acme.id)
+      expect(after.profile.id).toBe("profile.opencode")
+      expect(after.system).toEqual(before.system)
+      // A request sends it too.
+      const seen: Array<{ agent: string; sent: string[] }> = []
+      promptAudit.listen = (entry) => seen.push(entry)
+      yield* llm.text("ok")
+      yield* send((yield* (yield* Session.Service).create({ title: "Acme" })).id, "hello", "build")
+      expect(seen.find((item) => item.agent === "build")?.sent).toEqual([...after.system])
+      // Acme's own copy of the base prompt changes Acme's prompt only.
+      const base = `${P}${after.base}`
+      const copy = (yield* store.catalog(acme.id)).layers.find((item) => item.id === OperatorProfile.own(base))!
+      yield* store.saveLayer(acme.id, copy.id, { name: copy.name, type: copy.type, text: "You are Acme's assistant." })
+      expect((yield* prompts.preview({ agent: "build" })).system[0]).toStartWith("You are Acme's assistant.")
+      expect((yield* store.catalog("opencode")).layers.find((item) => item.id === base)?.text).not.toContain("Acme")
+    }),
+  ),
+)

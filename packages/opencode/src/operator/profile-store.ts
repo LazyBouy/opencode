@@ -115,6 +115,8 @@ export interface Interface {
   ) => Effect.Effect<OperatorProfile.Layer, Failure>
   /** Makes an editable copy of one of OpenCode's texts; `text` gives a tool description's text. */
   readonly copyBuiltin: (ns: string, id: string, text?: string) => Effect.Effect<OperatorProfile.Layer, Failure>
+  /** A copy of one of OpenCode's texts takes OpenCode's current text. */
+  readonly syncLayer: (ns: string, id: string) => Effect.Effect<OperatorProfile.Layer, Failure>
   readonly saveGroup: (
     ns: string,
     id: string | undefined,
@@ -180,6 +182,9 @@ export async function forProject(key: string) {
 
 export async function readNamespace(id: string): Promise<OperatorProfile.Catalog | undefined> {
   const dir = path.join(root(), id)
+  if (!(await readNamespaceRecord(id))) return undefined
+  // Read after its own copies of OpenCode's built-ins are made (and its settings pointed at them).
+  await adopt(id)
   const namespace = await readNamespaceRecord(id)
   if (!namespace) return undefined
   const [types, layers, groups, profiles] = await Promise.all([
@@ -240,6 +245,123 @@ export async function readAgents(): Promise<Record<string, Record<string, Operat
       ),
     ]),
   )
+}
+
+// OpenCode's built-ins belong to the OpenCode namespace; every other namespace gets its own copies of
+// them, editable there: each built-in layer (but the org purpose, which comes from the namespace),
+// group and profile, as "<id>" for "opencode:<id>". Its profiles, agents' settings, projects'
+// defaults and its default profile are pointed at its copies. The built-ins a namespace took are
+// listed in its builtins.json: one it deleted is not copied again, and new ones (a release) are.
+const ADOPTED = "builtins.json"
+const adopting = new Map<string, Promise<void>>()
+async function adopt(ns: string): Promise<void> {
+  if (ns === OperatorProfile.OPENCODE) return
+  const running = adopting.get(ns)
+  if (running) return running
+  const work = (async () => {
+    const file = path.join(root(), ns, ADOPTED)
+    const taken: string[] = await Bun.file(file)
+      .json()
+      .catch(() => [])
+    const layers = OperatorProfile.BUILTIN_LAYERS.filter(
+      (item) => item.origin !== "automatic" && !taken.includes(item.id),
+    )
+    const groups = OperatorProfile.BUILTIN_GROUPS.filter((item) => !taken.includes(item.id))
+    const profiles = OperatorProfile.BUILTIN_PROFILES.filter((item) => !taken.includes(item.id))
+    if (!layers.length && !groups.length && !profiles.length) return
+    const own = OperatorProfile.own
+    const exists = (kind: Kind, id: string) => Bun.file(itemFile(ns, kind, id)).exists()
+    for (const item of layers) {
+      if (await exists("layer", own(item.id))) continue
+      await writeItem(ns, "layer", {
+        id: own(item.id),
+        name: item.name,
+        type: item.type,
+        section: item.section,
+        replaces: item.id,
+        text: item.text,
+        ...(item.text ? { basedOn: OperatorProfile.fingerprint(item.text) } : {}),
+        origin: "user",
+      })
+    }
+    for (const item of groups)
+      if (!(await exists("group", own(item.id))))
+        await writeItem(ns, "group", { id: own(item.id), name: item.name, types: [...item.types], builtin: false })
+    for (const item of profiles)
+      if (!(await exists("profile", own(item.id))))
+        await writeItem(ns, "profile", {
+          id: own(item.id),
+          name: item.name,
+          group: own(item.group),
+          slots: ownSlots(item.slots),
+          builtin: false,
+        })
+    // What the namespace already had now points at its own copies.
+    await pointAtOwn(ns)
+    await writeJson(
+      file,
+      [...taken, ...layers, ...groups, ...profiles].map((item) => (typeof item === "string" ? item : item.id)),
+    )
+  })().finally(() => adopting.delete(ns))
+  adopting.set(ns, work)
+  return work
+}
+
+// Slots with OpenCode's built-ins replaced by a namespace's own copies. Built-in tool descriptions do
+// nothing in a slot on their own, so they are dropped.
+function ownSlots(slots: OperatorProfile.Slots) {
+  return Object.fromEntries(
+    Object.entries(slots).map(([type, ids]) => [
+      type,
+      ids.filter((id) => !id.startsWith(`${OperatorProfile.PREFIX}tool.`)).map((id) => OperatorProfile.own(id)),
+    ]),
+  )
+}
+
+const ownOverride = (override: OperatorProfile.Override | undefined) =>
+  override
+    ? {
+        ...(override.group ? { group: OperatorProfile.own(override.group) } : {}),
+        ...(override.slots ? { slots: ownSlots(override.slots) } : {}),
+      }
+    : undefined
+
+// A namespace's profiles, default profile, and its projects' and agents' settings, pointed at its own
+// copies of OpenCode's built-ins.
+async function pointAtOwn(ns: string) {
+  const dir = path.join(root(), ns, "profiles")
+  for (const file of await Glob.scan("*.json", { cwd: dir, absolute: true }).catch(() => [] as string[])) {
+    const data = (await Bun.file(file)
+      .json()
+      .catch(() => undefined)) as Record<string, unknown> | undefined
+    if (!data) continue
+    const group = typeof data.group === "string" ? OperatorProfile.own(data.group) : data.group
+    await writeJson(file, { ...data, group, slots: ownSlots(slotsOf(data.slots)) })
+  }
+  const record = await readNamespaceRecord(ns)
+  if (record?.defaultProfile && OperatorProfile.isBuiltin(record.defaultProfile))
+    await writeNamespace({ ...record, defaultProfile: OperatorProfile.own(record.defaultProfile) })
+  const projects = await readProjects()
+  const members = Object.keys(projects).filter((key) => projects[key]!.namespace === ns)
+  let changed = false
+  for (const key of members) {
+    const setting = projects[key]!
+    if (setting.defaultProfile && OperatorProfile.isBuiltin(setting.defaultProfile)) {
+      projects[key] = { ...setting, defaultProfile: OperatorProfile.own(setting.defaultProfile) }
+      changed = true
+    }
+  }
+  if (changed) await writeJson(path.join(root(), "projects.json"), projects)
+  const agents = await readAgents()
+  for (const key of members)
+    for (const [name, setting] of Object.entries(agents[key] ?? {})) {
+      const override = ownOverride(setting.override)
+      agents[key]![name] = {
+        ...(setting.profile ? { profile: OperatorProfile.own(setting.profile) } : {}),
+        ...(override ? { override } : {}),
+      }
+    }
+  if (members.some((key) => agents[key])) await writeJson(path.join(root(), "agents.json"), agents)
 }
 
 // A project in Trash loses its prompt settings and its agents' settings (kept with the Trash entry).
@@ -464,7 +586,7 @@ const layer = Layer.effect(
       return {
         namespace: found.namespace,
         types: OperatorProfile.types(found),
-        layers: [...OperatorProfile.BUILTIN_LAYERS, ...found.layers],
+        layers: OperatorProfile.isOpenCode(found) ? [...OperatorProfile.BUILTIN_LAYERS, ...found.layers] : found.layers,
         groups: OperatorProfile.groups(found),
         profiles: OperatorProfile.profiles(found),
         projects,
@@ -514,7 +636,8 @@ const layer = Layer.effect(
       const found = yield* load(ns)
       const before = yield* existing(found.layers, "layer", id)
       // Your Dynamic layers hold a prompt; the dynamic generator writes their text for each session.
-      const written = (before?.type ?? input.type) === OperatorProfile.DYNAMIC
+      // (A namespace's copy of one of OpenCode's per-request layers holds nothing.)
+      const written = (before?.type ?? input.type) === OperatorProfile.DYNAMIC && !before?.replaces
       yield* refuse(written && !input.prompt?.trim() ? "A Dynamic layer needs a prompt" : undefined)
       // A copy keeps its type and section; a layer's type changes only in Custom.
       const type = before?.replaces ? before.type : input.type
@@ -540,6 +663,7 @@ const layer = Layer.effect(
         type,
         section,
         ...(before?.replaces ? { replaces: before.replaces } : {}),
+        ...(before?.basedOn ? { basedOn: before.basedOn } : {}),
         text: written ? "" : input.text,
         ...(written ? { prompt: input.prompt!.trim() } : {}),
         origin: "user",
@@ -553,8 +677,8 @@ const layer = Layer.effect(
       id: string,
       text?: string,
     ) {
-      const found = yield* load(ns)
-      const original = OperatorProfile.findLayer(found, id)
+      yield* load(ns)
+      const original = OperatorProfile.builtinLayerById(id)
       if (!original || original.origin !== "builtin")
         return yield* new InvalidError({ message: `"${id}" is not one of OpenCode's texts` })
       const name = `${original.name} – copy`
@@ -565,8 +689,23 @@ const layer = Layer.effect(
         section: original.section,
         replaces: original.id,
         text: text ?? original.text,
+        ...(original.text ? { basedOn: OperatorProfile.fingerprint(original.text) } : {}),
         origin: "user",
       }
+      yield* Effect.promise(() => writeItem(ns, "layer", next))
+      return next
+    })
+
+    // A copy of one of OpenCode's texts takes OpenCode's current text (after a release changed it).
+    const syncLayer = Effect.fn("OperatorProfileStore.syncLayer")(function* (ns: string, id: string) {
+      const found = yield* load(ns)
+      const layer = found.layers.find((item) => item.id === id)
+      if (!layer) return yield* new NotFoundError({ message: `No layer "${id}" in ${found.namespace.name}` })
+      const original = layer.replaces ? OperatorProfile.builtinLayerById(layer.replaces) : undefined
+      if (!original?.text)
+        return yield* new InvalidError({ message: `${layer.name} is not a copy of one of OpenCode's texts` })
+      const { outdated: _, ...rest } = layer
+      const next = { ...rest, text: original.text, basedOn: OperatorProfile.fingerprint(original.text) }
       yield* Effect.promise(() => writeItem(ns, "layer", next))
       return next
     })
@@ -647,7 +786,9 @@ const layer = Layer.effect(
       yield* refuse(ns === target ? "Choose another namespace" : undefined)
       const source = yield* load(ns)
       const destination = yield* load(target)
-      yield* refuse(OperatorProfile.isBuiltin(id) ? "OpenCode's own items are in every namespace already" : undefined)
+      yield* refuse(
+        OperatorProfile.isBuiltin(id) ? "Every namespace has its own copies of OpenCode's items already" : undefined,
+      )
       return (yield* Effect.promise(() => copyItems(source, destination, [{ kind, id }], { kind, id }))).copied
     })
 
@@ -813,6 +954,7 @@ const layer = Layer.effect(
       saveType,
       saveLayer,
       copyBuiltin,
+      syncLayer,
       saveGroup,
       saveProfile,
       remove,
@@ -871,7 +1013,26 @@ async function copyItems(
   }
   const sources = { type: from.types, layer: from.layers, group: from.groups, profile: from.profiles }
   const visit = async (ref: Ref): Promise<string> => {
-    if (OperatorProfile.isBuiltin(ref.id)) return ref.id
+    // OpenCode's item, or a namespace's own copy of it: the target's own version (the built-in itself
+    // in OpenCode), copied there first if the target has none.
+    const builtin = ref.kind === "type" ? undefined : OperatorProfile.builtinOf(ref.kind, ref.id)
+    if (builtin && (OperatorProfile.isBuiltin(ref.id) || OperatorProfile.own(builtin) === ref.id)) {
+      const target = ns === OperatorProfile.OPENCODE ? builtin : OperatorProfile.own(builtin)
+      ids.set(`${ref.kind}:${ref.id}`, target)
+      if (ns === OperatorProfile.OPENCODE || lists[ref.kind].some((entry) => entry.id === target)) return target
+      const source =
+        (sources[ref.kind] as ReadonlyArray<{ id: string; name: string }>).find((entry) => entry.id === ref.id) ??
+        (ref.kind === "layer" ? OperatorProfile.builtinLayerById(builtin) : undefined)
+      if (!source) return target
+      const content =
+        ref.kind === "layer" && source.id === builtin
+          ? { ...(source as OperatorProfile.Layer), origin: "user" as const, replaces: builtin }
+          : await remap(ref.kind, source)
+      const next = { ...content, id: target, name: source.name }
+      lists[ref.kind].push(next)
+      if (!dryRun) await writeItem(ns, ref.kind, next as never)
+      return target
+    }
     const known = ids.get(`${ref.kind}:${ref.id}`)
     if (known) return known
     const item = (sources[ref.kind] as ReadonlyArray<{ id: string; name: string }>).find((entry) => entry.id === ref.id)
@@ -1004,10 +1165,13 @@ async function writeItem(
       type: value.type,
       section: value.section,
       ...(value.replaces ? { replaces: value.replaces } : {}),
+      ...(value.basedOn ? { basedOn: value.basedOn } : {}),
     }
     // A Dynamic layer's file holds its prompt.
+    // One newline is added here and taken off when read, so texts keep their own last newline (a
+    // copy of OpenCode's text must stay byte for byte the same).
     const body = value.prompt ?? value.text
-    return write(file, matter.stringify(body.endsWith("\n") ? body : `${body}\n`, data))
+    return write(file, matter.stringify(`${body}\n`, data))
   }
   return writeJson(file, Object.fromEntries(Object.entries(item).filter((pair) => pair[0] !== "builtin")))
 }
@@ -1044,14 +1208,24 @@ async function readLayers(dir: string): Promise<OperatorProfile.Layer[]> {
       const section = Schema.decodeUnknownOption(OperatorProfile.Section)(data.section)
       const type = typeof data.type === "string" ? data.type : "identity"
       const body = parsed.content.replace(/\n$/, "")
+      const replaces = typeof data.replaces === "string" ? data.replaces : undefined
+      const original = replaces ? OperatorProfile.builtinLayerById(replaces) : undefined
+      const basedOn = typeof data.basedOn === "string" ? data.basedOn : undefined
+      // Your Dynamic layers hold a prompt; copies of OpenCode's per-request layers hold nothing.
+      const written = type === OperatorProfile.DYNAMIC && !replaces
       return {
         id: path.basename(file, ".md"),
         name: typeof data.name === "string" ? data.name : path.basename(file, ".md"),
         type,
         section: section._tag === "Some" ? section.value : "custom",
-        ...(typeof data.replaces === "string" ? { replaces: data.replaces } : {}),
-        // A Dynamic layer's file holds its prompt.
-        ...(type === OperatorProfile.DYNAMIC ? { text: "", prompt: body } : { text: body }),
+        ...(replaces ? { replaces } : {}),
+        ...(written ? { text: "", prompt: body } : { text: body }),
+        ...(original?.delivery ? { delivery: original.delivery } : {}),
+        ...(basedOn ? { basedOn } : {}),
+        // OpenCode changed its text since this copy was made (a release).
+        ...(basedOn && original?.text && OperatorProfile.fingerprint(original.text) !== basedOn
+          ? { outdated: true }
+          : {}),
         origin: "user",
       }
     }),

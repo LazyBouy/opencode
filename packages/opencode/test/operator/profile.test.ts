@@ -363,7 +363,7 @@ describe("save checks", () => {
     expect(OperatorProfile.checkLayer(loaded, { name: "x", type: "role", replaces: `${P}base.gemini` })).toContain(
       "keeps its type",
     )
-    expect(OperatorProfile.checkLayer(loaded, { name: "x", type: "identity", replaces: `${P}slot.base` })).toContain(
+    expect(OperatorProfile.checkLayer(loaded, { name: "x", type: "purpose", replaces: `${P}purpose.org` })).toContain(
       "not one of OpenCode's texts",
     )
     expect(OperatorProfile.checkLayer(loaded, { name: "x", type: "rules" })).toBeUndefined()

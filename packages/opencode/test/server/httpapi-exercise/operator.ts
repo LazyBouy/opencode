@@ -452,6 +452,13 @@ export const operatorScenarios: Scenario[] = [
     }))
     .status(404),
   http.protected
+    .post("/operator/namespaces/{ns}/layers/{id}/sync", "operator.namespace.layer.sync")
+    .at((ctx) => ({
+      path: route("/operator/namespaces/{ns}/layers/{id}/sync", { ns: "opencode", id: "missing" }),
+      headers: ctx.headers(),
+    }))
+    .status(404),
+  http.protected
     .post("/operator/namespaces/{ns}/copy", "operator.namespace.copy")
     .at((ctx) => ({
       path: route("/operator/namespaces/{ns}/copy", { ns: "opencode" }),

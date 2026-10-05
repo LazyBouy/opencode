@@ -60,6 +60,7 @@ export const operatorNamespaceHandlers = HttpApiBuilder.group(OperatorRootApi, "
       .handle("layerCopy", (ctx) =>
         store.copyBuiltin(ctx.params.ns, ctx.params.id, ctx.payload.text).pipe(Effect.mapError(apiError)),
       )
+      .handle("layerSync", (ctx) => store.syncLayer(ctx.params.ns, ctx.params.id).pipe(Effect.mapError(apiError)))
       .handle("groupCreate", (ctx) =>
         store.saveGroup(ctx.params.ns, undefined, ctx.payload).pipe(Effect.mapError(apiError)),
       )

@@ -2333,6 +2333,8 @@ export type OperatorPromptLayer = {
   text: string
   origin: OperatorPromptOrigin
   delivery?: "tool" | "conversation"
+  basedOn?: string
+  outdated?: boolean
   prompt?: string
 }
 
@@ -8895,6 +8897,39 @@ export type OperatorNamespaceLayerCopyResponses = {
 
 export type OperatorNamespaceLayerCopyResponse =
   OperatorNamespaceLayerCopyResponses[keyof OperatorNamespaceLayerCopyResponses]
+
+export type OperatorNamespaceLayerSyncData = {
+  body?: never
+  path: {
+    ns: string
+    id: string
+  }
+  query?: never
+  url: "/operator/namespaces/{ns}/layers/{id}/sync"
+}
+
+export type OperatorNamespaceLayerSyncErrors = {
+  /**
+   * OperatorProfileInvalidError | InvalidRequestError
+   */
+  400: OperatorProfileInvalidError | InvalidRequestError
+  /**
+   * OperatorProfileNotFoundError
+   */
+  404: OperatorProfileNotFoundError
+}
+
+export type OperatorNamespaceLayerSyncError = OperatorNamespaceLayerSyncErrors[keyof OperatorNamespaceLayerSyncErrors]
+
+export type OperatorNamespaceLayerSyncResponses = {
+  /**
+   * The copy, with OpenCode's current text
+   */
+  200: OperatorPromptLayer
+}
+
+export type OperatorNamespaceLayerSyncResponse =
+  OperatorNamespaceLayerSyncResponses[keyof OperatorNamespaceLayerSyncResponses]
 
 export type OperatorNamespaceGroupCreateData = {
   body?: {

@@ -1178,7 +1178,7 @@
             }
           }
         },
-        "description": "Create a namespace as a copy of OpenCode: OpenCode's own types, layers, groups and profiles are copied, and built-in items stay shared. It starts with no projects.",
+        "description": "Create a namespace as a copy of OpenCode: it gets its own copies of OpenCode's built-in layers, groups and profiles (built-ins belong to OpenCode), and of OpenCode's own types, layers, groups and profiles. It starts with no projects.",
         "summary": "Create a namespace",
         "requestBody": {
           "content": {
@@ -2063,6 +2063,77 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespace.layer.copy({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/namespaces/{ns}/layers/{id}/sync": {
+      "post": {
+        "tags": ["operator namespaces"],
+        "operationId": "operator.namespace.layer.sync",
+        "parameters": [
+          {
+            "name": "ns",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The copy, with OpenCode's current text",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPromptLayer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProfileInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProfileInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProfileNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProfileNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "A copy of one of OpenCode's texts takes OpenCode's current text, after a release changed it (the copy is marked outdated).",
+        "summary": "Take OpenCode's text",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespace.layer.sync({\n  ...\n})"
           }
         ]
       }
@@ -26886,6 +26957,12 @@
           "delivery": {
             "type": "string",
             "enum": ["tool", "conversation"]
+          },
+          "basedOn": {
+            "type": "string"
+          },
+          "outdated": {
+            "type": "boolean"
           },
           "prompt": {
             "type": "string"
