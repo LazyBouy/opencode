@@ -161,7 +161,27 @@ export interface PromptMock {
   readonly writes: Array<{ method: string; path: string; body: unknown }>
 }
 
-export function createPromptMock(projects: Array<{ key: string; name: string }>) {
+// What OpenCode writes per request in the mock: generated layers by id (empty ones are not sent).
+const generated = (directory: string): Record<string, { text: string; source: string }> => ({
+  [`${PREFIX}generated.environment`]: {
+    text: "You are powered by the model named Claude Opus 4.6.\n<env>\n  Working directory: /repo\n</env>",
+    source: "generated",
+  },
+  [`${PREFIX}generated.instructions`]: {
+    text: `Instructions from: ${directory}/AGENTS.md\nUse Bun.`,
+    source: `${directory}/AGENTS.md`,
+  },
+  [`${PREFIX}generated.skills`]: {
+    text: "<available_skills>\n  <skill>review</skill>\n</available_skills>",
+    source: "generated",
+  },
+})
+
+export function createPromptMock(
+  projects: Array<{ key: string; name: string }>,
+  // An agent's own prompt, if it has one.
+  ownPrompt: (agent: string) => string | undefined = () => undefined,
+) {
   const state: PromptMock = {
     namespaces: [{ id: "opencode", name: "OpenCode", purpose: "", createdAt: 0, updatedAt: 0 }],
     items: { opencode: { types: [], layers: [], groups: [], profiles: [] } },
@@ -242,6 +262,72 @@ export function createPromptMock(projects: Array<{ key: string; name: string }>)
     }
   }
 
+  // A small stand-in for the assembler: Purpose, then the effective group's slots in order.
+  const preview = (url: URL) => {
+    const project = url.searchParams.get("directory") ?? ""
+    const name = url.searchParams.get("agent") ?? "build"
+    const chosen = agentPrompt(project, name)
+    const link = state.projects[project] ?? { namespace: "opencode" }
+    const loaded = catalog(link.namespace)
+    const asked = url.searchParams.get("profile")
+    const profile = loaded.profiles.find((item) => item.id === (asked ?? chosen.profile.id))!
+    const override = asked ? undefined : chosen.setting.override
+    const group = loaded.groups.find((item) => item.id === (override?.group ?? profile.group))!
+    const typeName = (id: string) => loaded.types.find((item) => item.id === id)?.name ?? id
+    const own = ownPrompt(name)
+    const base = builtinLayers.find((layer) => layer.id === `${PREFIX}base.default`)!
+    const extra = generated(project)
+    const section = (type: string, entry: string, layer: Layer, text: string, source: string, automatic = false) => ({
+      type,
+      typeName: typeName(type),
+      layer: layer.id,
+      layerName: layer.name,
+      entry,
+      automatic,
+      changed: !!override?.slots?.[type],
+      source,
+      text,
+    })
+    const purpose = loaded.layers.find((layer) => layer.id === link.purpose)
+    const org = builtinLayers.find((layer) => layer.id === `${PREFIX}purpose.org`)!
+    const sections = [
+      ...(loaded.namespace.purpose
+        ? [section("purpose", org.id, org, loaded.namespace.purpose, loaded.namespace.name, true)]
+        : []),
+      ...(purpose ? [section("purpose", purpose.id, purpose, purpose.text, purpose.name, true)] : []),
+      ...group.types
+        .filter((type) => type !== "purpose")
+        .flatMap((type) =>
+          (override?.slots?.[type] ?? profile.slots[type] ?? []).flatMap((entry) => {
+            const layer = loaded.layers.find((item) => item.id === entry)
+            if (!layer) return []
+            if (entry === `${PREFIX}slot.base`) return [section(type, entry, layer, base.text, "base.default")]
+            if (entry === `${PREFIX}slot.agent`) return own ? [section(type, entry, layer, own, name)] : []
+            if (entry === `${PREFIX}slot.agent-or-base`)
+              return [
+                own ? section(type, entry, layer, own, name) : section(type, entry, layer, base.text, "base.default"),
+              ]
+            const written = extra[entry]
+            if (written) return [section(type, entry, layer, written.text, written.source)]
+            if (layer.origin !== "user" || layer.replaces) return []
+            return [section(type, entry, layer, layer.text, layer.name)]
+          }),
+        ),
+    ]
+    return {
+      agent: name,
+      model: "opencode/claude-opus-4-6",
+      base: "base.default",
+      namespace: chosen.namespace,
+      project: { key: project, name: nameOf(project) },
+      profile: asked ? { id: profile.id, name: profile.name, source: chosen.profile.source } : chosen.profile,
+      group: { id: group.id, name: group.name },
+      override: Object.keys(override?.slots ?? {}),
+      sections,
+      system: [sections.map((item) => item.text).join("\n")],
+    }
+  }
+
   const handle = (route: Route, url: URL, method: string) => {
     const body = (method === "GET" || method === "DELETE" ? null : route.request().postDataJSON()) as Record<
       string,
@@ -249,6 +335,7 @@ export function createPromptMock(projects: Array<{ key: string; name: string }>)
     > | null
     if (method !== "GET") state.writes.push({ method, path: url.pathname, body })
 
+    if (url.pathname === "/operator/prompt/preview") return json(route, preview(url))
     if (url.pathname === "/operator/project-settings") {
       if (method === "GET")
         return json(

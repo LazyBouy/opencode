@@ -137,60 +137,6 @@ export const promptCatalog = {
   ],
 }
 
-const section = (
-  groupName: string,
-  groupType: string,
-  layerName: string,
-  fields: { layer: string; section: string; text: string; source?: string; mandatory?: boolean; overrides?: string },
-) => ({
-  group: `builtin.${groupType}`,
-  groupName,
-  groupType,
-  entry: fields.layer,
-  layerName,
-  source: "generated",
-  mandatory: false,
-  message: ["purpose", "identity", "role", "platform"].includes(groupType) ? 1 : 2,
-  ...fields,
-})
-
-export const promptPreview = {
-  agent: "build",
-  model: "opencode/claude-opus-4-6",
-  base: "base.default",
-  project: { key: "opencode", name: "OpenCode" },
-  profile: { id: "default", name: "Default" },
-  mode: "profile",
-  sections: [
-    section("Purpose", "purpose", "Terse", {
-      layer: "terse",
-      section: "base",
-      overrides: "base.default",
-      text: "Be terse.",
-      source: "terse",
-      mandatory: true,
-    }),
-    section("Identity", "identity", "voice", { layer: "file-voice", section: "identity", text: "We build editors." }),
-    section("Environment", "custom", "Environment", {
-      layer: "generated.environment",
-      section: "generated",
-      text: "You are powered by the model named Claude Opus 4.6.\n<env>\n  Working directory: /repo\n</env>",
-    }),
-    section("Project instructions", "custom", "Instructions", {
-      layer: "generated.instructions",
-      section: "generated",
-      text: `Instructions from: ${directory}/AGENTS.md\nUse Bun.`,
-      source: `${directory}/AGENTS.md`,
-    }),
-    section("Capabilities", "capabilities", "Skills", {
-      layer: "generated.skills",
-      section: "generated",
-      text: "<available_skills>\n  <skill>review</skill>\n</available_skills>",
-    }),
-  ],
-  system: ["Be terse.\nWe build editors.", "You are powered by the model named Claude Opus 4.6."],
-}
-
 export const memoryOverview = {
   files: [
     {
@@ -258,7 +204,10 @@ export interface OperatorMock {
 }
 
 export async function mockOperator(page: Page) {
-  const prompt = createPromptMock([{ key: directory, name: "smoke-project" }])
+  const prompt = createPromptMock(
+    [{ key: directory, name: "smoke-project" }],
+    (name) => (agents.find((agent) => agent.name === name) as { prompt?: string } | undefined)?.prompt,
+  )
   const state: OperatorMock = {
     replies: [],
     writes: [],
@@ -328,7 +277,8 @@ export async function mockOperator(page: Page) {
     if (
       url.pathname.startsWith("/operator/namespaces") ||
       url.pathname === "/operator/project-settings" ||
-      url.pathname.startsWith("/operator/agent-prompt/")
+      url.pathname.startsWith("/operator/agent-prompt/") ||
+      url.pathname === "/operator/prompt/preview"
     )
       return prompt.handle(route, url, method)
     if (url.pathname.startsWith("/operator/agent") && method !== "GET") {
@@ -371,23 +321,6 @@ export async function mockOperator(page: Page) {
       return json(route, { path: `${directory}/.opencode/opencode.jsonc`, changed: true })
     }
     if (url.pathname === "/operator/prompt") return json(route, promptCatalog)
-    if (url.pathname === "/operator/prompt/preview") {
-      // An agent with its own prompt sends it instead of the base prompt.
-      const own = (
-        agents.find((agent) => agent.name === url.searchParams.get("agent")) as { prompt?: string } | undefined
-      )?.prompt
-      return json(route, {
-        ...promptPreview,
-        agent: url.searchParams.get("agent"),
-        sections: [
-          ...promptPreview.sections.slice(0, 2),
-          ...(own
-            ? [section("Identity", "identity", "Agent prompt", { layer: "slot.agent", section: "identity", text: own })]
-            : []),
-          ...promptPreview.sections.slice(2),
-        ],
-      })
-    }
     if (url.pathname === "/operator/folder/roots") return json(route, [workspace])
     if (url.pathname === "/operator/folder" && method === "GET")
       return json(route, listing(url.searchParams.get("path") ?? workspace))

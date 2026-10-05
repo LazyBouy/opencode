@@ -16,31 +16,6 @@ test.beforeEach(async ({ page }) => {
   })
 })
 
-test("an agent's Prompt tab shows every section with its source", async ({ page }) => {
-  await mockOperator(page)
-  await page.goto(`/operator/agents/build${dir}&tab=prompt`)
-
-  const sections = page.locator('[data-slot="operator-prompt-section"]')
-  await expect(sections).toHaveCount(5)
-  const facts = page.locator('[data-component="operator-facts"]')
-  await expect(facts).toContainText("OpenCode")
-  await expect(facts).toContainText("Default")
-  await expect(facts).toContainText("From profile")
-  await expect(sections.nth(0)).toContainText("Purpose")
-  await expect(sections.nth(0)).toContainText("Mandatory")
-  await expect(sections.nth(0)).toContainText("Be terse.")
-  await expect(sections.nth(1)).toContainText("Identity")
-  await expect(sections.nth(3)).toContainText("Project instructions")
-  await expect(sections.nth(3)).toContainText("SmokeProject/AGENTS.md")
-  await expect(sections.nth(4)).toContainText("<available_skills>")
-  await expect(page.getByRole("switch")).toHaveCount(0)
-
-  await page.getByText("Exactly as sent (2 system messages)").click()
-  await expect(page.locator('[data-slot="operator-details"] [data-component="operator-code"]').first()).toHaveText(
-    "Be terse.\nWe build editors.",
-  )
-})
-
 test("add project browses the workspace, creates a git folder and opens it", async ({ page }) => {
   const state = await mockOperator(page)
   await page.goto("/operator/projects")

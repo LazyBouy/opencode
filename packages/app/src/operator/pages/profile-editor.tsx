@@ -25,7 +25,9 @@ export function SlotEditor(props: {
   value: SlotValue
   disabled?: boolean
   changed?: (type: string) => boolean
+  groupChanged?: boolean
   onReset?: (type: string) => void
+  onResetGroup?: () => void
   onChange: (value: SlotValue, type?: string) => void
 }) {
   const language = useLanguage()
@@ -60,18 +62,28 @@ export function SlotEditor(props: {
   return (
     <div class="flex flex-col gap-3">
       <Field group label={language.t("operator.profile.group")} hint={language.t("operator.profile.groupHint")}>
-        <SelectV2<string>
-          appearance="base"
-          aria-label={language.t("operator.profile.group")}
-          disabled={props.disabled}
-          options={props.catalog.groups.map((item) => item.id)}
-          current={props.value.group}
-          label={(id) => {
-            const found = props.catalog.groups.find((item) => item.id === id)
-            return found ? names.group(found) : id
-          }}
-          onSelect={(id) => id && void pickGroup(id)}
-        />
+        <div class="flex items-center gap-2 flex-wrap">
+          <SelectV2<string>
+            appearance="base"
+            aria-label={language.t("operator.profile.group")}
+            disabled={props.disabled}
+            options={props.catalog.groups.map((item) => item.id)}
+            current={props.value.group}
+            label={(id) => {
+              const found = props.catalog.groups.find((item) => item.id === id)
+              return found ? names.group(found) : id
+            }}
+            onSelect={(id) => id && void pickGroup(id)}
+          />
+          <Show when={props.groupChanged}>
+            <Tag>{language.t("operator.profile.changed")}</Tag>
+            <Show when={props.onResetGroup}>
+              <ButtonV2 size="small" variant="ghost" onClick={() => props.onResetGroup!()}>
+                {language.t("operator.profile.resetGroup")}
+              </ButtonV2>
+            </Show>
+          </Show>
+        </div>
       </Field>
       <For each={group()?.types ?? []}>
         {(type) => (
