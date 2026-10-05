@@ -11,6 +11,8 @@ import { Provider } from "@/provider/provider"
 import { Instruction } from "@/session/instruction"
 import { SystemPrompt } from "@/session/system"
 import { ToolRegistry } from "@/tool/registry"
+import { OperatorGenerate } from "./generate"
+import { OperatorHelperTexts } from "./helper-texts"
 import { OperatorProfile } from "./profile"
 import { OperatorProfileStore } from "./profile-store"
 import { OperatorProjects } from "./projects"
@@ -74,7 +76,13 @@ export interface Interface {
     layer: string
     providerID?: string
     modelID?: string
-  }) => Effect.Effect<Sample, NotFoundError>
+  }) => Effect.Effect<Sample, NotFoundError | OperatorGenerate.GenerateError>
+  /** A draft org or project purpose, written by the purpose generator. */
+  readonly purpose: (input: {
+    kind: "org" | "project"
+    ns?: string
+    brief?: string
+  }) => Effect.Effect<string, OperatorGenerate.GenerateError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorPrompts") {}
@@ -87,6 +95,7 @@ const layer = Layer.effect(
     const system = yield* SystemPrompt.Service
     const instruction = yield* Instruction.Service
     const registry = yield* ToolRegistry.Service
+    const helpers = yield* OperatorHelperTexts.Service
 
     // The project's tools with their own descriptions; prompt profiles override them.
     const catalog = Effect.fn("OperatorPrompts.catalog")(function* () {
@@ -131,6 +140,18 @@ const layer = Layer.effect(
       modelID?: string
     }) {
       const { agent, model, loaded, parts } = yield* request(input)
+      // Your Dynamic layers are written by the dynamic generator, here without a session.
+      const own = OperatorProfile.findLayer(loaded.catalog, input.layer)
+      if (own && OperatorProfile.isWrittenDynamic(own)) {
+        const text = yield* helpers.sample(own)
+        return {
+          agent: agent.name,
+          model: `${model.providerID}/${model.id}`,
+          layer: input.layer,
+          text,
+          source: own.name,
+        }
+      }
       const found = OperatorProfile.sample(
         {
           catalog: loaded.catalog,
@@ -165,6 +186,7 @@ const layer = Layer.effect(
         profile: input.profile,
         model,
         parts,
+        dynamic: written(loaded.catalog),
       })
       return {
         agent: agent.name,
@@ -180,12 +202,22 @@ const layer = Layer.effect(
       }
     })
 
-    return Service.of({ catalog, preview, sample })
+    // Your Dynamic layers are written for each session; the preview shows where their text goes.
+    const written = (catalog: OperatorProfile.Catalog) =>
+      new Map(
+        catalog.layers
+          .filter((item) => OperatorProfile.isWrittenDynamic(item))
+          .map((item) => [item.id, `‹${item.name}: written for each session by the dynamic generator›`] as const),
+      )
+
+    const purpose = (input: { kind: "org" | "project"; ns?: string; brief?: string }) => helpers.purpose(input)
+
+    return Service.of({ catalog, preview, sample, purpose })
   }),
 )
 
 export const node = LayerNode.make({
   service: Service,
   layer,
-  deps: [Agent.node, Provider.node, SystemPrompt.node, Instruction.node, ToolRegistry.node],
+  deps: [Agent.node, Provider.node, SystemPrompt.node, Instruction.node, ToolRegistry.node, OperatorHelperTexts.node],
 })

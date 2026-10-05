@@ -80,6 +80,9 @@ export const Layer = Schema.Struct({
   delivery: Schema.optional(Schema.Literals(["tool", "conversation"])).annotate({
     description: "Texts not sent in the system prompt: with the tool, or in the conversation",
   }),
+  prompt: Schema.optional(Schema.String).annotate({
+    description: "Your Dynamic layers: what the dynamic generator writes for each session",
+  }),
 }).annotate({ identifier: "OperatorPromptLayer" })
 export type Layer = typeof Layer.Type
 
@@ -257,8 +260,14 @@ export const OPENCODE_PROFILE = base("profile.opencode")
 // The helper profile each of OpenCode's helper agents uses unless it names a profile of its own. The
 // agent generator is not an agent; its one call goes by this name.
 export const AGENT_GENERATOR = "agent-generator"
+// The fork's own helper agents: they draft purposes and write your Dynamic layers.
+export const PURPOSE_GENERATOR = "purpose-generator"
+export const DYNAMIC_GENERATOR = "dynamic-generator"
 export const HELPER_DEFAULTS: ReadonlyMap<string, string> = new Map(
-  ["title", "summary", "compaction", AGENT_GENERATOR].map((name) => [name, base(`profile.helper.${name}`)]),
+  ["title", "summary", "compaction", AGENT_GENERATOR, PURPOSE_GENERATOR, DYNAMIC_GENERATOR].map((name) => [
+    name,
+    base(`profile.helper.${name}`),
+  ]),
 )
 // The helper profile that replaced "OpenCode helper", which every helper agent used.
 const LEGACY_HELPER = base("profile.helper")
@@ -282,6 +291,11 @@ export function groups(catalog: Catalog) {
 export function profiles(catalog: Catalog) {
   return [...BUILTIN_PROFILES, ...catalog.profiles]
 }
+// A Dynamic layer of yours: the dynamic generator writes its text for each session from its prompt.
+export function isWrittenDynamic(layer: Layer | undefined): boolean {
+  return layer?.type === DYNAMIC && layer.origin === "user"
+}
+
 // A helper profile: its group holds the Helper type.
 export function isHelper(catalog: Catalog, profile: { group: string }) {
   return groups(catalog).some((item) => item.id === profile.group && item.types.includes(HELPER))
@@ -351,6 +365,9 @@ export type AssembleInput = {
   readonly profile?: string
   readonly model: OperatorPromptText.ModelRef
   readonly parts: Parts
+  // The texts of your Dynamic layers for this request (written per session); a layer without one adds
+  // nothing.
+  readonly dynamic?: ReadonlyMap<string, string>
 }
 
 // Builds a request's system prompt (spec §5): the profile's group in order, each type's slot in
@@ -406,6 +423,7 @@ export function sample(input: AssembleInput, id: string) {
   if (found.origin === "automatic")
     return { text: input.catalog.namespace.purpose, source: input.catalog.namespace.name }
   if (found.replaces || found.type === HELPER) return { text: found.text, source: found.name }
+  if (isWrittenDynamic(found)) return { text: input.dynamic?.get(found.id) ?? "", source: found.name }
   const items = resolve(input, new Map(), id)
   return { text: items.map((item) => item.text).join("\n"), source: items[0]?.source ?? "" }
 }
@@ -478,6 +496,7 @@ function resolve(input: AssembleInput, copies: Map<string, Layer>, entry: string
   // Copies stand in for their built-in where it is used; on their own they add nothing.
   // A helper agent's prompt is its helper layer, a copy or OpenCode's.
   if (found.type === HELPER) return one(found.text, found.origin === "builtin" ? "OpenCode" : found.name)
+  if (isWrittenDynamic(found)) return one(input.dynamic?.get(found.id), found.name)
   if (found.replaces) {
     if (found.replaces !== base("notice.structured-output") || !input.parts.output) return []
     return one(found.text, found.name)

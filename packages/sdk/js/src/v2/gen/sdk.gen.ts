@@ -212,6 +212,8 @@ import type {
   OperatorPromptOverride,
   OperatorPromptPreviewErrors,
   OperatorPromptPreviewResponses,
+  OperatorPromptPurposeErrors,
+  OperatorPromptPurposeResponses,
   OperatorPromptSampleErrors,
   OperatorPromptSampleResponses,
   OperatorPromptSection,
@@ -1798,6 +1800,7 @@ export class Layer extends HeyApiClient {
       type?: string
       section?: OperatorPromptSection
       text?: string
+      prompt?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1811,6 +1814,7 @@ export class Layer extends HeyApiClient {
             { in: "body", key: "type" },
             { in: "body", key: "section" },
             { in: "body", key: "text" },
+            { in: "body", key: "prompt" },
           ],
         },
       ],
@@ -1878,6 +1882,7 @@ export class Layer extends HeyApiClient {
       type?: string
       section?: OperatorPromptSection
       text?: string
+      prompt?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1892,6 +1897,7 @@ export class Layer extends HeyApiClient {
             { in: "body", key: "type" },
             { in: "body", key: "section" },
             { in: "body", key: "text" },
+            { in: "body", key: "prompt" },
           ],
         },
       ],
@@ -3128,7 +3134,7 @@ export class Prompt extends HeyApiClient {
   /**
    * Sample a layer
    *
-   * What one layer fills in for an agent of this project and a model: a Dynamic layer's text (the agent's prompt, the base prompt for the model, the environment, skills, MCP instructions, instruction files), or a fixed layer's text.
+   * What one layer fills in for an agent of this project and a model: a Dynamic layer's text (the agent's prompt, the base prompt for the model, the environment, skills, MCP instructions, instruction files; your Dynamic layers are written by the dynamic generator), or a fixed layer's text.
    */
   public sample<ThrowOnError extends boolean = false>(
     parameters: {
@@ -3164,6 +3170,51 @@ export class Prompt extends HeyApiClient {
       url: "/operator/prompt/sample",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Draft a purpose
+   *
+   * Ask the purpose generator (a helper agent) for a draft project purpose, from this project's files, or org purpose, from the namespace's projects, following an optional brief. Nothing is saved.
+   */
+  public purpose<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      kind?: "org" | "project"
+      ns?: string
+      brief?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "kind" },
+            { in: "body", key: "ns" },
+            { in: "body", key: "brief" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorPromptPurposeResponses,
+      OperatorPromptPurposeErrors,
+      ThrowOnError
+    >({
+      url: "/operator/prompt/purpose",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 }

@@ -14,6 +14,7 @@ export const OperatorPromptPaths = {
   catalog: "/operator/prompt",
   preview: "/operator/prompt/preview",
   sample: "/operator/prompt/sample",
+  purpose: "/operator/prompt/purpose",
 } as const
 
 export class ApiPromptNotFoundError extends Schema.ErrorClass<{
@@ -22,6 +23,14 @@ export class ApiPromptNotFoundError extends Schema.ErrorClass<{
 }>("OperatorPromptNotFoundError")(
   { name: Schema.Literal("OperatorPromptNotFoundError"), data: Schema.Struct({ message: Schema.String }) },
   { httpApiStatus: 404 },
+) {}
+
+export class ApiPromptGenerateError extends Schema.ErrorClass<{
+  readonly name: "OperatorPromptGenerateError"
+  readonly data: { readonly message: string }
+}>("OperatorPromptGenerateError")(
+  { name: Schema.Literal("OperatorPromptGenerateError"), data: Schema.Struct({ message: Schema.String }) },
+  { httpApiStatus: 502 },
 ) {}
 
 export const OperatorPromptApi = HttpApi.make("operator-prompt")
@@ -68,13 +77,35 @@ export const OperatorPromptApi = HttpApi.make("operator-prompt")
             model: Schema.optional(Schema.String),
           }),
           success: described(OperatorPrompts.Sample, "What the layer fills in"),
-          error: ApiPromptNotFoundError,
+          error: [ApiPromptNotFoundError, ApiPromptGenerateError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "operator.prompt.sample",
             summary: "Sample a layer",
             description:
-              "What one layer fills in for an agent of this project and a model: a Dynamic layer's text (the agent's prompt, the base prompt for the model, the environment, skills, MCP instructions, instruction files), or a fixed layer's text.",
+              "What one layer fills in for an agent of this project and a model: a Dynamic layer's text (the agent's prompt, the base prompt for the model, the environment, skills, MCP instructions, instruction files; your Dynamic layers are written by the dynamic generator), or a fixed layer's text.",
+          }),
+        ),
+        HttpApiEndpoint.post("purpose", OperatorPromptPaths.purpose, {
+          query: WorkspaceRoutingQuery,
+          payload: Schema.Struct({
+            kind: Schema.Literals(["org", "project"]),
+            ns: Schema.optional(Schema.String).annotate({
+              description: "The namespace whose org purpose is drafted; the project's by default",
+            }),
+            brief: Schema.optional(Schema.String).annotate({ description: "What the purpose should say" }),
+          }),
+          success: described(
+            Schema.Struct({ text: Schema.String }).annotate({ identifier: "OperatorPurposeDraft" }),
+            "The draft",
+          ),
+          error: ApiPromptGenerateError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.prompt.purpose",
+            summary: "Draft a purpose",
+            description:
+              "Ask the purpose generator (a helper agent) for a draft project purpose, from this project's files, or org purpose, from the namespace's projects, following an optional brief. Nothing is saved.",
           }),
         ),
       )

@@ -2333,6 +2333,7 @@ export type OperatorPromptLayer = {
   text: string
   origin: OperatorPromptOrigin
   delivery?: "tool" | "conversation"
+  prompt?: string
 }
 
 export type OperatorPromptGroup = {
@@ -3245,6 +3246,17 @@ export type OperatorPromptSample = {
    * Where the text comes from: a file, an agent, or what wrote it
    */
   source: string
+}
+
+export type OperatorPromptGenerateError = {
+  name: "OperatorPromptGenerateError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorPurposeDraft = {
+  text: string
 }
 
 export type OperatorMemoryFile = {
@@ -8684,6 +8696,7 @@ export type OperatorNamespaceLayerCreateData = {
     type: string
     section?: OperatorPromptSection
     text: string
+    prompt?: string
   }
   path: {
     ns: string
@@ -8759,6 +8772,7 @@ export type OperatorNamespaceLayerUpdateData = {
     type: string
     section?: OperatorPromptSection
     text: string
+    prompt?: string
   }
   path: {
     ns: string
@@ -13632,6 +13646,10 @@ export type OperatorPromptSampleErrors = {
    * OperatorPromptNotFoundError
    */
   404: OperatorPromptNotFoundError
+  /**
+   * OperatorPromptGenerateError
+   */
+  502: OperatorPromptGenerateError
 }
 
 export type OperatorPromptSampleError = OperatorPromptSampleErrors[keyof OperatorPromptSampleErrors]
@@ -13644,6 +13662,42 @@ export type OperatorPromptSampleResponses = {
 }
 
 export type OperatorPromptSampleResponse = OperatorPromptSampleResponses[keyof OperatorPromptSampleResponses]
+
+export type OperatorPromptPurposeData = {
+  body?: {
+    kind: "org" | "project"
+    ns?: string
+    brief?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/prompt/purpose"
+}
+
+export type OperatorPromptPurposeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * OperatorPromptGenerateError
+   */
+  502: OperatorPromptGenerateError
+}
+
+export type OperatorPromptPurposeError = OperatorPromptPurposeErrors[keyof OperatorPromptPurposeErrors]
+
+export type OperatorPromptPurposeResponses = {
+  /**
+   * The draft
+   */
+  200: OperatorPurposeDraft
+}
+
+export type OperatorPromptPurposeResponse = OperatorPromptPurposeResponses[keyof OperatorPromptPurposeResponses]
 
 export type OperatorMemoryOverviewData = {
   body?: never

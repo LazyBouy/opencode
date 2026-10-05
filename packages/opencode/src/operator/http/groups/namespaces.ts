@@ -47,6 +47,9 @@ const LayerInput = Schema.Struct({
     description: "New layers only: the Layer Definition section (purpose, role, identity or custom)",
   }),
   text: Schema.String,
+  prompt: Schema.optional(Schema.String).annotate({
+    description: "Dynamic layers: what the dynamic generator writes for each session (their text is not used)",
+  }),
 })
 const GroupInput = Schema.Struct({ name: Schema.String, types: Schema.Array(Schema.String) })
 const ProfileInput = Schema.Struct({ name: Schema.String, group: Schema.String, slots: OperatorProfile.Slots })

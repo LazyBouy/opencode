@@ -273,3 +273,66 @@ unix("a Dynamic layer's sample is what it fills in for the agent", () =>
     }),
   ),
 )
+
+unix("your Dynamic layer is written once per session by the dynamic generator, then reused", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      const { llm } = yield* configure()
+      const store = yield* OperatorProfileStore.Service
+      const prompts = yield* OperatorPrompts.Service
+      const key = (yield* prompts.preview({ agent: "build" })).project.key
+      const notes = yield* store.saveLayer("opencode", undefined, {
+        name: "Release date",
+        type: "dynamic",
+        text: "",
+        prompt: "Say when the release is.",
+      })
+      const opencode = OperatorProfile.BUILTIN_PROFILES.find((item) => item.id === OperatorProfile.OPENCODE_PROFILE)!
+      const profile = yield* store.saveProfile("opencode", undefined, {
+        name: "Dated",
+        group: opencode.group,
+        slots: { ...opencode.slots, dynamic: [...opencode.slots.dynamic!, notes.id] },
+      })
+      yield* store.setProject(key, { defaultProfile: profile.id })
+      const seen: Array<{ agent: string; sent: string[] }> = []
+      promptAudit.listen = (entry) => seen.push(entry)
+      yield* llm.text("The release is on Friday.")
+      for (let index = 0; index < 2; index++) yield* llm.text("ok")
+      // A title of its own, so no title is generated meanwhile.
+      const id = (yield* (yield* Session.Service).create({ title: "Release" })).id
+      yield* send(id, "When do we ship?", "build")
+      yield* send(id, "And then?", "build")
+      const builds = seen.filter((item) => item.agent === "build")
+      expect(builds).toHaveLength(2)
+      for (const item of builds) expect(item.sent[0]).toContain("The release is on Friday.")
+      const writer = seen.filter((item) => item.agent === OperatorProfile.DYNAMIC_GENERATOR)
+      expect(writer).toHaveLength(1)
+      expect(writer[0]!.sent[0]).toStartWith("You write one section of another agent's system prompt.")
+      const inputs = yield* llm.inputs
+      expect(inputs).toHaveLength(3)
+      expect(JSON.stringify(inputs[0])).toContain("Say when the release is.")
+      expect(JSON.stringify(inputs[0])).toContain("When do we ship?")
+      // The preview marks where the text goes.
+      const preview = yield* prompts.preview({ agent: "build" })
+      expect(preview.sections.find((item) => item.layer === notes.id)?.text).toContain("written for each session")
+    }),
+  ),
+)
+
+unix("the purpose generator drafts a project purpose from its files and a brief", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      const { llm, directory } = yield* configure()
+      yield* Effect.promise(() => Bun.write(path.join(directory, "README.md"), "# Notes\nA notes app for teams.\n"))
+      const prompts = yield* OperatorPrompts.Service
+      yield* llm.text("We build a notes app for teams.")
+      expect(yield* prompts.purpose({ kind: "project", brief: "Keep it short." })).toBe(
+        "We build a notes app for teams.",
+      )
+      const sent = JSON.stringify((yield* llm.inputs)[0])
+      expect(sent).toContain("A notes app for teams.")
+      expect(sent).toContain("Keep it short.")
+      expect(sent).toContain("You write purpose statements")
+    }),
+  ),
+)

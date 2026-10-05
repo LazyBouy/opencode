@@ -6,6 +6,8 @@ import PROMPT_GENERATE from "@/agent/generate.txt"
 import PROMPT_COMPACTION from "@/agent/prompt/compaction.txt"
 import PROMPT_SUMMARY from "@/agent/prompt/summary.txt"
 import PROMPT_TITLE from "@/agent/prompt/title.txt"
+import DYNAMIC_GENERATOR from "./helper/dynamic-generator.txt"
+import PURPOSE_GENERATOR from "./helper/purpose-generator.txt"
 import { InstanceState } from "@/effect/instance-state"
 import type { Provider } from "@/provider/provider"
 import PROMPT_ANTHROPIC from "@/session/prompt/anthropic.txt"
@@ -61,6 +63,9 @@ export const BUILTINS: readonly Builtin[] = [
   { id: "helper.summary", kind: "helper", text: PROMPT_SUMMARY },
   { id: "helper.compaction", kind: "helper", text: PROMPT_COMPACTION },
   { id: "helper.agent-generator", kind: "helper", text: PROMPT_GENERATE },
+  // The fork's own helpers: they draft org and project purposes, and write your Dynamic layers.
+  { id: "helper.purpose-generator", kind: "helper", text: PURPOSE_GENERATOR },
+  { id: "helper.dynamic-generator", kind: "helper", text: DYNAMIC_GENERATOR },
 ]
 
 // Versions of built-in texts by their id, for rewriteReminder and text().

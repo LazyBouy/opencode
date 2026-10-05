@@ -1,9 +1,11 @@
 import type { Plugin } from "@opencode-ai/plugin"
-import { Fiber } from "effect"
+import { Context, Fiber } from "effect"
+import { InstanceRef } from "@/effect/instance-ref"
 import { OperatorProfile } from "./profile"
 import { OperatorProfileStore } from "./profile-store"
 import { OperatorProjects } from "./projects"
 import { OperatorPromptText } from "./prompt-text"
+import { OperatorRegistry } from "./registry"
 
 // Builds every request's system prompt from the agent's prompt profile (see profile.ts), and picks the
 // version of tool descriptions, reminders and notices the profile holds. Profile files are read for
@@ -37,6 +39,9 @@ const PromptPlugin: Plugin = async (input) => {
 
   return {
     "experimental.chat.system.transform": async (hook, output) => {
+      // The request's project instance, taken before anything is awaited (see written()).
+      const fiber = Fiber.getCurrent()
+      const instance = fiber ? Context.getReferenceUnsafe(fiber.context, InstanceRef) : undefined
       // The agent generator's call has no agent and only its own prompt: the helper layer of the
       // profile "agent-generator" uses (its own setting, else the Agent generator helper profile).
       if (!hook.parts) {
@@ -55,13 +60,15 @@ const PromptPlugin: Plugin = async (input) => {
       }
       if (!hook.agent) return
       const loaded = await context()
+      const setting = loaded.agents[hook.agent]
       const result = OperatorProfile.assemble({
         catalog: loaded.catalog,
         project: loaded.project,
         agent: { name: hook.agent, prompt: hook.parts.agent.prompt },
-        setting: loaded.agents[hook.agent],
+        setting,
         model: hook.model,
         parts: hook.parts,
+        dynamic: await written(instance, hook.sessionID, loaded, hook.agent),
       })
       promptAudit.listen?.({ agent: hook.agent, upstream: [...output.system], sent: result.system })
       output.system.splice(0, output.system.length, ...result.system)
@@ -104,6 +111,28 @@ const PromptPlugin: Plugin = async (input) => {
       if (version !== undefined) output.description = version
     },
   }
+}
+
+// The texts of your Dynamic layers in the agent's profile, written (once per session) by the server's
+// OperatorHelperTexts service. Without the service (or on a failure), they add nothing.
+async function written(
+  instance: unknown,
+  sessionID: string | undefined,
+  loaded: Awaited<ReturnType<typeof OperatorProfileStore.forProject>>,
+  agent: string,
+) {
+  const slots = OperatorProfile.slotsFor(loaded.catalog, {
+    agent,
+    setting: loaded.agents[agent],
+    project: loaded.project,
+  })
+  const layers = (slots[OperatorProfile.DYNAMIC] ?? []).filter((id) =>
+    OperatorProfile.isWrittenDynamic(OperatorProfile.findLayer(loaded.catalog, id)),
+  )
+  const dynamic = OperatorRegistry.helperTexts.dynamic
+  if (!layers.length || !dynamic || !instance) return undefined
+  const texts = await dynamic({ instance, sessionID, layers }).catch(() => ({}))
+  return new Map(Object.entries(texts))
 }
 
 const GENERATOR = OperatorPromptText.BUILTINS.find((item) => item.id === "helper.agent-generator")!.text

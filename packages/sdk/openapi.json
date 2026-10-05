@@ -1792,6 +1792,9 @@
                   },
                   "text": {
                     "type": "string"
+                  },
+                  "prompt": {
+                    "type": "string"
                   }
                 },
                 "required": ["name", "type", "text"],
@@ -1888,6 +1891,9 @@
                     "$ref": "#/components/schemas/OperatorPromptSection"
                   },
                   "text": {
+                    "type": "string"
+                  },
+                  "prompt": {
                     "type": "string"
                   }
                 },
@@ -13435,14 +13441,111 @@
                 }
               }
             }
+          },
+          "502": {
+            "description": "OperatorPromptGenerateError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPromptGenerateError"
+                }
+              }
+            }
           }
         },
-        "description": "What one layer fills in for an agent of this project and a model: a Dynamic layer's text (the agent's prompt, the base prompt for the model, the environment, skills, MCP instructions, instruction files), or a fixed layer's text.",
+        "description": "What one layer fills in for an agent of this project and a model: a Dynamic layer's text (the agent's prompt, the base prompt for the model, the environment, skills, MCP instructions, instruction files; your Dynamic layers are written by the dynamic generator), or a fixed layer's text.",
         "summary": "Sample a layer",
         "x-codeSamples": [
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.prompt.sample({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/prompt/purpose": {
+      "post": {
+        "tags": ["operator prompts"],
+        "operationId": "operator.prompt.purpose",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The draft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPurposeDraft"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "OperatorPromptGenerateError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPromptGenerateError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Ask the purpose generator (a helper agent) for a draft project purpose, from this project's files, or org purpose, from the namespace's projects, following an optional brief. Nothing is saved.",
+        "summary": "Draft a purpose",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": ["org", "project"]
+                  },
+                  "ns": {
+                    "type": "string"
+                  },
+                  "brief": {
+                    "type": "string"
+                  }
+                },
+                "required": ["kind"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.prompt.purpose({\n  ...\n})"
           }
         ]
       }
@@ -26399,6 +26502,9 @@
           "delivery": {
             "type": "string",
             "enum": ["tool", "conversation"]
+          },
+          "prompt": {
+            "type": "string"
           }
         },
         "required": ["id", "name", "type", "section", "text", "origin"],
@@ -28884,6 +28990,37 @@
           }
         },
         "required": ["agent", "model", "layer", "text", "source"],
+        "additionalProperties": false
+      },
+      "OperatorPromptGenerateError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorPromptGenerateError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorPurposeDraft": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": ["text"],
         "additionalProperties": false
       },
       "OperatorMemoryFile": {

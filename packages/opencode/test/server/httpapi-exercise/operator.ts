@@ -185,6 +185,10 @@ export const operatorScenarios: Scenario[] = [
     .at((ctx) => ({ path: "/operator/prompt/preview?agent=no-such-agent", headers: ctx.headers() }))
     .status(404),
   http.protected
+    .post("/operator/prompt/purpose", "operator.prompt.purpose")
+    .at((ctx) => ({ path: "/operator/prompt/purpose", headers: ctx.headers(), body: { kind: "nothing" } }))
+    .status(400),
+  http.protected
     .get("/operator/prompt/sample", "operator.prompt.sample")
     .at((ctx) => ({
       path: "/operator/prompt/sample?agent=build&layer=no-such-layer",

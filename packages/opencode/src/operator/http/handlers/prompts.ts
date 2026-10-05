@@ -2,14 +2,16 @@ import { OperatorPrompts } from "@/operator/prompts"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
-import { ApiPromptNotFoundError } from "../groups/prompts"
+import { ApiPromptGenerateError, ApiPromptNotFoundError } from "../groups/prompts"
 
 export const operatorPromptHandlers = HttpApiBuilder.group(InstanceHttpApi, "operatorPrompt", (handlers) =>
   Effect.gen(function* () {
     const prompts = yield* OperatorPrompts.Service
 
-    const notFound = (error: OperatorPrompts.NotFoundError) =>
-      new ApiPromptNotFoundError({ name: "OperatorPromptNotFoundError", data: { message: error.message } })
+    const notFound = (error: { _tag: string; message: string }) =>
+      error._tag === "OperatorGenerateError"
+        ? new ApiPromptGenerateError({ name: "OperatorPromptGenerateError", data: { message: error.message } })
+        : new ApiPromptNotFoundError({ name: "OperatorPromptNotFoundError", data: { message: error.message } })
 
     return handlers
       .handle("catalog", () => prompts.catalog())
@@ -22,6 +24,15 @@ export const operatorPromptHandlers = HttpApiBuilder.group(InstanceHttpApi, "ope
             modelID: ctx.query.model,
           })
           .pipe(Effect.mapError(notFound)),
+      )
+      .handle("purpose", (ctx) =>
+        prompts.purpose(ctx.payload).pipe(
+          Effect.map((text) => ({ text })),
+          Effect.mapError(
+            (error) =>
+              new ApiPromptGenerateError({ name: "OperatorPromptGenerateError", data: { message: error.message } }),
+          ),
+        ),
       )
       .handle("preview", (ctx) =>
         prompts

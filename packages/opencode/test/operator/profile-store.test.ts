@@ -288,3 +288,28 @@ it.instance("the same agent name in two projects is two agents", () =>
     }),
   ),
 )
+
+it.instance("a Dynamic layer of yours holds a prompt, kept in its file", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      const store = yield* OperatorProfileStore.Service
+      const refused = yield* store
+        .saveLayer("opencode", undefined, { name: "Empty", type: "dynamic", text: "ignored" })
+        .pipe(Effect.flip)
+      expect(refused.message).toContain("needs a prompt")
+      const saved = yield* store.saveLayer("opencode", undefined, {
+        name: "Release date",
+        type: "dynamic",
+        text: "ignored",
+        prompt: "Say when the release is.",
+      })
+      expect(saved).toMatchObject({ section: "dynamic", text: "", prompt: "Say when the release is." })
+      const catalog = yield* store.catalog("opencode")
+      expect(catalog.layers.find((item) => item.id === saved.id)).toMatchObject({
+        type: "dynamic",
+        text: "",
+        prompt: "Say when the release is.",
+      })
+    }),
+  ),
+)

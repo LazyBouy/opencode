@@ -110,7 +110,7 @@ export interface Interface {
   readonly saveLayer: (
     ns: string,
     id: string | undefined,
-    input: { name: string; type: string; section?: OperatorProfile.Section; text: string },
+    input: { name: string; type: string; section?: OperatorProfile.Section; text: string; prompt?: string },
   ) => Effect.Effect<OperatorProfile.Layer, Failure>
   /** Makes an editable copy of one of OpenCode's texts; `text` gives a tool description's text. */
   readonly copyBuiltin: (ns: string, id: string, text?: string) => Effect.Effect<OperatorProfile.Layer, Failure>
@@ -474,10 +474,13 @@ const layer = Layer.effect(
     const saveLayer = Effect.fn("OperatorProfileStore.saveLayer")(function* (
       ns: string,
       id: string | undefined,
-      input: { name: string; type: string; section?: OperatorProfile.Section; text: string },
+      input: { name: string; type: string; section?: OperatorProfile.Section; text: string; prompt?: string },
     ) {
       const found = yield* load(ns)
       const before = yield* existing(found.layers, "layer", id)
+      // Your Dynamic layers hold a prompt; the dynamic generator writes their text for each session.
+      const written = (before?.type ?? input.type) === OperatorProfile.DYNAMIC
+      yield* refuse(written && !input.prompt?.trim() ? "A Dynamic layer needs a prompt" : undefined)
       // A copy keeps its type and section; a layer's type changes only in Custom.
       const type = before?.replaces ? before.type : input.type
       // Helper and Dynamic layers have sections of their own.
@@ -502,7 +505,8 @@ const layer = Layer.effect(
         type,
         section,
         ...(before?.replaces ? { replaces: before.replaces } : {}),
-        text: input.text,
+        text: written ? "" : input.text,
+        ...(written ? { prompt: input.prompt!.trim() } : {}),
         origin: "user",
       }
       yield* Effect.promise(() => writeItem(ns, "layer", next))
@@ -962,7 +966,9 @@ async function writeItem(
       section: value.section,
       ...(value.replaces ? { replaces: value.replaces } : {}),
     }
-    return write(file, matter.stringify(value.text.endsWith("\n") ? value.text : `${value.text}\n`, data))
+    // A Dynamic layer's file holds its prompt.
+    const body = value.prompt ?? value.text
+    return write(file, matter.stringify(body.endsWith("\n") ? body : `${body}\n`, data))
   }
   return writeJson(file, Object.fromEntries(Object.entries(item).filter((pair) => pair[0] !== "builtin")))
 }
@@ -997,13 +1003,16 @@ async function readLayers(dir: string): Promise<OperatorProfile.Layer[]> {
       if (!parsed) return undefined
       const data = parsed.data as Record<string, unknown>
       const section = Schema.decodeUnknownOption(OperatorProfile.Section)(data.section)
+      const type = typeof data.type === "string" ? data.type : "identity"
+      const body = parsed.content.replace(/\n$/, "")
       return {
         id: path.basename(file, ".md"),
         name: typeof data.name === "string" ? data.name : path.basename(file, ".md"),
-        type: typeof data.type === "string" ? data.type : "identity",
+        type,
         section: section._tag === "Some" ? section.value : "custom",
         ...(typeof data.replaces === "string" ? { replaces: data.replaces } : {}),
-        text: parsed.content.replace(/\n$/, ""),
+        // A Dynamic layer's file holds its prompt.
+        ...(type === OperatorProfile.DYNAMIC ? { text: "", prompt: body } : { text: body }),
         origin: "user",
       }
     }),
