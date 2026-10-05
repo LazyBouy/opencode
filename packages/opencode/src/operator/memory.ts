@@ -17,7 +17,7 @@ import { Skill } from "@/skill"
 import { OperatorConfig } from "./config"
 
 // Everything OpenCode remembers today, in one view: the files added to prompts (instruction files,
-// nested AGENTS.md, skills, identity layers, prompt overrides) and what the database keeps
+// nested AGENTS.md, skills, prompt profile files) and what the database keeps
 // (sessions, messages, compaction summaries and the other tables).
 
 export const FileKind = Schema.Literals(["instructions", "nested", "url", "skill", "profile"])

@@ -4,7 +4,7 @@ This repository is a fork of [anomalyco/opencode](https://github.com/anomalyco/o
 
 - **`/merge`**: drive Claude Code (and future adapters) from an OpenCode session.
 - **The iphi theme**: the default look.
-- **An operator console**: `/operator/*` pages and the left sidebar, plus Settings → Adapters.
+- **An operator console**: `/operator/*` pages and the left sidebar, plus Settings → Adapters and Settings → Organization → Namespaces (prompt profiles per organization).
 - **A Docker-only dev stack**: in `docker/dev`.
 
 The fork is built so that new upstream releases merge with as few conflicts as possible.
@@ -100,14 +100,16 @@ The script works in four stages:
    - runs the merge and operator tests, the HttpApi coverage gate, and the app unit tests.
 4. It lists upstream files the fork now edits that are missing from the table above.
 
-**Prompt texts.** Prompt profiles (the Prompt Profile page) show every text OpenCode adds to a prompt as a layer, so new upstream texts must become layers. After a merge, check `session/system.ts`, `session/prompt/*.txt`, `session/reminders.ts`, and the system parts that `session/prompt.ts` and `session/llm/request.ts` pass to the `experimental.chat.system.transform` hook:
+**Prompt texts.** Prompt profiles (the Prompt Profile page) show every text OpenCode adds to a prompt as a built-in layer, and the built-in **OpenCode** profile must keep giving upstream's system prompt byte for byte (**OpenCode helper** does the same for `title`, `summary` and `compaction`). So new upstream texts must become layers. After a merge, check `session/system.ts`, `session/prompt/*.txt`, `session/reminders.ts`, and the system parts that `session/prompt.ts` and `session/llm/request.ts` pass to the `experimental.chat.system.transform` hook:
 
-- a new base prompt or model family is a **Base Model Group** layer: add it to `BUILTINS` in `packages/opencode/src/operator/prompt-text.ts`, with its description as `operator.prompts.id.<id>` in `packages/app/src/operator/i18n/en.ts`;
+- a new base prompt or model family is a **Base Model Group** layer (type Agent identity): add it to `BUILTINS` in `packages/opencode/src/operator/prompt-text.ts` (and to `baseFor` if it has its own model rule), with its description as `operator.prompts.id.<id>` in `packages/app/src/operator/i18n/en.ts`;
 - a new notice for structured answers is an **Output format** layer (`notice.*` in `BUILTINS`);
-- a new reminder, notice or one-call text (added to the conversation or a single call, not the system prompt) is a **Message text** (`reminder.*`, `notice.*`, `generator.*` in `BUILTINS`); reminders are matched back to their text by `rewriteReminder`;
-- a new section OpenCode writes for every request is a **Generated** layer: add a field to `SystemParts` (`packages/plugin/src/index.ts`, `session/llm/request.ts`, `session/prompt.ts`), a `generated.<name>` layer to `BUILTIN_LAYERS` and its resolution to `resolve` in `packages/opencode/src/operator/profile.ts`, and decide its group in the built-in Default profile (ask the user first: the built-in profiles are theirs to change).
+- a new reminder, notice or one-call text (added to the conversation or a single call, not the system prompt) is a **Message text** (type Platform/system constraints; `reminder.*`, `notice.*`, `generator.*` in `BUILTINS`); reminders are matched back to their text by `rewriteReminder`;
+- a new section OpenCode writes for every request is a **Generated** layer: add a field to `SystemParts` (`packages/plugin/src/index.ts`, `session/llm/request.ts`, `session/prompt.ts`), a `generated.<name>` layer to `BUILTIN_LAYERS` and its resolution to `resolve` in `packages/opencode/src/operator/profile.ts`, and put it in the OpenCode profile's slot where upstream sends it. Where it goes in the Spec profile is the user's choice: ask first, as for any change to the built-in groups and profiles.
 
-System text that a caller passes without a label arrives in `SystemParts.extra` and is sent, unlabelled, at the end of the second system message; give it a label. `test/operator/prompts-e2e.test.ts` fails when the agent page's preview no longer matches what is sent.
+System text that a caller passes without a label arrives in `SystemParts.extra` and is sent, unlabelled, at the end of the system message; give it a label. `test/operator/prompts-e2e.test.ts` fails when the OpenCode profile no longer reproduces upstream's prompt, a tool description or a reminder, or when the agent page's preview no longer matches what is sent.
+
+Namespaces, their layers, groups and profiles, project links and agent settings are files under `~/.config/opencode/namespaces/` (`operator/profile-store.ts`); upstream never reads them.
 
 Then run the browser suites:
 
