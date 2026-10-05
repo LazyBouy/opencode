@@ -94,7 +94,7 @@ export const dict = {
     "Settings forms for each section, badges for values set in this project, reset to the inherited value, and a raw JSONC editor.",
   "operator.page.profile.title": "Prompt Profile",
   "operator.page.profile.description":
-    "Layers of prompt text, groups of layers, and the profiles agents' system prompts are built from. Every text OpenCode adds is here and can be changed. An agent's full prompt is on its page, under Prompt.",
+    "Each namespace's layers of prompt text, group types, groups and profiles. An agent's system prompt is built from a profile: a group and the layers in each of its slots. Every text OpenCode adds is here and can be copied and changed. An agent's full prompt is on its page, under Prompt.",
   "operator.page.profile.planned":
     "Organization, user and project prompt layers you can write, reorder and preview for each agent.",
   "operator.page.models.title": "Providers & Models",

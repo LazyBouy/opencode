@@ -21,6 +21,7 @@ import {
   copyName,
   copySlots,
   type Layer,
+  namespaceDefault,
   PREFIX,
   profileUsers,
   regroup,
@@ -67,7 +68,7 @@ export function ProfileDefinition(props: { ns: string; namespaces: ReadonlyArray
                   <Show when={profile.builtin}>
                     <Tag>{language.t("operator.profile.builtin")}</Tag>
                   </Show>
-                  <Show when={catalog()?.namespace.defaultProfile === profile.id}>
+                  <Show when={catalog() && namespaceDefault(catalog()!) === profile.id}>
                     <Tag>{language.t("operator.profile.namespaceDefault")}</Tag>
                   </Show>
                 </span>
@@ -247,7 +248,7 @@ function ProfilePanel(props: {
           <Show when={!readOnly()}>
             <CopyToNamespace ns={props.ns} kind="profile" id={props.selected} namespaces={props.namespaces} />
           </Show>
-          <Show when={props.catalog.namespace.defaultProfile !== props.selected}>
+          <Show when={namespaceDefault(props.catalog) !== props.selected}>
             <ButtonV2 variant="neutral" onClick={() => void makeDefault()}>
               {language.t("operator.profile.makeDefault")}
             </ButtonV2>

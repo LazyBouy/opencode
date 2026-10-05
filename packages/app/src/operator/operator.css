@@ -804,6 +804,12 @@ html[data-theme="iphi"] [data-component="operator-inspector"] {
   opacity: 0.5;
 }
 
+/* Tags beside names in tables (Built-in, Namespace default) stay on one line. */
+[data-component="operator-panel"] table [data-component="tag"] {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 /* A profile's slot: one panel per group type. */
 [data-slot="operator-slot"] {
   display: flex;

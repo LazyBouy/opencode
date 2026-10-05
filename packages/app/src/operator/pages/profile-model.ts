@@ -60,12 +60,17 @@ export function profilesUsing(catalog: Catalog, layer: string) {
   return catalog.profiles.filter((profile) => Object.values(profile.slots).flat().includes(layer))
 }
 
+// The namespace's default profile: the one it names, else OpenCode's.
+export function namespaceDefault(catalog: Catalog) {
+  return catalog.namespace.defaultProfile ?? `${PREFIX}profile.opencode`
+}
+
 // What uses a profile: agents that name it, projects whose default it is, the namespace default.
 export function profileUsers(catalog: Catalog, profile: string) {
   return {
     agents: catalog.agents.filter((agent) => agent.profile === profile),
     projects: catalog.projects.filter((project) => project.defaultProfile === profile),
-    namespace: catalog.namespace.defaultProfile === profile,
+    namespace: namespaceDefault(catalog) === profile,
   }
 }
 

@@ -8,6 +8,7 @@ import {
   layersOfType,
   move,
   moveTo,
+  namespaceDefault,
   origin,
   profilesUsing,
   profileUsers,
@@ -66,6 +67,9 @@ describe("profile model", () => {
     expect(one.namespace).toBe(true)
     expect(one.agents.map((item) => item.name)).toEqual(["build"])
     expect(profileUsers(catalog, "p2").projects.map((item) => item.key)).toEqual(["/repo"])
+    const unset = { ...catalog, namespace: { ...catalog.namespace, defaultProfile: undefined } }
+    expect(namespaceDefault(unset)).toBe("opencode:profile.opencode")
+    expect(profileUsers(unset, "opencode:profile.opencode").namespace).toBe(true)
   })
 
   test("regroup keeps slots of types the group has, in its order, and names the dropped ones", () => {
