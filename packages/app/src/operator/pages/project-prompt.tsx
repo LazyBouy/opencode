@@ -193,52 +193,55 @@ function ProjectPromptDialog(props: { project: OperatorPromptProject; added?: bo
               </>
             }
           >
-            <Field
-              group
-              label={language.t("operator.column.purpose")}
-              hint={language.t("operator.projects.purposeHint")}
-            >
-              <div class="flex items-center gap-2 flex-wrap">
+            {/* The selects read their labels when they mount, so they wait for the namespace's items. */}
+            <Show when={catalog.data} fallback={<p data-slot="operator-note">{language.t("common.loading")}</p>}>
+              <Field
+                group
+                label={language.t("operator.column.purpose")}
+                hint={language.t("operator.projects.purposeHint")}
+              >
+                <div class="flex items-center gap-2 flex-wrap">
+                  <SelectV2<string>
+                    appearance="base"
+                    aria-label={language.t("operator.column.purpose")}
+                    options={[NONE, ...purposes().map((layer) => layer.id)]}
+                    current={store.purpose}
+                    label={(id) =>
+                      id === NONE
+                        ? language.t("operator.projects.noPurpose")
+                        : (purposes().find((layer) => layer.id === id)?.name ?? id)
+                    }
+                    onSelect={(id) => id !== null && setStore("purpose", id)}
+                  />
+                  <button
+                    type="button"
+                    data-slot="operator-link"
+                    onClick={() => {
+                      props.onDone()
+                      navigate(
+                        `/operator/profile?ns=${encodeURIComponent(props.project.namespace)}&tab=layers&layer=new:purpose`,
+                      )
+                    }}
+                  >
+                    {language.t("operator.profile.newPurpose")}
+                  </button>
+                </div>
+              </Field>
+              <Field group label={language.t("operator.column.defaultProfile")}>
                 <SelectV2<string>
                   appearance="base"
-                  aria-label={language.t("operator.column.purpose")}
-                  options={[NONE, ...purposes().map((layer) => layer.id)]}
-                  current={store.purpose}
-                  label={(id) =>
-                    id === NONE
-                      ? language.t("operator.projects.noPurpose")
-                      : (purposes().find((layer) => layer.id === id)?.name ?? id)
-                  }
-                  onSelect={(id) => id !== null && setStore("purpose", id)}
-                />
-                <button
-                  type="button"
-                  data-slot="operator-link"
-                  onClick={() => {
-                    props.onDone()
-                    navigate(
-                      `/operator/profile?ns=${encodeURIComponent(props.project.namespace)}&tab=layers&layer=new:purpose`,
-                    )
+                  aria-label={language.t("operator.column.defaultProfile")}
+                  options={[NONE, ...profiles().map((profile) => profile.id)]}
+                  current={store.defaultProfile}
+                  label={(id) => {
+                    if (id === NONE) return language.t("operator.projects.namespaceDefault", { name: fallback() })
+                    const found = profiles().find((profile) => profile.id === id)
+                    return found ? names.profile(found) : id
                   }}
-                >
-                  {language.t("operator.profile.newPurpose")}
-                </button>
-              </div>
-            </Field>
-            <Field group label={language.t("operator.column.defaultProfile")}>
-              <SelectV2<string>
-                appearance="base"
-                aria-label={language.t("operator.column.defaultProfile")}
-                options={[NONE, ...profiles().map((profile) => profile.id)]}
-                current={store.defaultProfile}
-                label={(id) => {
-                  if (id === NONE) return language.t("operator.projects.namespaceDefault", { name: fallback() })
-                  const found = profiles().find((profile) => profile.id === id)
-                  return found ? names.profile(found) : id
-                }}
-                onSelect={(id) => id !== null && setStore("defaultProfile", id)}
-              />
-            </Field>
+                  onSelect={(id) => id !== null && setStore("defaultProfile", id)}
+                />
+              </Field>
+            </Show>
           </Show>
           <Show when={store.error}>
             <p data-slot="operator-error" role="alert">
