@@ -66,11 +66,14 @@ describe("OpenCode profile", () => {
     expect(assemble({ parts: json, model: gemini }).system).toEqual([upstream(undefined, gemini, json)])
   })
 
-  test("the helper profile gives upstream's prompt for title, summary and compaction", () => {
+  test("the helper profiles give upstream's prompt for title, summary and compaction", () => {
     const bare = { environment: [], instructions: [], user: "From the user." }
-    const result = assemble({ agent: { name: "title", prompt: "Write a title." }, parts: bare })
-    expect(result.profile).toMatchObject({ id: OperatorProfile.HELPER_PROFILE, source: "helper" })
-    expect(result.system).toEqual([upstream("Write a title.", test_model, bare)])
+    for (const name of ["title", "summary", "compaction"]) {
+      const text = OperatorPromptText.BUILTINS.find((item) => item.id === `helper.${name}`)!.text
+      const result = assemble({ agent: { name, prompt: text }, parts: bare })
+      expect(result.profile).toMatchObject({ id: `${P}profile.helper.${name}`, source: "helper" })
+      expect(result.system).toEqual([upstream(text, test_model, bare)])
+    }
   })
 })
 
@@ -90,7 +93,7 @@ describe("which profile an agent uses", () => {
       OperatorProfile.profileFor(loaded, { agent, setting, project })
     expect(pick("build", { profile: "mine" })).toMatchObject({ profile: { id: "mine" }, source: "agent" })
     expect(pick("title", undefined, { namespace: "opencode", defaultProfile: "mine" })).toMatchObject({
-      profile: { id: OperatorProfile.HELPER_PROFILE },
+      profile: { id: `${P}profile.helper.title` },
       source: "helper",
     })
     expect(pick("title", { profile: "mine" }).source).toBe("agent")
@@ -159,24 +162,27 @@ describe("assembly", () => {
     const purpose = layer({ id: "goal", type: "purpose", section: "purpose", text: "Ship the release." })
     const loaded = catalog({ namespace: namespace({ purpose: "We value care." }), layers: [purpose] })
     const project = { namespace: "opencode", purpose: "goal" }
-    for (const agent of [{ name: "build" }, { name: "title", prompt: "Write a title." }]) {
-      const result = assemble({ catalog: loaded, project, agent })
-      expect(result.system[0]).toStartWith("We value care.\nShip the release.\n")
-      expect(result.sections.filter((item) => item.automatic).map((item) => item.layer)).toEqual([
-        `${P}purpose.org`,
-        "goal",
-      ])
-    }
+    const result = assemble({ catalog: loaded, project, agent: { name: "build" } })
+    expect(result.system[0]).toStartWith("We value care.\nShip the release.\n")
+    expect(result.sections.filter((item) => item.automatic).map((item) => item.layer)).toEqual([
+      `${P}purpose.org`,
+      "goal",
+    ])
+    // A helper agent sends its helper text only.
+    const title = OperatorPromptText.BUILTINS.find((item) => item.id === "helper.title")!.text
+    const bare = { environment: [], instructions: [] }
+    expect(assemble({ catalog: loaded, project, agent: { name: "title", prompt: title }, parts: bare }).system).toEqual(
+      [upstream(title, test_model, bare)],
+    )
     // An override cannot change it either.
-    const result = assemble({
+    const dynamic = OperatorProfile.BUILTIN_PROFILES.find((item) => item.id === `${P}profile.opencode`)!.slots.dynamic!
+    const changed = assemble({
       catalog: loaded,
       project,
-      setting: { override: { slots: { identity: [`${P}slot.agent`] } } },
+      setting: { override: { slots: { dynamic: [`${P}slot.agent`, ...dynamic.slice(1)] } } },
       agent: { name: "build", prompt: "Mine." },
     })
-    expect(result.system).toEqual([
-      `We value care.\nShip the release.\nMine.\n${upstream("x", test_model, parts).slice(2)}`,
-    ])
+    expect(changed.system).toEqual([`We value care.\nShip the release.\n${upstream("Mine.", test_model, parts)}`])
   })
 
   test("a copy of base.gemini changes Gemini's base prompt only, and only in a profile that holds it", () => {
@@ -221,7 +227,7 @@ describe("assembly", () => {
     const profile: OperatorProfile.Profile = {
       ...spec,
       id: "tools",
-      slots: { ...spec.slots, capabilities: [...spec.slots.capabilities!, "bash"], platform: ["plan"] },
+      slots: { ...spec.slots, capabilities: ["bash"], platform: ["plan"] },
       builtin: false,
     }
     const loaded = catalog({ layers: [bash, plan], profiles: [profile] })
@@ -310,13 +316,47 @@ describe("save checks", () => {
   test("slots hold layers of their type, each once, one copy per built-in, nothing in Purpose", () => {
     const shape = (slots: OperatorProfile.Slots) =>
       OperatorProfile.checkSlots(loaded, { group: `${P}group.spec`, slots })
-    expect(shape({ role: ["role"], identity: [`${P}slot.agent`, "gem1"] })).toBeUndefined()
+    expect(shape({ role: ["role"], identity: ["gem1"], dynamic: [`${P}slot.agent`] })).toBeUndefined()
+    expect(shape({ identity: [`${P}slot.agent`] })).toContain("is Dynamic, not Agent identity")
     expect(shape({ identity: ["role"] })).toContain("not Agent identity")
     expect(shape({ role: ["role", "role"] })).toContain("more than once")
     expect(shape({ identity: ["gem1", "gem2"] })).toContain("one copy of base.gemini")
     expect(shape({ purpose: ["goal"] })).toContain("Purpose is automatic")
     expect(shape({ identity: [`${P}purpose.org`] })).toBeDefined()
     expect(shape({ capabilities: [`${P}tool.bash`] })).toBeUndefined()
+  })
+
+  test("a helper group holds only the Helper type, and a helper profile one helper layer", () => {
+    expect(OperatorProfile.checkGroup(loaded, { name: "Helpers", types: ["helper"] })).toBeUndefined()
+    expect(OperatorProfile.checkGroup(loaded, { name: "Mixed", types: ["helper", "role"] })).toContain(
+      "holds no other type",
+    )
+    const helper = (slots: OperatorProfile.Slots) =>
+      OperatorProfile.checkSlots(loaded, { group: `${P}group.helper`, slots })
+    expect(helper({ helper: [`${P}helper.title`] })).toBeUndefined()
+    expect(helper({ helper: [] })).toContain("one helper layer")
+    expect(helper({ helper: [`${P}helper.title`, `${P}helper.summary`] })).toContain("one helper layer")
+    expect(helper({ helper: [`${P}slot.agent`] })).toContain("not Helper")
+  })
+
+  test("profiles and overrides saved before the Dynamic type are read with it", () => {
+    const old = { identity: [`${P}slot.agent-or-base`, "gem1"], additional: [`${P}generated.environment`] }
+    expect(OperatorProfile.migrateSlots(old, ["purpose", "role", "identity", "dynamic", "additional"])).toEqual({
+      identity: ["gem1"],
+      additional: [],
+      dynamic: [`${P}slot.agent-or-base`, `${P}generated.environment`],
+    })
+    expect(
+      OperatorProfile.migrateGroup({
+        id: "g",
+        name: "G",
+        types: ["purpose", "role", "identity", "output"],
+        builtin: false,
+      }).types,
+    ).toEqual(["purpose", "role", "identity", "dynamic", "output"])
+    expect(OperatorProfile.migrateSetting("title", { profile: `${P}profile.helper` })).toEqual({
+      profile: `${P}profile.helper.title`,
+    })
   })
 
   test("a copy keeps its built-in's type", () => {

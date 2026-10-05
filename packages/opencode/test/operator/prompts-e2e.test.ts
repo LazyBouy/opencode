@@ -139,7 +139,7 @@ unix("the preview is exactly what is sent, for build, explore and title", () =>
         expect(seen.find((item) => item.agent === agent)?.sent).toEqual([...preview.system])
       }
       expect((yield* prompts.preview({ agent: "title" })).profile).toMatchObject({
-        id: OperatorProfile.HELPER_PROFILE,
+        id: `${OperatorProfile.PREFIX}profile.helper.title`,
         source: "helper",
       })
     }),
@@ -166,8 +166,9 @@ unix("Purpose comes first for every agent: the namespace's purpose, then the pro
       for (let index = 0; index < 3; index++) yield* llm.text("ok")
       yield* send((yield* (yield* Session.Service).create({})).id, "hello", "build")
       yield* request("Generate a title")
-      for (const agent of ["build", "title"])
-        expect(seen.find((item) => item.agent === agent)?.sent[0]).toStartWith("We value care.\nShip the release.\n")
+      expect(seen.find((item) => item.agent === "build")?.sent[0]).toStartWith("We value care.\nShip the release.\n")
+      // A helper agent sends its helper text only.
+      expect(seen.find((item) => item.agent === "title")?.sent[0]).toStartWith("You are a title generator.")
       const preview = yield* prompts.preview({ agent: "build" })
       expect(preview.sections.filter((item) => item.automatic).map((item) => item.text)).toEqual([
         "We value care.",
@@ -198,8 +199,8 @@ unix("editable copies change only agents whose profile holds them", () =>
         group: opencode.group,
         slots: {
           ...opencode.slots,
-          identity: [`${P}slot.agent-or-base`, base.id],
-          capabilities: [...opencode.slots.capabilities!, bash.id],
+          identity: [base.id],
+          capabilities: [bash.id],
         },
       })
       yield* store.setProject(key, { defaultProfile: profile.id })
@@ -252,4 +253,23 @@ unix("the tool catalog lists this project's tools with their own descriptions", 
     expect(catalog.tools.some((tool) => tool.id === "read" && tool.builtin.length > 0)).toBe(true)
     expect(catalog.tools.some((tool) => tool.id === "invalid")).toBe(false)
   }),
+)
+
+unix("a Dynamic layer's sample is what it fills in for the agent", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      yield* configure()
+      const prompts = yield* OperatorPrompts.Service
+      const preview = yield* prompts.preview({ agent: "build" })
+      const environment = preview.sections.find((item) => item.layer === `${P}generated.environment`)!
+      expect((yield* prompts.sample({ agent: "build", layer: `${P}generated.environment` })).text).toBe(
+        environment.text,
+      )
+      const base = yield* prompts.sample({ agent: "build", layer: `${P}slot.base` })
+      expect(base.text).toBe(preview.sections.find((item) => item.layer === `${P}${preview.base}`)?.text ?? base.text)
+      expect(base.source).toBe(preview.base)
+      const title = yield* prompts.sample({ agent: "title", layer: `${P}helper.title` })
+      expect(title.text).toStartWith("You are a title generator.")
+    }),
+  ),
 )

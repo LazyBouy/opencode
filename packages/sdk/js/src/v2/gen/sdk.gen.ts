@@ -212,6 +212,8 @@ import type {
   OperatorPromptOverride,
   OperatorPromptPreviewErrors,
   OperatorPromptPreviewResponses,
+  OperatorPromptSampleErrors,
+  OperatorPromptSampleResponses,
   OperatorPromptSection,
   OperatorPromptSlots,
   OperatorSessionListErrors,
@@ -3118,6 +3120,48 @@ export class Prompt extends HeyApiClient {
       ThrowOnError
     >({
       url: "/operator/prompt/preview",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Sample a layer
+   *
+   * What one layer fills in for an agent of this project and a model: a Dynamic layer's text (the agent's prompt, the base prompt for the model, the environment, skills, MCP instructions, instruction files), or a fixed layer's text.
+   */
+  public sample<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      agent: string
+      layer: string
+      provider?: string
+      model?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "agent" },
+            { in: "query", key: "layer" },
+            { in: "query", key: "provider" },
+            { in: "query", key: "model" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorPromptSampleResponses,
+      OperatorPromptSampleErrors,
+      ThrowOnError
+    >({
+      url: "/operator/prompt/sample",
       ...options,
       ...params,
     })

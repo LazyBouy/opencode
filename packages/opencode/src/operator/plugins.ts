@@ -37,16 +37,20 @@ const PromptPlugin: Plugin = async (input) => {
 
   return {
     "experimental.chat.system.transform": async (hook, output) => {
-      // The agent generator's call has no agent and only its own prompt.
+      // The agent generator's call has no agent and only its own prompt: the helper layer of the
+      // profile "agent-generator" uses (its own setting, else the Agent generator helper profile).
       if (!hook.parts) {
         if (output.system[0] !== GENERATOR) return
-        const found = await slots(undefined)
-        const version = OperatorProfile.versionOf({
-          catalog: found.loaded.catalog,
-          slots: found.slots,
-          builtin: `${OperatorProfile.PREFIX}generator.agent`,
+        const loaded = await context()
+        const result = OperatorProfile.assemble({
+          catalog: loaded.catalog,
+          project: loaded.project,
+          agent: { name: OperatorProfile.AGENT_GENERATOR },
+          setting: loaded.agents[OperatorProfile.AGENT_GENERATOR],
+          model: hook.model,
+          parts: { environment: [], instructions: [] },
         })
-        if (version !== undefined) output.system[0] = version
+        if (result.system[0]) output.system[0] = result.system[0]
         return
       }
       if (!hook.agent) return
@@ -102,7 +106,7 @@ const PromptPlugin: Plugin = async (input) => {
   }
 }
 
-const GENERATOR = OperatorPromptText.BUILTINS.find((item) => item.id === "generator.agent")!.text
+const GENERATOR = OperatorPromptText.BUILTINS.find((item) => item.id === "helper.agent-generator")!.text
 
 // For tests: sees each request's system prompt as upstream built it and as it is sent.
 export const promptAudit: {

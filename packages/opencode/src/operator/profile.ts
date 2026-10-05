@@ -18,19 +18,25 @@ import { OperatorPromptText } from "./prompt-text"
 export const OPENCODE = "opencode"
 // Built-in ids start with this, so they never clash with ids people make.
 export const PREFIX = "opencode:"
-// Agents that use the OpenCode helper profile unless they name a profile of their own.
-export const HELPER_AGENTS = ["title", "summary", "compaction"]
-
 export const BUILTIN_TYPES = [
   { id: "platform", name: "Platform/system constraints" },
   { id: "purpose", name: "Purpose" },
   { id: "role", name: "Agent role" },
   { id: "identity", name: "Agent identity" },
+  { id: "dynamic", name: "Dynamic" },
   { id: "capabilities", name: "Stable capability boundaries" },
   { id: "additional", name: "Optional additional blocks" },
   { id: "output", name: "Output format" },
+  { id: "helper", name: "Helper" },
 ] as const
 export const REQUIRED_TYPES = ["purpose", "role", "identity"]
+// Texts filled in per request (the agent's prompt, the base prompt for the model, the environment,
+// skills, ...) are of this type.
+export const DYNAMIC = "dynamic"
+// A helper agent's whole prompt is one layer of this type: a group with it holds no other type, and a
+// profile of such a group (a helper profile) one layer. An agent that uses a helper profile is a helper
+// agent; it has no override.
+export const HELPER = "helper"
 
 export const Section = Schema.Literals([
   "base",
@@ -38,7 +44,8 @@ export const Section = Schema.Literals([
   "role",
   "identity",
   "tool",
-  "generated",
+  "dynamic",
+  "helper",
   "output",
   "custom",
   "message",
@@ -156,26 +163,24 @@ export const builtinTypes: GroupType[] = BUILTIN_TYPES.map((item) => ({
 }))
 
 const base = (id: string) => `${PREFIX}${id}`
-const MESSAGE_TEXTS = [
-  "reminder.plan",
-  "reminder.plan-mode",
-  "reminder.build-switch",
-  "notice.max-steps",
-  "generator.agent",
-]
+const MESSAGE_TEXTS = ["reminder.plan", "reminder.plan-mode", "reminder.build-switch", "notice.max-steps"]
+const HELPERS = OperatorPromptText.BUILTINS.filter((item) => item.kind === "helper")
 
 export const BUILTIN_LAYERS: readonly Layer[] = [
   ...OperatorPromptText.BUILTINS.filter((item) => item.kind === "base" && item.id !== "base").map((item) =>
     layer(base(item.id), item.id, "identity", "base", "builtin", item.text),
   ),
-  layer(base("slot.base"), "Base prompt (by model)", "identity", "base", "slot"),
-  layer(base("slot.agent-or-base"), "Agent prompt, else base prompt", "identity", "base", "slot"),
-  layer(base("slot.agent"), "Agent prompt", "identity", "identity", "slot"),
-  layer(base("generated.mcp"), "MCP instructions", "capabilities", "generated", "generated"),
-  layer(base("generated.skills"), "Skills", "capabilities", "generated", "generated"),
-  layer(base("generated.environment"), "Environment", "additional", "generated", "generated"),
-  layer(base("generated.references"), "References", "additional", "generated", "generated"),
-  layer(base("generated.instructions"), "Instructions", "additional", "generated", "generated"),
+  layer(base("slot.base"), "Base prompt (by model)", DYNAMIC, "dynamic", "slot"),
+  layer(base("slot.agent-or-base"), "Agent prompt, else base prompt", DYNAMIC, "dynamic", "slot"),
+  layer(base("slot.agent"), "Agent prompt", DYNAMIC, "dynamic", "slot"),
+  layer(base("generated.mcp"), "MCP instructions", DYNAMIC, "dynamic", "generated"),
+  layer(base("generated.skills"), "Skills", DYNAMIC, "dynamic", "generated"),
+  layer(base("generated.environment"), "Environment", DYNAMIC, "dynamic", "generated"),
+  layer(base("generated.references"), "References", DYNAMIC, "dynamic", "generated"),
+  layer(base("generated.instructions"), "Instructions", DYNAMIC, "dynamic", "generated"),
+  ...HELPERS.map((item) =>
+    layer(base(item.id), item.id.slice("helper.".length), HELPER, "helper", "builtin", item.text),
+  ),
   layer(
     base("notice.structured-output"),
     "notice.structured-output",
@@ -195,19 +200,25 @@ export const BUILTIN_GROUPS: readonly Group[] = [
   {
     id: base("group.spec"),
     name: "Default",
-    types: ["platform", "purpose", "role", "identity", "capabilities", "additional", "output"],
+    types: ["platform", "purpose", "role", "identity", DYNAMIC, "capabilities", "additional", "output"],
     builtin: true,
   },
   {
     id: base("group.opencode"),
     name: "OpenCode",
-    types: ["purpose", "role", "identity", "additional", "capabilities", "output"],
+    types: ["purpose", "role", "identity", DYNAMIC, "additional", "capabilities", "output"],
     builtin: true,
   },
+  { id: base("group.helper"), name: "Helper", types: [HELPER], builtin: true },
 ]
 
 const ENVIRONMENT = [base("generated.environment"), base("generated.references"), base("generated.instructions")]
 const CAPABILITIES = [base("generated.mcp"), base("generated.skills")]
+// One helper profile per helper text, named after it ("agent-generator" is "Agent generator").
+const helperName = (id: string) => {
+  const words = id.slice("helper.".length).replaceAll("-", " ")
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
 export const BUILTIN_PROFILES: readonly Profile[] = [
   {
     id: base("profile.opencode"),
@@ -215,18 +226,10 @@ export const BUILTIN_PROFILES: readonly Profile[] = [
     group: base("group.opencode"),
     slots: {
       role: [],
-      identity: [base("slot.agent-or-base")],
-      additional: ENVIRONMENT,
-      capabilities: CAPABILITIES,
+      identity: [],
+      [DYNAMIC]: [base("slot.agent-or-base"), ...ENVIRONMENT, ...CAPABILITIES],
       output: [base("notice.structured-output")],
     },
-    builtin: true,
-  },
-  {
-    id: base("profile.helper"),
-    name: "OpenCode helper",
-    group: base("group.opencode"),
-    slots: { identity: [base("slot.agent-or-base")] },
     builtin: true,
   },
   {
@@ -236,16 +239,29 @@ export const BUILTIN_PROFILES: readonly Profile[] = [
     slots: {
       platform: [],
       role: [],
-      identity: [base("slot.base"), base("slot.agent")],
-      capabilities: CAPABILITIES,
-      additional: ENVIRONMENT,
+      identity: [],
+      [DYNAMIC]: [base("slot.base"), base("slot.agent"), ...CAPABILITIES, ...ENVIRONMENT],
       output: [base("notice.structured-output")],
     },
     builtin: true,
   },
+  ...HELPERS.map((item) => ({
+    id: base(`profile.${item.id}`),
+    name: helperName(item.id),
+    group: base("group.helper"),
+    slots: { [HELPER]: [base(item.id)] },
+    builtin: true,
+  })),
 ]
 export const OPENCODE_PROFILE = base("profile.opencode")
-export const HELPER_PROFILE = base("profile.helper")
+// The helper profile each of OpenCode's helper agents uses unless it names a profile of its own. The
+// agent generator is not an agent; its one call goes by this name.
+export const AGENT_GENERATOR = "agent-generator"
+export const HELPER_DEFAULTS: ReadonlyMap<string, string> = new Map(
+  ["title", "summary", "compaction", AGENT_GENERATOR].map((name) => [name, base(`profile.helper.${name}`)]),
+)
+// The helper profile that replaced "OpenCode helper", which every helper agent used.
+const LEGACY_HELPER = base("profile.helper")
 
 // The key a project is stored under: its worktree, or the folder itself outside git.
 export function projectKey(ctx: { directory: string; worktree: string }) {
@@ -266,6 +282,10 @@ export function groups(catalog: Catalog) {
 export function profiles(catalog: Catalog) {
   return [...BUILTIN_PROFILES, ...catalog.profiles]
 }
+// A helper profile: its group holds the Helper type.
+export function isHelper(catalog: Catalog, profile: { group: string }) {
+  return groups(catalog).some((item) => item.id === profile.group && item.types.includes(HELPER))
+}
 // Tool descriptions are built in for every tool id (`opencode:tool.<id>`); their text comes from the
 // tool registry, so here it is empty.
 export function findLayer(catalog: Catalog, id: string) {
@@ -277,8 +297,8 @@ export function findLayer(catalog: Catalog, id: string) {
 
 export type Source = "agent" | "helper" | "project" | "namespace"
 
-// The profile an agent uses (spec §4): its own setting; for title, summary and compaction the
-// OpenCode helper profile; the project's default; the namespace's default; else OpenCode.
+// The profile an agent uses (spec §4): its own setting; for OpenCode's helper agents their helper
+// profile; the project's default; the namespace's default; else OpenCode.
 export function profileFor(
   catalog: Catalog,
   input: { agent: string; setting?: AgentSetting; project?: ProjectSetting },
@@ -286,15 +306,18 @@ export function profileFor(
   const find = (id: string | undefined) => (id ? profiles(catalog).find((item) => item.id === id) : undefined)
   const own = find(input.setting?.profile)
   if (own) return { profile: own, source: "agent" }
-  if (HELPER_AGENTS.includes(input.agent)) return { profile: find(HELPER_PROFILE)!, source: "helper" }
+  const helper = find(HELPER_DEFAULTS.get(input.agent))
+  if (helper) return { profile: helper, source: "helper" }
   const project = find(input.project?.defaultProfile)
   if (project) return { profile: project, source: "project" }
   return { profile: find(catalog.namespace.defaultProfile) ?? find(OPENCODE_PROFILE)!, source: "namespace" }
 }
 
 // A profile with an agent's override applied: the override's group if it has one, and its slots for
-// the types it changed. A type the group drops is not sent; one it adds starts empty.
-export function effective(catalog: Catalog, profile: Profile, override?: Override) {
+// the types it changed. A type the group drops is not sent; one it adds starts empty. A helper agent
+// has no override.
+export function effective(catalog: Catalog, profile: Profile, given?: Override) {
+  const override = isHelper(catalog, profile) ? undefined : given
   const group =
     groups(catalog).find((item) => item.id === (override?.group ?? profile.group)) ??
     BUILTIN_GROUPS.find((item) => item.id === base("group.opencode"))!
@@ -375,6 +398,18 @@ export function assemble(input: AssembleInput) {
   }
 }
 
+// What one layer fills in for a request: a Dynamic layer's sample (the agent's prompt, the base prompt
+// for the model, the environment, ...), or a fixed layer's text.
+export function sample(input: AssembleInput, id: string) {
+  const found = findLayer(input.catalog, id)
+  if (!found) return undefined
+  if (found.origin === "automatic")
+    return { text: input.catalog.namespace.purpose, source: input.catalog.namespace.name }
+  if (found.replaces || found.type === HELPER) return { text: found.text, source: found.name }
+  const items = resolve(input, new Map(), id)
+  return { text: items.map((item) => item.text).join("\n"), source: items[0]?.source ?? "" }
+}
+
 // The version of a text an agent uses: the copy of it in the profile's slot of the text's type, else
 // OpenCode's. Tool descriptions are copies in Stable capability boundaries; reminders, notices and
 // the agent generator are copies in Platform/system constraints.
@@ -441,6 +476,8 @@ function resolve(input: AssembleInput, copies: Map<string, Layer>, entry: string
     return one(chosen.text, chosen.layer?.name ?? id.slice(PREFIX.length), chosen.layer ?? found)
   }
   // Copies stand in for their built-in where it is used; on their own they add nothing.
+  // A helper agent's prompt is its helper layer, a copy or OpenCode's.
+  if (found.type === HELPER) return one(found.text, found.origin === "builtin" ? "OpenCode" : found.name)
   if (found.replaces) {
     if (found.replaces !== base("notice.structured-output") || !input.parts.output) return []
     return one(found.text, found.name)
@@ -476,6 +513,8 @@ export function checkGroup(catalog: Catalog, group: { name: string; types: Reado
   const unknown = group.types.find((type) => !known.includes(type))
   if (unknown) return `No group type "${unknown}"`
   if (new Set(group.types).size !== group.types.length) return "A type can be in a group only once"
+  if (group.types.includes(HELPER))
+    return group.types.length === 1 ? undefined : "A group with the Helper type holds no other type"
   const absent = REQUIRED_TYPES.find((type) => !group.types.includes(type))
   if (absent) return `A group needs ${typeName(catalog, absent)}`
   return undefined
@@ -485,6 +524,8 @@ export function checkGroup(catalog: Catalog, group: { name: string; types: Reado
 export function checkSlots(catalog: Catalog, shape: { group: string; slots: Slots }) {
   const group = groups(catalog).find((item) => item.id === shape.group)
   if (!group) return `No group "${shape.group}"`
+  if (group.types.includes(HELPER) && (shape.slots[HELPER] ?? []).length !== 1)
+    return "A helper profile holds one helper layer"
   if ((shape.slots.purpose ?? []).length) return "Purpose is automatic: it cannot hold layers"
   const extra = Object.keys(shape.slots).find((type) => !group.types.includes(type) && shape.slots[type]!.length)
   if (extra) return `${typeName(catalog, extra)} is not in the group "${group.name}"`
@@ -514,6 +555,78 @@ export function checkLayer(catalog: Catalog, input: { name: string; type: string
   if (!original || original.origin !== "builtin") return `"${input.replaces}" is not one of OpenCode's texts`
   if (original.type !== input.type) return `A copy of ${original.name} keeps its type`
   return undefined
+}
+
+// Before the Dynamic type, texts filled in per request were typed by where they went (Agent identity,
+// Stable capability boundaries, Optional additional blocks), and "OpenCode helper" was every helper
+// agent's profile. Items saved then are read as they are now: those texts move to the Dynamic slot,
+// in the order the group sent them, and the groups of profiles that hold them get Dynamic after Agent
+// identity.
+const DYNAMIC_LAYERS = new Set(BUILTIN_LAYERS.filter((item) => item.type === DYNAMIC).map((item) => item.id))
+
+export function migrateSlots(slots: Slots, order: ReadonlyArray<string>): Slots {
+  const rank = (type: string) => (order.includes(type) ? order.indexOf(type) : order.length)
+  const moved = Object.keys(slots)
+    .filter((type) => type !== DYNAMIC)
+    .toSorted((a, b) => rank(a) - rank(b))
+    .flatMap((type) => slots[type]!.filter((id) => DYNAMIC_LAYERS.has(id) && !slots[DYNAMIC]?.includes(id)))
+  if (!Object.entries(slots).some(([type, ids]) => type !== DYNAMIC && ids.some((id) => DYNAMIC_LAYERS.has(id))))
+    return slots
+  return {
+    ...Object.fromEntries(
+      Object.entries(slots).map(([type, ids]) => [type, ids.filter((id) => !DYNAMIC_LAYERS.has(id))] as const),
+    ),
+    [DYNAMIC]: [...(slots[DYNAMIC] ?? []), ...moved],
+  }
+}
+
+export function migrateGroup(group: Group): Group {
+  if (group.types.includes(DYNAMIC) || group.types.includes(HELPER)) return group
+  const at = group.types.indexOf("identity") + 1 || group.types.length
+  return { ...group, types: [...group.types.slice(0, at), DYNAMIC, ...group.types.slice(at)] }
+}
+
+export function migrate(catalog: Catalog): Catalog {
+  // Only groups whose profiles hold those texts need Dynamic; a group can be without it.
+  const needs = new Set(
+    catalog.profiles
+      .filter((profile) => Object.values(profile.slots).some((ids) => ids.some((id) => DYNAMIC_LAYERS.has(id))))
+      .map((profile) => profile.group),
+  )
+  const own = catalog.groups.map((group) => (needs.has(group.id) ? migrateGroup(group) : group))
+  const order = (id: string) =>
+    [...BUILTIN_GROUPS, ...own].find((item) => item.id === id)?.types ?? BUILTIN_TYPES.map((item) => item.id)
+  return {
+    ...catalog,
+    groups: own,
+    profiles: catalog.profiles.map((profile) => ({
+      ...profile,
+      slots: migrateSlots(profile.slots, order(profile.group)),
+    })),
+  }
+}
+
+export function migrateSetting(agent: string, setting: AgentSetting): AgentSetting {
+  const profile = setting.profile === LEGACY_HELPER ? HELPER_DEFAULTS.get(agent) : setting.profile
+  const slots = setting.override?.slots
+  return {
+    ...(profile ? { profile } : {}),
+    ...(setting.override
+      ? {
+          override: {
+            ...setting.override,
+            ...(slots
+              ? {
+                  slots: migrateSlots(
+                    slots,
+                    BUILTIN_TYPES.map((item) => item.id),
+                  ),
+                }
+              : {}),
+          },
+        }
+      : {}),
+  }
 }
 
 function typeName(catalog: Catalog, id: string) {

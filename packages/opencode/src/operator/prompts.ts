@@ -46,6 +46,15 @@ export const Preview = Schema.Struct({
 }).annotate({ identifier: "OperatorPromptPreview" })
 export type Preview = typeof Preview.Type
 
+export const Sample = Schema.Struct({
+  agent: Schema.String,
+  model: Schema.String.annotate({ description: "provider/model the sample was made for" }),
+  layer: Schema.String,
+  text: Schema.String.annotate({ description: "What the layer fills in; empty when it adds nothing here" }),
+  source: Schema.String.annotate({ description: "Where the text comes from: a file, an agent, or what wrote it" }),
+}).annotate({ identifier: "OperatorPromptSample" })
+export type Sample = typeof Sample.Type
+
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("OperatorPromptNotFound", {
   message: Schema.String,
 }) {}
@@ -59,6 +68,13 @@ export interface Interface {
     /** Preview this profile on the agent instead of its own (without its override). */
     profile?: string
   }) => Effect.Effect<Preview, NotFoundError>
+  /** What one layer fills in for an agent of this project: a Dynamic layer's sample. */
+  readonly sample: (input: {
+    agent: string
+    layer: string
+    providerID?: string
+    modelID?: string
+  }) => Effect.Effect<Sample, NotFoundError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorPrompts") {}
@@ -78,12 +94,9 @@ const layer = Layer.effect(
       return { tools: tools.map((tool) => ({ id: tool.id, builtin: tool.description })) }
     })
 
-    const preview = Effect.fn("OperatorPrompts.preview")(function* (input: {
-      agent: string
-      providerID?: string
-      modelID?: string
-      profile?: string
-    }) {
+    // What a request of an agent of this project starts from: the model, the parts OpenCode writes for
+    // it, and the project's prompt settings.
+    const request = Effect.fnUntraced(function* (input: { agent: string; providerID?: string; modelID?: string }) {
       const ctx = yield* InstanceState.context
       const agent = yield* agents.get(input.agent)
       if (!agent) return yield* new NotFoundError({ message: `No agent named "${input.agent}"` })
@@ -94,8 +107,9 @@ const layer = Layer.effect(
       const model = yield* provider
         .getModel(ref.providerID, ref.modelID)
         .pipe(Effect.mapError(() => new NotFoundError({ message: `No model ${ref.providerID}/${ref.modelID}` })))
-      // Title, summary and compaction calls carry no generated sections, only the agent's prompt.
-      const helper = OperatorProfile.HELPER_AGENTS.includes(agent.name)
+      // OpenCode's title, summary and compaction calls carry no generated sections, only the agent's
+      // prompt.
+      const helper = OperatorProfile.HELPER_DEFAULTS.has(agent.name)
       const [env, files, mcp, skills] = helper
         ? [[], [], undefined, undefined]
         : yield* Effect.all([
@@ -106,6 +120,39 @@ const layer = Layer.effect(
           ])
       const key = yield* Effect.promise(() => OperatorProjects.keyOf(ctx))
       const loaded = yield* Effect.promise(() => OperatorProfileStore.forProject(key))
+      const parts: OperatorProfile.Parts = { environment: env, instructions: files, mcp, skills, extra: [] }
+      return { ctx, agent, model, key, loaded, parts }
+    })
+
+    const sample = Effect.fn("OperatorPrompts.sample")(function* (input: {
+      agent: string
+      layer: string
+      providerID?: string
+      modelID?: string
+    }) {
+      const { agent, model, loaded, parts } = yield* request(input)
+      const found = OperatorProfile.sample(
+        {
+          catalog: loaded.catalog,
+          project: loaded.project,
+          agent: { name: agent.name, prompt: agent.prompt },
+          setting: loaded.agents[agent.name],
+          model,
+          parts,
+        },
+        input.layer,
+      )
+      if (!found) return yield* new NotFoundError({ message: `No layer "${input.layer}"` })
+      return { agent: agent.name, model: `${model.providerID}/${model.id}`, layer: input.layer, ...found }
+    })
+
+    const preview = Effect.fn("OperatorPrompts.preview")(function* (input: {
+      agent: string
+      providerID?: string
+      modelID?: string
+      profile?: string
+    }) {
+      const { ctx, agent, model, key, loaded, parts } = yield* request(input)
       if (input.profile && !OperatorProfile.profiles(loaded.catalog).some((item) => item.id === input.profile))
         return yield* new NotFoundError({
           message: `No profile "${input.profile}" in ${loaded.catalog.namespace.name}`,
@@ -117,7 +164,7 @@ const layer = Layer.effect(
         setting: loaded.agents[agent.name],
         profile: input.profile,
         model,
-        parts: { environment: env, instructions: files, mcp, skills, extra: [] },
+        parts,
       })
       return {
         agent: agent.name,
@@ -133,7 +180,7 @@ const layer = Layer.effect(
       }
     })
 
-    return Service.of({ catalog, preview })
+    return Service.of({ catalog, preview, sample })
   }),
 )
 

@@ -2313,7 +2313,8 @@ export type OperatorPromptSection =
   | "role"
   | "identity"
   | "tool"
-  | "generated"
+  | "dynamic"
+  | "helper"
   | "output"
   | "custom"
   | "message"
@@ -3227,6 +3228,23 @@ export type OperatorPromptNotFoundError = {
   data: {
     message: string
   }
+}
+
+export type OperatorPromptSample = {
+  agent: string
+  /**
+   * provider/model the sample was made for
+   */
+  model: string
+  layer: string
+  /**
+   * What the layer fills in; empty when it adds nothing here
+   */
+  text: string
+  /**
+   * Where the text comes from: a file, an agent, or what wrote it
+   */
+  source: string
 }
 
 export type OperatorMemoryFile = {
@@ -13590,6 +13608,42 @@ export type OperatorPromptPreviewResponses = {
 }
 
 export type OperatorPromptPreviewResponse = OperatorPromptPreviewResponses[keyof OperatorPromptPreviewResponses]
+
+export type OperatorPromptSampleData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    agent: string
+    layer: string
+    provider?: string
+    model?: string
+  }
+  url: "/operator/prompt/sample"
+}
+
+export type OperatorPromptSampleErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * OperatorPromptNotFoundError
+   */
+  404: OperatorPromptNotFoundError
+}
+
+export type OperatorPromptSampleError = OperatorPromptSampleErrors[keyof OperatorPromptSampleErrors]
+
+export type OperatorPromptSampleResponses = {
+  /**
+   * What the layer fills in
+   */
+  200: OperatorPromptSample
+}
+
+export type OperatorPromptSampleResponse = OperatorPromptSampleResponses[keyof OperatorPromptSampleResponses]
 
 export type OperatorMemoryOverviewData = {
   body?: never

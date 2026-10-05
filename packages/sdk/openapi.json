@@ -13351,6 +13351,102 @@
         ]
       }
     },
+    "/operator/prompt/sample": {
+      "get": {
+        "tags": ["operator prompts"],
+        "operationId": "operator.prompt.sample",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "layer",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "What the layer fills in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPromptSample"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorPromptNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPromptNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "What one layer fills in for an agent of this project and a model: a Dynamic layer's text (the agent's prompt, the base prompt for the model, the environment, skills, MCP instructions, instruction files), or a fixed layer's text.",
+        "summary": "Sample a layer",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.prompt.sample({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/operator/memory/overview": {
       "get": {
         "tags": ["operator memory"],
@@ -26269,7 +26365,7 @@
       },
       "OperatorPromptSection": {
         "type": "string",
-        "enum": ["base", "purpose", "role", "identity", "tool", "generated", "output", "custom", "message"]
+        "enum": ["base", "purpose", "role", "identity", "tool", "dynamic", "helper", "output", "custom", "message"]
       },
       "OperatorPromptOrigin": {
         "type": "string",
@@ -28763,6 +28859,31 @@
           }
         },
         "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorPromptSample": {
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string",
+            "description": "provider/model the sample was made for"
+          },
+          "layer": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string",
+            "description": "What the layer fills in; empty when it adds nothing here"
+          },
+          "source": {
+            "type": "string",
+            "description": "Where the text comes from: a file, an agent, or what wrote it"
+          }
+        },
+        "required": ["agent", "model", "layer", "text", "source"],
         "additionalProperties": false
       },
       "OperatorMemoryFile": {

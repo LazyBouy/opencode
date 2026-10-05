@@ -203,7 +203,7 @@ export async function readNamespace(id: string): Promise<OperatorProfile.Catalog
       builtin: false,
     })),
   ])
-  return { namespace, types, layers, groups, profiles }
+  return OperatorProfile.migrate({ namespace, types, layers, groups, profiles })
 }
 
 export async function readProjects(): Promise<Record<string, OperatorProfile.ProjectSetting>> {
@@ -231,7 +231,12 @@ export async function readAgents(): Promise<Record<string, Record<string, Operat
   return Object.fromEntries(
     Object.entries(data as Record<string, Record<string, Record<string, unknown>>>).map((project) => [
       project[0],
-      Object.fromEntries(Object.entries(project[1] ?? {}).map((agent) => [agent[0], agentSetting(agent[1])])),
+      Object.fromEntries(
+        Object.entries(project[1] ?? {}).map((agent) => [
+          agent[0],
+          OperatorProfile.migrateSetting(agent[0], agentSetting(agent[1])),
+        ]),
+      ),
     ]),
   )
 }
@@ -393,6 +398,7 @@ const layer = Layer.effect(
       if (input.name !== undefined) yield* refuse(input.name.trim() ? undefined : "A namespace needs a name")
       if (input.defaultProfile && !OperatorProfile.profiles(catalog).some((item) => item.id === input.defaultProfile))
         yield* refuse(`No profile "${input.defaultProfile}" in ${catalog.namespace.name}`)
+      yield* refuse(helperDefault(catalog, input.defaultProfile))
       const next = {
         ...catalog.namespace,
         ...(input.name !== undefined ? { name: input.name.trim() } : {}),
@@ -474,10 +480,17 @@ const layer = Layer.effect(
       const before = yield* existing(found.layers, "layer", id)
       // A copy keeps its type and section; a layer's type changes only in Custom.
       const type = before?.replaces ? before.type : input.type
-      const section = before?.section ?? input.section ?? sectionFor(type)
+      // Helper and Dynamic layers have sections of their own.
+      const own = type === OperatorProfile.HELPER || type === OperatorProfile.DYNAMIC ? sectionFor(type) : undefined
+      const section = own ?? before?.section ?? input.section ?? sectionFor(type)
       yield* refuse(
         before && !before.replaces && before.type !== type && before.section !== "custom"
           ? "Only Custom layers can change type"
+          : undefined,
+      )
+      yield* refuse(
+        before && before.section !== section
+          ? "A layer cannot change to or from the Helper or Dynamic type"
           : undefined,
       )
       yield* refuse(OperatorProfile.checkLayer(found, { name: input.name, type, replaces: before?.replaces }))
@@ -554,7 +567,10 @@ const layer = Layer.effect(
       const found = yield* load(ns)
       yield* existing(found.profiles, "profile", id)
       yield* refuse(input.name.trim() ? undefined : "A profile needs a name")
-      yield* refuse(OperatorProfile.checkSlots(found, input))
+      // Slots shaped as before the Dynamic type are read as they are now.
+      const order = OperatorProfile.groups(found).find((item) => item.id === input.group)?.types ?? []
+      const slots = OperatorProfile.migrateSlots(input.slots, order)
+      yield* refuse(OperatorProfile.checkSlots(found, { group: input.group, slots }))
       const group = OperatorProfile.groups(found).find((item) => item.id === input.group)!
       const next = {
         id: id ?? (yield* Effect.promise(() => freeId(path.join(root(), ns, "profiles"), input.name, ".json"))),
@@ -562,7 +578,7 @@ const layer = Layer.effect(
         group: input.group,
         // Only the group's types are kept, in its order.
         slots: Object.fromEntries(
-          group.types.filter((type) => type !== "purpose").map((type) => [type, [...(input.slots[type] ?? [])]]),
+          group.types.filter((type) => type !== "purpose").map((type) => [type, [...(slots[type] ?? [])]]),
         ),
         builtin: false,
       }
@@ -638,6 +654,7 @@ const layer = Layer.effect(
       }
       if (next.defaultProfile && !OperatorProfile.profiles(after).some((item) => item.id === next.defaultProfile))
         yield* refuse(`No profile "${next.defaultProfile}" in ${after.namespace.name}`)
+      yield* refuse(helperDefault(after, next.defaultProfile))
       yield* Effect.promise(async () => {
         const all = await readProjects()
         await writeJson(path.join(root(), "projects.json"), { ...all, [key]: next })
@@ -668,14 +685,17 @@ const layer = Layer.effect(
     const setAgent = Effect.fn("OperatorProfileStore.setAgent")(function* (
       project: string,
       name: string,
-      setting: OperatorProfile.AgentSetting,
+      given: OperatorProfile.AgentSetting,
     ) {
+      const setting = OperatorProfile.migrateSetting(name, given)
       const context = yield* Effect.promise(() => forProject(project))
       const found = context.catalog
       if (setting.profile && !OperatorProfile.profiles(found).some((item) => item.id === setting.profile))
         yield* refuse(`No profile "${setting.profile}" in ${found.namespace.name}`)
       if (setting.override) {
         const chosen = OperatorProfile.profileFor(found, { agent: name, setting, project: context.project })
+        if (OperatorProfile.isHelper(found, chosen.profile))
+          yield* refuse(`${name} uses the helper profile ${chosen.profile.name}: a helper agent has no override`)
         const shape = OperatorProfile.effective(found, chosen.profile, setting.override)
         yield* refuse(OperatorProfile.checkSlots(found, { group: shape.group.id, slots: shape.slots }))
         if (
@@ -765,11 +785,22 @@ const layer = Layer.effect(
 
 export const node = LayerNode.make({ service: Service, layer, deps: [Database.node] })
 
+// A default profile is for every agent of a project or namespace; a helper profile would make them all
+// helper agents.
+function helperDefault(catalog: OperatorProfile.Catalog, id: string | undefined) {
+  const found = id ? OperatorProfile.profiles(catalog).find((item) => item.id === id) : undefined
+  return found && OperatorProfile.isHelper(catalog, found)
+    ? `${found.name} is a helper profile: only an agent can use it`
+    : undefined
+}
+
 // The section a new layer of a type shows in.
 function sectionFor(type: string): OperatorProfile.Section {
   if (type === "purpose") return "purpose"
   if (type === "role") return "role"
   if (type === "identity") return "identity"
+  if (type === OperatorProfile.HELPER) return "helper"
+  if (type === OperatorProfile.DYNAMIC) return "dynamic"
   return "custom"
 }
 

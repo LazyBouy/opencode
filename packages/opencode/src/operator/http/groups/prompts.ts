@@ -13,6 +13,7 @@ import { described } from "@/server/routes/instance/httpapi/groups/metadata"
 export const OperatorPromptPaths = {
   catalog: "/operator/prompt",
   preview: "/operator/prompt/preview",
+  sample: "/operator/prompt/sample",
 } as const
 
 export class ApiPromptNotFoundError extends Schema.ErrorClass<{
@@ -56,6 +57,24 @@ export const OperatorPromptApi = HttpApi.make("operator-prompt")
             summary: "Preview a system prompt",
             description:
               "The system prompt an agent of this project sends with a model: its namespace, the profile it uses and why, the slots its override changed, and each section's group type and layer, with Purpose marked automatic. The model defaults to the agent's, then the configured default.",
+          }),
+        ),
+        HttpApiEndpoint.get("sample", OperatorPromptPaths.sample, {
+          query: Schema.Struct({
+            ...WorkspaceRoutingQueryFields,
+            agent: Schema.String,
+            layer: Schema.String,
+            provider: Schema.optional(Schema.String),
+            model: Schema.optional(Schema.String),
+          }),
+          success: described(OperatorPrompts.Sample, "What the layer fills in"),
+          error: ApiPromptNotFoundError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.prompt.sample",
+            summary: "Sample a layer",
+            description:
+              "What one layer fills in for an agent of this project and a model: a Dynamic layer's text (the agent's prompt, the base prompt for the model, the environment, skills, MCP instructions, instruction files), or a fixed layer's text.",
           }),
         ),
       )

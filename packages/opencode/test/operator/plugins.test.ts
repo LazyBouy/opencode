@@ -65,7 +65,7 @@ it.instance("a tool's description is the copy in the agent's profile, else OpenC
       const profile = yield* store.saveProfile("opencode", undefined, {
         name: "Tools",
         group: spec.group,
-        slots: { ...spec.slots, capabilities: [...spec.slots.capabilities!, bash.id] },
+        slots: { ...spec.slots, capabilities: [bash.id] },
       })
       yield* store.setAgent(directory, "build", { profile: profile.id })
       const definition = (yield* hooks())["tool.definition"]!

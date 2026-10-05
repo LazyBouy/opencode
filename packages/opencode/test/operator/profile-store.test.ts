@@ -51,12 +51,12 @@ const seed = Effect.fnUntraced(function* () {
   })
   const group = yield* store.saveGroup("opencode", undefined, {
     name: "With rules",
-    types: ["purpose", rules.id, "role", "identity"],
+    types: ["purpose", rules.id, "role", "identity", "dynamic"],
   })
   const profile = yield* store.saveProfile("opencode", undefined, {
     name: "Reviewing",
     group: group.id,
-    slots: { [rules.id]: [rule.id], role: [role.id], identity: [`${P}slot.agent-or-base`] },
+    slots: { [rules.id]: [rule.id], role: [role.id], dynamic: [`${P}slot.agent-or-base`] },
   })
   return { store, rules, rule, role, group, profile }
 })
@@ -68,8 +68,8 @@ it.instance("the OpenCode namespace exists from the start, and new items are wri
       const catalog = yield* items.store.catalog("opencode")
       expect(catalog.namespace).toMatchObject({ id: "opencode", name: "OpenCode", purpose: "" })
       expect(catalog.profiles.map((item) => item.id)).toContain(items.profile.id)
-      expect(catalog.profiles.filter((item) => item.builtin)).toHaveLength(3)
-      expect(catalog.types.filter((item) => item.builtin)).toHaveLength(7)
+      expect(catalog.profiles.filter((item) => item.builtin)).toHaveLength(OperatorProfile.BUILTIN_PROFILES.length)
+      expect(catalog.types.filter((item) => item.builtin)).toHaveLength(OperatorProfile.BUILTIN_TYPES.length)
       const file = path.join(global, "namespaces", "opencode", "layers", `${items.role.id}.md`)
       expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toContain("type: role")
     }),
@@ -220,7 +220,11 @@ it.instance("copying a project gives the new one its prompt settings; another na
       // Same namespace: the profiles are shared, so the links are the same ids.
       const same = yield* items.store.copyProject(source, "/work/copy", {})
       expect(same.copied).toEqual([])
-      expect(same.project).toMatchObject({ namespace: "opencode", purpose: purpose.id, defaultProfile: items.profile.id })
+      expect(same.project).toMatchObject({
+        namespace: "opencode",
+        purpose: purpose.id,
+        defaultProfile: items.profile.id,
+      })
       expect((yield* items.store.agent("/work/copy", "build")).profile).toBe(items.profile.id)
 
       // Another namespace: what the project uses is copied there and the links point at the copies.

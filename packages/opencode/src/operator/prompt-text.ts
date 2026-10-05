@@ -3,6 +3,9 @@ export * as OperatorPromptText from "./prompt-text"
 import { Effect, Fiber } from "effect"
 import { MAX_STEPS_PROMPT } from "@opencode-ai/core/session/runner/max-steps"
 import PROMPT_GENERATE from "@/agent/generate.txt"
+import PROMPT_COMPACTION from "@/agent/prompt/compaction.txt"
+import PROMPT_SUMMARY from "@/agent/prompt/summary.txt"
+import PROMPT_TITLE from "@/agent/prompt/title.txt"
 import { InstanceState } from "@/effect/instance-state"
 import type { Provider } from "@/provider/provider"
 import PROMPT_ANTHROPIC from "@/session/prompt/anthropic.txt"
@@ -27,7 +30,7 @@ import { SystemPrompt } from "@/session/system"
 // Mirrors session/prompt.ts; kept in sync by the end-to-end prompt tests.
 export const STRUCTURED_OUTPUT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
-export type Kind = "base" | "reminder" | "notice" | "generator"
+export type Kind = "base" | "reminder" | "notice" | "helper"
 
 interface Builtin {
   readonly id: string
@@ -52,7 +55,12 @@ export const BUILTINS: readonly Builtin[] = [
   { id: "reminder.build-switch", kind: "reminder", text: BUILD_SWITCH },
   { id: "notice.structured-output", kind: "notice", text: STRUCTURED_OUTPUT },
   { id: "notice.max-steps", kind: "notice", text: MAX_STEPS_PROMPT },
-  { id: "generator.agent", kind: "generator", text: PROMPT_GENERATE },
+  // The prompts of the agents OpenCode runs for itself (title, summary, compaction) and of the agent
+  // generator's one call.
+  { id: "helper.title", kind: "helper", text: PROMPT_TITLE },
+  { id: "helper.summary", kind: "helper", text: PROMPT_SUMMARY },
+  { id: "helper.compaction", kind: "helper", text: PROMPT_COMPACTION },
+  { id: "helper.agent-generator", kind: "helper", text: PROMPT_GENERATE },
 ]
 
 // Versions of built-in texts by their id, for rewriteReminder and text().
