@@ -2421,6 +2421,37 @@ export type OperatorProjectResolution = {
   }
 }
 
+export type OperatorProjectRegisterResult = {
+  project: OperatorPromptProject
+  copied?: {
+    /**
+     * Files copied, relative to the project
+     */
+    files: Array<string>
+    /**
+     * Files the folder already had, left as they were
+     */
+    kept: Array<string>
+    /**
+     * Prompt items copied to another namespace
+     */
+    items: Array<OperatorPromptCopied>
+    /**
+     * Sessions copied
+     */
+    sessions: number
+  }
+}
+
+export type OperatorFolderMoveResult = {
+  moved: number
+  archived: number
+}
+
+export type OperatorFolderArchiveResult = {
+  archived: number
+}
+
 export type Model = {
   id: string
   providerID: string
@@ -9136,6 +9167,8 @@ export type OperatorProjectSettingsRegisterData = {
     directory: string
     git?: boolean
     namespace?: string
+    from?: string
+    sessions?: boolean
   }
   path?: never
   query?: never
@@ -9158,13 +9191,88 @@ export type OperatorProjectSettingsRegisterError =
 
 export type OperatorProjectSettingsRegisterResponses = {
   /**
-   * The project
+   * The project, and what was copied
    */
-  200: OperatorPromptProject
+  200: OperatorProjectRegisterResult
 }
 
 export type OperatorProjectSettingsRegisterResponse =
   OperatorProjectSettingsRegisterResponses[keyof OperatorProjectSettingsRegisterResponses]
+
+export type OperatorFolderSessionsMoveData = {
+  body?: {
+    /**
+     * A folder that is not part of a project
+     */
+    directory: string
+    /**
+     * The project to move its sessions to
+     */
+    project: string
+  }
+  path?: never
+  query?: never
+  url: "/operator/project-settings/folder/move"
+}
+
+export type OperatorFolderSessionsMoveErrors = {
+  /**
+   * OperatorProfileInvalidError | InvalidRequestError
+   */
+  400: OperatorProfileInvalidError | InvalidRequestError
+  /**
+   * OperatorProfileNotFoundError
+   */
+  404: OperatorProfileNotFoundError
+}
+
+export type OperatorFolderSessionsMoveError = OperatorFolderSessionsMoveErrors[keyof OperatorFolderSessionsMoveErrors]
+
+export type OperatorFolderSessionsMoveResponses = {
+  /**
+   * Sessions moved, and sessions archived because they could not be moved
+   */
+  200: OperatorFolderMoveResult
+}
+
+export type OperatorFolderSessionsMoveResponse =
+  OperatorFolderSessionsMoveResponses[keyof OperatorFolderSessionsMoveResponses]
+
+export type OperatorFolderSessionsArchiveData = {
+  body?: {
+    /**
+     * A folder that is not part of a project
+     */
+    directory: string
+  }
+  path?: never
+  query?: never
+  url: "/operator/project-settings/folder/archive"
+}
+
+export type OperatorFolderSessionsArchiveErrors = {
+  /**
+   * OperatorProfileInvalidError | InvalidRequestError
+   */
+  400: OperatorProfileInvalidError | InvalidRequestError
+  /**
+   * OperatorProfileNotFoundError
+   */
+  404: OperatorProfileNotFoundError
+}
+
+export type OperatorFolderSessionsArchiveError =
+  OperatorFolderSessionsArchiveErrors[keyof OperatorFolderSessionsArchiveErrors]
+
+export type OperatorFolderSessionsArchiveResponses = {
+  /**
+   * Sessions archived
+   */
+  200: OperatorFolderArchiveResult
+}
+
+export type OperatorFolderSessionsArchiveResponse =
+  OperatorFolderSessionsArchiveResponses[keyof OperatorFolderSessionsArchiveResponses]
 
 export type EventSubscribeData = {
   body?: never

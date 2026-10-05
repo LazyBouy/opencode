@@ -203,6 +203,44 @@ it.instance("moving a project copies what it uses and keeps its prompt the same"
   ),
 )
 
+it.instance("copying a project gives the new one its prompt settings; another namespace gets copies", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      const items = yield* seed()
+      const source = "/work/app"
+      const purpose = yield* items.store.saveLayer("opencode", undefined, {
+        name: "App goal",
+        type: "purpose",
+        section: "purpose",
+        text: "Ship the app.",
+      })
+      yield* items.store.setProject(source, { purpose: purpose.id, defaultProfile: items.profile.id })
+      yield* items.store.setAgent(source, "build", { profile: items.profile.id })
+
+      // Same namespace: the profiles are shared, so the links are the same ids.
+      const same = yield* items.store.copyProject(source, "/work/copy", {})
+      expect(same.copied).toEqual([])
+      expect(same.project).toMatchObject({ namespace: "opencode", purpose: purpose.id, defaultProfile: items.profile.id })
+      expect((yield* items.store.agent("/work/copy", "build")).profile).toBe(items.profile.id)
+
+      // Another namespace: what the project uses is copied there and the links point at the copies.
+      const target = yield* items.store.createNamespace({ name: "Other" })
+      yield* items.store.remove(target.id, "profile", items.profile.id)
+      yield* items.store.remove(target.id, "layer", purpose.id)
+      const other = yield* items.store.copyProject(source, "/work/other", { namespace: target.id })
+      expect(other.copied.map((item) => item.name)).toEqual(["App goal", "Reviewing"])
+      expect(other.project.namespace).toBe(target.id)
+      const loaded = yield* Effect.promise(() => OperatorProfileStore.forProject("/work/other"))
+      expect(loaded.catalog.profiles.some((profile) => profile.id === other.project.defaultProfile)).toBe(true)
+      expect(loaded.agents.build?.profile).toBe(other.project.defaultProfile)
+
+      // The source is unchanged.
+      const unchanged = (yield* items.store.projects()).find((item) => item.key === source)
+      expect(unchanged).toMatchObject({ namespace: "opencode", purpose: purpose.id, defaultProfile: items.profile.id })
+    }),
+  ),
+)
+
 it.instance("items in use cannot be deleted, and the error says by what", () =>
   withGlobal(() =>
     Effect.gen(function* () {

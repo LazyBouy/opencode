@@ -23,6 +23,8 @@ export const OperatorNamespacePaths = {
   projects: "/operator/project-settings",
   resolve: "/operator/project-settings/resolve",
   register: "/operator/project-settings/register",
+  folderMove: "/operator/project-settings/folder/move",
+  folderArchive: "/operator/project-settings/folder/archive",
 } as const
 
 const profileError = <Name extends string, Status extends number>(name: Name, status: Status) =>
@@ -61,6 +63,20 @@ const Resolution = Schema.Struct({
     }),
   ).annotate({ description: "The project the folder belongs to; missing when it is not part of one" }),
 }).annotate({ identifier: "OperatorProjectResolution" })
+
+const Registered = Schema.Struct({
+  project: OperatorProfileStore.ProjectInfo,
+  copied: Schema.optional(
+    Schema.Struct({
+      files: Schema.Array(Schema.String).annotate({ description: "Files copied, relative to the project" }),
+      kept: Schema.Array(Schema.String).annotate({ description: "Files the folder already had, left as they were" }),
+      items: Schema.Array(OperatorProfileStore.Copied).annotate({
+        description: "Prompt items copied to another namespace",
+      }),
+      sessions: Schema.Finite.annotate({ description: "Sessions copied" }),
+    }),
+  ).annotate({ description: "What was copied from the source project" }),
+}).annotate({ identifier: "OperatorProjectRegisterResult" })
 
 const doc = (identifier: string, summary: string, description: string) =>
   OpenApi.annotations({ identifier, summary, description })
@@ -319,15 +335,59 @@ export const OperatorNamespaceGroup = HttpApiGroup.make("operatorNamespace")
         git: Schema.optional(Schema.Boolean).annotate({
           description: "Make it a git repository (git init) instead of registering it as it is",
         }),
-        namespace: Schema.optional(Schema.String).annotate({ description: "Its namespace; OpenCode by default" }),
+        namespace: Schema.optional(Schema.String).annotate({
+          description: "Its namespace; by default the source project's, or OpenCode",
+        }),
+        from: Schema.optional(Schema.String).annotate({
+          description:
+            "A project to copy: its agents with their prompt settings, its tools, skills and commands. The source is left as it is.",
+        }),
+        sessions: Schema.optional(Schema.Boolean).annotate({
+          description: "With from: copy the source's sessions too (off by default)",
+        }),
       }),
-      success: described(OperatorProfileStore.ProjectInfo, "The project"),
+      success: described(Registered, "The project, and what was copied"),
       error: errors,
     }).annotateMerge(
       doc(
         "operator.projectSettings.register",
         "Make a folder a project",
-        "Register a folder outside git as a project (its subfolders belong to it too), or make it a git repository. Sessions can start only in a project.",
+        "Register a folder outside git as a project (its subfolders belong to it too), or make it a git repository; a missing folder is created. With from, the new project is a copy of another: in the same namespace the prompt profiles are shared, in another the ones it uses are copied. Sessions can start only in a project.",
+      ),
+    ),
+    HttpApiEndpoint.post("folderMove", OperatorNamespacePaths.folderMove, {
+      payload: Schema.Struct({
+        directory: Schema.String.annotate({ description: "A folder that is not part of a project" }),
+        project: Schema.String.annotate({ description: "The project to move its sessions to" }),
+      }),
+      success: described(
+        Schema.Struct({ moved: Schema.Finite, archived: Schema.Finite }).annotate({
+          identifier: "OperatorFolderMoveResult",
+        }),
+        "Sessions moved, and sessions archived because they could not be moved",
+      ),
+      error: errors,
+    }).annotateMerge(
+      doc(
+        "operator.folderSessions.move",
+        "Move a folder's sessions into a project",
+        "Move the sessions that ran in a folder that is not part of a project (with their subagent sessions) to a project's folder. A session that cannot be moved is archived. The files they changed stay where they are.",
+      ),
+    ),
+    HttpApiEndpoint.post("folderArchive", OperatorNamespacePaths.folderArchive, {
+      payload: Schema.Struct({
+        directory: Schema.String.annotate({ description: "A folder that is not part of a project" }),
+      }),
+      success: described(
+        Schema.Struct({ archived: Schema.Finite }).annotate({ identifier: "OperatorFolderArchiveResult" }),
+        "Sessions archived",
+      ),
+      error: errors,
+    }).annotateMerge(
+      doc(
+        "operator.folderSessions.archive",
+        "Archive a folder's sessions",
+        "Archive the sessions that ran in a folder that is not part of a project.",
       ),
     ),
   )

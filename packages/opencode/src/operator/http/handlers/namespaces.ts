@@ -1,8 +1,12 @@
+import fs from "fs/promises"
 import path from "path"
 import { OperatorFolders } from "@/operator/folders"
 import { OperatorProfile } from "@/operator/profile"
 import { OperatorProfileStore } from "@/operator/profile-store"
+import { OperatorProjectCopy } from "@/operator/project-copy"
+import { OperatorProjectSessions } from "@/operator/project-sessions"
 import { OperatorProjects } from "@/operator/projects"
+import { InstanceStore } from "@/project/instance-store"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { ApiProfileInvalidError, ApiProfileNotFoundError } from "../groups/namespaces"
@@ -17,6 +21,8 @@ export const operatorNamespaceHandlers = HttpApiBuilder.group(OperatorRootApi, "
   Effect.gen(function* () {
     const store = yield* OperatorProfileStore.Service
     const folders = yield* OperatorFolders.Service
+    const sessions = yield* OperatorProjectSessions.Service
+    const instances = yield* InstanceStore.Service
     const done = Effect.as(true)
     const invalid = (message: string) =>
       new ApiProfileInvalidError({ name: "OperatorProfileInvalidError", data: { message } })
@@ -91,15 +97,57 @@ export const operatorNamespaceHandlers = HttpApiBuilder.group(OperatorRootApi, "
           const directory = path.resolve(ctx.payload.directory)
           const current = yield* Effect.promise(() => OperatorProjects.projectOf(directory))
           if (current?.git) return yield* invalid(`${directory} is already in the git repository ${current.key}`)
+          if (current) return yield* invalid(`${directory} is already part of the project ${current.key}`)
+          const source = ctx.payload.from ? path.resolve(ctx.payload.from) : undefined
+          if (source && (yield* Effect.promise(() => OperatorProjects.projectOf(source)))?.key !== source)
+            return yield* invalid(`${source} is not a project`)
+          const from = source ? (yield* store.projects()).find((item) => item.key === source) : undefined
+          const namespace = ctx.payload.namespace ?? from?.namespace ?? OperatorProfile.OPENCODE
+          yield* Effect.tryPromise({
+            try: () => fs.mkdir(directory, { recursive: true }),
+            catch: () => invalid(`${directory} cannot be created`),
+          })
           if (ctx.payload.git) yield* folders.init(directory).pipe(Effect.mapError((error) => invalid(error.message)))
           // Outside git, the project is its entry in projects.json; a git project gets one for a
-          // namespace other than OpenCode.
-          if (!ctx.payload.git || (ctx.payload.namespace && ctx.payload.namespace !== OperatorProfile.OPENCODE))
-            yield* store
-              .setProject(directory, { namespace: ctx.payload.namespace ?? OperatorProfile.OPENCODE })
-              .pipe(Effect.mapError(apiError))
+          // namespace other than OpenCode, or for the prompt settings of the project it copies.
+          const copied = source
+            ? yield* Effect.gen(function* () {
+                const settings = yield* store
+                  .copyProject(source, directory, { namespace })
+                  .pipe(Effect.mapError(apiError))
+                const files = yield* Effect.promise(() => OperatorProjectCopy.copyFiles(source, directory))
+                return { files: files.copied, kept: files.kept, items: settings.copied, sessions: 0 }
+              })
+            : undefined
+          if (!source && (!ctx.payload.git || namespace !== OperatorProfile.OPENCODE))
+            yield* store.setProject(directory, { namespace }).pipe(Effect.mapError(apiError))
+          // An instance loaded before is reloaded with the folder's new project, agents and config.
+          yield* instances.disposeDirectory(directory)
+          if (copied && ctx.payload.sessions) copied.sessions = yield* sessions.copy(source!, directory)
           const listed = (yield* store.projects()).find((item) => item.key === directory)
-          return listed ?? { key: directory, name: path.basename(directory), namespace: OperatorProfile.OPENCODE }
+          return {
+            project: listed ?? { key: directory, name: path.basename(directory), namespace, registered: true },
+            ...(copied ? { copied } : {}),
+          }
+        }),
+      )
+      .handle("folderMove", (ctx) =>
+        Effect.gen(function* () {
+          const directory = path.resolve(ctx.payload.directory)
+          const target = path.resolve(ctx.payload.project)
+          if (yield* Effect.promise(() => OperatorProjects.projectOf(directory)))
+            return yield* invalid(`${directory} is part of a project already`)
+          if ((yield* Effect.promise(() => OperatorProjects.projectOf(target)))?.key !== target)
+            return yield* invalid(`${target} is not a project`)
+          return yield* sessions.move(directory, target)
+        }),
+      )
+      .handle("folderArchive", (ctx) =>
+        Effect.gen(function* () {
+          const directory = path.resolve(ctx.payload.directory)
+          if (yield* Effect.promise(() => OperatorProjects.projectOf(directory)))
+            return yield* invalid(`${directory} is part of a project already`)
+          return { archived: yield* sessions.archive(directory) }
         }),
       )
       .handle("project", (ctx) =>

@@ -476,6 +476,22 @@ export const operatorScenarios: Scenario[] = [
     }))
     .status(400),
   http.protected
+    .post("/operator/project-settings/folder/move", "operator.folderSessions.move")
+    .at((ctx) => ({
+      path: "/operator/project-settings/folder/move",
+      headers: ctx.headers(),
+      body: { directory: ctx.directory ?? "/tmp/x", project: ctx.directory ?? "/tmp/x" },
+    }))
+    .status(400),
+  http.protected
+    .post("/operator/project-settings/folder/archive", "operator.folderSessions.archive")
+    .at((ctx) => ({
+      path: "/operator/project-settings/folder/archive",
+      headers: ctx.headers(),
+      body: { directory: ctx.directory ?? "/tmp/x" },
+    }))
+    .status(400),
+  http.protected
     .get("/operator/agent-prompt/{name}", "operator.agentPrompt.get")
     .at((ctx) => ({ path: route("/operator/agent-prompt/{name}", { name: "build" }), headers: ctx.headers() }))
     .json(200, (body) => {

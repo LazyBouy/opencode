@@ -133,6 +133,12 @@ export interface Interface {
     key: string,
     input: { namespace?: string; purpose?: string; defaultProfile?: string; dryRun?: boolean },
   ) => Effect.Effect<{ project: ProjectInfo; copied: Copied[] }, Failure>
+  /** Gives a new project the prompt settings of another (and its agents' settings); the other is unchanged. */
+  readonly copyProject: (
+    source: string,
+    target: string,
+    input: { namespace?: string },
+  ) => Effect.Effect<{ project: ProjectInfo; copied: Copied[] }, Failure>
   readonly agent: (project: string, name: string) => Effect.Effect<OperatorProfile.AgentSetting>
   /** An agent's setting, with the profile it uses and where that comes from. */
   readonly agentPrompt: (project: string, name: string) => Effect.Effect<AgentPrompt>
@@ -607,19 +613,7 @@ const layer = Layer.effect(
       const moved = moving
         ? yield* Effect.promise(async () => {
             const source = (await readNamespace(current.namespace))!
-            const own = agents[key] ?? {}
-            const roots = [
-              ...(current.purpose ? [{ kind: "layer" as const, id: current.purpose }] : []),
-              ...(current.defaultProfile ? [{ kind: "profile" as const, id: current.defaultProfile }] : []),
-              ...Object.values(own).flatMap((setting) => [
-                ...(setting.profile ? [{ kind: "profile" as const, id: setting.profile }] : []),
-                ...(setting.override?.group ? [{ kind: "group" as const, id: setting.override.group }] : []),
-                ...Object.values(setting.override?.slots ?? {})
-                  .flat()
-                  .map((layer) => ({ kind: "layer" as const, id: layer })),
-              ]),
-            ]
-            return copyItems(source, destination, roots, undefined, input.dryRun)
+            return copyItems(source, destination, rootsOf(current, agents[key] ?? {}), undefined, input.dryRun)
           })
         : { copied: [] as Copied[], ids: new Map<string, string>() }
       const map = (kind: Kind, id: string | undefined) => (id ? (moved.ids.get(`${kind}:${id}`) ?? id) : undefined)
@@ -648,31 +642,7 @@ const layer = Layer.effect(
         const all = await readProjects()
         await writeJson(path.join(root(), "projects.json"), { ...all, [key]: next })
         if (!moving || !agents[key]) return
-        const remapped = Object.fromEntries(
-          Object.entries(agents[key]!).map((agent) => [
-            agent[0],
-            {
-              ...(agent[1].profile ? { profile: map("profile", agent[1].profile) } : {}),
-              ...(agent[1].override
-                ? {
-                    override: {
-                      ...(agent[1].override.group ? { group: map("group", agent[1].override.group) } : {}),
-                      ...(agent[1].override.slots
-                        ? {
-                            slots: Object.fromEntries(
-                              Object.entries(agent[1].override.slots).map((slot) => [
-                                slot[0],
-                                slot[1].map((id) => map("layer", id)!),
-                              ]),
-                            ),
-                          }
-                        : {}),
-                    },
-                  }
-                : {}),
-            },
-          ]),
-        )
+        const remapped = remapAgents(agents[key]!, map)
         await writeJson(path.join(root(), "agents.json"), { ...agents, [key]: remapped })
       })
       return { project: { ...current, ...next }, copied: moved.copied }
@@ -730,7 +700,48 @@ const layer = Layer.effect(
       return next
     })
 
+    const copyProject = Effect.fn("OperatorProfileStore.copyProject")(function* (
+      source: string,
+      target: string,
+      input: { namespace?: string },
+    ) {
+      const from: ProjectInfo = (yield* known()).find((item) => item.key === source) ?? {
+        key: source,
+        name: path.basename(source),
+        namespace: OperatorProfile.OPENCODE,
+      }
+      const namespace = input.namespace ?? from.namespace
+      const destination = yield* load(namespace)
+      const agents = yield* Effect.promise(readAgents)
+      const own = agents[source] ?? {}
+      // In the same namespace the prompt profiles are shared; in another, what the project uses is copied.
+      const moved =
+        namespace === from.namespace
+          ? { copied: [] as Copied[], ids: new Map<string, string>() }
+          : yield* Effect.promise(async () =>
+              copyItems((await readNamespace(from.namespace))!, destination, rootsOf(from, own)),
+            )
+      const map = (kind: Kind, id: string | undefined) => (id ? (moved.ids.get(`${kind}:${id}`) ?? id) : undefined)
+      const purpose = map("layer", from.purpose)
+      const defaultProfile = map("profile", from.defaultProfile)
+      const next: OperatorProfile.ProjectSetting = {
+        namespace,
+        ...(purpose ? { purpose } : {}),
+        ...(defaultProfile ? { defaultProfile } : {}),
+      }
+      yield* Effect.promise(async () => {
+        await writeJson(path.join(root(), "projects.json"), { ...(await readProjects()), [target]: next })
+        if (Object.keys(own).length)
+          await writeJson(path.join(root(), "agents.json"), { ...agents, [target]: remapAgents(own, map) })
+      })
+      return {
+        project: { key: target, name: path.basename(target), ...next, registered: true },
+        copied: moved.copied,
+      }
+    })
+
     return Service.of({
+      copyProject,
       namespaces,
       createNamespace,
       updateNamespace,
@@ -843,6 +854,54 @@ async function copyItems(
   for (const ref of roots) await visit(ref)
   // New ids by "<kind>:<old id>".
   return { copied, ids }
+}
+
+// What a project's prompt settings use in its namespace: its purpose, its default profile, and the
+// profiles, groups and layers its agents' settings name.
+function rootsOf(project: ProjectInfo, agents: Record<string, OperatorProfile.AgentSetting>) {
+  return [
+    ...(project.purpose ? [{ kind: "layer" as const, id: project.purpose }] : []),
+    ...(project.defaultProfile ? [{ kind: "profile" as const, id: project.defaultProfile }] : []),
+    ...Object.values(agents).flatMap((setting) => [
+      ...(setting.profile ? [{ kind: "profile" as const, id: setting.profile }] : []),
+      ...(setting.override?.group ? [{ kind: "group" as const, id: setting.override.group }] : []),
+      ...Object.values(setting.override?.slots ?? {})
+        .flat()
+        .map((layer) => ({ kind: "layer" as const, id: layer })),
+    ]),
+  ]
+}
+
+// Agents' settings with their profiles, groups and layers pointed at their copies.
+function remapAgents(
+  agents: Record<string, OperatorProfile.AgentSetting>,
+  map: (kind: Kind, id: string | undefined) => string | undefined,
+) {
+  return Object.fromEntries(
+    Object.entries(agents).map((agent) => [
+      agent[0],
+      {
+        ...(agent[1].profile ? { profile: map("profile", agent[1].profile) } : {}),
+        ...(agent[1].override
+          ? {
+              override: {
+                ...(agent[1].override.group ? { group: map("group", agent[1].override.group) } : {}),
+                ...(agent[1].override.slots
+                  ? {
+                      slots: Object.fromEntries(
+                        Object.entries(agent[1].override.slots).map((slot) => [
+                          slot[0],
+                          slot[1].map((id) => map("layer", id)!),
+                        ]),
+                      ),
+                    }
+                  : {}),
+              },
+            }
+          : {}),
+      },
+    ]),
+  )
 }
 
 function same(kind: Kind, a: object, b: object) {

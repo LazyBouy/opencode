@@ -2818,11 +2818,11 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": "The project",
+            "description": "The project, and what was copied",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OperatorPromptProject"
+                  "$ref": "#/components/schemas/OperatorProjectRegisterResult"
                 }
               }
             }
@@ -2855,7 +2855,7 @@
             }
           }
         },
-        "description": "Register a folder outside git as a project (its subfolders belong to it too), or make it a git repository. Sessions can start only in a project.",
+        "description": "Register a folder outside git as a project (its subfolders belong to it too), or make it a git repository; a missing folder is created. With from, the new project is a copy of another: in the same namespace the prompt profiles are shared, in another the ones it uses are copied. Sessions can start only in a project.",
         "summary": "Make a folder a project",
         "requestBody": {
           "content": {
@@ -2872,6 +2872,12 @@
                   },
                   "namespace": {
                     "type": "string"
+                  },
+                  "from": {
+                    "type": "string"
+                  },
+                  "sessions": {
+                    "type": "boolean"
                   }
                 },
                 "required": ["directory"],
@@ -2884,6 +2890,152 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.projectSettings.register({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/project-settings/folder/move": {
+      "post": {
+        "tags": ["operator namespaces"],
+        "operationId": "operator.folderSessions.move",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Sessions moved, and sessions archived because they could not be moved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorFolderMoveResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProfileInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProfileInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProfileNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProfileNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Move the sessions that ran in a folder that is not part of a project (with their subagent sessions) to a project's folder. A session that cannot be moved is archived. The files they changed stay where they are.",
+        "summary": "Move a folder's sessions into a project",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "directory": {
+                    "type": "string",
+                    "description": "A folder that is not part of a project"
+                  },
+                  "project": {
+                    "type": "string",
+                    "description": "The project to move its sessions to"
+                  }
+                },
+                "required": ["directory", "project"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.folderSessions.move({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/project-settings/folder/archive": {
+      "post": {
+        "tags": ["operator namespaces"],
+        "operationId": "operator.folderSessions.archive",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Sessions archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorFolderArchiveResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProfileInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProfileInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProfileNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProfileNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Archive the sessions that ran in a folder that is not part of a project.",
+        "summary": "Archive a folder's sessions",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "directory": {
+                    "type": "string",
+                    "description": "A folder that is not part of a project"
+                  }
+                },
+                "required": ["directory"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.folderSessions.archive({\n  ...\n})"
           }
         ]
       }
@@ -26385,6 +26537,71 @@
           }
         },
         "required": ["directory"],
+        "additionalProperties": false
+      },
+      "OperatorProjectRegisterResult": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "$ref": "#/components/schemas/OperatorPromptProject"
+          },
+          "copied": {
+            "type": "object",
+            "properties": {
+              "files": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Files copied, relative to the project"
+              },
+              "kept": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Files the folder already had, left as they were"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/OperatorPromptCopied"
+                },
+                "description": "Prompt items copied to another namespace"
+              },
+              "sessions": {
+                "type": "number",
+                "description": "Sessions copied"
+              }
+            },
+            "required": ["files", "kept", "items", "sessions"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["project"],
+        "additionalProperties": false
+      },
+      "OperatorFolderMoveResult": {
+        "type": "object",
+        "properties": {
+          "moved": {
+            "type": "number"
+          },
+          "archived": {
+            "type": "number"
+          }
+        },
+        "required": ["moved", "archived"],
+        "additionalProperties": false
+      },
+      "OperatorFolderArchiveResult": {
+        "type": "object",
+        "properties": {
+          "archived": {
+            "type": "number"
+          }
+        },
+        "required": ["archived"],
         "additionalProperties": false
       },
       "Model": {
