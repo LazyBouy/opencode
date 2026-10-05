@@ -8,11 +8,9 @@ import { createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSettingsDialog } from "@/components/settings-dialog"
 import { useLanguage } from "@/context/language"
-import { Persist, persisted } from "@/utils/persist"
 import { useOperatorClient } from "../data"
 import { formatCost, formatCount } from "../format"
 import { useScopedProject } from "../project"
-import { ColumnPicker } from "../ui/column-picker"
 import { type Column, DataTable } from "../ui/data-table"
 import { PageHeader } from "../ui/page-header"
 import { ScopePicker } from "../ui/scope-picker"
@@ -25,7 +23,6 @@ export default function ModelsPage() {
   const directory = useScopedProject()
   const connect = useSettingsDialog("providers")
   const choose = useSettingsDialog("models")
-  const [prefs, setPrefs] = persisted(Persist.global("operator.models"), createStore({ hidden: ["cache"] as string[] }))
   const [filter, setFilter] = createStore({ text: "" })
 
   const providers = useQuery(() => ({
@@ -71,6 +68,7 @@ export default function ModelsPage() {
     },
     {
       id: "context",
+      optional: true,
       header: language.t("operator.models.context"),
       align: "end",
       value: (model) => model.limit.context,
@@ -78,6 +76,7 @@ export default function ModelsPage() {
     },
     {
       id: "output",
+      optional: true,
       header: language.t("operator.models.output"),
       align: "end",
       value: (model) => model.limit.output,
@@ -85,6 +84,7 @@ export default function ModelsPage() {
     },
     {
       id: "input",
+      optional: true,
       header: language.t("operator.models.inputPrice"),
       align: "end",
       value: (model) => model.cost.input,
@@ -92,6 +92,7 @@ export default function ModelsPage() {
     },
     {
       id: "outputPrice",
+      optional: true,
       header: language.t("operator.models.outputPrice"),
       align: "end",
       value: (model) => model.cost.output,
@@ -99,6 +100,8 @@ export default function ModelsPage() {
     },
     {
       id: "cache",
+      optional: true,
+      hidden: true,
       header: language.t("operator.models.cachePrice"),
       align: "end",
       value: (model) => model.cost.cache.read,
@@ -106,6 +109,7 @@ export default function ModelsPage() {
     },
     {
       id: "capabilities",
+      optional: true,
       header: language.t("operator.models.capabilities"),
       cell: (model) => (
         <span class="flex flex-wrap gap-1">
@@ -123,6 +127,7 @@ export default function ModelsPage() {
     },
     {
       id: "released",
+      optional: true,
       header: language.t("operator.models.released"),
       align: "end",
       value: (model) => model.release_date,
@@ -175,13 +180,12 @@ export default function ModelsPage() {
           placeholder={language.t("operator.models.search")}
           aria-label={language.t("operator.models.search")}
         />
-        <ColumnPicker columns={columns} hidden={prefs.hidden} onChange={(hidden) => setPrefs("hidden", hidden)} />
       </div>
       <DataTable
+        columnsKey="models"
         label={language.t("operator.page.models.title")}
         rows={rows()}
         columns={columns}
-        hidden={prefs.hidden}
         filter={filter.text}
         search={(model) => `${model.name} ${model.id} ${model.providerName}`}
         loading={providers.isPending}

@@ -20,6 +20,7 @@ export type Slots = Record<string, string[]>
 
 export const OPENCODE = "opencode"
 export const PREFIX = "opencode:"
+export const HELPER_AGENTS = ["title", "summary", "compaction"]
 export const REQUIRED = ["purpose", "role", "identity"]
 export const BUILTIN_TYPES = ["platform", "purpose", "role", "identity", "capabilities", "additional", "output"]
 
@@ -72,6 +73,20 @@ export function profileUsers(catalog: Catalog, profile: string) {
     projects: catalog.projects.filter((project) => project.defaultProfile === profile),
     namespace: namespaceDefault(catalog) === profile,
   }
+}
+
+// The profile an agent of `project` uses, and where that comes from: its own setting, the helper rule
+// (title, summary, compaction), the project's default, else the namespace's (the server's profileFor).
+export function profileFor(catalog: Catalog, project: string, agent: string) {
+  const find = (id: string | undefined) => (id ? catalog.profiles.find((profile) => profile.id === id) : undefined)
+  const own = find(catalog.agents.find((item) => item.project === project && item.name === agent)?.profile)
+  if (own) return { profile: own, source: "agent" as const }
+  const helper = find(`${PREFIX}profile.helper`)
+  if (HELPER_AGENTS.includes(agent) && helper) return { profile: helper, source: "helper" as const }
+  const fallback = find(catalog.projects.find((item) => item.key === project)?.defaultProfile)
+  if (fallback) return { profile: fallback, source: "project" as const }
+  const named = find(namespaceDefault(catalog)) ?? find(`${PREFIX}profile.opencode`)
+  return named ? { profile: named, source: "namespace" as const } : undefined
 }
 
 // A profile's slots for another group: slots of types the group keeps stay, the others are dropped.

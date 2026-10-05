@@ -140,7 +140,7 @@ export default function AgentFormPage() {
               onInput={(event) => set("description", event.currentTarget.value)}
             />
           </Field>
-          <Field group label={language.t("operator.column.mode")}>
+          <Field group label={language.t("operator.column.mode")} hint={language.t("operator.help.agentMode")}>
             <SegmentedControlV2
               value={store.form.mode}
               onChange={(value) => value && set("mode", value as AgentForm["mode"])}
@@ -163,14 +163,14 @@ export default function AgentFormPage() {
             />
           </Field>
           <div data-slot="operator-form-row">
-            <Field label={language.t("operator.agent.variant")}>
+            <Field label={language.t("operator.agent.variant")} hint={language.t("operator.help.variant")}>
               <TextInputV2
                 appearance="base"
                 value={store.form.variant}
                 onInput={(event) => set("variant", event.currentTarget.value)}
               />
             </Field>
-            <Field label={language.t("operator.agent.temperature")}>
+            <Field label={language.t("operator.agent.temperature")} hint={language.t("operator.help.temperature")}>
               <TextInputV2
                 appearance="base"
                 inputMode="decimal"
@@ -178,7 +178,7 @@ export default function AgentFormPage() {
                 onInput={(event) => set("temperature", event.currentTarget.value)}
               />
             </Field>
-            <Field label={language.t("operator.agent.topP")}>
+            <Field label={language.t("operator.agent.topP")} hint={language.t("operator.help.topP")}>
               <TextInputV2
                 appearance="base"
                 inputMode="decimal"
@@ -186,7 +186,7 @@ export default function AgentFormPage() {
                 onInput={(event) => set("top_p", event.currentTarget.value)}
               />
             </Field>
-            <Field label={language.t("operator.agent.steps")}>
+            <Field label={language.t("operator.agent.steps")} hint={language.t("operator.help.steps")}>
               <TextInputV2
                 appearance="base"
                 inputMode="numeric"
@@ -204,7 +204,7 @@ export default function AgentFormPage() {
                 onInput={(event) => set("color", event.currentTarget.value)}
               />
             </Field>
-            <Field group label={language.t("operator.agents.hidden")}>
+            <Field group label={language.t("operator.agents.hidden")} hint={language.t("operator.help.hidden")}>
               <Switch checked={store.form.hidden} onChange={(checked) => set("hidden", checked)}>
                 {language.t("operator.agentForm.hiddenHint")}
               </Switch>

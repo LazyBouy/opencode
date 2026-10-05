@@ -316,6 +316,13 @@ html[data-theme="iphi"]
   text-align: end;
 }
 
+/* The optional-columns picker sits at the end of the header row. */
+[data-component="operator-table"] :is(th, td)[data-slot="operator-table-picker"] {
+  width: 1%;
+  padding: 4px 8px;
+  text-align: end;
+}
+
 [data-component="operator-table"] td {
   padding: 8px 12px;
   border-bottom: 1px solid var(--v2-border-border-muted);
@@ -721,6 +728,12 @@ html[data-theme="iphi"] [data-component="operator-inspector"] {
   flex-direction: column;
   gap: 6px;
   min-width: 0;
+}
+
+[data-slot="operator-field-head"] {
+  display: flex;
+  align-items: center;
+  min-height: 18px;
 }
 
 [data-slot="operator-field-label"] {

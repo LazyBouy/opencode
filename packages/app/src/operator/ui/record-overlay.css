@@ -1,0 +1,128 @@
+/* The record overlay (Prompt Profile pages): Settings' layout with record navigation. */
+[data-component="record-overlay-panel"] [data-slot="record-overlay-header"] {
+  padding: 24px 32px 16px;
+}
+
+[data-slot="record-overlay-header-row"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+[data-slot="record-overlay-position"] {
+  min-width: 56px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--v2-text-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-component="record-overlay-panel"] [data-slot="record-overlay-body"] {
+  outline: none;
+  padding: 0 32px 32px;
+  gap: 16px;
+  user-select: text;
+}
+
+[data-component="record-overlay-list"] {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--v2-border-border-muted);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+[data-component="record-overlay-list"] li + li {
+  border-top: 1px solid var(--v2-border-border-muted);
+}
+
+[data-slot="record-overlay-item"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--v2-text-text-base);
+  font: inherit;
+  font-size: 13px;
+  text-align: start;
+  cursor: pointer;
+}
+
+[data-slot="record-overlay-item"]:hover,
+[data-slot="record-overlay-item"]:focus-visible {
+  background: var(--v2-background-bg-layer-02);
+}
+
+[data-slot="record-overlay-item-label"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+[data-slot="record-overlay-item-detail"] {
+  color: var(--v2-text-text-muted);
+  font-size: 12px;
+  text-align: end;
+}
+
+/* A record's view: its title and actions, then its fields. */
+[data-component="record-view"] {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+[data-slot="record-view-head"] {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+[data-slot="record-view-title"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--v2-text-text-base);
+}
+
+[data-slot="record-view-actions"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+[data-component="record-fields"] {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) minmax(0, 1fr);
+  gap: 10px 16px;
+  margin: 0;
+  font-size: 13px;
+}
+
+[data-component="record-fields"] dt {
+  display: flex;
+  align-items: center;
+  color: var(--v2-text-text-muted);
+}
+
+[data-component="record-fields"] dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--v2-text-text-base);
+  overflow-wrap: anywhere;
+}

@@ -10,10 +10,10 @@ import { Persist, persisted } from "@/utils/persist"
 import { useOpenSession, useOperatorClient } from "../data"
 import { formatAgo, formatCost, formatCount, sessionFolder, shortPath } from "../format"
 import { useOperatorScope } from "../scope"
-import { ColumnPicker } from "../ui/column-picker"
 import { type Column, DataTable } from "../ui/data-table"
 import { PageHeader } from "../ui/page-header"
 import { ScopePicker } from "../ui/scope-picker"
+import { FieldHelp } from "../ui/field-help"
 
 const PAGE = 50
 
@@ -24,7 +24,7 @@ export default function SessionsPage() {
   const openSession = useOpenSession()
   const [prefs, setPrefs] = persisted(
     Persist.global("operator.sessions"),
-    createStore({ hidden: ["model"] as string[], children: false, archived: false }),
+    createStore({ children: false, archived: false }),
   )
   const [filter, setFilter] = createStore({ search: "", agent: "" })
 
@@ -60,24 +60,29 @@ export default function SessionsPage() {
     },
     {
       id: "project",
+      optional: true,
       header: language.t("operator.column.project"),
       value: (session) => sessionFolder(session),
       cell: (session) => <span title={session.directory}>{shortPath(sessionFolder(session))}</span>,
     },
     {
       id: "agent",
+      optional: true,
       header: language.t("operator.column.agent"),
       value: (session) => session.agent,
       cell: (session) => session.agent ?? "",
     },
     {
       id: "model",
+      optional: true,
+      hidden: true,
       header: language.t("operator.column.model"),
       value: (session) => session.model?.id,
       cell: (session) => (session.model ? `${session.model.providerID}/${session.model.id}` : ""),
     },
     {
       id: "tokens",
+      optional: true,
       header: language.t("operator.column.tokens"),
       align: "end",
       value: tokens,
@@ -85,6 +90,7 @@ export default function SessionsPage() {
     },
     {
       id: "cost",
+      optional: true,
       header: language.t("operator.column.cost"),
       align: "end",
       value: (session) => session.cost ?? 0,
@@ -92,6 +98,7 @@ export default function SessionsPage() {
     },
     {
       id: "updated",
+      optional: true,
       header: language.t("operator.column.updated"),
       align: "end",
       value: (session) => session.time.updated,
@@ -122,19 +129,30 @@ export default function SessionsPage() {
           placeholder={language.t("operator.sessions.agent")}
           aria-label={language.t("operator.sessions.agent")}
         />
-        <Switch checked={prefs.children} onChange={(checked) => setPrefs("children", checked)}>
-          {language.t("operator.sessions.children")}
-        </Switch>
-        <Switch checked={prefs.archived} onChange={(checked) => setPrefs("archived", checked)}>
-          {language.t("operator.sessions.archived")}
-        </Switch>
-        <ColumnPicker columns={columns} hidden={prefs.hidden} onChange={(hidden) => setPrefs("hidden", hidden)} />
+        <span class="inline-flex items-center">
+          <Switch checked={prefs.children} onChange={(checked) => setPrefs("children", checked)}>
+            {language.t("operator.sessions.children")}
+          </Switch>
+          <FieldHelp
+            field={language.t("operator.sessions.children")}
+            text={language.t("operator.help.sessionChildren")}
+          />
+        </span>
+        <span class="inline-flex items-center">
+          <Switch checked={prefs.archived} onChange={(checked) => setPrefs("archived", checked)}>
+            {language.t("operator.sessions.archived")}
+          </Switch>
+          <FieldHelp
+            field={language.t("operator.sessions.archived")}
+            text={language.t("operator.help.sessionArchived")}
+          />
+        </span>
       </div>
       <DataTable
+        columnsKey="sessions"
         label={language.t("operator.page.sessions.title")}
         rows={rows()}
         columns={columns}
-        hidden={prefs.hidden}
         loading={sessions.isPending}
         empty={language.t("operator.sessions.empty")}
         onRowClick={(session) => openSession(session.id)}

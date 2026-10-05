@@ -13,9 +13,10 @@ import { useConfirm } from "../ui/confirm"
 import { DataTable } from "../ui/data-table"
 import { EmptyState } from "../ui/empty-state"
 import { PageHeader } from "../ui/page-header"
-import { AgentPrompt } from "./agent-prompt"
+import { AgentPrompt, useAgentPromptSetting } from "./agent-prompt"
 import { agentModel, useAgents } from "./agents"
 import { requestError } from "./config-helpers"
+import { FieldHelp } from "../ui/field-help"
 
 export default function AgentPage() {
   const language = useLanguage()
@@ -29,6 +30,7 @@ export default function AgentPage() {
   const directory = useScopedProject()
   const agents = useAgents()
   const agent = createMemo(() => agents.data?.find((item) => item.name === decodeURIComponent(params.name)))
+  const prompt = useAgentPromptSetting(() => decodeURIComponent(params.name), directory)
   const sessions = useQuery(() => ({
     queryKey: api.key("sessions", "agent", directory(), params.name),
     enabled: !!directory(),
@@ -145,19 +147,41 @@ export default function AgentPage() {
             </TabsV2.List>
             <TabsV2.Content value="overview">
               <dl data-component="operator-facts">
-                <Fact label={language.t("operator.column.model")}>
+                <Fact label={language.t("operator.column.model")} help={language.t("operator.help.agentModelFact")}>
                   {agentModel(current()) || language.t("operator.agents.defaultModel")}
                 </Fact>
-                <Fact label={language.t("operator.agent.variant")}>{current().variant ?? "—"}</Fact>
-                <Fact label={language.t("operator.agent.temperature")}>{current().temperature ?? "—"}</Fact>
-                <Fact label={language.t("operator.agent.topP")}>{current().topP ?? "—"}</Fact>
-                <Fact label={language.t("operator.agent.steps")}>{current().steps ?? "—"}</Fact>
-                <Fact label={language.t("operator.column.source")}>
+                <Fact label={language.t("operator.prompts.profile")} help={language.t("operator.help.agentProfile")}>
+                  <Show when={prompt.data} fallback="—">
+                    {(found) =>
+                      language.t("operator.prompts.profileFrom", {
+                        name: found().profile.name,
+                        source: language.t(`operator.prompts.source.${found().profile.source}`),
+                      })
+                    }
+                  </Show>
+                </Fact>
+                <Fact label={language.t("operator.agent.variant")} help={language.t("operator.help.variant")}>
+                  {current().variant ?? "—"}
+                </Fact>
+                <Fact label={language.t("operator.agent.temperature")} help={language.t("operator.help.temperature")}>
+                  {current().temperature ?? "—"}
+                </Fact>
+                <Fact label={language.t("operator.agent.topP")} help={language.t("operator.help.topP")}>
+                  {current().topP ?? "—"}
+                </Fact>
+                <Fact label={language.t("operator.agent.steps")} help={language.t("operator.help.steps")}>
+                  {current().steps ?? "—"}
+                </Fact>
+                <Fact label={language.t("operator.column.source")} help={language.t("operator.help.agentSource")}>
                   {current().source.path ?? language.t(`operator.agents.source.${current().source.kind}`)}
                 </Fact>
-                <Fact label={language.t("operator.agentForm.home")}>{current().home ?? "—"}</Fact>
-                <Fact label={language.t("operator.column.sessions")}>{current().sessions.total}</Fact>
-                <Fact label={language.t("operator.column.lastUsed")}>
+                <Fact label={language.t("operator.agentForm.home")} help={language.t("operator.agentForm.homeHint")}>
+                  {current().home ?? "—"}
+                </Fact>
+                <Fact label={language.t("operator.column.sessions")} help={language.t("operator.help.agentSessions")}>
+                  {current().sessions.total}
+                </Fact>
+                <Fact label={language.t("operator.column.lastUsed")} help={language.t("operator.help.agentLastUsed")}>
                   {formatAgo(current().sessions.lastUsed, locale()) || "—"}
                 </Fact>
               </dl>
@@ -168,6 +192,7 @@ export default function AgentPage() {
             <TabsV2.Content value="permissions">
               <p data-slot="operator-note">{language.t("operator.agent.rulesHint")}</p>
               <DataTable
+                columnsKey="agent-permissions"
                 label={language.t("operator.agent.tab.permissions")}
                 rows={current().permission.map((rule, index) => ({ ...rule, index: index + 1 }))}
                 empty={language.t("operator.agent.noRules")}
@@ -200,6 +225,7 @@ export default function AgentPage() {
             </TabsV2.Content>
             <TabsV2.Content value="sessions">
               <DataTable
+                columnsKey="agent-sessions"
                 label={language.t("operator.agent.tab.sessions")}
                 rows={sessions.data ?? []}
                 loading={sessions.isPending}
@@ -209,6 +235,7 @@ export default function AgentPage() {
                   { id: "title", header: language.t("operator.column.title"), cell: (session) => session.title },
                   {
                     id: "cost",
+                    optional: true,
                     header: language.t("operator.column.cost"),
                     align: "end",
                     cell: (session) => formatCost(session.cost ?? 0, locale()),
@@ -216,6 +243,7 @@ export default function AgentPage() {
                   },
                   {
                     id: "updated",
+                    optional: true,
                     header: language.t("operator.column.updated"),
                     align: "end",
                     cell: (session) => formatAgo(session.time.updated, locale()),
@@ -231,10 +259,14 @@ export default function AgentPage() {
   )
 }
 
-function Fact(props: { label: string; children: JSX.Element }) {
+// A fact about the agent, with the field helper's (i) explaining it.
+function Fact(props: { label: string; help: string; children: JSX.Element }) {
   return (
     <>
-      <dt>{props.label}</dt>
+      <dt>
+        {props.label}
+        <FieldHelp field={props.label} text={props.help} />
+      </dt>
       <dd>{props.children}</dd>
     </>
   )

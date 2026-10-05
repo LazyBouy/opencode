@@ -23,10 +23,10 @@ test("creating an agent sends its settings and rules, then opens it", async ({ p
   await expect(page).toHaveURL(/\/operator\/agents\/new\?dir=/)
 
   await page.getByLabel("Name", { exact: true }).fill("docs")
-  await page.getByLabel("Description").fill("Writes docs")
+  await page.getByLabel("Description", { exact: true }).fill("Writes docs")
   await page.getByRole("button", { name: "Subagent", exact: true }).click()
-  await page.getByLabel("Temperature").fill("0.3")
-  await page.getByLabel("Home folder").fill("/work/docs")
+  await page.getByLabel("Temperature", { exact: true }).fill("0.3")
+  await page.getByLabel("Home folder", { exact: true }).fill("/work/docs")
   await page.getByLabel("Prompt", { exact: true }).fill("Write clear docs.")
   await page.getByRole("button", { name: "Add rule" }).click()
   await page.getByRole("textbox", { name: "Permission, such as bash or edit" }).fill("edit")
@@ -51,10 +51,10 @@ test("creating an agent sends its settings and rules, then opens it", async ({ p
 test("editing a built-in agent sends only what changed and resets cleared settings", async ({ page }) => {
   const state = await mockOperator(page)
   await page.goto(`/operator/agents/build/edit${dir}`)
-  const temperature = page.getByLabel("Temperature")
+  const temperature = page.getByLabel("Temperature", { exact: true })
   await expect(temperature).toHaveValue("0.1")
   await temperature.fill("")
-  await page.getByLabel("Description").fill("Builds things")
+  await page.getByLabel("Description", { exact: true }).fill("Builds things")
   await page.getByRole("button", { name: "Save", exact: true }).click()
 
   await expect.poll(() => state.agentWrites.length).toBe(1)

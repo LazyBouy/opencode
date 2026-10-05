@@ -24,6 +24,8 @@ export function SlotEditor(props: {
   layers: ReadonlyArray<Layer>
   value: SlotValue
   disabled?: boolean
+  /** Leave out the group select (a read-only view shows the group elsewhere). */
+  hideGroup?: boolean
   changed?: (type: string) => boolean
   groupChanged?: boolean
   onReset?: (type: string) => void
@@ -61,30 +63,32 @@ export function SlotEditor(props: {
 
   return (
     <div class="flex flex-col gap-3">
-      <Field group label={language.t("operator.profile.group")} hint={language.t("operator.profile.groupHint")}>
-        <div class="flex items-center gap-2 flex-wrap">
-          <SelectV2<string>
-            appearance="base"
-            aria-label={language.t("operator.profile.group")}
-            disabled={props.disabled}
-            options={props.catalog.groups.map((item) => item.id)}
-            current={props.value.group}
-            label={(id) => {
-              const found = props.catalog.groups.find((item) => item.id === id)
-              return found ? names.group(found) : id
-            }}
-            onSelect={(id) => id && void pickGroup(id)}
-          />
-          <Show when={props.groupChanged}>
-            <Tag>{language.t("operator.profile.changed")}</Tag>
-            <Show when={props.onResetGroup}>
-              <ButtonV2 size="small" variant="ghost" onClick={() => props.onResetGroup!()}>
-                {language.t("operator.profile.resetGroup")}
-              </ButtonV2>
+      <Show when={!props.hideGroup}>
+        <Field group label={language.t("operator.profile.group")} hint={language.t("operator.profile.groupHint")}>
+          <div class="flex items-center gap-2 flex-wrap">
+            <SelectV2<string>
+              appearance="base"
+              aria-label={language.t("operator.profile.group")}
+              disabled={props.disabled}
+              options={props.catalog.groups.map((item) => item.id)}
+              current={props.value.group}
+              label={(id) => {
+                const found = props.catalog.groups.find((item) => item.id === id)
+                return found ? names.group(found) : id
+              }}
+              onSelect={(id) => id && void pickGroup(id)}
+            />
+            <Show when={props.groupChanged}>
+              <Tag>{language.t("operator.profile.changed")}</Tag>
+              <Show when={props.onResetGroup}>
+                <ButtonV2 size="small" variant="ghost" onClick={() => props.onResetGroup!()}>
+                  {language.t("operator.profile.resetGroup")}
+                </ButtonV2>
+              </Show>
             </Show>
-          </Show>
-        </div>
-      </Field>
+          </div>
+        </Field>
+      </Show>
       <For each={group()?.types ?? []}>
         {(type) => (
           <section data-slot="operator-slot" data-type={type} data-changed={props.changed?.(type) ? "" : undefined}>
@@ -227,14 +231,14 @@ function AddLayer(props: {
       }
     >
       <div data-component="operator-form" role="group" aria-label={language.t("operator.profile.createLayer")}>
-        <Field label={language.t("operator.agentForm.name")}>
+        <Field label={language.t("operator.agentForm.name")} hint={language.t("operator.help.newLayerName")}>
           <TextInputV2
             appearance="base"
             value={store.name}
             onInput={(event) => setStore("name", event.currentTarget.value)}
           />
         </Field>
-        <Field label={language.t("operator.prompts.text")}>
+        <Field label={language.t("operator.prompts.text")} hint={language.t("operator.help.newLayerText")}>
           <TextareaV2 rows={5} value={store.text} onInput={(event) => setStore("text", event.currentTarget.value)} />
         </Field>
         <div data-slot="operator-actions">

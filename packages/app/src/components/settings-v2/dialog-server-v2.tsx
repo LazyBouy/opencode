@@ -8,6 +8,7 @@ import { useLanguage } from "@/context/language"
 import { type ServerConnection } from "@/context/server"
 import { useServerManagementController } from "../dialog-select-server"
 import "./settings-v2.css"
+import { FieldHelp } from "@/operator/ui/field-help"
 
 export const DialogServerV2: Component<{
   mode: "add" | "edit"
@@ -61,7 +62,10 @@ export const DialogServerV2: Component<{
       <DialogBody class="flex w-full min-w-0 flex-1 flex-col px-4 pt-4 pb-2">
         <div class="flex w-full min-w-0 flex-col gap-6">
           <div class="flex w-full min-w-0 flex-col gap-2">
-            <label class="settings-v2-server-dialog-label">{language.t("dialog.server.add.url")}</label>
+            <div class="flex items-center">
+              <label class="settings-v2-server-dialog-label">{language.t("dialog.server.add.url")}</label>
+              <FieldHelp field={language.t("dialog.server.add.url")} text={language.t("settings.servers.help.url")} />
+            </div>
             <TextInputV2
               type="text"
               appearance="large"
@@ -79,7 +83,10 @@ export const DialogServerV2: Component<{
             </Show>
           </div>
           <div class="flex w-full min-w-0 flex-col gap-2">
-            <label class="settings-v2-server-dialog-label">{language.t("dialog.server.add.name")}</label>
+            <div class="flex items-center">
+              <label class="settings-v2-server-dialog-label">{language.t("dialog.server.add.name")}</label>
+              <FieldHelp field={language.t("dialog.server.add.name")} text={language.t("settings.servers.help.name")} />
+            </div>
             <TextInputV2
               type="text"
               appearance="large"
@@ -93,7 +100,13 @@ export const DialogServerV2: Component<{
           </div>
           <div class="grid w-full min-w-0 grid-cols-2 gap-4">
             <div class="flex min-w-0 flex-col gap-2">
-              <label class="settings-v2-server-dialog-label">{language.t("dialog.server.add.username")}</label>
+              <div class="flex items-center">
+                <label class="settings-v2-server-dialog-label">{language.t("dialog.server.add.username")}</label>
+                <FieldHelp
+                  field={language.t("dialog.server.add.username")}
+                  text={language.t("settings.servers.help.username")}
+                />
+              </div>
               <TextInputV2
                 type="text"
                 appearance="large"
@@ -106,7 +119,13 @@ export const DialogServerV2: Component<{
               />
             </div>
             <div class="flex min-w-0 flex-col gap-2">
-              <label class="settings-v2-server-dialog-label">{language.t("dialog.server.add.password")}</label>
+              <div class="flex items-center">
+                <label class="settings-v2-server-dialog-label">{language.t("dialog.server.add.password")}</label>
+                <FieldHelp
+                  field={language.t("dialog.server.add.password")}
+                  text={language.t("settings.servers.help.password")}
+                />
+              </div>
               <TextInputV2
                 type="password"
                 appearance="large"

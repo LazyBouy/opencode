@@ -114,6 +114,7 @@ export default function DashboardPage() {
         <section data-component="operator-panel">
           <h2 data-slot="operator-panel-title">{language.t("operator.dashboard.recent")}</h2>
           <DataTable
+            columnsKey="dashboard-recent"
             label={language.t("operator.dashboard.recent")}
             rows={recent.data ?? []}
             loading={recent.isPending}
@@ -123,12 +124,19 @@ export default function DashboardPage() {
               { id: "title", header: language.t("operator.column.title"), cell: (session) => session.title },
               {
                 id: "project",
+                optional: true,
                 header: language.t("operator.column.project"),
                 cell: (session) => shortPath(sessionFolder(session)),
               },
-              { id: "agent", header: language.t("operator.column.agent"), cell: (session) => session.agent ?? "" },
+              {
+                id: "agent",
+                optional: true,
+                header: language.t("operator.column.agent"),
+                cell: (session) => session.agent ?? "",
+              },
               {
                 id: "updated",
+                optional: true,
                 header: language.t("operator.column.updated"),
                 align: "end",
                 cell: (session) => formatAgo(session.time.updated, locale()),
@@ -141,6 +149,7 @@ export default function DashboardPage() {
           <Show when={stats.data} fallback={<div data-slot="operator-panel-empty">{language.t("common.loading")}</div>}>
             {(data) => (
               <DataTable
+                columnsKey="dashboard-agents"
                 label={language.t("operator.dashboard.agents")}
                 rows={data().agents ?? []}
                 empty={language.t("operator.dashboard.noSessions")}
@@ -154,6 +163,7 @@ export default function DashboardPage() {
                   },
                   {
                     id: "sessions",
+                    optional: true,
                     header: language.t("operator.column.sessions"),
                     align: "end",
                     cell: (row) => formatCount(row.sessions, locale()),
@@ -161,6 +171,7 @@ export default function DashboardPage() {
                   },
                   {
                     id: "cost",
+                    optional: true,
                     header: language.t("operator.column.cost"),
                     align: "end",
                     cell: (row) => formatCost(row.cost, locale()),
@@ -168,6 +179,7 @@ export default function DashboardPage() {
                   },
                   {
                     id: "lastUsed",
+                    optional: true,
                     header: language.t("operator.column.lastUsed"),
                     align: "end",
                     cell: (row) => formatAgo(row.lastUsed, locale()),

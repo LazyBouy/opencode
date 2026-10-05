@@ -121,6 +121,7 @@ export default function MemoryPage() {
               </div>
             </Show>
             <DataTable
+              columnsKey="memory-files"
               label={language.t("operator.memory.filesLabel")}
               rows={memory.data?.files ?? []}
               loading={memory.isPending}
@@ -129,6 +130,7 @@ export default function MemoryPage() {
               columns={[
                 {
                   id: "kind",
+                  optional: true,
                   header: language.t("operator.column.kind"),
                   value: (row) => row.kind,
                   cell: (row) => (
@@ -151,18 +153,21 @@ export default function MemoryPage() {
                 },
                 {
                   id: "scope",
+                  optional: true,
                   header: language.t("operator.scope.label"),
                   value: (row) => row.scope,
                   cell: (row) => language.t(`operator.scope.${row.scope}`),
                 },
                 {
                   id: "loaded",
+                  optional: true,
                   header: language.t("operator.memory.loadedLabel"),
                   value: (row) => row.loaded,
                   cell: loaded,
                 },
                 {
                   id: "size",
+                  optional: true,
                   header: language.t("operator.column.size"),
                   align: "end",
                   value: (row) => row.size,
@@ -170,6 +175,7 @@ export default function MemoryPage() {
                 },
                 {
                   id: "modified",
+                  optional: true,
                   header: language.t("operator.column.modified"),
                   align: "end",
                   value: (row) => row.modified,
@@ -242,6 +248,7 @@ export default function MemoryPage() {
               <section data-component="operator-panel">
                 <h2 data-slot="operator-panel-title">{language.t("operator.memory.tables")}</h2>
                 <DataTable
+                  columnsKey="memory-tables"
                   label={language.t("operator.memory.tables")}
                   rows={memory.data?.database.tables ?? []}
                   loading={memory.isPending}
@@ -255,6 +262,7 @@ export default function MemoryPage() {
                     },
                     {
                       id: "rows",
+                      optional: true,
                       header: language.t("operator.memory.rows"),
                       align: "end",
                       value: (row) => row.rows,

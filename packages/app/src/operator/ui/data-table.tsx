@@ -1,6 +1,8 @@
 import { createMemo, For, type JSX, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
+import { Persist, persisted } from "@/utils/persist"
+import { ColumnPicker } from "./column-picker"
 import { filterRows, nextSort, type Sort, sortRows } from "./table"
 
 export interface Column<T> {
@@ -11,13 +13,18 @@ export interface Column<T> {
   readonly value?: (row: T) => unknown
   readonly width?: string
   readonly align?: "start" | "end"
+  /** An optional column: the viewer can add or remove it. Columns without this always show. */
+  readonly optional?: boolean
+  /** An optional column that is off until the viewer adds it. */
+  readonly hidden?: boolean
 }
 
 export interface DataTableProps<T> {
   readonly label: string
   readonly rows: readonly T[]
   readonly columns: readonly Column<T>[]
-  readonly hidden?: readonly string[]
+  /** Where the viewer's choice of optional columns is kept; tables sharing it share the choice. */
+  readonly columnsKey?: string
   readonly filter?: string
   readonly search?: (row: T) => string
   readonly initialSort?: Sort
@@ -27,10 +34,17 @@ export interface DataTableProps<T> {
 }
 
 // Sortable, filterable table for operator pages. Rows open with a click or Enter when onRowClick is set.
+// Optional columns can be added or removed from the picker at the end of the header row.
 export function DataTable<T>(props: DataTableProps<T>) {
   const language = useLanguage()
   const [store, setStore] = createStore<{ sort?: Sort }>({ sort: props.initialSort })
-  const columns = createMemo(() => props.columns.filter((column) => !props.hidden?.includes(column.id)))
+  const fresh = createStore({ shown: {} as Record<string, boolean> })
+  const [choice, setChoice] = props.columnsKey
+    ? persisted(Persist.global(`operator.columns.${props.columnsKey}`), fresh)
+    : fresh
+  const visible = (column: Column<T>) => !column.optional || (choice.shown[column.id] ?? !column.hidden)
+  const columns = createMemo(() => props.columns.filter(visible))
+  const picker = () => !!props.columnsKey && props.columns.some((column) => column.optional)
   const rows = createMemo(() => {
     // A server that answers with an unexpected shape shows an empty table rather than breaking the page.
     const source = Array.isArray(props.rows) ? props.rows : []
@@ -73,6 +87,16 @@ export function DataTable<T>(props: DataTableProps<T>) {
                 </th>
               )}
             </For>
+            <Show when={picker()}>
+              <th scope="col" data-slot="operator-table-picker">
+                <ColumnPicker
+                  label={props.label}
+                  columns={props.columns}
+                  visible={visible}
+                  onChange={(id, shown) => setChoice("shown", id, shown)}
+                />
+              </th>
+            </Show>
           </tr>
         </thead>
         <tbody>
@@ -91,6 +115,9 @@ export function DataTable<T>(props: DataTableProps<T>) {
                 <For each={columns()}>
                   {(column) => <td data-align={column.align ?? "start"}>{column.cell(row)}</td>}
                 </For>
+                <Show when={picker()}>
+                  <td data-slot="operator-table-picker" />
+                </Show>
               </tr>
             )}
           </For>

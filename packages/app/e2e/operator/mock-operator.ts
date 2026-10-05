@@ -348,6 +348,12 @@ export async function mockOperator(page: Page) {
     return route.fallback()
   })
 
+  // Settings → General lists the server's shells (the v1 route the shared mock leaves out).
+  await page.route(
+    (url) => url.pathname === "/pty/shells",
+    (route) => json(route, []),
+  )
+
   await page.route("**/project/current*", (route) => {
     const opened = new URL(route.request().url()).searchParams.get("directory")
     if (!opened?.startsWith(workspace)) return route.fallback()

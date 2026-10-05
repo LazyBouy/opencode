@@ -148,7 +148,11 @@ function ProjectPromptDialog(props: { project: OperatorPromptProject; added?: bo
           <Show when={props.added}>
             <p data-slot="operator-note">{language.t("operator.projects.addedHint")}</p>
           </Show>
-          <Field group label={language.t("operator.column.namespace")}>
+          <Field
+            group
+            label={language.t("operator.column.namespace")}
+            hint={language.t("operator.help.projectNamespace")}
+          >
             <SelectV2<string>
               appearance="base"
               aria-label={language.t("operator.column.namespace")}
@@ -227,7 +231,11 @@ function ProjectPromptDialog(props: { project: OperatorPromptProject; added?: bo
                   </button>
                 </div>
               </Field>
-              <Field group label={language.t("operator.column.defaultProfile")}>
+              <Field
+                group
+                label={language.t("operator.column.defaultProfile")}
+                hint={language.t("operator.help.projectDefaultProfile")}
+              >
                 <SelectV2<string>
                   appearance="base"
                   aria-label={language.t("operator.column.defaultProfile")}

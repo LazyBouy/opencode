@@ -13,6 +13,7 @@ import { PageHeader } from "../ui/page-header"
 import { ScopePicker } from "../ui/scope-picker"
 import { type Scope, ScopeSwitch } from "../ui/scope-switch"
 import { maskSecrets, requestError } from "./config-helpers"
+import { FieldHelp } from "../ui/field-help"
 
 export default function ConfigPage() {
   const language = useLanguage()
@@ -101,7 +102,10 @@ export default function ConfigPage() {
         <section data-component="operator-panel">
           <div data-slot="operator-panel-head">
             <h2 data-slot="operator-panel-title">{language.t("operator.config.edit")}</h2>
-            <ScopeSwitch value={store.scope} onChange={(scope) => setStore("scope", scope)} />
+            <span class="inline-flex items-center">
+              <ScopeSwitch value={store.scope} onChange={(scope) => setStore("scope", scope)} />
+              <FieldHelp field={language.t("operator.config.edit")} text={language.t("operator.help.configScope")} />
+            </span>
           </div>
           <p data-slot="operator-note">{language.t("operator.config.editHint", { path: target() ?? "" })}</p>
           <TextareaV2

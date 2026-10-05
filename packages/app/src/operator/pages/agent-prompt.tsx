@@ -17,11 +17,26 @@ import { requestError } from "./config-helpers"
 import { useAllLayers, usePromptCatalog, useProfileNames } from "./profile-data"
 import { SlotEditor, type SlotValue } from "./profile-editor"
 import { type Catalog, copySlots, PREFIX, type Profile, slotProblem, type Slots } from "./profile-model"
+import { FieldHelp } from "../ui/field-help"
 
 // The model option that means "whatever the agent uses".
 const AGENT_MODEL = "agent"
 // The profile option that means "no setting of its own" (not a possible profile id).
 const DEFAULT = "@default"
+
+// An agent's prompt setting, its namespace, and the profile it uses with where that comes from.
+export function useAgentPromptSetting(agent: () => string, directory: () => string | undefined) {
+  const api = useOperatorClient()
+  return useQuery(() => ({
+    queryKey: api.key("agent-prompt", directory(), agent()),
+    enabled: !!directory(),
+    queryFn: () =>
+      api
+        .client()
+        .operator.agentPrompt.get({ name: agent(), directory: directory() })
+        .then((result) => result.data!),
+  }))
+}
 
 // The agent's prompt: which profile it uses, its override of that profile, and the whole system
 // prompt it sends, section by section. The agent belongs to the project of `directory`.
@@ -31,14 +46,10 @@ export function AgentPrompt(props: { agent: string; directory: string }) {
   const names = useProfileNames()
   const [params, setParams] = useSearchParams<{ previewProfile?: string }>()
 
-  const setting = useQuery(() => ({
-    queryKey: api.key("agent-prompt", props.directory, props.agent),
-    queryFn: () =>
-      api
-        .client()
-        .operator.agentPrompt.get({ name: props.agent, directory: props.directory })
-        .then((result) => result.data!),
-  }))
+  const setting = useAgentPromptSetting(
+    () => props.agent,
+    () => props.directory,
+  )
   const ns = () => setting.data?.namespace.id
   const data = usePromptCatalog(() => ns() ?? "")
   const catalog = () => (ns() ? data.query.data : undefined)
@@ -233,12 +244,14 @@ function Override(props: {
 
   return (
     <section data-component="operator-panel">
-      <CheckboxV2
-        label={language.t("operator.prompts.override")}
-        description={language.t("operator.prompts.overrideHint")}
-        checked={store.open}
-        onChange={(checked: boolean) => void toggle(checked)}
-      />
+      <span class="inline-flex items-center">
+        <CheckboxV2
+          label={language.t("operator.prompts.override")}
+          checked={store.open}
+          onChange={(checked: boolean) => void toggle(checked)}
+        />
+        <FieldHelp field={language.t("operator.prompts.override")} text={language.t("operator.help.override")} />
+      </span>
       <Show when={store.open && props.profile}>
         <SlotEditor
           ns={props.ns}

@@ -1,0 +1,32 @@
+/* The field helper's (i): beside a field's label, help on hover or focus. */
+[data-component="field-help"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-inline-start: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--v2-icon-icon-muted, currentColor);
+  vertical-align: middle;
+  cursor: help;
+}
+
+[data-component="field-help"]:hover,
+[data-component="field-help"]:focus-visible {
+  color: var(--v2-text-text-base, currentColor);
+}
+
+[data-component="field-help"]:focus-visible {
+  outline: 2px solid var(--v2-border-border-focus, currentColor);
+  outline-offset: 1px;
+}
+
+.field-help-content {
+  max-width: 320px;
+  white-space: normal;
+  line-height: 1.45;
+}

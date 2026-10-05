@@ -13,6 +13,7 @@ import { useLanguage } from "@/context/language"
 import { useOperatorClient } from "../data"
 import { crumbs } from "../format"
 import { requestError } from "../pages/config-helpers"
+import { FieldHelp } from "./field-help"
 
 // Opens a dialog to browse the server's workspace roots, create folders in them and pick one as a
 // project. Resolves with the chosen folder, or undefined when dismissed.
@@ -176,18 +177,24 @@ function FolderBrowser(props: {
               void create()
             }}
           >
-            <TextInputV2
-              appearance="base"
-              value={store.name}
-              placeholder={t("operator.folders.newPlaceholder")}
-              aria-label={t("operator.folders.new")}
-              onInput={(event) => setStore("name", event.currentTarget.value)}
-            />
-            <CheckboxV2
-              label={t("operator.folders.gitOption")}
-              checked={store.git}
-              onChange={(checked: boolean) => setStore("git", checked)}
-            />
+            <span class="inline-flex items-center">
+              <TextInputV2
+                appearance="base"
+                value={store.name}
+                placeholder={t("operator.folders.newPlaceholder")}
+                aria-label={t("operator.folders.new")}
+                onInput={(event) => setStore("name", event.currentTarget.value)}
+              />
+              <FieldHelp field={t("operator.folders.new")} text={t("operator.help.newFolder")} />
+            </span>
+            <span class="inline-flex items-center">
+              <CheckboxV2
+                label={t("operator.folders.gitOption")}
+                checked={store.git}
+                onChange={(checked: boolean) => setStore("git", checked)}
+              />
+              <FieldHelp field={t("operator.folders.gitOption")} text={t("operator.help.gitOption")} />
+            </span>
             <ButtonV2 type="submit" variant="outline" disabled={!store.name.trim() || store.busy || !store.listing}>
               {t("operator.folders.create")}
             </ButtonV2>

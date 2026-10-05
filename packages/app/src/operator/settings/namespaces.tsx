@@ -3,7 +3,7 @@ import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
 import type { OperatorNamespaceSummary } from "@opencode-ai/sdk/v2/client"
-import { type Component, createEffect, createMemo, createResource, For, on, Show } from "solid-js"
+import { type Component, createEffect, createMemo, createResource, createUniqueId, For, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { SettingsListV2 } from "@/components/settings-v2/parts/list"
 import { SettingsRowV2 } from "@/components/settings-v2/parts/row"
@@ -13,6 +13,7 @@ import { useServerSDK } from "@/context/server-sdk"
 import { showToast } from "@/utils/toast"
 import { shortPath } from "../format"
 import { requestError } from "../pages/config-helpers"
+import { FieldHelp } from "../ui/field-help"
 
 const OPENCODE = "opencode"
 
@@ -20,6 +21,7 @@ const OPENCODE = "opencode"
 // is sent first in every agent's prompt in it. A new namespace starts as a copy of OpenCode.
 export const SettingsNamespacesV2: Component = () => {
   const language = useLanguage()
+  const id = createUniqueId()
   const serverSdk = useServerSDK()
   const client = () => serverSdk().client.operator.namespace
   const [list, { refetch }] = createResource(() =>
@@ -134,27 +136,50 @@ export const SettingsNamespacesV2: Component = () => {
           <Show when={store.selected === "new"}>
             <p class="text-12-regular text-v2-text-text-muted">{language.t("settings.namespaces.copyNote")}</p>
           </Show>
-          <label class="flex flex-col gap-1">
-            <span class="text-12-medium">{language.t("settings.namespaces.name")}</span>
+          <div class="flex flex-col gap-1">
+            <div class="flex items-center">
+              <label class="text-12-medium" for={`${id}-name`}>
+                {language.t("settings.namespaces.name")}
+              </label>
+              <FieldHelp
+                field={language.t("settings.namespaces.name")}
+                text={language.t("operator.help.namespaceName")}
+              />
+            </div>
             <TextInputV2
+              id={`${id}-name`}
               appearance="base"
               value={store.name}
               onInput={(event) => setStore("name", event.currentTarget.value)}
             />
-          </label>
-          <label class="flex flex-col gap-1">
-            <span class="text-12-medium">{language.t("settings.namespaces.purpose")}</span>
+          </div>
+          <div class="flex flex-col gap-1">
+            <div class="flex items-center">
+              <label class="text-12-medium" for={`${id}-purpose`}>
+                {language.t("settings.namespaces.purpose")}
+              </label>
+              <FieldHelp
+                field={language.t("settings.namespaces.purpose")}
+                text={language.t("settings.namespaces.purposeHint")}
+              />
+            </div>
             <TextareaV2
+              id={`${id}-purpose`}
               rows={5}
               value={store.purpose}
               onInput={(event) => setStore("purpose", event.currentTarget.value)}
             />
-            <span class="text-12-regular text-v2-text-text-muted">{language.t("settings.namespaces.purposeHint")}</span>
-          </label>
+          </div>
           <Show when={current()}>
             {(found) => (
               <div class="flex flex-col gap-1">
-                <span class="text-12-medium">{language.t("settings.namespaces.projectsLabel")}</span>
+                <div class="flex items-center">
+                  <span class="text-12-medium">{language.t("settings.namespaces.projectsLabel")}</span>
+                  <FieldHelp
+                    field={language.t("settings.namespaces.projectsLabel")}
+                    text={language.t("operator.help.namespaceProjects")}
+                  />
+                </div>
                 <span class="text-12-regular text-v2-text-text-muted">
                   {found().projects.map(shortPath).join(", ") || language.t("settings.namespaces.noProjects")}
                 </span>

@@ -25,6 +25,7 @@ import {
   type ShellSettingsController,
   type SoundSettingsController,
 } from "./general-controllers"
+import { FieldHelpSetting } from "@/operator/settings/field-help-setting"
 import "./settings-v2.css"
 
 const schemeOptions: ("system" | "light" | "dark")[] = ["system", "light", "dark"]
@@ -172,6 +173,7 @@ const AppearanceSection: Component<{ controller: AppearanceSettingsController }>
         <FontSetting kind="ui" fonts={props.controller.fonts} />
         <FontSetting kind="code" fonts={props.controller.fonts} />
         <FontSetting kind="terminal" fonts={props.controller.fonts} />
+        <FieldHelpSetting />
       </SettingsListV2>
     </div>
   )

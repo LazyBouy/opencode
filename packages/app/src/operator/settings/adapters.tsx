@@ -102,14 +102,23 @@ export const SettingsAdaptersV2: Component = () => {
                         >
                           <SettingsRowV2
                             title={
-                              <span class="flex items-center gap-2">
-                                {adapter.name}
-                                <Tag variant={adapter.enabled && adapter.available ? "accent" : "neutral"}>
-                                  {status(adapter)}
-                                </Tag>
+                              <span class="inline-flex flex-col gap-1">
+                                <span class="flex items-center gap-2">
+                                  {adapter.name}
+                                  <Tag variant={adapter.enabled && adapter.available ? "accent" : "neutral"}>
+                                    {status(adapter)}
+                                  </Tag>
+                                </span>
+                                <span
+                                  data-slot="settings-adapter-details"
+                                  class="text-12-regular text-v2-text-text-muted"
+                                >
+                                  {details(adapter)}
+                                </span>
                               </span>
                             }
-                            description={details(adapter)}
+                            field={adapter.name}
+                            description={language.t("operator.help.adapter", { id: adapter.id, name: adapter.name })}
                           >
                             <Switch
                               checked={adapter.enabled}

@@ -162,6 +162,7 @@ export default function ProjectsPage() {
       />
       <p data-slot="operator-note">{language.t("operator.projects.hint")}</p>
       <DataTable
+        columnsKey="projects"
         label={language.t("operator.page.projects.title")}
         rows={rows()}
         loading={projects.isPending}
@@ -190,24 +191,28 @@ export default function ProjectsPage() {
           },
           {
             id: "namespace",
+            optional: true,
             header: language.t("operator.column.namespace"),
             value: (project) => (project.global ? "" : nsName(project.worktree)),
             cell: (project) => (project.global ? "" : nsName(project.worktree)),
           },
           {
             id: "purpose",
+            optional: true,
             header: language.t("operator.column.purpose"),
             cell: (project) =>
               project.global ? "" : <span data-slot="operator-cell-clamp">{purposeName(project.worktree)}</span>,
           },
           {
             id: "defaultProfile",
+            optional: true,
             header: language.t("operator.column.defaultProfile"),
             cell: (project) =>
               project.global ? "" : <span data-slot="operator-cell-clamp">{profileName(project.worktree)}</span>,
           },
           {
             id: "sessions",
+            optional: true,
             header: language.t("operator.column.sessions"),
             align: "end",
             value: (project) => project.sessions,
@@ -215,6 +220,7 @@ export default function ProjectsPage() {
           },
           {
             id: "cost",
+            optional: true,
             header: language.t("operator.column.cost"),
             align: "end",
             value: (project) => project.cost,
@@ -222,6 +228,7 @@ export default function ProjectsPage() {
           },
           {
             id: "lastActivity",
+            optional: true,
             header: language.t("operator.column.lastUsed"),
             align: "end",
             value: (project) => project.lastActivity,

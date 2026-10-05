@@ -4,6 +4,7 @@ import { useLanguage } from "@/context/language"
 import { shortPath } from "../format"
 import { useOperatorProjects, useScopedProject } from "../project"
 import { useOperatorScope } from "../scope"
+import { FieldHelp } from "./field-help"
 
 type Option = { directory?: string; label: string }
 
@@ -28,14 +29,17 @@ export function ScopePicker(props: { all?: boolean }) {
     ]
   })
   return (
-    <SelectV2<Option>
-      appearance="inline"
-      aria-label={language.t("operator.scope.picker")}
-      options={options()}
-      current={options().find((option) => option.directory === selected()) ?? options()[0]}
-      value={(option) => option.directory ?? "*"}
-      label={(option) => option.label}
-      onSelect={(option) => scope.setDirectory(option?.directory)}
-    />
+    <span class="inline-flex items-center">
+      <SelectV2<Option>
+        appearance="inline"
+        aria-label={language.t("operator.scope.picker")}
+        options={options()}
+        current={options().find((option) => option.directory === selected()) ?? options()[0]}
+        value={(option) => option.directory ?? "*"}
+        label={(option) => option.label}
+        onSelect={(option) => scope.setDirectory(option?.directory)}
+      />
+      <FieldHelp field={language.t("operator.scope.picker")} text={language.t("operator.help.scopePicker")} />
+    </span>
   )
 }

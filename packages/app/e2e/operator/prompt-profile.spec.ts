@@ -14,10 +14,14 @@ test.beforeEach(async ({ page }) => {
   })
 })
 
-// Picks an option from the select with this accessible name.
+// Picks an option from the select with this accessible name. Records open in a modal overlay, where
+// the select's list is not in the accessibility tree, so options are found by their items.
 const pick = async (page: Page, label: string, option: string) => {
   await page.locator(`[data-component="select-v2-root"][aria-label="${label}"] [data-component="select-v2"]`).click()
-  await page.getByRole("option", { name: option, exact: true }).click()
+  await page
+    .locator('[data-component="menu-v2-item"]')
+    .filter({ hasText: new RegExp(`^${option.replace(/[()]/g, "\\$&")}$`) })
+    .click()
 }
 
 const user = (id: string, name: string, type: string, section: string, text: string) => ({
@@ -29,46 +33,104 @@ const user = (id: string, name: string, type: string, section: string, text: str
   origin: "user",
 })
 
-test("Layer Definition: sections, a new role layer and an editable copy of a built-in text", async ({ page }) => {
+test("Layer Definition: a new role layer and an editable copy open in the overlay", async ({ page }) => {
   const state = await mockOperator(page)
   await page.goto("/operator/profile")
   await expect(page.getByRole("tab", { name: "Layer Definition" })).toHaveAttribute("aria-selected", "true")
 
-  const purpose = page.locator('[data-section="purpose"]')
-  await expect(purpose.getByRole("heading", { name: "Project Purpose" })).toBeVisible()
   // Only project purposes: the org purpose comes from the namespace, not from a layer here.
+  const purpose = page.locator('[data-section="purpose"]')
   await expect(purpose.getByRole("row", { name: /Org purpose/ })).toHaveCount(0)
   await expect(purpose).toContainText("No Project Purposes yet.")
   const messages = page.locator('[data-section="message"]')
   await expect(messages.getByRole("row", { name: /reminder\.plan/ })).toContainText("Sent in the conversation")
 
+  // A new layer opens in the overlay, in edit mode.
   await page.locator('[data-section="role"]').getByRole("button", { name: "New layer" }).click()
-  await page.getByLabel("Name", { exact: true }).fill("Reviewer")
-  await page.getByLabel("Text", { exact: true }).fill("You review release notes.")
-  await page.getByRole("button", { name: "Save", exact: true }).click()
+  const overlay = page.getByRole("dialog")
+  await expect(overlay.getByRole("heading", { name: "New layer: Role" })).toBeVisible()
+  await overlay.getByLabel("Name", { exact: true }).fill("Reviewer")
+  await overlay.getByLabel("Text", { exact: true }).fill("You review release notes.")
+  await overlay.getByRole("button", { name: "Save", exact: true }).click()
   await expect.poll(() => state.prompt.writes.length).toBe(1)
   expect(state.prompt.writes[0]).toMatchObject({
     method: "POST",
     path: "/operator/namespaces/opencode/layers",
     body: { name: "Reviewer", type: "role", section: "role", text: "You review release notes." },
   })
+  // Saved: the layer shows read-only, with Edit.
+  await expect(overlay.getByRole("heading", { name: "Reviewer" })).toBeVisible()
+  await expect(overlay.getByRole("button", { name: "Edit", exact: true })).toBeVisible()
+  await expect(overlay).toContainText("You review release notes.")
+  await overlay.getByRole("button", { name: "Close" }).click()
+  await expect(overlay).toBeHidden()
+  await expect(page).not.toHaveURL(/layer=/)
   await expect(page.locator('[data-section="role"]').getByRole("row", { name: /Reviewer/ })).toContainText("Yours")
 
+  // OpenCode's text is read-only, with Make editable copy.
   await page
     .locator('[data-section="base"]')
     .getByRole("row", { name: /base\.default/ })
     .click()
-  await expect(page.locator('[data-slot="operator-sticky"] [data-component="operator-code"]')).toHaveText(
+  await expect(overlay.locator('[data-component="operator-code"]')).toHaveText(
     "You are opencode, an interactive CLI tool.",
   )
-  await page.getByRole("button", { name: "Make editable copy" }).click()
+  await expect(overlay.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0)
+  await overlay.getByRole("button", { name: "Make editable copy" }).click()
   await expect.poll(() => state.prompt.writes.length).toBe(2)
   expect(state.prompt.writes[1].path).toMatch(/\/layers\/opencode(:|%3A)base\.default\/copy$/)
-  await expect(page.getByLabel("Text", { exact: true })).toHaveValue("You are opencode, an interactive CLI tool.")
-  await expect(page.getByText("Editable copy of")).toBeVisible()
-  await expect(page.locator('[data-section="base"]').getByRole("row", { name: /base\.default – copy/ })).toContainText(
-    "Copy of base.default",
+  await expect(overlay.getByRole("heading", { name: "base.default – copy" })).toBeVisible()
+  await expect(overlay.getByRole("button", { name: "base.default", exact: true })).toBeVisible()
+
+  // Edit brings Cancel; Cancel leaves it unchanged.
+  await overlay.getByRole("button", { name: "Edit", exact: true }).click()
+  await expect(overlay.getByLabel("Text", { exact: true })).toHaveValue("You are opencode, an interactive CLI tool.")
+  await overlay.getByLabel("Text", { exact: true }).fill("Changed.")
+  await overlay.getByRole("button", { name: "Cancel" }).click()
+  await expect(overlay.getByRole("button", { name: "Edit", exact: true })).toBeVisible()
+  await expect(overlay.locator('[data-component="operator-code"]')).toHaveText(
+    "You are opencode, an interactive CLI tool.",
   )
+  expect(state.prompt.writes).toHaveLength(2)
+})
+
+test("the overlay's menu lists a block's records, and ‹ › move through every record on the page", async ({ page }) => {
+  await mockOperator(page)
+  await page.goto("/operator/profile?tab=layers&layer=opencode:base.default")
+  const overlay = page.getByRole("dialog")
+  await expect(overlay.getByRole("heading", { name: "base.default" })).toBeVisible()
+  const menu = overlay.getByRole("tablist", { name: "Layer Definition" })
+  for (const block of ["Base Model Group", "Project Purpose", "Role", "Identity Groups", "Message texts"])
+    await expect(menu.getByRole("tab", { name: block })).toBeVisible()
+  await expect(menu.getByRole("tab", { name: "Base Model Group" })).toHaveAttribute("aria-selected", "true")
+
+  // The last Base Model Group layer is followed by the first Identity Groups layer (Project Purpose
+  // and Role are empty), and the menu follows.
+  await overlay.getByRole("button", { name: "Next record" }).click()
+  await expect(overlay.getByRole("heading", { name: "Base prompt (by model)" })).toBeVisible()
+  await overlay.getByRole("button", { name: "Next record" }).click()
+  await overlay.getByRole("button", { name: "Next record" }).click()
+  await expect(overlay.getByRole("heading", { name: "Agent prompt", exact: true })).toBeVisible()
+  await expect(menu.getByRole("tab", { name: "Identity Groups" })).toHaveAttribute("aria-selected", "true")
+  await page.keyboard.press("ArrowLeft")
+  await expect(overlay.getByRole("heading", { name: "Agent prompt, else base prompt" })).toBeVisible()
+
+  // A block's records, then one of them.
+  await menu.getByRole("tab", { name: "Message texts" }).click()
+  const list = overlay.getByRole("list", { name: "Message texts" })
+  await expect(list.getByRole("button")).toHaveCount(2)
+  await list.getByRole("button", { name: /notice\.max-steps/ }).click()
+  await expect(overlay.getByRole("heading", { name: /notice\.max-steps/ })).toBeVisible()
+  await expect(page).toHaveURL(/layer=opencode(:|%3A)notice\.max-steps/)
+
+  // An empty block offers its New button.
+  await menu.getByRole("tab", { name: "Project Purpose" }).click()
+  await expect(overlay).toContainText("No Project Purposes yet.")
+  await overlay.getByRole("button", { name: "New Project Purpose" }).click()
+  await expect(overlay.getByRole("heading", { name: "New Project Purpose" })).toBeVisible()
+  await expect(overlay.getByRole("button", { name: "Next record" })).toHaveCount(0)
+  await overlay.getByRole("button", { name: "Cancel" }).click()
+  await expect(overlay).toContainText("No Project Purposes yet.")
 })
 
 test("Group Definition: a custom type, and a group that orders it with the required types", async ({ page }) => {
@@ -78,18 +140,22 @@ test("Group Definition: a custom type, and a group that orders it with the requi
   const types = page.getByRole("table", { name: "Group types" })
   await expect(types.getByRole("row", { name: /Stable capability boundaries/ })).toContainText("Built-in")
   await page.getByRole("button", { name: "New type" }).click()
-  await page.getByLabel("Name", { exact: true }).fill("Compliance")
-  await page.getByLabel("Description", { exact: true }).fill("Rules from legal.")
-  await page.getByRole("button", { name: "Save", exact: true }).click()
+  const overlay = page.getByRole("dialog")
+  await overlay.getByLabel("Name", { exact: true }).fill("Compliance")
+  await overlay.getByLabel("Description", { exact: true }).fill("Rules from legal.")
+  await overlay.getByRole("button", { name: "Save", exact: true }).click()
   await expect.poll(() => state.prompt.writes.length).toBe(1)
   expect(state.prompt.writes[0]).toMatchObject({
     path: "/operator/namespaces/opencode/types",
     body: { name: "Compliance", description: "Rules from legal." },
   })
+  await expect(overlay.getByRole("heading", { name: "Compliance" })).toBeVisible()
 
-  await page.getByRole("button", { name: "New group" }).click()
-  await page.getByLabel("Name", { exact: true }).fill("Release order")
-  const order = page.getByRole("list", { name: "Order" })
+  // To Groups through the overlay's menu.
+  await overlay.getByRole("tab", { name: "Groups" }).click()
+  await overlay.getByRole("button", { name: "New group" }).click()
+  await overlay.getByLabel("Name", { exact: true }).fill("Release order")
+  const order = overlay.getByRole("list", { name: "Order" })
   await expect(order.getByRole("listitem")).toHaveCount(3)
   await expect(order.getByRole("listitem").first()).toContainText("Required")
   await expect(order.getByRole("button", { name: /Take .* out/ })).toHaveCount(0)
@@ -97,7 +163,7 @@ test("Group Definition: a custom type, and a group that orders it with the requi
   await pick(page, "Add a type", "Output format")
   await order.getByRole("button", { name: "Move Compliance up" }).click()
   await order.getByRole("button", { name: "Take Output format out" }).click()
-  await page.getByRole("button", { name: "Save", exact: true }).click()
+  await overlay.getByRole("button", { name: "Save", exact: true }).click()
   await expect.poll(() => state.prompt.writes.length).toBe(2)
   expect(state.prompt.writes[1]).toMatchObject({
     method: "POST",
@@ -117,9 +183,10 @@ test("Profile Definition: layers in two slots, reordered, and the profile made t
   )
   await page.goto("/operator/profile?tab=profiles")
   await page.getByRole("button", { name: "New profile" }).click()
-  await page.getByLabel("Name", { exact: true }).fill("Release")
+  const overlay = page.getByRole("dialog")
+  await overlay.getByLabel("Name", { exact: true }).fill("Release")
 
-  const purpose = page.locator('[data-slot="operator-slot"][data-type="purpose"]')
+  const purpose = overlay.locator('[data-slot="operator-slot"][data-type="purpose"]')
   await expect(purpose).toContainText("Org purpose (from the namespace)")
   await expect(purpose).toContainText("Locked")
   await expect(purpose.locator('[data-component="select-v2"]')).toHaveCount(0)
@@ -127,10 +194,10 @@ test("Profile Definition: layers in two slots, reordered, and the profile made t
   await pick(page, "Add a layer to Agent role", "Reviewer")
   await pick(page, "Add a layer to Agent identity", "Voice")
   await pick(page, "Add a layer to Agent identity", "House rules")
-  const identity = page.getByRole("list", { name: "Agent identity" })
+  const identity = overlay.getByRole("list", { name: "Agent identity" })
   await identity.getByRole("button", { name: "Move House rules up" }).click()
   await expect(identity.getByRole("listitem").first()).toContainText("House rules")
-  await page.getByRole("button", { name: "Save", exact: true }).click()
+  await overlay.getByRole("button", { name: "Save", exact: true }).click()
   await expect.poll(() => state.prompt.writes.length).toBe(1)
   expect(state.prompt.writes[0]).toMatchObject({ method: "POST", path: "/operator/namespaces/opencode/profiles" })
   expect(state.prompt.writes[0].body).toMatchObject({
@@ -139,13 +206,17 @@ test("Profile Definition: layers in two slots, reordered, and the profile made t
     slots: { role: ["reviewer"], identity: ["rules", "voice"], platform: [] },
   })
 
-  await page.getByRole("button", { name: "Use as namespace default" }).click()
+  // Read-only now: the slots without controls, and the profile's actions.
+  await expect(overlay.getByRole("heading", { name: "Release" })).toBeVisible()
+  await expect(overlay.getByRole("button", { name: "Move House rules up" })).toHaveCount(0)
+  await overlay.getByRole("button", { name: "Use as namespace default" }).click()
   await expect.poll(() => state.prompt.writes.length).toBe(2)
   expect(state.prompt.writes[1]).toMatchObject({
     method: "PATCH",
     path: "/operator/namespaces/opencode",
     body: { defaultProfile: "release" },
   })
+  await overlay.getByRole("button", { name: "Close" }).click()
   await expect(page.getByRole("row", { name: /Release/ })).toContainText("Namespace default")
 })
 
@@ -161,24 +232,28 @@ test("built-in groups and profiles are read-only and can be duplicated; the name
     profiles: [],
   }
   await page.goto("/operator/profile?tab=groups&group=opencode:group.spec")
+  const overlay = page.getByRole("dialog")
 
-  await expect(page.getByText("OpenCode's own group.")).toBeVisible()
-  await expect(page.getByRole("list", { name: "Order" }).getByRole("listitem")).toHaveCount(7)
-  await page.getByRole("button", { name: "Duplicate" }).click()
-  await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Default copy")
-  await page.getByRole("button", { name: "Save", exact: true }).click()
+  await expect(overlay.getByText("OpenCode's own group.")).toBeVisible()
+  await expect(overlay.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0)
+  await expect(overlay.getByRole("list", { name: "Order" }).getByRole("listitem")).toHaveCount(7)
+  await overlay.getByRole("button", { name: "Duplicate" }).click()
+  await expect(overlay.getByLabel("Name", { exact: true })).toHaveValue("Default copy")
+  await overlay.getByRole("button", { name: "Save", exact: true }).click()
   await expect.poll(() => state.prompt.writes.length).toBe(1)
   expect(state.prompt.writes[0].body).toMatchObject({
     types: ["platform", "purpose", "role", "identity", "capabilities", "additional", "output"],
   })
+  await overlay.getByRole("button", { name: "Close" }).click()
 
   await page.goto("/operator/profile?tab=profiles&profile=opencode:profile.helper")
-  await expect(page.getByText("OpenCode's own profile.")).toBeVisible()
-  await expect(page.getByLabel("Name", { exact: true })).toHaveCount(0)
-  await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0)
-  await expect(page.locator('[data-slot="operator-slot"][data-type="identity"]')).toContainText(
+  await expect(overlay.getByText("OpenCode's own profile.")).toBeVisible()
+  await expect(overlay.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0)
+  await expect(overlay.getByRole("button", { name: "Save", exact: true })).toHaveCount(0)
+  await expect(overlay.locator('[data-slot="operator-slot"][data-type="identity"]')).toContainText(
     "Agent prompt, else base prompt",
   )
+  await overlay.getByRole("button", { name: "Close" }).click()
 
   await pick(page, "Namespace", "Acme")
   await expect(page).toHaveURL(/ns=acme/)

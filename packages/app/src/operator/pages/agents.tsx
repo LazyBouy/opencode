@@ -12,11 +12,14 @@ import { Persist, persisted } from "@/utils/persist"
 import { useOperatorClient } from "../data"
 import { formatAgo, formatCount } from "../format"
 import { useScopedProject } from "../project"
-import { ColumnPicker } from "../ui/column-picker"
+import { usePromptCatalog, useProfileNames } from "./profile-data"
+import { OPENCODE, profileFor } from "./profile-model"
+import { useProjectSettings } from "./project-prompt"
 import { type Column, DataTable } from "../ui/data-table"
 import { EmptyState } from "../ui/empty-state"
 import { PageHeader } from "../ui/page-header"
 import { ScopePicker } from "../ui/scope-picker"
+import { FieldHelp } from "../ui/field-help"
 
 export function useAgents() {
   const api = useOperatorClient()
@@ -41,14 +44,21 @@ export default function AgentsPage() {
   const navigate = useNavigate()
   const directory = useScopedProject()
   const agents = useAgents()
-  const [store, setStore] = persisted(
-    Persist.global("operator.agents"),
-    createStore({ hidden: [] as string[], showHidden: false }),
-  )
+  const [store, setStore] = persisted(Persist.global("operator.agents"), createStore({ showHidden: false }))
   const [filter, setFilter] = createStore({ text: "" })
 
   const rows = createMemo(() => (agents.data ?? []).filter((agent) => store.showHidden || !agent.hidden))
   const sourceLabel = (agent: OperatorAgent) => language.t(`operator.agents.source.${agent.source.kind}`)
+  // The profile each agent of this project uses: resolved from its namespace's catalog.
+  const names = useProfileNames()
+  const settings = useProjectSettings()
+  const namespace = () => settings.data?.find((item) => item.key === directory())?.namespace ?? OPENCODE
+  const prompts = usePromptCatalog(namespace)
+  const profileOf = (agent: OperatorAgent) => {
+    const catalog = prompts.query.data
+    const found = catalog && directory() ? profileFor(catalog, directory()!, agent.name) : undefined
+    return found ? { name: names.profile(found.profile), source: found.source } : undefined
+  }
 
   const columns: Column<OperatorAgent>[] = [
     {
@@ -70,18 +80,21 @@ export default function AgentsPage() {
     },
     {
       id: "mode",
+      optional: true,
       header: language.t("operator.column.mode"),
       value: (agent) => agent.mode,
       cell: (agent) => language.t(`operator.agents.mode.${agent.mode}`),
     },
     {
       id: "model",
+      optional: true,
       header: language.t("operator.column.model"),
       value: agentModel,
       cell: (agent) => agentModel(agent) || language.t("operator.agents.defaultModel"),
     },
     {
       id: "source",
+      optional: true,
       header: language.t("operator.column.source"),
       value: sourceLabel,
       cell: (agent) => (
@@ -95,12 +108,32 @@ export default function AgentsPage() {
       ),
     },
     {
+      id: "profile",
+      optional: true,
+      header: language.t("operator.prompts.profile"),
+      value: (agent) => profileOf(agent)?.name,
+      cell: (agent) => (
+        <Show when={profileOf(agent)}>
+          {(found) => (
+            <span title={language.t(`operator.prompts.source.${found().source}`)}>
+              {found().name}
+              <Show when={found().source !== "namespace"}>
+                <span data-slot="operator-note"> · {language.t(`operator.prompts.source.${found().source}`)}</span>
+              </Show>
+            </span>
+          )}
+        </Show>
+      ),
+    },
+    {
       id: "description",
+      optional: true,
       header: language.t("operator.column.description"),
       cell: (agent) => <span data-slot="operator-cell-clamp">{agent.description ?? ""}</span>,
     },
     {
       id: "sessions",
+      optional: true,
       header: language.t("operator.column.sessions"),
       align: "end",
       value: (agent) => agent.sessions.total,
@@ -108,6 +141,7 @@ export default function AgentsPage() {
     },
     {
       id: "lastUsed",
+      optional: true,
       header: language.t("operator.column.lastUsed"),
       align: "end",
       value: (agent) => agent.sessions.lastUsed,
@@ -154,16 +188,18 @@ export default function AgentsPage() {
             placeholder={language.t("operator.agents.search")}
             aria-label={language.t("operator.agents.search")}
           />
-          <Switch checked={store.showHidden} onChange={(checked) => setStore("showHidden", checked)}>
-            {language.t("operator.agents.showHidden")}
-          </Switch>
-          <ColumnPicker columns={columns} hidden={store.hidden} onChange={(hidden) => setStore("hidden", hidden)} />
+          <span class="inline-flex items-center">
+            <Switch checked={store.showHidden} onChange={(checked) => setStore("showHidden", checked)}>
+              {language.t("operator.agents.showHidden")}
+            </Switch>
+            <FieldHelp field={language.t("operator.agents.showHidden")} text={language.t("operator.help.showHidden")} />
+          </span>
         </div>
         <DataTable
+          columnsKey="agents"
           label={language.t("operator.page.agents.title")}
           rows={rows()}
           columns={columns}
-          hidden={store.hidden}
           filter={filter.text}
           search={(agent) => `${agent.name} ${agent.description ?? ""} ${agentModel(agent)}`}
           loading={agents.isPending}

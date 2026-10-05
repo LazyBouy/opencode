@@ -118,6 +118,7 @@ export default function CapabilitiesPage() {
           <TabsV2.Content value="tools">
             <div data-slot="operator-toolbar">{search}</div>
             <DataTable
+              columnsKey="tools"
               label={language.t("operator.capabilities.toolsLabel")}
               rows={tools.data ?? []}
               loading={tools.isPending}
@@ -133,6 +134,7 @@ export default function CapabilitiesPage() {
                 },
                 {
                   id: "origin",
+                  optional: true,
                   header: language.t("operator.column.source"),
                   value: (tool) => tool.origin,
                   cell: (tool) => (
@@ -146,6 +148,7 @@ export default function CapabilitiesPage() {
                 },
                 {
                   id: "description",
+                  optional: true,
                   header: language.t("operator.column.description"),
                   cell: (tool) => <span data-slot="operator-cell-clamp">{tool.description}</span>,
                 },
@@ -155,6 +158,7 @@ export default function CapabilitiesPage() {
           <TabsV2.Content value="skills">
             <div data-slot="operator-toolbar">{search}</div>
             <DataTable
+              columnsKey="skills"
               label={language.t("operator.capabilities.skillsLabel")}
               rows={skills.data ?? []}
               loading={skills.isPending}
@@ -171,11 +175,13 @@ export default function CapabilitiesPage() {
                 },
                 {
                   id: "description",
+                  optional: true,
                   header: language.t("operator.column.description"),
                   cell: (skill) => <span data-slot="operator-cell-clamp">{skill.description ?? ""}</span>,
                 },
                 {
                   id: "location",
+                  optional: true,
                   header: language.t("operator.column.location"),
                   value: (skill) => skill.location,
                   cell: (skill) => <span title={skill.location}>{shortPath(skill.location)}</span>,
@@ -186,6 +192,7 @@ export default function CapabilitiesPage() {
           <TabsV2.Content value="commands">
             <div data-slot="operator-toolbar">{search}</div>
             <DataTable
+              columnsKey="commands"
               label={language.t("operator.capabilities.commandsLabel")}
               rows={commands.data ?? []}
               loading={commands.isPending}
@@ -202,17 +209,20 @@ export default function CapabilitiesPage() {
                 },
                 {
                   id: "description",
+                  optional: true,
                   header: language.t("operator.column.description"),
                   cell: (command) => <span data-slot="operator-cell-clamp">{command.description ?? ""}</span>,
                 },
                 {
                   id: "agent",
+                  optional: true,
                   header: language.t("operator.column.agent"),
                   value: (command) => command.agent,
                   cell: (command) => command.agent ?? "",
                 },
                 {
                   id: "source",
+                  optional: true,
                   header: language.t("operator.column.source"),
                   value: (command) => command.source,
                   cell: (command) => (command.source ? <Tag>{command.source}</Tag> : ""),
@@ -222,6 +232,7 @@ export default function CapabilitiesPage() {
           </TabsV2.Content>
           <TabsV2.Content value="mcp">
             <DataTable
+              columnsKey="mcp"
               label={language.t("operator.capabilities.mcpLabel")}
               rows={servers()}
               loading={mcp.isPending}
@@ -248,6 +259,7 @@ export default function CapabilitiesPage() {
                 },
                 {
                   id: "tools",
+                  optional: true,
                   header: language.t("operator.capabilities.toolsLabel"),
                   align: "end",
                   value: (server) => (tools.data ?? []).filter((tool) => tool.source === server.name).length,

@@ -25,14 +25,22 @@ const pick = async (page: Page, label: string, option: string, inDialog = false)
     .click()
 }
 
-const save = (page: Page) => page.getByRole("button", { name: "Save", exact: true }).click()
+// Records open in the overlay: Save there, then close it.
+const saveAndClose = async (page: Page, name: string) => {
+  const overlay = page.getByRole("dialog")
+  await overlay.getByRole("button", { name: "Save", exact: true }).click()
+  await expect(overlay.getByRole("heading", { name, exact: true })).toBeVisible()
+  await overlay.getByRole("button", { name: "Close" }).click()
+  await expect(overlay).toBeHidden()
+}
 
 // A layer in a Layer Definition section.
 const layer = async (page: Page, section: string, button: string, name: string, text: string) => {
   await page.locator(`[data-section="${section}"]`).getByRole("button", { name: button }).click()
-  await page.getByLabel("Name", { exact: true }).fill(name)
-  await page.getByLabel("Text", { exact: true }).fill(text)
-  await save(page)
+  const overlay = page.getByRole("dialog")
+  await overlay.getByLabel("Name", { exact: true }).fill(name)
+  await overlay.getByLabel("Text", { exact: true }).fill(text)
+  await saveAndClose(page, name)
   await expect(page.locator(`[data-section="${section}"]`).getByRole("row", { name: new RegExp(name) })).toBeVisible()
 }
 
@@ -48,7 +56,7 @@ test("a namespace, a moved project, a custom type and group, a profile, a projec
   await settings.getByRole("tab", { name: "Namespaces" }).click()
   await settings.getByRole("button", { name: "New namespace" }).click()
   await settings.getByLabel("Name", { exact: true }).fill("Acme")
-  await settings.getByLabel("Org purpose").fill("We build developer tools.")
+  await settings.getByLabel("Org purpose", { exact: true }).fill("We build developer tools.")
   await settings.getByRole("button", { name: "Create namespace" }).click()
   await expect.poll(() => state.prompt.namespaces.map((item) => item.id)).toContain("acme")
   await page.keyboard.press("Escape")
@@ -73,31 +81,32 @@ test("a namespace, a moved project, a custom type and group, a profile, a projec
   await layer(page, "identity", "New layer", "Rules", "Use Bun.")
   await page.getByRole("tab", { name: "Group Definition" }).click()
   await page.getByRole("button", { name: "New type" }).click()
-  await page.getByLabel("Name", { exact: true }).fill("Compliance")
-  await save(page)
+  const overlay = page.getByRole("dialog")
+  await overlay.getByLabel("Name", { exact: true }).fill("Compliance")
+  await saveAndClose(page, "Compliance")
   await expect(page.getByRole("table", { name: "Group types" })).toContainText("Compliance")
   await page.getByRole("button", { name: "New group" }).click()
-  await page.getByLabel("Name", { exact: true }).fill("Acme order")
-  await pick(page, "Add a type", "Compliance")
-  await save(page)
+  await overlay.getByLabel("Name", { exact: true }).fill("Acme order")
+  await pick(page, "Add a type", "Compliance", true)
+  await saveAndClose(page, "Acme order")
   await expect(page.getByRole("table", { name: "Groups" })).toContainText("Acme order")
 
   // 4. A profile with layers in two slots, reordered, and a layer created in the custom slot.
   await page.getByRole("tab", { name: "Profile Definition" }).click()
   await page.getByRole("button", { name: "New profile" }).click()
-  await page.getByLabel("Name", { exact: true }).fill("Acme")
-  await pick(page, "Group", "Acme order")
-  await pick(page, "Add a layer to Agent role", "Reviewer")
-  await pick(page, "Add a layer to Agent identity", "Voice")
-  await pick(page, "Add a layer to Agent identity", "Rules")
-  await page.getByRole("list", { name: "Agent identity" }).getByRole("button", { name: "Move Rules up" }).click()
-  const compliance = page.locator('[data-slot="operator-slot"][data-type="compliance"]')
+  await overlay.getByLabel("Name", { exact: true }).fill("Acme")
+  await pick(page, "Group", "Acme order", true)
+  await pick(page, "Add a layer to Agent role", "Reviewer", true)
+  await pick(page, "Add a layer to Agent identity", "Voice", true)
+  await pick(page, "Add a layer to Agent identity", "Rules", true)
+  await overlay.getByRole("list", { name: "Agent identity" }).getByRole("button", { name: "Move Rules up" }).click()
+  const compliance = overlay.locator('[data-slot="operator-slot"][data-type="compliance"]')
   await compliance.getByRole("button", { name: "Create layer" }).click()
   await compliance.getByLabel("Name", { exact: true }).fill("Legal")
   await compliance.getByLabel("Text", { exact: true }).fill("Follow the licence rules.")
   await compliance.getByRole("button", { name: "Create and add" }).click()
-  await expect(page.getByRole("list", { name: "Compliance" })).toContainText("Legal")
-  await save(page)
+  await expect(overlay.getByRole("list", { name: "Compliance" })).toContainText("Legal")
+  await saveAndClose(page, "Acme")
   await expect.poll(() => state.prompt.items.acme?.profiles.map((item) => item.name)).toContain("Acme")
   expect(state.prompt.items.acme!.profiles[0]).toMatchObject({
     group: "acme-order",
