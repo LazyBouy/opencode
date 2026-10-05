@@ -1,6 +1,8 @@
+import { operatorAgentPromptHandlers } from "./handlers/agent-prompt"
 import { operatorConfigHandlers } from "./handlers/config"
 import { operatorFolderHandlers } from "./handlers/folders"
 import { operatorMemoryHandlers } from "./handlers/memory"
+import { operatorNamespaceHandlers } from "./handlers/namespaces"
 import { mergeHandlers } from "./handlers/merge"
 import { operatorOverviewHandlers } from "./handlers/overview"
 import { operatorProjectHandlers } from "./handlers/project"
@@ -14,8 +16,10 @@ export const operatorHandlers = [
   operatorProjectHandlers,
   operatorPromptHandlers,
   operatorMemoryHandlers,
+  operatorAgentPromptHandlers,
 ] as const
 export const operatorRootHandlers = [
   operatorOverviewHandlers,
   operatorFolderHandlers,
+  operatorNamespaceHandlers,
 ] as const

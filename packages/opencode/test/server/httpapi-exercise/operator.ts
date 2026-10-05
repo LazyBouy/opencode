@@ -253,4 +253,223 @@ export const operatorScenarios: Scenario[] = [
       body: { path: `${ctx.directory}/AGENTS.md`, text: "Written by the exerciser.\n" },
     }))
     .json(200, (body) => check(body === true, "AGENTS.md at the project root should be created"), "status"),
+  http.protected.get("/operator/namespaces", "operator.namespace.list").json(200, (body) => {
+    array(body)
+    check(
+      isRecord(body[0]) && isRecord(body[0].namespace) && body[0].namespace.id === "opencode",
+      "OpenCode should be the first namespace",
+    )
+  }),
+  http.protected
+    .post("/operator/namespaces", "operator.namespace.create")
+    .mutating()
+    .at((ctx) => ({
+      path: "/operator/namespaces",
+      headers: ctx.headers(),
+      body: { name: "HttpApi team", purpose: "Test." },
+    }))
+    .json(
+      200,
+      (body) => {
+        object(body)
+        check(body.id === "httpapi-team" && body.purpose === "Test.", "the namespace should be created")
+      },
+      "status",
+    ),
+  http.protected
+    .get("/operator/namespaces/{ns}", "operator.namespace.get")
+    .at((ctx) => ({ path: route("/operator/namespaces/{ns}", { ns: "opencode" }), headers: ctx.headers() }))
+    .json(200, (body) => {
+      object(body)
+      check(body.id === "opencode" && body.name === "OpenCode", "OpenCode should exist from the start")
+    }),
+  http.protected
+    .patch("/operator/namespaces/{ns}", "operator.namespace.update")
+    .mutating()
+    .at((ctx) => ({
+      path: route("/operator/namespaces/{ns}", { ns: "opencode" }),
+      headers: ctx.headers(),
+      body: { purpose: "" },
+    }))
+    .json(200, (body) => check(isRecord(body) && body.purpose === "", "the purpose should be saved"), "status"),
+  http.protected
+    .delete("/operator/namespaces/{ns}", "operator.namespace.remove")
+    .at((ctx) => ({ path: route("/operator/namespaces/{ns}", { ns: "opencode" }), headers: ctx.headers() }))
+    .status(400),
+  http.protected
+    .get("/operator/namespaces/{ns}/catalog", "operator.namespace.catalog")
+    .at((ctx) => ({ path: route("/operator/namespaces/{ns}/catalog", { ns: "opencode" }), headers: ctx.headers() }))
+    .json(200, (body) => {
+      object(body)
+      array(body.profiles)
+      array(body.types)
+      check(
+        body.profiles.some((item) => isRecord(item) && item.id === "opencode:profile.opencode"),
+        "the built-in OpenCode profile should be listed",
+      )
+      check(body.types.length >= 7, "the seven built-in group types should be listed")
+    }),
+  http.protected
+    .post("/operator/namespaces/{ns}/types", "operator.namespace.type.create")
+    .mutating()
+    .at((ctx) => ({
+      path: route("/operator/namespaces/{ns}/types", { ns: "opencode" }),
+      headers: ctx.headers(),
+      body: { name: "HttpApi rules", description: "Rules" },
+    }))
+    .json(200, (body) => check(isRecord(body) && body.builtin === false, "the type should be saved"), "status"),
+  http.protected
+    .put("/operator/namespaces/{ns}/types/{id}", "operator.namespace.type.update")
+    .at((ctx) => ({
+      path: route("/operator/namespaces/{ns}/types/{id}", { ns: "opencode", id: "missing" }),
+      headers: ctx.headers(),
+      body: { name: "x" },
+    }))
+    .status(404),
+  http.protected
+    .delete("/operator/namespaces/{ns}/types/{id}", "operator.namespace.type.remove")
+    .at((ctx) => ({
+      path: route("/operator/namespaces/{ns}/types/{id}", { ns: "opencode", id: "role" }),
+      headers: ctx.headers(),
+    }))
+    .status(404),
+  http.protected
+    .post("/operator/namespaces/{ns}/layers", "operator.namespace.layer.create")
+    .mutating()
+    .at((ctx) => ({
+      path: route("/operator/namespaces/{ns}/layers", { ns: "opencode" }),
+      headers: ctx.headers(),
+      body: { name: "HttpApi role", type: "role", section: "role", text: "You check the API." },
+    }))
+    .json(
+      200,
+      (body) => check(isRecord(body) && body.type === "role" && body.origin === "user", "the layer should be saved"),
+      "status",
+    ),
+  http.protected
+    .put("/operator/namespaces/{ns}/layers/{id}", "operator.namespace.layer.update")
+    .at((ctx) => ({
+      path: route("/operator/namespaces/{ns}/layers/{id}", { ns: "opencode", id: "missing" }),
+      headers: ctx.headers(),
+      body: { name: "x", type: "role", text: "x" },
+    }))
+    .status(404),
+  http.protected
+    .delete("/operator/namespaces/{ns}/layers/{id}", "operator.namespace.layer.remove")
+    .at((ctx) => ({
+      path: route("/operator/namespaces/{ns}/layers/{id}", {
+        ns: "opencode",
+        id: encodeURIComponent("opencode:base.gemini"),
+      }),
+      headers: ctx.headers(),
+    }))
+    .status(400),
+  http.protected
+    .post("/operator/namespaces/{ns}/layers/{id}/copy", "operator.namespace.layer.copy")
+    .mutating()
+    .at((ctx) => ({
+      path: route("/operator/namespaces/{ns}/layers/{id}/copy", {
+        ns: "opencode",
+        id: encodeURIComponent("opencode:base.gemini"),
+      }),
+      headers: ctx.headers(),
+      body: {},
+    }))
+    .json(
+      200,
+      (body) =>
+        check(
+          isRecord(body) && body.replaces === "opencode:base.gemini" && body.type === "identity",
+          "the copy should keep its type",
+        ),
+      "status",
+    ),
+  http.protected
+    .post("/operator/namespaces/{ns}/groups", "operator.namespace.group.create")
+    .at((ctx) => ({
+      path: route("/operator/namespaces/{ns}/groups", { ns: "opencode" }),
+      headers: ctx.headers(),
+      body: { name: "No role", types: ["purpose", "identity"] },
+    }))
+    .status(400),
+  http.protected
+    .put("/operator/namespaces/{ns}/groups/{id}", "operator.namespace.group.update")
+    .at((ctx) => ({
+      path: route("/operator/namespaces/{ns}/groups/{id}", {
+        ns: "opencode",
+        id: encodeURIComponent("opencode:group.spec"),
+      }),
+      headers: ctx.headers(),
+      body: { name: "Default", types: ["purpose", "role", "identity"] },
+    }))
+    .status(400),
+  http.protected
+    .delete("/operator/namespaces/{ns}/groups/{id}", "operator.namespace.group.remove")
+    .at((ctx) => ({
+      path: route("/operator/namespaces/{ns}/groups/{id}", { ns: "opencode", id: "missing" }),
+      headers: ctx.headers(),
+    }))
+    .status(404),
+  http.protected
+    .post("/operator/namespaces/{ns}/profiles", "operator.namespace.profile.create")
+    .at((ctx) => ({
+      path: route("/operator/namespaces/{ns}/profiles", { ns: "opencode" }),
+      headers: ctx.headers(),
+      body: { name: "Bad", group: "opencode:group.spec", slots: { purpose: ["opencode:purpose.org"] } },
+    }))
+    .status(400),
+  http.protected
+    .put("/operator/namespaces/{ns}/profiles/{id}", "operator.namespace.profile.update")
+    .at((ctx) => ({
+      path: route("/operator/namespaces/{ns}/profiles/{id}", {
+        ns: "opencode",
+        id: encodeURIComponent("opencode:profile.opencode"),
+      }),
+      headers: ctx.headers(),
+      body: { name: "OpenCode", group: "opencode:group.opencode", slots: {} },
+    }))
+    .status(400),
+  http.protected
+    .delete("/operator/namespaces/{ns}/profiles/{id}", "operator.namespace.profile.remove")
+    .at((ctx) => ({
+      path: route("/operator/namespaces/{ns}/profiles/{id}", { ns: "opencode", id: "missing" }),
+      headers: ctx.headers(),
+    }))
+    .status(404),
+  http.protected
+    .post("/operator/namespaces/{ns}/copy", "operator.namespace.copy")
+    .at((ctx) => ({
+      path: route("/operator/namespaces/{ns}/copy", { ns: "opencode" }),
+      headers: ctx.headers(),
+      body: { kind: "profile", id: "missing", target: "opencode" },
+    }))
+    .status(400),
+  http.protected.get("/operator/project-settings", "operator.projectSettings.list").json(200, array),
+  http.protected
+    .put("/operator/project-settings", "operator.projectSettings.update")
+    .at((ctx) => ({
+      path: "/operator/project-settings",
+      headers: ctx.headers(),
+      body: { key: ctx.directory ?? "/tmp/x", namespace: "missing" },
+    }))
+    .status(404),
+  http.protected
+    .get("/operator/agent-prompt/{name}", "operator.agentPrompt.get")
+    .at((ctx) => ({ path: route("/operator/agent-prompt/{name}", { name: "build" }), headers: ctx.headers() }))
+    .json(200, (body) => {
+      object(body)
+      object(body.profile)
+      check(
+        body.profile.id === "opencode:profile.opencode" && body.profile.source === "namespace",
+        "build should use the OpenCode profile",
+      )
+    }),
+  http.protected
+    .put("/operator/agent-prompt/{name}", "operator.agentPrompt.update")
+    .at((ctx) => ({
+      path: route("/operator/agent-prompt/{name}", { name: "build" }),
+      headers: ctx.headers(),
+      body: { profile: "missing" },
+    }))
+    .status(400),
 ]

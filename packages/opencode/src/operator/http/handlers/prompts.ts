@@ -12,7 +12,12 @@ export const operatorPromptHandlers = HttpApiBuilder.group(InstanceHttpApi, "ope
       .handle("catalog", () => prompts.catalog())
       .handle("preview", (ctx) =>
         prompts
-          .preview({ agent: ctx.query.agent, providerID: ctx.query.provider, modelID: ctx.query.model })
+          .preview({
+            agent: ctx.query.agent,
+            providerID: ctx.query.provider,
+            modelID: ctx.query.model,
+            profile: ctx.query.profile,
+          })
           .pipe(
             Effect.mapError(
               (error) =>

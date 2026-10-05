@@ -119,6 +119,10 @@ import type {
   OperatorAgentCreateResponses,
   OperatorAgentListErrors,
   OperatorAgentListResponses,
+  OperatorAgentPromptGetErrors,
+  OperatorAgentPromptGetResponses,
+  OperatorAgentPromptUpdateErrors,
+  OperatorAgentPromptUpdateResponses,
   OperatorAgentRemoveErrors,
   OperatorAgentRemoveResponses,
   OperatorAgentUpdateErrors,
@@ -146,40 +150,62 @@ import type {
   OperatorMemoryReadResponses,
   OperatorMemoryWriteErrors,
   OperatorMemoryWriteResponses,
+  OperatorNamespaceCatalogErrors,
+  OperatorNamespaceCatalogResponses,
+  OperatorNamespaceCopyErrors,
+  OperatorNamespaceCopyResponses,
+  OperatorNamespaceCreateErrors,
+  OperatorNamespaceCreateResponses,
+  OperatorNamespaceGetErrors,
+  OperatorNamespaceGetResponses,
+  OperatorNamespaceGroupCreateErrors,
+  OperatorNamespaceGroupCreateResponses,
+  OperatorNamespaceGroupRemoveErrors,
+  OperatorNamespaceGroupRemoveResponses,
+  OperatorNamespaceGroupUpdateErrors,
+  OperatorNamespaceGroupUpdateResponses,
+  OperatorNamespaceLayerCopyErrors,
+  OperatorNamespaceLayerCopyResponses,
+  OperatorNamespaceLayerCreateErrors,
+  OperatorNamespaceLayerCreateResponses,
+  OperatorNamespaceLayerRemoveErrors,
+  OperatorNamespaceLayerRemoveResponses,
+  OperatorNamespaceLayerUpdateErrors,
+  OperatorNamespaceLayerUpdateResponses,
+  OperatorNamespaceListErrors,
+  OperatorNamespaceListResponses,
+  OperatorNamespaceProfileCreateErrors,
+  OperatorNamespaceProfileCreateResponses,
+  OperatorNamespaceProfileRemoveErrors,
+  OperatorNamespaceProfileRemoveResponses,
+  OperatorNamespaceProfileUpdateErrors,
+  OperatorNamespaceProfileUpdateResponses,
+  OperatorNamespaceRemoveErrors,
+  OperatorNamespaceRemoveResponses,
+  OperatorNamespaceTypeCreateErrors,
+  OperatorNamespaceTypeCreateResponses,
+  OperatorNamespaceTypeRemoveErrors,
+  OperatorNamespaceTypeRemoveResponses,
+  OperatorNamespaceTypeUpdateErrors,
+  OperatorNamespaceTypeUpdateResponses,
+  OperatorNamespaceUpdateErrors,
+  OperatorNamespaceUpdateResponses,
   OperatorPermissionPendingErrors,
   OperatorPermissionPendingResponses,
   OperatorProjectListErrors,
   OperatorProjectListResponses,
+  OperatorProjectSettingsListErrors,
+  OperatorProjectSettingsListResponses,
+  OperatorProjectSettingsUpdateErrors,
+  OperatorProjectSettingsUpdateResponses,
   OperatorPromptCatalogErrors,
   OperatorPromptCatalogResponses,
-  OperatorPromptGroupType,
-  OperatorPromptLayerSection,
+  OperatorPromptItemKind,
+  OperatorPromptOverride,
   OperatorPromptPreviewErrors,
   OperatorPromptPreviewResponses,
-  OperatorPromptProfileCatalogErrors,
-  OperatorPromptProfileCatalogResponses,
-  OperatorPromptProfileDefaultsErrors,
-  OperatorPromptProfileDefaultsResponses,
-  OperatorPromptProfileGroupCreateErrors,
-  OperatorPromptProfileGroupCreateResponses,
-  OperatorPromptProfileGroupRemoveErrors,
-  OperatorPromptProfileGroupRemoveResponses,
-  OperatorPromptProfileGroupUpdateErrors,
-  OperatorPromptProfileGroupUpdateResponses,
-  OperatorPromptProfileLayerCreateErrors,
-  OperatorPromptProfileLayerCreateResponses,
-  OperatorPromptProfileLayerRemoveErrors,
-  OperatorPromptProfileLayerRemoveResponses,
-  OperatorPromptProfileLayerUpdateErrors,
-  OperatorPromptProfileLayerUpdateResponses,
-  OperatorPromptProfileProfileCreateErrors,
-  OperatorPromptProfileProfileCreateResponses,
-  OperatorPromptProfileProfileRemoveErrors,
-  OperatorPromptProfileProfileRemoveResponses,
-  OperatorPromptProfileProfileUpdateErrors,
-  OperatorPromptProfileProfileUpdateResponses,
-  OperatorPromptProjects,
-  OperatorPromptSetting,
+  OperatorPromptSection,
+  OperatorPromptSlots,
   OperatorSessionListErrors,
   OperatorSessionListResponses,
   OperatorStatsErrors,
@@ -1629,24 +1655,17 @@ export class Folder extends HeyApiClient {
   }
 }
 
-export class Layer extends HeyApiClient {
+export class Type extends HeyApiClient {
   /**
-   * Create a prompt layer
+   * Create a group type
    *
-   * Write a layer, or an override of one of OpenCode's texts (set `overrides`). A project can have one goal and one project-scoped override of each text.
+   * Create a custom group type.
    */
   public create<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
+      ns: string
       name?: string
-      section?: OperatorPromptLayerSection
-      purpose?: "org" | "goal"
-      overrides?: string
-      projects?: OperatorPromptProjects
-      agents?: Array<string>
-      priority?: number
-      maxLength?: number
-      enabled?: boolean
-      text?: string
+      description?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1655,26 +1674,19 @@ export class Layer extends HeyApiClient {
       [
         {
           args: [
+            { in: "path", key: "ns" },
             { in: "body", key: "name" },
-            { in: "body", key: "section" },
-            { in: "body", key: "purpose" },
-            { in: "body", key: "overrides" },
-            { in: "body", key: "projects" },
-            { in: "body", key: "agents" },
-            { in: "body", key: "priority" },
-            { in: "body", key: "maxLength" },
-            { in: "body", key: "enabled" },
-            { in: "body", key: "text" },
+            { in: "body", key: "description" },
           ],
         },
       ],
     )
     return (options?.client ?? this.client).post<
-      OperatorPromptProfileLayerCreateResponses,
-      OperatorPromptProfileLayerCreateErrors,
+      OperatorNamespaceTypeCreateResponses,
+      OperatorNamespaceTypeCreateErrors,
       ThrowOnError
     >({
-      url: "/operator/prompt-profile/layer",
+      url: "/operator/namespaces/{ns}/types",
       ...options,
       ...params,
       headers: {
@@ -1686,45 +1698,95 @@ export class Layer extends HeyApiClient {
   }
 
   /**
-   * Delete a prompt layer
+   * Delete a group type
    *
-   * Delete a layer no group uses. Removing an override brings back OpenCode's text. Layers from existing files are never deleted.
+   * Delete a custom group type no layer or group uses.
    */
   public remove<ThrowOnError extends boolean = false>(
     parameters: {
+      ns: string
       id: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "ns" },
+            { in: "path", key: "id" },
+          ],
+        },
+      ],
+    )
     return (options?.client ?? this.client).delete<
-      OperatorPromptProfileLayerRemoveResponses,
-      OperatorPromptProfileLayerRemoveErrors,
+      OperatorNamespaceTypeRemoveResponses,
+      OperatorNamespaceTypeRemoveErrors,
       ThrowOnError
     >({
-      url: "/operator/prompt-profile/layer/{id}",
+      url: "/operator/namespaces/{ns}/types/{id}",
       ...options,
       ...params,
     })
   }
 
   /**
-   * Change a prompt layer
+   * Change a group type
    *
-   * Change a layer. A layer from an existing file is written back to that file, and keeps its scope.
+   * Change a custom group type.
    */
   public update<ThrowOnError extends boolean = false>(
     parameters: {
+      ns: string
       id: string
       name?: string
-      section?: OperatorPromptLayerSection
-      purpose?: "org" | "goal"
-      overrides?: string
-      projects?: OperatorPromptProjects
-      agents?: Array<string>
-      priority?: number
-      maxLength?: number
-      enabled?: boolean
+      description?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "ns" },
+            { in: "path", key: "id" },
+            { in: "body", key: "name" },
+            { in: "body", key: "description" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorNamespaceTypeUpdateResponses,
+      OperatorNamespaceTypeUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/operator/namespaces/{ns}/types/{id}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Layer extends HeyApiClient {
+  /**
+   * Create a layer
+   *
+   * Create a layer: one text of one group type.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters: {
+      ns: string
+      name?: string
+      type?: string
+      section?: OperatorPromptSection
       text?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -1734,27 +1796,143 @@ export class Layer extends HeyApiClient {
       [
         {
           args: [
+            { in: "path", key: "ns" },
+            { in: "body", key: "name" },
+            { in: "body", key: "type" },
+            { in: "body", key: "section" },
+            { in: "body", key: "text" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorNamespaceLayerCreateResponses,
+      OperatorNamespaceLayerCreateErrors,
+      ThrowOnError
+    >({
+      url: "/operator/namespaces/{ns}/layers",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Delete a layer
+   *
+   * Delete a layer no profile, override or project uses.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      ns: string
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "ns" },
+            { in: "path", key: "id" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      OperatorNamespaceLayerRemoveResponses,
+      OperatorNamespaceLayerRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/operator/namespaces/{ns}/layers/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Change a layer
+   *
+   * Change a layer's name and text, and the type of a Custom layer. A copy of one of OpenCode's texts keeps its type.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      ns: string
+      id: string
+      name?: string
+      type?: string
+      section?: OperatorPromptSection
+      text?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "ns" },
             { in: "path", key: "id" },
             { in: "body", key: "name" },
+            { in: "body", key: "type" },
             { in: "body", key: "section" },
-            { in: "body", key: "purpose" },
-            { in: "body", key: "overrides" },
-            { in: "body", key: "projects" },
-            { in: "body", key: "agents" },
-            { in: "body", key: "priority" },
-            { in: "body", key: "maxLength" },
-            { in: "body", key: "enabled" },
             { in: "body", key: "text" },
           ],
         },
       ],
     )
     return (options?.client ?? this.client).put<
-      OperatorPromptProfileLayerUpdateResponses,
-      OperatorPromptProfileLayerUpdateErrors,
+      OperatorNamespaceLayerUpdateResponses,
+      OperatorNamespaceLayerUpdateErrors,
       ThrowOnError
     >({
-      url: "/operator/prompt-profile/layer/{id}",
+      url: "/operator/namespaces/{ns}/layers/{id}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Make an editable copy
+   *
+   * Copy one of OpenCode's texts into the namespace. The copy does nothing until a profile includes it; OpenCode's text stays as it is.
+   */
+  public copy<ThrowOnError extends boolean = false>(
+    parameters: {
+      ns: string
+      id: string
+      text?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "ns" },
+            { in: "path", key: "id" },
+            { in: "body", key: "text" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorNamespaceLayerCopyResponses,
+      OperatorNamespaceLayerCopyErrors,
+      ThrowOnError
+    >({
+      url: "/operator/namespaces/{ns}/layers/{id}/copy",
       ...options,
       ...params,
       headers: {
@@ -1768,16 +1946,15 @@ export class Layer extends HeyApiClient {
 
 export class Group extends HeyApiClient {
   /**
-   * Create a prompt group
+   * Create a group
    *
-   * Create an ordered list of layers.
+   * Create an ordering of group types. Purpose, Agent role and Agent identity are required, and no type repeats.
    */
   public create<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
+      ns: string
       name?: string
-      type?: OperatorPromptGroupType
-      projects?: OperatorPromptProjects
-      layers?: Array<string>
+      types?: Array<string>
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1786,20 +1963,19 @@ export class Group extends HeyApiClient {
       [
         {
           args: [
+            { in: "path", key: "ns" },
             { in: "body", key: "name" },
-            { in: "body", key: "type" },
-            { in: "body", key: "projects" },
-            { in: "body", key: "layers" },
+            { in: "body", key: "types" },
           ],
         },
       ],
     )
     return (options?.client ?? this.client).post<
-      OperatorPromptProfileGroupCreateResponses,
-      OperatorPromptProfileGroupCreateErrors,
+      OperatorNamespaceGroupCreateResponses,
+      OperatorNamespaceGroupCreateErrors,
       ThrowOnError
     >({
-      url: "/operator/prompt-profile/group",
+      url: "/operator/namespaces/{ns}/groups",
       ...options,
       ...params,
       headers: {
@@ -1811,40 +1987,14 @@ export class Group extends HeyApiClient {
   }
 
   /**
-   * Delete a prompt group
+   * Delete a group
    *
    * Delete a group no profile uses.
    */
   public remove<ThrowOnError extends boolean = false>(
     parameters: {
+      ns: string
       id: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
-    return (options?.client ?? this.client).delete<
-      OperatorPromptProfileGroupRemoveResponses,
-      OperatorPromptProfileGroupRemoveErrors,
-      ThrowOnError
-    >({
-      url: "/operator/prompt-profile/group/{id}",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Change a prompt group
-   *
-   * Change a group.
-   */
-  public update<ThrowOnError extends boolean = false>(
-    parameters: {
-      id: string
-      name?: string
-      type?: OperatorPromptGroupType
-      projects?: OperatorPromptProjects
-      layers?: Array<string>
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1853,21 +2003,56 @@ export class Group extends HeyApiClient {
       [
         {
           args: [
+            { in: "path", key: "ns" },
+            { in: "path", key: "id" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      OperatorNamespaceGroupRemoveResponses,
+      OperatorNamespaceGroupRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/operator/namespaces/{ns}/groups/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Change a group
+   *
+   * Change a group.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      ns: string
+      id: string
+      name?: string
+      types?: Array<string>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "ns" },
             { in: "path", key: "id" },
             { in: "body", key: "name" },
-            { in: "body", key: "type" },
-            { in: "body", key: "projects" },
-            { in: "body", key: "layers" },
+            { in: "body", key: "types" },
           ],
         },
       ],
     )
     return (options?.client ?? this.client).put<
-      OperatorPromptProfileGroupUpdateResponses,
-      OperatorPromptProfileGroupUpdateErrors,
+      OperatorNamespaceGroupUpdateResponses,
+      OperatorNamespaceGroupUpdateErrors,
       ThrowOnError
     >({
-      url: "/operator/prompt-profile/group/{id}",
+      url: "/operator/namespaces/{ns}/groups/{id}",
       ...options,
       ...params,
       headers: {
@@ -1881,15 +2066,16 @@ export class Group extends HeyApiClient {
 
 export class Profile extends HeyApiClient {
   /**
-   * Create a prompt profile
+   * Create a profile
    *
-   * Create an ordered list of groups: Platform, Purpose, Role, Identity, Capabilities, custom groups, Output format, Tool. Purpose, Role and Identity are required.
+   * Create a profile: a group, and for each of its types an ordered slot of layers of that type. Purpose is automatic and holds no layers.
    */
   public create<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
+      ns: string
       name?: string
-      projects?: OperatorPromptProjects
-      groups?: Array<string>
+      group?: string
+      slots?: OperatorPromptSlots
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1898,19 +2084,20 @@ export class Profile extends HeyApiClient {
       [
         {
           args: [
+            { in: "path", key: "ns" },
             { in: "body", key: "name" },
-            { in: "body", key: "projects" },
-            { in: "body", key: "groups" },
+            { in: "body", key: "group" },
+            { in: "body", key: "slots" },
           ],
         },
       ],
     )
     return (options?.client ?? this.client).post<
-      OperatorPromptProfileProfileCreateResponses,
-      OperatorPromptProfileProfileCreateErrors,
+      OperatorNamespaceProfileCreateResponses,
+      OperatorNamespaceProfileCreateErrors,
       ThrowOnError
     >({
-      url: "/operator/prompt-profile/profile",
+      url: "/operator/namespaces/{ns}/profiles",
       ...options,
       ...params,
       headers: {
@@ -1922,39 +2109,14 @@ export class Profile extends HeyApiClient {
   }
 
   /**
-   * Delete a prompt profile
+   * Delete a profile
    *
-   * Delete a profile that is not a default.
+   * Delete a profile no agent, project or namespace default uses.
    */
   public remove<ThrowOnError extends boolean = false>(
     parameters: {
+      ns: string
       id: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
-    return (options?.client ?? this.client).delete<
-      OperatorPromptProfileProfileRemoveResponses,
-      OperatorPromptProfileProfileRemoveErrors,
-      ThrowOnError
-    >({
-      url: "/operator/prompt-profile/profile/{id}",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Change a prompt profile
-   *
-   * Change a profile.
-   */
-  public update<ThrowOnError extends boolean = false>(
-    parameters: {
-      id: string
-      name?: string
-      projects?: OperatorPromptProjects
-      groups?: Array<string>
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1963,20 +2125,58 @@ export class Profile extends HeyApiClient {
       [
         {
           args: [
+            { in: "path", key: "ns" },
+            { in: "path", key: "id" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      OperatorNamespaceProfileRemoveResponses,
+      OperatorNamespaceProfileRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/operator/namespaces/{ns}/profiles/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Change a profile
+   *
+   * Change a profile.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      ns: string
+      id: string
+      name?: string
+      group?: string
+      slots?: OperatorPromptSlots
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "ns" },
             { in: "path", key: "id" },
             { in: "body", key: "name" },
-            { in: "body", key: "projects" },
-            { in: "body", key: "groups" },
+            { in: "body", key: "group" },
+            { in: "body", key: "slots" },
           ],
         },
       ],
     )
     return (options?.client ?? this.client).put<
-      OperatorPromptProfileProfileUpdateResponses,
-      OperatorPromptProfileProfileUpdateErrors,
+      OperatorNamespaceProfileUpdateResponses,
+      OperatorNamespaceProfileUpdateErrors,
       ThrowOnError
     >({
-      url: "/operator/prompt-profile/profile/{id}",
+      url: "/operator/namespaces/{ns}/profiles/{id}",
       ...options,
       ...params,
       headers: {
@@ -1988,31 +2188,29 @@ export class Profile extends HeyApiClient {
   }
 }
 
-export class PromptProfile extends HeyApiClient {
+export class Namespace extends HeyApiClient {
   /**
-   * List prompt profile resources
+   * List namespaces
    *
-   * Every prompt layer (OpenCode's own texts, slots, generated sections, layers you wrote and existing prompts/ and identity/ files), prompt group and profile, the default profiles, and the projects they can be scoped to. Tool descriptions are listed per project by GET /operator/prompt.
+   * Every namespace (organization) with its projects. OpenCode comes first.
    */
-  public catalog<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+  public list<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).get<
-      OperatorPromptProfileCatalogResponses,
-      OperatorPromptProfileCatalogErrors,
+      OperatorNamespaceListResponses,
+      OperatorNamespaceListErrors,
       ThrowOnError
-    >({ url: "/operator/prompt-profile", ...options })
+    >({ url: "/operator/namespaces", ...options })
   }
 
   /**
-   * Set the default profiles
+   * Create a namespace
    *
-   * The profile agents use when they name none: per project, else the global default, else the built-in Default (Helper for title, summary and compaction).
+   * Create a namespace as a copy of OpenCode: OpenCode's own types, layers, groups and profiles are copied, and built-in items stay shared. It starts with no projects.
    */
-  public defaults<ThrowOnError extends boolean = false>(
+  public create<ThrowOnError extends boolean = false>(
     parameters?: {
-      global?: string
-      projects?: {
-        [key: string]: string
-      }
+      name?: string
+      purpose?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2021,18 +2219,18 @@ export class PromptProfile extends HeyApiClient {
       [
         {
           args: [
-            { in: "body", key: "global" },
-            { in: "body", key: "projects" },
+            { in: "body", key: "name" },
+            { in: "body", key: "purpose" },
           ],
         },
       ],
     )
-    return (options?.client ?? this.client).put<
-      OperatorPromptProfileDefaultsResponses,
-      OperatorPromptProfileDefaultsErrors,
+    return (options?.client ?? this.client).post<
+      OperatorNamespaceCreateResponses,
+      OperatorNamespaceCreateErrors,
       ThrowOnError
     >({
-      url: "/operator/prompt-profile/defaults",
+      url: "/operator/namespaces",
       ...options,
       ...params,
       headers: {
@@ -2041,6 +2239,166 @@ export class PromptProfile extends HeyApiClient {
         ...params.headers,
       },
     })
+  }
+
+  /**
+   * Delete a namespace
+   *
+   * Delete a namespace that has no projects, with its items. OpenCode cannot be deleted.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      ns: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "ns" }] }])
+    return (options?.client ?? this.client).delete<
+      OperatorNamespaceRemoveResponses,
+      OperatorNamespaceRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/operator/namespaces/{ns}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get a namespace
+   *
+   * A namespace's record.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      ns: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "ns" }] }])
+    return (options?.client ?? this.client).get<
+      OperatorNamespaceGetResponses,
+      OperatorNamespaceGetErrors,
+      ThrowOnError
+    >({
+      url: "/operator/namespaces/{ns}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Change a namespace
+   *
+   * Change a namespace's name, its org purpose (sent first in every agent's prompt) or its default profile.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      ns: string
+      name?: string
+      purpose?: string
+      defaultProfile?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "ns" },
+            { in: "body", key: "name" },
+            { in: "body", key: "purpose" },
+            { in: "body", key: "defaultProfile" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      OperatorNamespaceUpdateResponses,
+      OperatorNamespaceUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/operator/namespaces/{ns}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get a namespace's prompt items
+   *
+   * Built-in and the namespace's own group types, layers, groups and profiles, the namespace's projects, and its agents' prompt settings. Tool descriptions are listed per project by GET /operator/prompt.
+   */
+  public catalog<ThrowOnError extends boolean = false>(
+    parameters: {
+      ns: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "ns" }] }])
+    return (options?.client ?? this.client).get<
+      OperatorNamespaceCatalogResponses,
+      OperatorNamespaceCatalogErrors,
+      ThrowOnError
+    >({
+      url: "/operator/namespaces/{ns}/catalog",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Copy to another namespace
+   *
+   * Copy a type, layer, group or profile to another namespace, with what it uses that the target lacks. A name the target already uses gets " (copy)".
+   */
+  public copy<ThrowOnError extends boolean = false>(
+    parameters: {
+      ns: string
+      kind?: OperatorPromptItemKind
+      id?: string
+      target?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "ns" },
+            { in: "body", key: "kind" },
+            { in: "body", key: "id" },
+            { in: "body", key: "target" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorNamespaceCopyResponses,
+      OperatorNamespaceCopyErrors,
+      ThrowOnError
+    >({
+      url: "/operator/namespaces/{ns}/copy",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  private _type?: Type
+  get type(): Type {
+    return (this._type ??= new Type({ client: this.client }))
   }
 
   private _layer?: Layer
@@ -2056,6 +2414,66 @@ export class PromptProfile extends HeyApiClient {
   private _profile?: Profile
   get profile(): Profile {
     return (this._profile ??= new Profile({ client: this.client }))
+  }
+}
+
+export class ProjectSettings extends HeyApiClient {
+  /**
+   * List project prompt settings
+   *
+   * Every project with its namespace, linked Project Purpose and default profile.
+   */
+  public list<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<
+      OperatorProjectSettingsListResponses,
+      OperatorProjectSettingsListErrors,
+      ThrowOnError
+    >({ url: "/operator/project-settings", ...options })
+  }
+
+  /**
+   * Change a project's prompt settings
+   *
+   * Set a project's namespace, Project Purpose or default profile. A new namespace moves the project: what it uses is copied there, so its prompts stay the same.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters?: {
+      key?: string
+      namespace?: string
+      purpose?: string
+      defaultProfile?: string
+      dryRun?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "key" },
+            { in: "body", key: "namespace" },
+            { in: "body", key: "purpose" },
+            { in: "body", key: "defaultProfile" },
+            { in: "body", key: "dryRun" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorProjectSettingsUpdateResponses,
+      OperatorProjectSettingsUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/operator/project-settings",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
   }
 }
 
@@ -2268,7 +2686,6 @@ export class Agent extends HeyApiClient {
       home?: string
       prompt?: string
       permission?: PermissionConfig
-      promptProfile?: OperatorPromptSetting
       reset?: Array<
         | "description"
         | "mode"
@@ -2283,7 +2700,6 @@ export class Agent extends HeyApiClient {
         | "home"
         | "prompt"
         | "permission"
-        | "promptProfile"
       >
     },
     options?: Options<never, ThrowOnError>,
@@ -2310,7 +2726,6 @@ export class Agent extends HeyApiClient {
             { in: "body", key: "home" },
             { in: "body", key: "prompt" },
             { in: "body", key: "permission" },
-            { in: "body", key: "promptProfile" },
             { in: "body", key: "reset" },
           ],
         },
@@ -2392,7 +2807,6 @@ export class Agent extends HeyApiClient {
       home?: string
       prompt?: string
       permission?: PermissionConfig
-      promptProfile?: OperatorPromptSetting
       reset?: Array<
         | "description"
         | "mode"
@@ -2407,7 +2821,6 @@ export class Agent extends HeyApiClient {
         | "home"
         | "prompt"
         | "permission"
-        | "promptProfile"
       >
     },
     options?: Options<never, ThrowOnError>,
@@ -2434,7 +2847,6 @@ export class Agent extends HeyApiClient {
             { in: "body", key: "home" },
             { in: "body", key: "prompt" },
             { in: "body", key: "permission" },
-            { in: "body", key: "promptProfile" },
             { in: "body", key: "reset" },
           ],
         },
@@ -2493,7 +2905,7 @@ export class Prompt extends HeyApiClient {
   /**
    * List tool descriptions
    *
-   * This project's tools with their own descriptions, which prompt profiles' Tool Group overrides. Every other prompt text is listed by GET /operator/prompt-profile.
+   * This project's tools with their own descriptions (the built-in Tool Group layers). Every other prompt text is in a namespace's catalog, GET /operator/namespaces/{ns}/catalog.
    */
   public catalog<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -2527,7 +2939,7 @@ export class Prompt extends HeyApiClient {
   /**
    * Preview a system prompt
    *
-   * The system messages an agent sends with a model in this project, split into sections with where each comes from. The model defaults to the agent's, then the configured default.
+   * The system prompt an agent of this project sends with a model: its namespace, the profile it uses and why, the slots its override changed, and each section's group type and layer, with Purpose marked automatic. The model defaults to the agent's, then the configured default.
    */
   public preview<ThrowOnError extends boolean = false>(
     parameters: {
@@ -2536,6 +2948,7 @@ export class Prompt extends HeyApiClient {
       agent: string
       provider?: string
       model?: string
+      profile?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2549,6 +2962,7 @@ export class Prompt extends HeyApiClient {
             { in: "query", key: "agent" },
             { in: "query", key: "provider" },
             { in: "query", key: "model" },
+            { in: "query", key: "profile" },
           ],
         },
       ],
@@ -2672,6 +3086,89 @@ export class Memory extends HeyApiClient {
   }
 }
 
+export class AgentPrompt extends HeyApiClient {
+  /**
+   * Get an agent's prompt setting
+   *
+   * The profile this project's agent uses and why (its own setting, the helper rule, the project default or the namespace default), and its override.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorAgentPromptGetResponses,
+      OperatorAgentPromptGetErrors,
+      ThrowOnError
+    >({
+      url: "/operator/agent-prompt/{name}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Set an agent's prompt setting
+   *
+   * Replace the setting of this project's agent: the profile it uses (unset for the default) and an override with the group and slots it changes. Purpose cannot be overridden.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+      profile?: string
+      override?: OperatorPromptOverride
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "profile" },
+            { in: "body", key: "override" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorAgentPromptUpdateResponses,
+      OperatorAgentPromptUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/operator/agent-prompt/{name}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Operator extends HeyApiClient {
   /**
    * Get server status
@@ -2735,9 +3232,14 @@ export class Operator extends HeyApiClient {
     return (this._folder ??= new Folder({ client: this.client }))
   }
 
-  private _promptProfile?: PromptProfile
-  get promptProfile(): PromptProfile {
-    return (this._promptProfile ??= new PromptProfile({ client: this.client }))
+  private _namespace?: Namespace
+  get namespace(): Namespace {
+    return (this._namespace ??= new Namespace({ client: this.client }))
+  }
+
+  private _projectSettings?: ProjectSettings
+  get projectSettings(): ProjectSettings {
+    return (this._projectSettings ??= new ProjectSettings({ client: this.client }))
   }
 
   private _config?: Config2
@@ -2763,6 +3265,11 @@ export class Operator extends HeyApiClient {
   private _memory?: Memory
   get memory(): Memory {
     return (this._memory ??= new Memory({ client: this.client }))
+  }
+
+  private _agentPrompt?: AgentPrompt
+  get agentPrompt(): AgentPrompt {
+    return (this._agentPrompt ??= new AgentPrompt({ client: this.client }))
   }
 }
 

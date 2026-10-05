@@ -35,7 +35,7 @@ export const OperatorPromptApi = HttpApi.make("operator-prompt")
             identifier: "operator.prompt.catalog",
             summary: "List tool descriptions",
             description:
-              "This project's tools with their own descriptions, which prompt profiles' Tool Group overrides. Every other prompt text is listed by GET /operator/prompt-profile.",
+              "This project's tools with their own descriptions (the built-in Tool Group layers). Every other prompt text is in a namespace's catalog, GET /operator/namespaces/{ns}/catalog.",
           }),
         ),
         HttpApiEndpoint.get("preview", OperatorPromptPaths.preview, {
@@ -44,6 +44,9 @@ export const OperatorPromptApi = HttpApi.make("operator-prompt")
             agent: Schema.String,
             provider: Schema.optional(Schema.String),
             model: Schema.optional(Schema.String),
+            profile: Schema.optional(Schema.String).annotate({
+              description: "Preview this profile on the agent instead of its own (without its override)",
+            }),
           }),
           success: described(OperatorPrompts.Preview, "The system prompt for an agent and model"),
           error: ApiPromptNotFoundError,
@@ -52,7 +55,7 @@ export const OperatorPromptApi = HttpApi.make("operator-prompt")
             identifier: "operator.prompt.preview",
             summary: "Preview a system prompt",
             description:
-              "The system messages an agent sends with a model in this project, split into sections with where each comes from. The model defaults to the agent's, then the configured default.",
+              "The system prompt an agent of this project sends with a model: its namespace, the profile it uses and why, the slots its override changed, and each section's group type and layer, with Purpose marked automatic. The model defaults to the agent's, then the configured default.",
           }),
         ),
       )

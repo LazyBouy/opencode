@@ -1095,18 +1095,22 @@
         ]
       }
     },
-    "/operator/prompt-profile": {
+    "/operator/namespaces": {
       "get": {
-        "tags": ["operator prompt profiles"],
-        "operationId": "operator.promptProfile.catalog",
+        "tags": ["operator namespaces"],
+        "operationId": "operator.namespace.list",
         "parameters": [],
         "responses": {
           "200": {
-            "description": "Layers, groups, profiles and defaults",
+            "description": "Namespaces",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OperatorPromptProfileCatalog"
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorNamespaceSummary"
+                  },
+                  "description": "Namespaces"
                 }
               }
             }
@@ -1122,28 +1126,26 @@
             }
           }
         },
-        "description": "Every prompt layer (OpenCode's own texts, slots, generated sections, layers you wrote and existing prompts/ and identity/ files), prompt group and profile, the default profiles, and the projects they can be scoped to. Tool descriptions are listed per project by GET /operator/prompt.",
-        "summary": "List prompt profile resources",
+        "description": "Every namespace (organization) with its projects. OpenCode comes first.",
+        "summary": "List namespaces",
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.promptProfile.catalog({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespace.list({\n  ...\n})"
           }
         ]
-      }
-    },
-    "/operator/prompt-profile/layer": {
+      },
       "post": {
-        "tags": ["operator prompt profiles"],
-        "operationId": "operator.promptProfile.layer.create",
+        "tags": ["operator namespaces"],
+        "operationId": "operator.namespace.create",
         "parameters": [],
         "responses": {
           "200": {
-            "description": "The layer",
+            "description": "The new namespace",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OperatorPromptLayer"
+                  "$ref": "#/components/schemas/OperatorNamespace"
                 }
               }
             }
@@ -1176,8 +1178,8 @@
             }
           }
         },
-        "description": "Write a layer, or an override of one of OpenCode's texts (set `overrides`). A project can have one goal and one project-scoped override of each text.",
-        "summary": "Create a prompt layer",
+        "description": "Create a namespace as a copy of OpenCode: OpenCode's own types, layers, groups and profiles are copied, and built-in items stay shared. It starts with no projects.",
+        "summary": "Create a namespace",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1187,39 +1189,11 @@
                   "name": {
                     "type": "string"
                   },
-                  "section": {
-                    "$ref": "#/components/schemas/OperatorPromptLayerSection"
-                  },
                   "purpose": {
-                    "type": "string",
-                    "enum": ["org", "goal"]
-                  },
-                  "overrides": {
-                    "type": "string"
-                  },
-                  "projects": {
-                    "$ref": "#/components/schemas/OperatorPromptProjects"
-                  },
-                  "agents": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "priority": {
-                    "type": "number"
-                  },
-                  "maxLength": {
-                    "type": "number"
-                  },
-                  "enabled": {
-                    "type": "boolean"
-                  },
-                  "text": {
                     "type": "string"
                   }
                 },
-                "required": ["name", "section", "projects", "text"],
+                "required": ["name"],
                 "additionalProperties": false
               }
             }
@@ -1228,18 +1202,18 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.promptProfile.layer.create({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespace.create({\n  ...\n})"
           }
         ]
       }
     },
-    "/operator/prompt-profile/layer/{id}": {
-      "put": {
-        "tags": ["operator prompt profiles"],
-        "operationId": "operator.promptProfile.layer.update",
+    "/operator/namespaces/{ns}": {
+      "get": {
+        "tags": ["operator namespaces"],
+        "operationId": "operator.namespace.get",
         "parameters": [
           {
-            "name": "id",
+            "name": "ns",
             "in": "path",
             "schema": {
               "type": "string"
@@ -1249,11 +1223,11 @@
         ],
         "responses": {
           "200": {
-            "description": "The layer",
+            "description": "The namespace",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OperatorPromptLayer"
+                  "$ref": "#/components/schemas/OperatorNamespace"
                 }
               }
             }
@@ -1286,8 +1260,69 @@
             }
           }
         },
-        "description": "Change a layer. A layer from an existing file is written back to that file, and keeps its scope.",
-        "summary": "Change a prompt layer",
+        "description": "A namespace's record.",
+        "summary": "Get a namespace",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespace.get({\n  ...\n})"
+          }
+        ]
+      },
+      "patch": {
+        "tags": ["operator namespaces"],
+        "operationId": "operator.namespace.update",
+        "parameters": [
+          {
+            "name": "ns",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The namespace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorNamespace"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProfileInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProfileInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProfileNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProfileNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Change a namespace's name, its org purpose (sent first in every agent's prompt) or its default profile.",
+        "summary": "Change a namespace",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1297,39 +1332,13 @@
                   "name": {
                     "type": "string"
                   },
-                  "section": {
-                    "$ref": "#/components/schemas/OperatorPromptLayerSection"
-                  },
                   "purpose": {
-                    "type": "string",
-                    "enum": ["org", "goal"]
-                  },
-                  "overrides": {
                     "type": "string"
                   },
-                  "projects": {
-                    "$ref": "#/components/schemas/OperatorPromptProjects"
-                  },
-                  "agents": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "priority": {
-                    "type": "number"
-                  },
-                  "maxLength": {
-                    "type": "number"
-                  },
-                  "enabled": {
-                    "type": "boolean"
-                  },
-                  "text": {
+                  "defaultProfile": {
                     "type": "string"
                   }
                 },
-                "required": ["name", "section", "projects", "text"],
                 "additionalProperties": false
               }
             }
@@ -1338,16 +1347,16 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.promptProfile.layer.update({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespace.update({\n  ...\n})"
           }
         ]
       },
       "delete": {
-        "tags": ["operator prompt profiles"],
-        "operationId": "operator.promptProfile.layer.remove",
+        "tags": ["operator namespaces"],
+        "operationId": "operator.namespace.remove",
         "parameters": [
           {
-            "name": "id",
+            "name": "ns",
             "in": "path",
             "schema": {
               "type": "string"
@@ -1357,12 +1366,12 @@
         ],
         "responses": {
           "200": {
-            "description": "Removed",
+            "description": "Deleted",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "boolean",
-                  "description": "Removed"
+                  "description": "Deleted"
                 }
               }
             }
@@ -1395,21 +1404,677 @@
             }
           }
         },
-        "description": "Delete a layer no group uses. Removing an override brings back OpenCode's text. Layers from existing files are never deleted.",
-        "summary": "Delete a prompt layer",
+        "description": "Delete a namespace that has no projects, with its items. OpenCode cannot be deleted.",
+        "summary": "Delete a namespace",
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.promptProfile.layer.remove({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespace.remove({\n  ...\n})"
           }
         ]
       }
     },
-    "/operator/prompt-profile/group": {
+    "/operator/namespaces/{ns}/catalog": {
+      "get": {
+        "tags": ["operator namespaces"],
+        "operationId": "operator.namespace.catalog",
+        "parameters": [
+          {
+            "name": "ns",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Types, layers, groups, profiles, projects and agent settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPromptCatalog"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProfileInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProfileInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProfileNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProfileNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Built-in and the namespace's own group types, layers, groups and profiles, the namespace's projects, and its agents' prompt settings. Tool descriptions are listed per project by GET /operator/prompt.",
+        "summary": "Get a namespace's prompt items",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespace.catalog({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/namespaces/{ns}/types": {
       "post": {
-        "tags": ["operator prompt profiles"],
-        "operationId": "operator.promptProfile.group.create",
-        "parameters": [],
+        "tags": ["operator namespaces"],
+        "operationId": "operator.namespace.type.create",
+        "parameters": [
+          {
+            "name": "ns",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The group type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPromptGroupType"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProfileInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProfileInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProfileNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProfileNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Create a custom group type.",
+        "summary": "Create a group type",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                },
+                "required": ["name"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespace.type.create({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/namespaces/{ns}/types/{id}": {
+      "put": {
+        "tags": ["operator namespaces"],
+        "operationId": "operator.namespace.type.update",
+        "parameters": [
+          {
+            "name": "ns",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The group type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPromptGroupType"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProfileInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProfileInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProfileNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProfileNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Change a custom group type.",
+        "summary": "Change a group type",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                },
+                "required": ["name"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespace.type.update({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "tags": ["operator namespaces"],
+        "operationId": "operator.namespace.type.remove",
+        "parameters": [
+          {
+            "name": "ns",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Deleted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProfileInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProfileInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProfileNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProfileNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Delete a custom group type no layer or group uses.",
+        "summary": "Delete a group type",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespace.type.remove({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/namespaces/{ns}/layers": {
+      "post": {
+        "tags": ["operator namespaces"],
+        "operationId": "operator.namespace.layer.create",
+        "parameters": [
+          {
+            "name": "ns",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The layer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPromptLayer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProfileInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProfileInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProfileNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProfileNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Create a layer: one text of one group type.",
+        "summary": "Create a layer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "description": "The group type id"
+                  },
+                  "section": {
+                    "$ref": "#/components/schemas/OperatorPromptSection"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": ["name", "type", "text"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespace.layer.create({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/namespaces/{ns}/layers/{id}": {
+      "put": {
+        "tags": ["operator namespaces"],
+        "operationId": "operator.namespace.layer.update",
+        "parameters": [
+          {
+            "name": "ns",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The layer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPromptLayer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProfileInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProfileInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProfileNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProfileNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Change a layer's name and text, and the type of a Custom layer. A copy of one of OpenCode's texts keeps its type.",
+        "summary": "Change a layer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "description": "The group type id"
+                  },
+                  "section": {
+                    "$ref": "#/components/schemas/OperatorPromptSection"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": ["name", "type", "text"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespace.layer.update({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "tags": ["operator namespaces"],
+        "operationId": "operator.namespace.layer.remove",
+        "parameters": [
+          {
+            "name": "ns",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Deleted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProfileInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProfileInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProfileNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProfileNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Delete a layer no profile, override or project uses.",
+        "summary": "Delete a layer",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespace.layer.remove({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/namespaces/{ns}/layers/{id}/copy": {
+      "post": {
+        "tags": ["operator namespaces"],
+        "operationId": "operator.namespace.layer.copy",
+        "parameters": [
+          {
+            "name": "ns",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The editable copy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPromptLayer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProfileInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProfileInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProfileNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProfileNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Copy one of OpenCode's texts into the namespace. The copy does nothing until a profile includes it; OpenCode's text stays as it is.",
+        "summary": "Make an editable copy",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespace.layer.copy({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/namespaces/{ns}/groups": {
+      "post": {
+        "tags": ["operator namespaces"],
+        "operationId": "operator.namespace.group.create",
+        "parameters": [
+          {
+            "name": "ns",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
         "responses": {
           "200": {
             "description": "The group",
@@ -1449,8 +2114,8 @@
             }
           }
         },
-        "description": "Create an ordered list of layers.",
-        "summary": "Create a prompt group",
+        "description": "Create an ordering of group types. Purpose, Agent role and Agent identity are required, and no type repeats.",
+        "summary": "Create a group",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1460,20 +2125,14 @@
                   "name": {
                     "type": "string"
                   },
-                  "type": {
-                    "$ref": "#/components/schemas/OperatorPromptGroupType"
-                  },
-                  "projects": {
-                    "$ref": "#/components/schemas/OperatorPromptProjects"
-                  },
-                  "layers": {
+                  "types": {
                     "type": "array",
                     "items": {
                       "type": "string"
                     }
                   }
                 },
-                "required": ["name", "type", "projects", "layers"],
+                "required": ["name", "types"],
                 "additionalProperties": false
               }
             }
@@ -1482,16 +2141,24 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.promptProfile.group.create({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespace.group.create({\n  ...\n})"
           }
         ]
       }
     },
-    "/operator/prompt-profile/group/{id}": {
+    "/operator/namespaces/{ns}/groups/{id}": {
       "put": {
-        "tags": ["operator prompt profiles"],
-        "operationId": "operator.promptProfile.group.update",
+        "tags": ["operator namespaces"],
+        "operationId": "operator.namespace.group.update",
         "parameters": [
+          {
+            "name": "ns",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
           {
             "name": "id",
             "in": "path",
@@ -1541,7 +2208,7 @@
           }
         },
         "description": "Change a group.",
-        "summary": "Change a prompt group",
+        "summary": "Change a group",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1551,20 +2218,14 @@
                   "name": {
                     "type": "string"
                   },
-                  "type": {
-                    "$ref": "#/components/schemas/OperatorPromptGroupType"
-                  },
-                  "projects": {
-                    "$ref": "#/components/schemas/OperatorPromptProjects"
-                  },
-                  "layers": {
+                  "types": {
                     "type": "array",
                     "items": {
                       "type": "string"
                     }
                   }
                 },
-                "required": ["name", "type", "projects", "layers"],
+                "required": ["name", "types"],
                 "additionalProperties": false
               }
             }
@@ -1573,14 +2234,22 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.promptProfile.group.update({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespace.group.update({\n  ...\n})"
           }
         ]
       },
       "delete": {
-        "tags": ["operator prompt profiles"],
-        "operationId": "operator.promptProfile.group.remove",
+        "tags": ["operator namespaces"],
+        "operationId": "operator.namespace.group.remove",
         "parameters": [
+          {
+            "name": "ns",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
           {
             "name": "id",
             "in": "path",
@@ -1592,12 +2261,12 @@
         ],
         "responses": {
           "200": {
-            "description": "Removed",
+            "description": "Deleted",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "boolean",
-                  "description": "Removed"
+                  "description": "Deleted"
                 }
               }
             }
@@ -1631,20 +2300,29 @@
           }
         },
         "description": "Delete a group no profile uses.",
-        "summary": "Delete a prompt group",
+        "summary": "Delete a group",
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.promptProfile.group.remove({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespace.group.remove({\n  ...\n})"
           }
         ]
       }
     },
-    "/operator/prompt-profile/profile": {
+    "/operator/namespaces/{ns}/profiles": {
       "post": {
-        "tags": ["operator prompt profiles"],
-        "operationId": "operator.promptProfile.profile.create",
-        "parameters": [],
+        "tags": ["operator namespaces"],
+        "operationId": "operator.namespace.profile.create",
+        "parameters": [
+          {
+            "name": "ns",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
         "responses": {
           "200": {
             "description": "The profile",
@@ -1684,8 +2362,8 @@
             }
           }
         },
-        "description": "Create an ordered list of groups: Platform, Purpose, Role, Identity, Capabilities, custom groups, Output format, Tool. Purpose, Role and Identity are required.",
-        "summary": "Create a prompt profile",
+        "description": "Create a profile: a group, and for each of its types an ordered slot of layers of that type. Purpose is automatic and holds no layers.",
+        "summary": "Create a profile",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1695,17 +2373,14 @@
                   "name": {
                     "type": "string"
                   },
-                  "projects": {
-                    "$ref": "#/components/schemas/OperatorPromptProjects"
+                  "group": {
+                    "type": "string"
                   },
-                  "groups": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
+                  "slots": {
+                    "$ref": "#/components/schemas/OperatorPromptSlots"
                   }
                 },
-                "required": ["name", "projects", "groups"],
+                "required": ["name", "group", "slots"],
                 "additionalProperties": false
               }
             }
@@ -1714,16 +2389,24 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.promptProfile.profile.create({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespace.profile.create({\n  ...\n})"
           }
         ]
       }
     },
-    "/operator/prompt-profile/profile/{id}": {
+    "/operator/namespaces/{ns}/profiles/{id}": {
       "put": {
-        "tags": ["operator prompt profiles"],
-        "operationId": "operator.promptProfile.profile.update",
+        "tags": ["operator namespaces"],
+        "operationId": "operator.namespace.profile.update",
         "parameters": [
+          {
+            "name": "ns",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
           {
             "name": "id",
             "in": "path",
@@ -1773,7 +2456,7 @@
           }
         },
         "description": "Change a profile.",
-        "summary": "Change a prompt profile",
+        "summary": "Change a profile",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1783,17 +2466,14 @@
                   "name": {
                     "type": "string"
                   },
-                  "projects": {
-                    "$ref": "#/components/schemas/OperatorPromptProjects"
+                  "group": {
+                    "type": "string"
                   },
-                  "groups": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
+                  "slots": {
+                    "$ref": "#/components/schemas/OperatorPromptSlots"
                   }
                 },
-                "required": ["name", "projects", "groups"],
+                "required": ["name", "group", "slots"],
                 "additionalProperties": false
               }
             }
@@ -1802,14 +2482,22 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.promptProfile.profile.update({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespace.profile.update({\n  ...\n})"
           }
         ]
       },
       "delete": {
-        "tags": ["operator prompt profiles"],
-        "operationId": "operator.promptProfile.profile.remove",
+        "tags": ["operator namespaces"],
+        "operationId": "operator.namespace.profile.remove",
         "parameters": [
+          {
+            "name": "ns",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
           {
             "name": "id",
             "in": "path",
@@ -1821,12 +2509,12 @@
         ],
         "responses": {
           "200": {
-            "description": "Removed",
+            "description": "Deleted",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "boolean",
-                  "description": "Removed"
+                  "description": "Deleted"
                 }
               }
             }
@@ -1859,28 +2547,37 @@
             }
           }
         },
-        "description": "Delete a profile that is not a default.",
-        "summary": "Delete a prompt profile",
+        "description": "Delete a profile no agent, project or namespace default uses.",
+        "summary": "Delete a profile",
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.promptProfile.profile.remove({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespace.profile.remove({\n  ...\n})"
           }
         ]
       }
     },
-    "/operator/prompt-profile/defaults": {
-      "put": {
-        "tags": ["operator prompt profiles"],
-        "operationId": "operator.promptProfile.defaults",
-        "parameters": [],
+    "/operator/namespaces/{ns}/copy": {
+      "post": {
+        "tags": ["operator namespaces"],
+        "operationId": "operator.namespace.copy",
+        "parameters": [
+          {
+            "name": "ns",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
         "responses": {
           "200": {
-            "description": "The defaults",
+            "description": "What was copied",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OperatorPromptDefaults"
+                  "$ref": "#/components/schemas/OperatorPromptCopyResult"
                 }
               }
             }
@@ -1913,25 +2610,26 @@
             }
           }
         },
-        "description": "The profile agents use when they name none: per project, else the global default, else the built-in Default (Helper for title, summary and compaction).",
-        "summary": "Set the default profiles",
+        "description": "Copy a type, layer, group or profile to another namespace, with what it uses that the target lacks. A name the target already uses gets \" (copy)\".",
+        "summary": "Copy to another namespace",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
                 "properties": {
-                  "global": {
+                  "kind": {
+                    "$ref": "#/components/schemas/OperatorPromptItemKind"
+                  },
+                  "id": {
                     "type": "string"
                   },
-                  "projects": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "string"
-                    }
+                  "target": {
+                    "type": "string",
+                    "description": "The namespace to copy to"
                   }
                 },
-                "required": ["projects"],
+                "required": ["kind", "id", "target"],
                 "additionalProperties": false
               }
             }
@@ -1940,7 +2638,129 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.promptProfile.defaults({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespace.copy({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/project-settings": {
+      "get": {
+        "tags": ["operator namespaces"],
+        "operationId": "operator.projectSettings.list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Projects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorPromptProject"
+                  },
+                  "description": "Projects"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Every project with its namespace, linked Project Purpose and default profile.",
+        "summary": "List project prompt settings",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.projectSettings.list({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "tags": ["operator namespaces"],
+        "operationId": "operator.projectSettings.update",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The project",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectSettingResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProfileInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProfileInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProfileNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProfileNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Set a project's namespace, Project Purpose or default profile. A new namespace moves the project: what it uses is copied there, so its prompts stay the same.",
+        "summary": "Change a project's prompt settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "description": "The project's folder"
+                  },
+                  "namespace": {
+                    "type": "string"
+                  },
+                  "purpose": {
+                    "type": "string"
+                  },
+                  "defaultProfile": {
+                    "type": "string"
+                  },
+                  "dryRun": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["key"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.projectSettings.update({\n  ...\n})"
           }
         ]
       }
@@ -11746,9 +12566,6 @@
                   "permission": {
                     "$ref": "#/components/schemas/PermissionConfig"
                   },
-                  "promptProfile": {
-                    "$ref": "#/components/schemas/OperatorPromptSetting"
-                  },
                   "reset": {
                     "type": "array",
                     "items": {
@@ -11766,8 +12583,7 @@
                         "disable",
                         "home",
                         "prompt",
-                        "permission",
-                        "promptProfile"
+                        "permission"
                       ]
                     }
                   }
@@ -11922,9 +12738,6 @@
                   "permission": {
                     "$ref": "#/components/schemas/PermissionConfig"
                   },
-                  "promptProfile": {
-                    "$ref": "#/components/schemas/OperatorPromptSetting"
-                  },
                   "reset": {
                     "type": "array",
                     "items": {
@@ -11942,8 +12755,7 @@
                         "disable",
                         "home",
                         "prompt",
-                        "permission",
-                        "promptProfile"
+                        "permission"
                       ]
                     }
                   }
@@ -12142,7 +12954,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OperatorPromptCatalog"
+                  "$ref": "#/components/schemas/OperatorPromptCatalog1"
                 }
               }
             }
@@ -12158,7 +12970,7 @@
             }
           }
         },
-        "description": "This project's tools with their own descriptions, which prompt profiles' Tool Group overrides. Every other prompt text is listed by GET /operator/prompt-profile.",
+        "description": "This project's tools with their own descriptions (the built-in Tool Group layers). Every other prompt text is in a namespace's catalog, GET /operator/namespaces/{ns}/catalog.",
         "summary": "List tool descriptions",
         "x-codeSamples": [
           {
@@ -12212,6 +13024,14 @@
               "type": "string"
             },
             "required": false
+          },
+          {
+            "name": "profile",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -12246,7 +13066,7 @@
             }
           }
         },
-        "description": "The system messages an agent sends with a model in this project, split into sections with where each comes from. The model defaults to the agent's, then the configured default.",
+        "description": "The system prompt an agent of this project sends with a model: its namespace, the profile it uses and why, the slots its override changed, and each section's group type and layer, with Purpose marked automatic. The model defaults to the agent's, then the configured default.",
         "summary": "Preview a system prompt",
         "x-codeSamples": [
           {
@@ -12471,6 +13291,163 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.memory.write({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/agent-prompt/{name}": {
+      "get": {
+        "tags": ["operator agent prompts"],
+        "operationId": "operator.agentPrompt.get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The agent's prompt setting",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAgentPromptView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The profile this project's agent uses and why (its own setting, the helper rule, the project default or the namespace default), and its override.",
+        "summary": "Get an agent's prompt setting",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.agentPrompt.get({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "tags": ["operator agent prompts"],
+        "operationId": "operator.agentPrompt.update",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The saved setting",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAgentPrompt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProfileInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProfileInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProfileNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProfileNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Replace the setting of this project's agent: the profile it uses (unset for the default) and an override with the group and slots it changes. Purpose cannot be overridden.",
+        "summary": "Set an agent's prompt setting",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "profile": {
+                    "type": "string"
+                  },
+                  "override": {
+                    "$ref": "#/components/schemas/OperatorPromptOverride"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.agentPrompt.update({\n  ...\n})"
           }
         ]
       }
@@ -23472,44 +24449,6 @@
           },
           "home": {
             "type": "string"
-          },
-          "promptProfile": {
-            "type": "object",
-            "properties": {
-              "mode": {
-                "type": "string",
-                "enum": ["profile", "layers", "custom"],
-                "description": "profile: the prompt profile as it is; layers: the profile plus `layers`; custom: no profile, only Purpose, the agent's prompt and the `generated` sections"
-              },
-              "profile": {
-                "type": "string"
-              },
-              "layers": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "layer": {
-                      "type": "string"
-                    },
-                    "group": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["layer", "group"],
-                  "additionalProperties": false
-                }
-              },
-              "generated": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "enum": ["environment", "references", "instructions", "mcp", "skills"]
-                }
-              }
-            },
-            "required": ["mode"],
-            "additionalProperties": false
           }
         },
         "additionalProperties": {}
@@ -24946,29 +25885,7 @@
         "required": ["path"],
         "additionalProperties": false
       },
-      "OperatorPromptLayerSection": {
-        "type": "string",
-        "enum": ["base", "purpose", "role", "identity", "tool", "generated", "output", "custom", "message"]
-      },
-      "OperatorPromptProjects": {
-        "anyOf": [
-          {
-            "type": "string",
-            "enum": ["*"]
-          },
-          {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        ]
-      },
-      "OperatorPromptLayerOrigin": {
-        "type": "string",
-        "enum": ["builtin", "slot", "collection", "generated", "profile", "file"]
-      },
-      "OperatorPromptLayer": {
+      "OperatorNamespace": {
         "type": "object",
         "properties": {
           "id": {
@@ -24976,169 +25893,39 @@
           },
           "name": {
             "type": "string"
-          },
-          "section": {
-            "$ref": "#/components/schemas/OperatorPromptLayerSection"
           },
           "purpose": {
             "type": "string",
-            "enum": ["org", "goal"]
+            "description": "The org purpose, sent first in every agent's prompt"
           },
-          "overrides": {
+          "defaultProfile": {
             "type": "string"
           },
-          "projects": {
-            "$ref": "#/components/schemas/OperatorPromptProjects"
-          },
-          "agents": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "priority": {
-            "type": "number",
-            "description": "Lower comes first among layers added together (default 50)"
-          },
-          "maxLength": {
+          "createdAt": {
             "type": "number"
           },
-          "enabled": {
-            "type": "boolean"
-          },
-          "text": {
-            "type": "string"
-          },
-          "origin": {
-            "$ref": "#/components/schemas/OperatorPromptLayerOrigin"
-          },
-          "path": {
-            "type": "string"
+          "updatedAt": {
+            "type": "number"
           }
         },
-        "required": ["id", "name", "section", "projects", "priority", "enabled", "text", "origin"],
+        "required": ["id", "name", "purpose", "createdAt", "updatedAt"],
         "additionalProperties": false
       },
-      "OperatorPromptGroupType": {
-        "type": "string",
-        "enum": ["platform", "purpose", "role", "identity", "capabilities", "custom", "output", "tool"]
-      },
-      "OperatorPromptGroup": {
+      "OperatorNamespaceSummary": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "type": {
-            "$ref": "#/components/schemas/OperatorPromptGroupType"
+          "namespace": {
+            "$ref": "#/components/schemas/OperatorNamespace"
           },
           "projects": {
-            "$ref": "#/components/schemas/OperatorPromptProjects"
-          },
-          "layers": {
             "type": "array",
             "items": {
               "type": "string"
-            }
-          },
-          "builtin": {
-            "type": "boolean"
-          }
-        },
-        "required": ["id", "name", "type", "projects", "layers", "builtin"],
-        "additionalProperties": false
-      },
-      "OperatorPromptProfile": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "projects": {
-            "$ref": "#/components/schemas/OperatorPromptProjects"
-          },
-          "groups": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "builtin": {
-            "type": "boolean"
-          }
-        },
-        "required": ["id", "name", "projects", "groups", "builtin"],
-        "additionalProperties": false
-      },
-      "OperatorPromptDefaults": {
-        "type": "object",
-        "properties": {
-          "global": {
-            "type": "string"
-          },
-          "projects": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            }
-          }
-        },
-        "required": ["projects"],
-        "additionalProperties": false
-      },
-      "OperatorPromptProject": {
-        "type": "object",
-        "properties": {
-          "key": {
-            "type": "string",
-            "description": "\"opencode\", or the project folder"
-          },
-          "name": {
-            "type": "string"
-          }
-        },
-        "required": ["key", "name"],
-        "additionalProperties": false
-      },
-      "OperatorPromptProfileCatalog": {
-        "type": "object",
-        "properties": {
-          "layers": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/OperatorPromptLayer"
-            }
-          },
-          "groups": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/OperatorPromptGroup"
-            }
-          },
-          "profiles": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/OperatorPromptProfile"
-            }
-          },
-          "defaults": {
-            "$ref": "#/components/schemas/OperatorPromptDefaults"
-          },
-          "projects": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/OperatorPromptProject"
             },
-            "description": "OpenCode first, then every project the server knows"
+            "description": "Keys of the namespace's projects"
           }
         },
-        "required": ["layers", "groups", "profiles", "defaults", "projects"],
+        "required": ["namespace", "projects"],
         "additionalProperties": false
       },
       "OperatorProfileInvalidError": {
@@ -25181,6 +25968,270 @@
           }
         },
         "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorPromptGroupType": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "builtin": {
+            "type": "boolean"
+          }
+        },
+        "required": ["id", "name", "description", "builtin"],
+        "additionalProperties": false
+      },
+      "OperatorPromptSection": {
+        "type": "string",
+        "enum": ["base", "purpose", "role", "identity", "tool", "generated", "output", "custom", "message"]
+      },
+      "OperatorPromptOrigin": {
+        "type": "string",
+        "enum": ["builtin", "slot", "generated", "automatic", "user"]
+      },
+      "OperatorPromptLayer": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "description": "The group type id"
+          },
+          "section": {
+            "$ref": "#/components/schemas/OperatorPromptSection"
+          },
+          "replaces": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/OperatorPromptOrigin"
+          },
+          "delivery": {
+            "type": "string",
+            "enum": ["tool", "conversation"]
+          }
+        },
+        "required": ["id", "name", "type", "section", "text", "origin"],
+        "additionalProperties": false
+      },
+      "OperatorPromptGroup": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "builtin": {
+            "type": "boolean"
+          }
+        },
+        "required": ["id", "name", "types", "builtin"],
+        "additionalProperties": false
+      },
+      "OperatorPromptSlots": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "OperatorPromptProfile": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "group": {
+            "type": "string"
+          },
+          "slots": {
+            "$ref": "#/components/schemas/OperatorPromptSlots"
+          },
+          "builtin": {
+            "type": "boolean"
+          }
+        },
+        "required": ["id", "name", "group", "slots", "builtin"],
+        "additionalProperties": false
+      },
+      "OperatorPromptProject": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "The project's folder (its worktree, or the folder outside git)"
+          },
+          "name": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "defaultProfile": {
+            "type": "string"
+          }
+        },
+        "required": ["key", "name", "namespace"],
+        "additionalProperties": false
+      },
+      "OperatorPromptOverride": {
+        "type": "object",
+        "properties": {
+          "group": {
+            "type": "string"
+          },
+          "slots": {
+            "$ref": "#/components/schemas/OperatorPromptSlots"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OperatorPromptAgentSetting": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "profile": {
+            "type": "string"
+          },
+          "override": {
+            "$ref": "#/components/schemas/OperatorPromptOverride"
+          }
+        },
+        "required": ["project", "name"],
+        "additionalProperties": false
+      },
+      "OperatorPromptCatalog": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "$ref": "#/components/schemas/OperatorNamespace"
+          },
+          "types": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPromptGroupType"
+            }
+          },
+          "layers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPromptLayer"
+            }
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPromptGroup"
+            }
+          },
+          "profiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPromptProfile"
+            }
+          },
+          "projects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPromptProject"
+            },
+            "description": "The namespace's projects"
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPromptAgentSetting"
+            },
+            "description": "Prompt settings of the agents of those projects"
+          }
+        },
+        "required": ["namespace", "types", "layers", "groups", "profiles", "projects", "agents"],
+        "additionalProperties": false
+      },
+      "OperatorPromptItemKind": {
+        "type": "string",
+        "enum": ["type", "layer", "group", "profile"]
+      },
+      "OperatorPromptCopied": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/OperatorPromptItemKind"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": ["kind", "id", "name"],
+        "additionalProperties": false
+      },
+      "OperatorPromptCopyResult": {
+        "type": "object",
+        "properties": {
+          "copied": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPromptCopied"
+            }
+          }
+        },
+        "required": ["copied"],
+        "additionalProperties": false
+      },
+      "OperatorProjectSettingResult": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "$ref": "#/components/schemas/OperatorPromptProject"
+          },
+          "copied": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPromptCopied"
+            }
+          }
+        },
+        "required": ["project", "copied"],
         "additionalProperties": false
       },
       "Model": {
@@ -27058,46 +28109,6 @@
         "required": ["name", "mode", "permission", "options", "source", "disabled", "settings", "sessions"],
         "additionalProperties": false
       },
-      "OperatorPromptMode": {
-        "type": "string",
-        "enum": ["profile", "layers", "custom"]
-      },
-      "OperatorPromptSetting": {
-        "type": "object",
-        "properties": {
-          "mode": {
-            "$ref": "#/components/schemas/OperatorPromptMode"
-          },
-          "profile": {
-            "type": "string"
-          },
-          "layers": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "layer": {
-                  "type": "string"
-                },
-                "group": {
-                  "type": "string"
-                }
-              },
-              "required": ["layer", "group"],
-              "additionalProperties": false
-            }
-          },
-          "generated": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": ["environment", "references", "instructions", "mcp", "skills"]
-            }
-          }
-        },
-        "required": ["mode"],
-        "additionalProperties": false
-      },
       "OperatorAgentWritten": {
         "type": "object",
         "properties": {
@@ -27205,7 +28216,7 @@
         "required": ["id", "builtin"],
         "additionalProperties": false
       },
-      "OperatorPromptCatalog": {
+      "OperatorPromptCatalog1": {
         "type": "object",
         "properties": {
           "tools": {
@@ -27221,18 +28232,11 @@
       "OperatorPromptAssembledSection": {
         "type": "object",
         "properties": {
-          "group": {
+          "type": {
             "type": "string"
           },
-          "groupName": {
+          "typeName": {
             "type": "string"
-          },
-          "groupType": {
-            "$ref": "#/components/schemas/OperatorPromptGroupType"
-          },
-          "entry": {
-            "type": "string",
-            "description": "The layer as the group lists it (a slot or collection, or a layer)"
           },
           "layer": {
             "type": "string",
@@ -27241,11 +28245,17 @@
           "layerName": {
             "type": "string"
           },
-          "section": {
-            "$ref": "#/components/schemas/OperatorPromptLayerSection"
+          "entry": {
+            "type": "string",
+            "description": "The layer as the slot lists it (a slot such as Base prompt, or a layer)"
           },
-          "overrides": {
-            "type": "string"
+          "automatic": {
+            "type": "boolean",
+            "description": "Purpose, which every agent gets"
+          },
+          "changed": {
+            "type": "boolean",
+            "description": "From a slot the agent's override changed"
           },
           "source": {
             "type": "string",
@@ -27253,28 +28263,9 @@
           },
           "text": {
             "type": "string"
-          },
-          "mandatory": {
-            "type": "boolean"
-          },
-          "message": {
-            "type": "number",
-            "description": "1 or 2: the system message the text is in"
           }
         },
-        "required": [
-          "group",
-          "groupName",
-          "groupType",
-          "entry",
-          "layer",
-          "layerName",
-          "section",
-          "source",
-          "text",
-          "mandatory",
-          "message"
-        ],
+        "required": ["type", "typeName", "layer", "layerName", "entry", "automatic", "changed", "source", "text"],
         "additionalProperties": false
       },
       "OperatorPromptPreview": {
@@ -27291,21 +28282,7 @@
             "type": "string",
             "description": "The Base Model Group layer for this model"
           },
-          "project": {
-            "type": "object",
-            "properties": {
-              "key": {
-                "type": "string"
-              },
-              "name": {
-                "type": "string"
-              }
-            },
-            "required": ["key", "name"],
-            "additionalProperties": false,
-            "description": "The project the agent belongs to, whose goal and layers apply"
-          },
-          "profile": {
+          "namespace": {
             "type": "object",
             "properties": {
               "id": {
@@ -27318,8 +28295,56 @@
             "required": ["id", "name"],
             "additionalProperties": false
           },
-          "mode": {
-            "$ref": "#/components/schemas/OperatorPromptMode"
+          "project": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": ["key", "name"],
+            "additionalProperties": false
+          },
+          "profile": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string",
+                "enum": ["agent", "helper", "project", "namespace"],
+                "description": "Where the profile comes from: the agent's setting, the helper rule, the project default or the namespace default"
+              }
+            },
+            "required": ["id", "name", "source"],
+            "additionalProperties": false
+          },
+          "group": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": ["id", "name"],
+            "additionalProperties": false
+          },
+          "override": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The types whose slots the agent's override changed"
           },
           "sections": {
             "type": "array",
@@ -27335,7 +28360,18 @@
             "description": "The system messages exactly as sent"
           }
         },
-        "required": ["agent", "model", "base", "project", "profile", "mode", "sections", "system"],
+        "required": [
+          "agent",
+          "model",
+          "base",
+          "namespace",
+          "project",
+          "profile",
+          "group",
+          "override",
+          "sections",
+          "system"
+        ],
         "additionalProperties": false
       },
       "OperatorPromptNotFoundError": {
@@ -27364,7 +28400,7 @@
         "properties": {
           "kind": {
             "type": "string",
-            "enum": ["instructions", "nested", "url", "skill", "identity", "prompt", "profile"]
+            "enum": ["instructions", "nested", "url", "skill", "profile"]
           },
           "scope": {
             "$ref": "#/components/schemas/OperatorConfigScope"
@@ -27498,6 +28534,72 @@
           }
         },
         "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorAgentPrompt": {
+        "type": "object",
+        "properties": {
+          "profile": {
+            "type": "string"
+          },
+          "override": {
+            "$ref": "#/components/schemas/OperatorPromptOverride"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OperatorAgentPromptView": {
+        "type": "object",
+        "properties": {
+          "setting": {
+            "$ref": "#/components/schemas/OperatorAgentPrompt"
+          },
+          "namespace": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": ["id", "name"],
+            "additionalProperties": false
+          },
+          "profile": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string",
+                "enum": ["agent", "helper", "project", "namespace"]
+              }
+            },
+            "required": ["id", "name", "source"],
+            "additionalProperties": false
+          },
+          "default": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": ["id", "name"],
+            "additionalProperties": false,
+            "description": "The profile the agent uses without a setting of its own"
+          }
+        },
+        "required": ["setting", "namespace", "profile", "default"],
         "additionalProperties": false
       },
       "UnauthorizedError": {
@@ -41070,8 +42172,8 @@
       "description": "Workspace folder routes."
     },
     {
-      "name": "operator prompt profiles",
-      "description": "Prompt profile routes."
+      "name": "operator namespaces",
+      "description": "Namespace and prompt profile routes."
     },
     {
       "name": "event",
@@ -41156,6 +42258,10 @@
     {
       "name": "operator memory",
       "description": "Memory routes."
+    },
+    {
+      "name": "operator agent prompts",
+      "description": "Agent prompt routes."
     },
     {
       "name": "opencode HttpApi",
