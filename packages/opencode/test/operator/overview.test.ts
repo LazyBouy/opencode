@@ -1,4 +1,5 @@
 import { expect } from "bun:test"
+import path from "path"
 import { eq } from "drizzle-orm"
 import { Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -81,16 +82,34 @@ it.instance("adds up sessions, tokens and cost by agent and by day", () =>
   }),
 )
 
-it.instance("lists projects with their session totals", () =>
+it.instance(
+  "lists projects with their session totals",
+  () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const overview = yield* OperatorOverview.Service
+      const created = yield* sessions.create({ title: "Counted", agent: "build" })
+
+      const project = (yield* overview.projects()).find((item) => item.id === created.projectID)
+      expect(project?.sessions).toBeGreaterThanOrEqual(1)
+      expect(project?.lastActivity).toBeGreaterThanOrEqual(created.time.updated)
+      expect(project?.folder).toBeUndefined()
+    }),
+  { git: true },
+)
+
+it.instance("lists each folder outside git where sessions ran, not one shared project", () =>
   Effect.gen(function* () {
+    const { directory } = yield* TestInstance
     const sessions = yield* Session.Service
     const overview = yield* OperatorOverview.Service
-    const created = yield* sessions.create({ title: "Counted", agent: "build" })
+    yield* sessions.create({ title: "Outside git", agent: "build" })
 
-    const project = (yield* overview.projects()).find((item) => item.id === created.projectID)
-    expect(project?.sessions).toBeGreaterThanOrEqual(1)
-    expect(project?.lastActivity).toBeGreaterThanOrEqual(created.time.updated)
-    expect(typeof project?.global).toBe("boolean")
+    const projects = yield* overview.projects()
+    expect(projects.some((item) => item.worktree === "/")).toBe(false)
+    const folder = projects.find((item) => item.worktree === directory)
+    expect(folder).toMatchObject({ folder: true, global: false, name: path.basename(directory) })
+    expect(folder?.sessions).toBeGreaterThanOrEqual(1)
   }),
 )
 

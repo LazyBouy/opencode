@@ -2194,9 +2194,10 @@ export type OperatorProject = {
   worktree: string
   vcs?: string
   /**
-   * The project for sessions outside git repositories
+   * The project for sessions outside git repositories (no longer listed: see folder)
    */
   global: boolean
+  folder?: boolean
   sessions: number
   cost: number
   lastActivity?: number

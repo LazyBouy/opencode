@@ -129,6 +129,8 @@ export const pendingRequest = {
 }
 
 export const workspace = "/workspace"
+// A folder outside git where a session ran.
+export const notes = "/home/me/notes"
 
 export const promptCatalog = {
   tools: [
@@ -256,15 +258,29 @@ export async function mockOperator(page: Page) {
           lastActivity: now - 600_000,
           created: now - 86_400_000,
         },
+        // Sessions outside git are listed per folder.
         {
-          id: "global",
-          worktree: "/",
-          global: true,
+          id: `folder:${notes}`,
+          name: "notes",
+          worktree: notes,
+          global: false,
+          folder: true,
           sessions: 1,
           cost: 0.03,
           lastActivity: now - 3_600_000,
           created: now - 86_400_000,
         },
+        // Folders opened with Add project.
+        ...state.projectsOpened.map((opened) => ({
+          id: `proj_${opened}`,
+          name: opened.split("/").at(-1),
+          worktree: opened,
+          vcs: "git",
+          global: false,
+          sessions: 0,
+          cost: 0,
+          created: now,
+        })),
       ])
     if (url.pathname === "/operator/session") {
       state.sessionQueries.push(url.searchParams)

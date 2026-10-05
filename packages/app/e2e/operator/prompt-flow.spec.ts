@@ -67,11 +67,14 @@ test("a namespace, a moved project, a custom type and group, a profile, a projec
   // 2. The project moves to it.
   await page.goto("/operator/projects")
   const row = page.getByRole("row", { name: /smoke-project/ })
-  await row.getByRole("button", { name: "Prompt settings of smoke-project" }).click()
+  await row.click()
   const dialog = page.getByRole("dialog")
+  await dialog.getByRole("button", { name: "Edit", exact: true }).click()
   await pick(page, "Namespace", "Acme", true)
   await dialog.getByRole("button", { name: "Check the move" }).click()
   await dialog.getByRole("button", { name: "Move", exact: true }).click()
+  await expect(dialog.getByRole("button", { name: "Edit", exact: true })).toBeVisible()
+  await dialog.getByRole("button", { name: "Close" }).click()
   await expect(dialog).toBeHidden()
   await expect(row).toContainText("Acme")
 
@@ -117,11 +120,13 @@ test("a namespace, a moved project, a custom type and group, a profile, a projec
 
   // 5. The project's default profile and Project Purpose.
   await page.goto("/operator/projects")
-  await row.getByRole("button", { name: "Prompt settings of smoke-project" }).click()
+  await row.click()
+  await dialog.getByRole("button", { name: "Edit", exact: true }).click()
   await pick(page, "Project Purpose", "Ship CLI", true)
   await pick(page, "Default profile", "Acme", true)
   await dialog.getByRole("button", { name: "Save", exact: true }).click()
-  await expect(dialog).toBeHidden()
+  await expect(dialog.getByRole("button", { name: "Edit", exact: true })).toBeVisible()
+  await dialog.getByRole("button", { name: "Close" }).click()
   await expect(row).toContainText("Ship CLI")
 
   // 6. build overrides one slot: Agent identity without Voice.

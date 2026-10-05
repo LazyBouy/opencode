@@ -1,5 +1,6 @@
 export * as OperatorOverview from "./overview"
 
+import path from "path"
 import { and, count, desc, eq, gte, inArray, isNull, like, lt, max, sql, sum, type SQL } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
@@ -47,7 +48,12 @@ export const ProjectSummary = Schema.Struct({
   name: Schema.optional(Schema.String),
   worktree: Schema.String,
   vcs: Schema.optional(Schema.String),
-  global: Schema.Boolean.annotate({ description: "The project for sessions outside git repositories" }),
+  global: Schema.Boolean.annotate({
+    description: "The project for sessions outside git repositories (no longer listed: see folder)",
+  }),
+  folder: Schema.optional(Schema.Boolean).annotate({
+    description: "A folder outside git where sessions ran; worktree is the folder",
+  }),
   sessions: Schema.Finite,
   cost: Schema.Finite,
   lastActivity: Schema.optional(Schema.Finite),
@@ -233,8 +239,26 @@ const layer = Layer.effect(
         .all()
         .pipe(Effect.orDie)
       const byProject = new Map(usage.map((row) => [row.project, row]))
-      return rows
-        .map((row) => {
+      // Sessions outside git share one project upstream; each of their folders is listed instead.
+      const shared = rows.filter((row) => row.worktree === "/").map((row) => row.id)
+      const folders = shared.length
+        ? yield* db
+            .select({
+              directory: SessionTable.directory,
+              sessions: count(),
+              cost: sum(SessionTable.cost),
+              created: sql<number>`min(${SessionTable.time_created})`,
+              lastActivity: max(SessionTable.time_updated),
+            })
+            .from(SessionTable)
+            .where(inArray(SessionTable.project_id, shared))
+            .groupBy(SessionTable.directory)
+            .all()
+            .pipe(Effect.orDie)
+        : []
+      const listed = rows
+        .filter((row) => row.worktree !== "/")
+        .map((row): ProjectSummary => {
           const used = byProject.get(row.id)
           return {
             id: row.id,
@@ -248,7 +272,22 @@ const layer = Layer.effect(
             created: row.time_created,
           }
         })
-        .sort((a, b) => (b.lastActivity ?? b.created) - (a.lastActivity ?? a.created))
+      return [
+        ...listed,
+        ...folders.map(
+          (row): ProjectSummary => ({
+            id: `folder:${row.directory}`,
+            name: path.basename(row.directory) || row.directory,
+            worktree: row.directory,
+            global: false,
+            folder: true,
+            sessions: row.sessions,
+            cost: Number(row.cost ?? 0),
+            ...(row.lastActivity ? { lastActivity: row.lastActivity } : {}),
+            created: Number(row.created ?? 0),
+          }),
+        ),
+      ].sort((a, b) => (b.lastActivity ?? b.created) - (a.lastActivity ?? a.created))
     })
 
     return Service.of({

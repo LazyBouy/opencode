@@ -252,17 +252,20 @@ export function RecordField(props: { label: string; help: JSX.Element; children:
 export function useRecordOverlay(wanted: () => boolean, render: () => JSX.Element, onClose: () => void) {
   const dialog = useDialog()
   let shown = false
+  let leaving = false
   createEffect(() => {
     if (!wanted() || shown) return
     shown = true
     untrack(() =>
       dialog.show(render, () => {
         shown = false
-        onClose()
+        // Leaving the page (a link in the overlay) closes it too; its URL state goes with the page.
+        if (!leaving) onClose()
       }),
     )
   })
   onCleanup(() => {
+    leaving = true
     if (shown) dialog.close()
   })
 }

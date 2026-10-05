@@ -25709,7 +25709,10 @@
           },
           "global": {
             "type": "boolean",
-            "description": "The project for sessions outside git repositories"
+            "description": "The project for sessions outside git repositories (no longer listed: see folder)"
+          },
+          "folder": {
+            "type": "boolean"
           },
           "sessions": {
             "type": "number"
