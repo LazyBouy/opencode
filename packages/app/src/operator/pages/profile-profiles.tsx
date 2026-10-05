@@ -23,6 +23,7 @@ import {
   type Catalog,
   copyName,
   copySlots,
+  DYNAMIC,
   isHelper,
   type Layer,
   namespaceDefault,
@@ -249,6 +250,8 @@ function ProfileRecord(props: {
   const [store, setStore] = createStore({
     name: "",
     value: { group: "", slots: {} } as SlotValue,
+    // The slots changed in the view, until the change is saved.
+    live: undefined as SlotValue | undefined,
     busy: false,
     editing: false,
   })
@@ -283,9 +286,27 @@ function ProfileRecord(props: {
       store.value.slots,
       props.catalog.groups.find((item) => item.id === store.value.group)?.types,
     )
+  // The project the profile's size is counted in, and where Create agent… makes the agent.
+  const [chosen, setProject] = createSignal<string>()
+  const project = () =>
+    props.catalog.projects.find((item) => item.key === chosen())?.key ?? props.catalog.projects[0]?.key
   const groupName = (id: string) => {
     const found = props.catalog.groups.find((group) => group.id === id)
     return found ? names.group(found) : id
+  }
+
+  // The namespace's own profiles change their slots in the view: each change is saved at once.
+  const saveSlots = async (value: SlotValue) => {
+    const found = source()
+    if (!found || found.builtin || !props.ns) return
+    setStore("live", value)
+    const group = props.catalog.groups.find((item) => item.id === value.group)
+    if (slotProblem(props.catalog, value.slots, group?.types)) return
+    await client()
+      .profile.update({ ns: props.ns, id: found.id, name: found.name, group: value.group, slots: value.slots })
+      .then(() => data.refresh())
+      .catch(data.fail)
+      .finally(() => setStore("live", undefined))
   }
 
   const save = async () => {
@@ -437,20 +458,32 @@ function ProfileRecord(props: {
               <RecordField label={language.t("operator.profile.group")} help={language.t("operator.profile.groupHint")}>
                 {groupName(found().group)}
               </RecordField>
+              <RecordField label={language.t("operator.profile.size")} help={language.t("operator.help.profileSize")}>
+                <ProfileSize
+                  catalog={props.catalog}
+                  layers={props.layers}
+                  profile={found().id}
+                  slots={store.live?.slots ?? found().slots}
+                  project={project()}
+                />
+              </RecordField>
             </dl>
             <SlotEditor
               ns={props.ns ?? props.catalog.namespace.id}
               catalog={props.catalog}
               layers={props.layers}
-              value={{ group: found().group, slots: found().slots }}
-              disabled
+              value={store.live ?? { group: found().group, slots: found().slots }}
+              disabled={found().builtin || !props.ns}
               hideGroup
-              onChange={() => undefined}
+              onChange={(value) => void saveSlots(value)}
             />
-            <Show when={found().builtin}>
+            <Show
+              when={found().builtin}
+              fallback={<p data-slot="operator-note">{language.t("operator.profile.liveSlots")}</p>}
+            >
               <p data-slot="operator-note">{language.t("operator.profile.builtinProfile")}</p>
             </Show>
-            <PreviewOnAgent catalog={props.catalog} profile={found().id} />
+            <ProfileProject catalog={props.catalog} profile={found().id} project={project()} onProject={setProject} />
           </RecordView>
         )}
       </Show>
@@ -458,73 +491,109 @@ function ProfileRecord(props: {
   )
 }
 
-// "Preview on an agent": opens an agent's Prompt tab showing what this profile would send for it.
-function PreviewOnAgent(props: { catalog: Catalog; profile: string }) {
+// How much a profile sends: the words of its fixed texts, and of the whole system prompt it gives the
+// project's build agent today (with the texts filled in per request). Tokens are estimated at about
+// four characters each.
+function ProfileSize(props: {
+  catalog: Catalog
+  layers: ReadonlyArray<Layer>
+  profile: string
+  slots: Record<string, ReadonlyArray<string>>
+  project: string | undefined
+}) {
   const language = useLanguage()
-  const navigate = useNavigate()
   const api = useOperatorClient()
-  const [project, setProject] = createSignal<string>()
-  const [agent, setAgent] = createSignal<string>()
-  const chosen = () => project() ?? props.catalog.projects[0]?.key
-  const agents = useQuery(() => ({
-    queryKey: api.key("profile-preview-agents", chosen()),
-    enabled: !!chosen(),
+  const locale = () => language.intl()
+  const count = (text: string) => ({
+    words: text.split(/\s+/).filter(Boolean).length,
+    tokens: Math.ceil(text.length / 4),
+  })
+  const number = (value: number) => new Intl.NumberFormat(locale()).format(value)
+  // Texts sent as they are: no Dynamic texts, tool descriptions or message texts.
+  const fixed = createMemo(() =>
+    count(
+      Object.values(props.slots)
+        .flat()
+        .map((id) => props.layers.find((layer) => layer.id === id))
+        .filter((layer) => layer && layer.type !== DYNAMIC && !layer.delivery && !layer.replaces)
+        .map((layer) => layer!.text)
+        .join("\n"),
+    ),
+  )
+  const sent = useQuery(() => ({
+    queryKey: api.key("profile-size", props.profile, JSON.stringify(props.slots), props.project),
+    enabled: !!props.project,
     queryFn: () =>
       api
         .client()
-        .operator.agent.list({ directory: chosen() })
-        .then((result) => (result.data ?? []).map((item) => item.name)),
+        .operator.prompt.preview({ directory: props.project, agent: "build", profile: props.profile })
+        .then((result) => result.data?.system.join("\n") ?? ""),
   }))
-  const name = () => agent() ?? (agents.data?.includes("build") ? "build" : agents.data?.[0])
+  const projectName = () =>
+    props.catalog.projects.find((item) => item.key === props.project)?.name ?? shortPath(props.project ?? "")
 
+  return (
+    <span class="flex flex-col gap-1">
+      <span>
+        {language.t("operator.profile.sizeFixed", {
+          words: number(fixed().words),
+          tokens: number(fixed().tokens),
+        })}
+      </span>
+      <Show
+        when={props.project}
+        fallback={<span data-slot="operator-note">{language.t("operator.profile.sizeNoProject")}</span>}
+      >
+        <Show when={sent.data !== undefined}>
+          <span>
+            {language.t("operator.profile.sizeSent", {
+              project: projectName(),
+              words: number(count(sent.data ?? "").words),
+              tokens: number(count(sent.data ?? "").tokens),
+            })}
+          </span>
+        </Show>
+      </Show>
+    </span>
+  )
+}
+
+// The project the profile is looked at in, and Create agent…: a new agent of that project that uses
+// this profile (a helper agent, for a helper profile).
+function ProfileProject(props: {
+  catalog: Catalog
+  profile: string
+  project: string | undefined
+  onProject: (project: string) => void
+}) {
+  const language = useLanguage()
+  const navigate = useNavigate()
   return (
     <Show
       when={props.catalog.projects.length}
       fallback={<p data-slot="operator-note">{language.t("operator.profile.previewNoProject")}</p>}
     >
-      <h3 data-slot="operator-panel-title">{language.t("operator.profile.previewOn")}</h3>
       <div class="flex items-end gap-2 flex-wrap">
-        <Field
-          group
-          label={language.t("operator.profile.previewProject")}
-          hint={language.t("operator.help.previewProject")}
-        >
+        <Field group label={language.t("operator.profile.inProject")} hint={language.t("operator.help.profileProject")}>
           <SelectV2<string>
             appearance="base"
-            aria-label={language.t("operator.profile.previewProject")}
+            aria-label={language.t("operator.profile.inProject")}
             options={props.catalog.projects.map((item) => item.key)}
-            current={chosen()}
+            current={props.project}
             label={(key) => props.catalog.projects.find((item) => item.key === key)?.name ?? shortPath(key)}
-            onSelect={(key) => {
-              if (!key) return
-              setProject(key)
-              setAgent(undefined)
-            }}
-          />
-        </Field>
-        <Field
-          group
-          label={language.t("operator.profile.previewAgent")}
-          hint={language.t("operator.help.previewAgent")}
-        >
-          <SelectV2<string>
-            appearance="base"
-            aria-label={language.t("operator.profile.previewAgent")}
-            options={agents.data ?? []}
-            current={name()}
-            onSelect={(item) => item && setAgent(item)}
+            onSelect={(key) => key && props.onProject(key)}
           />
         </Field>
         <ButtonV2
-          variant="neutral"
-          disabled={!chosen() || !name()}
+          variant="outline"
+          disabled={!props.project}
           onClick={() =>
             navigate(
-              `/operator/agents/${encodeURIComponent(name()!)}?dir=${encodeURIComponent(chosen())}&tab=prompt&previewProfile=${encodeURIComponent(props.profile)}`,
+              `/operator/agents/new?dir=${encodeURIComponent(props.project!)}&profile=${encodeURIComponent(props.profile)}`,
             )
           }
         >
-          {language.t("operator.profile.preview")}
+          {language.t("operator.profile.createAgent")}
         </ButtonV2>
       </div>
     </Show>

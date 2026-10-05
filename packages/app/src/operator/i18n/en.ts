@@ -651,6 +651,19 @@ export const dict = {
   "operator.profile.new.role": "New Role",
   "operator.profile.new.identity": "New Identity",
   "operator.profile.new.helper": "New Helper",
+  "operator.profile.size": "Size",
+  "operator.help.profileSize":
+    "The words of the profile's fixed texts, and of the whole system prompt it gives the project's build agent today, with the texts filled in per request. Tokens are estimated at about four characters each; each model counts its own way.",
+  "operator.profile.sizeFixed": "Fixed texts: {{words}} words · ≈ {{tokens}} tokens",
+  "operator.profile.sizeSent": "As sent for build in {{project}}: {{words}} words · ≈ {{tokens}} tokens",
+  "operator.profile.sizeNoProject": "The namespace has no project to count the texts filled in per request in.",
+  "operator.profile.liveSlots":
+    "Add layers to a slot, drag them into another order, or remove them: each change is saved at once.",
+  "operator.profile.inProject": "Project",
+  "operator.help.profileProject":
+    "The project the size is counted in, and where Create agent… makes the agent. Only the namespace's projects can use its profiles.",
+  "operator.profile.createAgent": "Create agent…",
+  "operator.agentForm.profile": "The new agent will use the profile {{name}}.",
   "operator.profile.new.dynamic": "New Dynamic layer",
   "operator.profile.prompt": "Prompt",
   "operator.help.layerPrompt":

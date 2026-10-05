@@ -1,4 +1,4 @@
-import { useNavigate, useParams } from "@solidjs/router"
+import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SegmentedControlItemV2, SegmentedControlV2 } from "@opencode-ai/ui/v2/segmented-control-v2"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
@@ -20,17 +20,28 @@ import { type Scope, ScopeSwitch } from "../ui/scope-switch"
 import { useAgents } from "./agents"
 import { agentPatch, type AgentForm, formFromSettings } from "./agent-form-state"
 import { requestError } from "./config-helpers"
+import { usePromptCatalog, useProfileNames } from "./profile-data"
+import { OPENCODE } from "./profile-model"
+import { useProjectSettings } from "./project-prompt"
 
 // Create a new agent (a markdown file) or edit an existing one.
 export default function AgentFormPage() {
   const language = useLanguage()
   const params = useParams<{ name?: string }>()
+  // Create agent… on a profile: the new agent uses that profile.
+  const [search] = useSearchParams<{ profile?: string }>()
+  const names = useProfileNames()
+  const settings = useProjectSettings()
   const navigate = useNavigate()
   const api = useOperatorClient()
   const queryClient = useQueryClient()
   const directory = useScopedProject()
   const agents = useAgents()
   const editing = () => params.name !== undefined
+  const namespace = () => settings.data?.find((item) => item.key === directory())?.namespace ?? OPENCODE
+  const prompts = usePromptCatalog(namespace)
+  const profile = () =>
+    !editing() && search.profile ? prompts.query.data?.profiles.find((item) => item.id === search.profile) : undefined
   const existing = createMemo(() => agents.data?.find((agent) => agent.name === decodeURIComponent(params.name ?? "")))
   const [store, setStore] = createStore({
     scope: "project" as Scope,
@@ -69,7 +80,17 @@ export default function AgentFormPage() {
           scope: store.scope,
           ...patch,
         })
+    const chosen = profile()
     await request
+      .then(() =>
+        chosen
+          ? client.operator.agentPrompt.update({
+              name: store.form.name.trim(),
+              directory: directory(),
+              profile: chosen.id,
+            })
+          : undefined,
+      )
       .then(() => {
         showToast({ title: language.t("operator.agentForm.saved", { name: store.form.name }) })
         done(store.form.name.trim())
@@ -101,6 +122,13 @@ export default function AgentFormPage() {
       />
       <section data-component="operator-panel">
         <div data-component="operator-form">
+          <Show when={profile()}>
+            {(found) => (
+              <p data-slot="operator-note" role="status">
+                {language.t("operator.agentForm.profile", { name: names.profile(found()) })}
+              </p>
+            )}
+          </Show>
           <Show when={!editing()}>
             <Field label={language.t("operator.agentForm.name")} hint={language.t("operator.agentForm.nameHint")}>
               <TextInputV2

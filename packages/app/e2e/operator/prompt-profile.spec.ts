@@ -213,9 +213,10 @@ test("Profile Definition: layers in two slots, reordered, and the profile made t
     slots: { role: ["reviewer"], identity: ["rules", "voice"], platform: [] },
   })
 
-  // Read-only now: the slots without controls, and the profile's actions.
+  // Saved: the view keeps the slots' controls (each change there is saved at once), with the
+  // profile's actions.
   await expect(overlay.getByRole("heading", { name: "Release" })).toBeVisible()
-  await expect(overlay.getByRole("button", { name: "Move House rules up" })).toHaveCount(0)
+  await expect(overlay.getByRole("button", { name: "Move House rules up" })).toHaveCount(1)
   await overlay.getByRole("button", { name: "Use as namespace default" }).click()
   await expect.poll(() => state.prompt.writes.length).toBe(2)
   expect(state.prompt.writes[1]).toMatchObject({
@@ -384,4 +385,56 @@ test("the purpose generator drafts a Project Purpose into the editor", async ({ 
   await overlay.getByLabel("Brief", { exact: true }).fill("short")
   await overlay.getByRole("button", { name: "Write a draft" }).click()
   await expect(overlay.getByLabel("Text", { exact: true })).toHaveValue("A drafted project purpose (short).")
+})
+
+test("a profile's slots change in its view, it shows its size, and Create agent… makes an agent that uses it", async ({
+  page,
+}) => {
+  const state = await mockOperator(page)
+  state.prompt.items.opencode!.layers.push(user("reviewer", "Reviewer", "role", "role", "You review release notes."))
+  state.prompt.items.opencode!.profiles.push({
+    id: "release",
+    name: "Release",
+    group: "opencode:group.spec",
+    slots: { role: [], dynamic: ["opencode:slot.agent"] },
+    builtin: false,
+  })
+  await page.goto("/operator/profile?ns=opencode&tab=profiles&profile=release")
+  const overlay = page.getByRole("dialog")
+  await expect(overlay).toContainText("Fixed texts: 0 words")
+  await expect(overlay).toContainText("As sent for build in smoke-project:")
+  await expect(overlay).toContainText("each change is saved at once")
+
+  // A layer added straight from the view is saved.
+  await overlay
+    .locator('[data-component="select-v2-root"][aria-label="Add a layer to Agent role"] [data-component="select-v2"]')
+    .click()
+  await page
+    .locator('[data-component="menu-v2-item"]')
+    .filter({ hasText: /^Reviewer/ })
+    .click()
+  await expect.poll(() => state.prompt.writes.length).toBe(1)
+  expect(state.prompt.writes[0]).toMatchObject({
+    method: "PUT",
+    path: "/operator/namespaces/opencode/profiles/release",
+    body: { name: "Release", slots: { role: ["reviewer"], dynamic: ["opencode:slot.agent"] } },
+  })
+  await expect(overlay).toContainText("Fixed texts: 4 words")
+
+  await overlay.getByRole("button", { name: "Create agent…" }).click()
+  await expect(page).toHaveURL(/\/operator\/agents\/new\?dir=.*&profile=release/)
+  await expect(page.getByRole("status")).toContainText("The new agent will use the profile Release.")
+  await page.getByLabel("Name", { exact: true }).fill("releaser")
+  await page.getByRole("button", { name: "Create agent", exact: true }).click()
+  await expect.poll(() => state.agentWrites.length).toBe(1)
+  await expect.poll(() => state.prompt.writes.at(-1)?.path).toMatch(/\/operator\/agent-prompt\/releaser$/)
+  expect(state.prompt.writes.at(-1)!.body).toMatchObject({ profile: "release" })
+})
+
+test("OpenCode's profiles stay read-only in their view", async ({ page }) => {
+  await mockOperator(page)
+  await page.goto("/operator/profile?ns=opencode&tab=profiles&profile=opencode:profile.spec")
+  const overlay = page.getByRole("dialog")
+  await expect(overlay.getByText("OpenCode's own profile.")).toBeVisible()
+  await expect(overlay.locator('[data-component="select-v2-root"][aria-label^="Add a layer to"]')).toHaveCount(0)
 })
