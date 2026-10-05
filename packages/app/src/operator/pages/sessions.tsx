@@ -8,7 +8,7 @@ import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
 import { showToast } from "@/utils/toast"
-import { useOpenSession, useOperatorClient } from "../data"
+import { useOperatorClient } from "../data"
 import { formatAgo, formatCost, formatCount, sessionFolder, shortPath } from "../format"
 import { useOperatorScope } from "../scope"
 import { type Column, DataTable } from "../ui/data-table"
@@ -17,6 +17,7 @@ import { ScopePicker } from "../ui/scope-picker"
 import { FieldHelp } from "../ui/field-help"
 import { useMoveToTrash } from "../ui/confirm"
 import { requestError } from "./config-helpers"
+import { useSessionOverlay } from "./session-overlay"
 
 const PAGE = 50
 
@@ -24,7 +25,6 @@ export default function SessionsPage() {
   const language = useLanguage()
   const api = useOperatorClient()
   const scope = useOperatorScope()
-  const openSession = useOpenSession()
   const [prefs, setPrefs] = persisted(
     Persist.global("operator.sessions"),
     createStore({ children: false, archived: false }),
@@ -126,6 +126,9 @@ export default function SessionsPage() {
     },
   ]
 
+  // A session opens in the overlay; Maximize there opens the full session page.
+  const openOverlay = useSessionOverlay(rows)
+
   // To Trash: archived (with its subagents' sessions) until restored or deleted for good.
   const moveToTrash = useMoveToTrash()
   const queryClient = useQueryClient()
@@ -192,7 +195,7 @@ export default function SessionsPage() {
         columns={columns}
         loading={sessions.isPending}
         empty={language.t("operator.sessions.empty")}
-        onRowClick={(session) => openSession(session.id)}
+        onRowClick={(session) => openOverlay(session.id)}
       />
       <Show when={sessions.hasNextPage}>
         <div data-slot="operator-more">

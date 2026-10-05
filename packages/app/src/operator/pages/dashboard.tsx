@@ -5,18 +5,18 @@ import { createMemo, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
-import { useOpenSession, useOperatorClient, usePendingPermissions, useServerStatus } from "../data"
+import { useOperatorClient, usePendingPermissions, useServerStatus } from "../data"
 import { formatAgo, formatCost, formatCount, sessionFolder, shortPath } from "../format"
 import { DataTable } from "../ui/data-table"
 import { PageHeader } from "../ui/page-header"
 import { StatTile } from "../ui/stat-tile"
+import { useSessionOverlay } from "./session-overlay"
 
 const RANGES = [7, 14, 30] as const
 
 export default function DashboardPage() {
   const language = useLanguage()
   const api = useOperatorClient()
-  const openSession = useOpenSession()
   const status = useServerStatus()
   const pending = usePendingPermissions()
   const [store, setStore] = persisted(Persist.global("operator.dashboard"), createStore({ days: 14 as number }))
@@ -39,6 +39,8 @@ export default function DashboardPage() {
         .then((result) => result.data ?? []),
     refetchInterval: 30_000,
   }))
+  // A recent session opens in the overlay; Maximize there opens the full session page.
+  const openOverlay = useSessionOverlay(() => recent.data ?? [])
 
   const locale = () => language.intl()
   const range = () => stats.data?.range
@@ -119,7 +121,7 @@ export default function DashboardPage() {
             rows={recent.data ?? []}
             loading={recent.isPending}
             empty={language.t("operator.dashboard.noSessions")}
-            onRowClick={(session) => openSession(session.id)}
+            onRowClick={(session) => openOverlay(session.id)}
             columns={[
               { id: "title", header: language.t("operator.column.title"), cell: (session) => session.title },
               {

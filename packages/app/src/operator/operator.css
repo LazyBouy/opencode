@@ -937,3 +937,34 @@ html[data-theme="iphi"] [data-component="operator-inspector"] {
   flex-direction: column;
   gap: 6px;
 }
+
+/* A session's conversation in its overlay. */
+[data-component="operator-conversation"] {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+[data-component="operator-conversation"] [data-slot="operator-message"] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--v2-border-border-subtle, var(--border-weak-base));
+  min-width: 0;
+}
+[data-component="operator-conversation"] [data-slot="operator-message"][data-role="user"] {
+  background: var(--v2-background-bg-subtle, var(--surface-inset-base));
+}
+[data-slot="operator-message-head"] {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+[data-slot="operator-tool-call"] {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}

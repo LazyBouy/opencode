@@ -241,7 +241,7 @@ export function AgentDetail(props: { name: string; directory: string; tab: strin
                 rows={sessions.data ?? []}
                 loading={sessions.isPending}
                 empty={language.t("operator.agent.noSessions")}
-                onRowClick={(session) => openSession(session.id)}
+                onRowClick={(session) => navigate(`/operator/sessions?session=${encodeURIComponent(session.id)}`)}
                 columns={[
                   { id: "title", header: language.t("operator.column.title"), cell: (session) => session.title },
                   {

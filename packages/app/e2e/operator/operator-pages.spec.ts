@@ -28,7 +28,10 @@ test("the dashboard shows usage, approvals and recent sessions", async ({ page }
 
   const recent = page.locator('[data-component="operator-panel"]').filter({ hasText: "Recent sessions" })
   await expect(recent).toContainText("Fix the parser")
+  // A recent session opens in the overlay; Maximize opens the full session page.
   await recent.getByRole("row", { name: /Fix the parser/ }).click()
+  await expect(page).toHaveURL(/session=ses_op_1/)
+  await page.getByRole("dialog").getByRole("button", { name: "Maximize" }).click()
   await expect(page).toHaveURL(/\/session\/ses_op_1$/)
 })
 
@@ -118,7 +121,21 @@ test("the sessions page searches on the server and opens a session", async ({ pa
   expect(state.sessionQueries.some((query) => query.get("search") === "plan" && query.get("roots") === "true")).toBe(
     true,
   )
+  // A session opens in the overlay: its conversation, with a prompt box; Maximize opens the full page.
   await table.getByRole("row", { name: /Plan the release/ }).click()
+  await expect(page).toHaveURL(/session=ses_op_2/)
+  const overlay = page.getByRole("dialog")
+  for (const section of ["Conversation", "Details", "Subagents"])
+    await expect(overlay.getByRole("tab", { name: section })).toBeVisible()
+  const sent: string[] = []
+  page.on("request", (request) => {
+    if (request.url().includes("/prompt_async")) sent.push(request.postData() ?? "")
+  })
+  await overlay.getByLabel("Message", { exact: true }).fill("Keep going.")
+  await overlay.getByRole("button", { name: "Send" }).click()
+  await expect.poll(() => sent.length).toBe(1)
+  expect(sent[0]).toContain("Keep going.")
+  await overlay.getByRole("button", { name: "Maximize" }).click()
   await expect(page).toHaveURL(/\/session\/ses_op_2$/)
 })
 
