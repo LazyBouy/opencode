@@ -13,6 +13,7 @@ import { SystemPrompt } from "@/session/system"
 import { ToolRegistry } from "@/tool/registry"
 import { OperatorProfile } from "./profile"
 import { OperatorProfileStore } from "./profile-store"
+import { OperatorProjects } from "./projects"
 import { OperatorPromptText } from "./prompt-text"
 
 export const ToolEntry = Schema.Struct({
@@ -103,7 +104,7 @@ const layer = Layer.effect(
             system.mcp(agent),
             system.skills(agent),
           ])
-      const key = OperatorProfile.projectKey(ctx)
+      const key = yield* Effect.promise(() => OperatorProjects.keyOf(ctx))
       const loaded = yield* Effect.promise(() => OperatorProfileStore.forProject(key))
       if (input.profile && !OperatorProfile.profiles(loaded.catalog).some((item) => item.id === input.profile))
         return yield* new NotFoundError({

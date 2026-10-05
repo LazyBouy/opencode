@@ -95,7 +95,8 @@ export const maxSteps = Effect.gen(function* () {
   const agent = fiber ? loopAgents.get(fiber) : undefined
   const { OperatorProfile } = yield* Effect.promise(() => import("./profile"))
   const { OperatorProfileStore } = yield* Effect.promise(() => import("./profile-store"))
-  const loaded = yield* Effect.promise(() => OperatorProfileStore.forProject(OperatorProfile.projectKey(ctx)))
+  const { OperatorProjects } = yield* Effect.promise(() => import("./projects"))
+  const loaded = yield* Effect.promise(() => OperatorProjects.keyOf(ctx).then(OperatorProfileStore.forProject))
   const slots = OperatorProfile.slotsFor(loaded.catalog, {
     agent,
     setting: agent ? loaded.agents[agent] : undefined,

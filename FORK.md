@@ -110,6 +110,8 @@ The script works in four stages:
 
 System text that a caller passes without a label arrives in `SystemParts.extra` and is sent, unlabelled, at the end of the system message; give it a label. `test/operator/prompts-e2e.test.ts` fails when the OpenCode profile no longer reproduces upstream's prompt, a tool description or a reminder, or when the agent page's preview no longer matches what is sent.
 
+**Projects and the session guard.** Every session, and the agents it runs, belongs to one project: a git repository, or a folder outside git registered as a project (its subfolders belong to it too); see `packages/opencode/src/operator/projects.ts`. A fork-owned global middleware (`operator/http/session-guard.ts`, merged into `operatorRootRoutes`) runs before upstream's routes and refuses `POST /session`, `POST /session/:id/fork` and `POST /api/session` in a folder that is not part of a project, with an `OperatorNotAProjectError` (409); upstream's routes are untouched. Upstream's test suite starts sessions in plain temporary folders, so the guard is off when `OPENCODE_TEST_HOME` is set (its test preload) and in the HttpApi exerciser; `OPENCODE_PROJECT_GUARD=on|off` overrides. Sessions that skip HTTP (`opencode github`, `debug agent`, the separate `packages/cli` server) are not guarded. If upstream adds a route that creates sessions, add it to the guard.
+
 Namespaces, their layers, groups and profiles, project links and agent settings are files under `~/.config/opencode/namespaces/` (`operator/profile-store.ts`); upstream never reads them.
 
 Then run the browser suites:

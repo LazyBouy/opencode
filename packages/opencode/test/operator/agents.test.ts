@@ -128,6 +128,24 @@ it.instance("editing a built-in agent writes overrides into the scope's config",
   }),
 )
 
+it.instance("an agent's home folder must be inside its project", () =>
+  Effect.gen(function* () {
+    const { directory } = yield* TestInstance
+    const agents = yield* OperatorAgents.Service
+
+    const outside = yield* agents
+      .update("project", "build", { home: path.join(path.dirname(directory), "elsewhere") })
+      .pipe(Effect.flip)
+    expect(outside.message).toContain("must be inside it")
+    expect(yield* agents.update("project", "build", { home: "notes" })).toBe(
+      path.join(directory, ".opencode", "opencode.jsonc"),
+    )
+    expect(yield* Effect.promise(() => fs.stat(path.join(directory, "notes")).then((stat) => stat.isDirectory()))).toBe(
+      true,
+    )
+  }),
+)
+
 it.instance(
   "deleting removes a file agent; built-in agents can only be turned off",
   () =>

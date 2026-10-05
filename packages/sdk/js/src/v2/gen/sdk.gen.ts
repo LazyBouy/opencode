@@ -196,6 +196,10 @@ import type {
   OperatorProjectListResponses,
   OperatorProjectSettingsListErrors,
   OperatorProjectSettingsListResponses,
+  OperatorProjectSettingsRegisterErrors,
+  OperatorProjectSettingsRegisterResponses,
+  OperatorProjectSettingsResolveErrors,
+  OperatorProjectSettingsResolveResponses,
   OperatorProjectSettingsUpdateErrors,
   OperatorProjectSettingsUpdateResponses,
   OperatorPromptCatalogErrors,
@@ -2466,6 +2470,70 @@ export class ProjectSettings extends HeyApiClient {
       ThrowOnError
     >({
       url: "/operator/project-settings",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Find a folder's project
+   *
+   * The project a folder belongs to: the git repository it is in, or the registered folder outside git it is in. Sessions can start only in a project.
+   */
+  public resolve<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<
+      OperatorProjectSettingsResolveResponses,
+      OperatorProjectSettingsResolveErrors,
+      ThrowOnError
+    >({
+      url: "/operator/project-settings/resolve",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Make a folder a project
+   *
+   * Register a folder outside git as a project (its subfolders belong to it too), or make it a git repository. Sessions can start only in a project.
+   */
+  public register<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      git?: boolean
+      namespace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "directory" },
+            { in: "body", key: "git" },
+            { in: "body", key: "namespace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorProjectSettingsRegisterResponses,
+      OperatorProjectSettingsRegisterErrors,
+      ThrowOnError
+    >({
+      url: "/operator/project-settings/register",
       ...options,
       ...params,
       headers: {

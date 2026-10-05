@@ -2765,6 +2765,129 @@
         ]
       }
     },
+    "/operator/project-settings/resolve": {
+      "get": {
+        "tags": ["operator namespaces"],
+        "operationId": "operator.projectSettings.resolve",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The folder's project",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectResolution"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The project a folder belongs to: the git repository it is in, or the registered folder outside git it is in. Sessions can start only in a project.",
+        "summary": "Find a folder's project",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.projectSettings.resolve({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/project-settings/register": {
+      "post": {
+        "tags": ["operator namespaces"],
+        "operationId": "operator.projectSettings.register",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The project",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPromptProject"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProfileInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProfileInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProfileNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProfileNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Register a folder outside git as a project (its subfolders belong to it too), or make it a git repository. Sessions can start only in a project.",
+        "summary": "Make a folder a project",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "directory": {
+                    "type": "string",
+                    "description": "A folder outside git"
+                  },
+                  "git": {
+                    "type": "boolean"
+                  },
+                  "namespace": {
+                    "type": "string"
+                  }
+                },
+                "required": ["directory"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.projectSettings.register({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/event": {
       "get": {
         "tags": ["event"],
@@ -26104,6 +26227,9 @@
           },
           "defaultProfile": {
             "type": "string"
+          },
+          "registered": {
+            "type": "boolean"
           }
         },
         "required": ["key", "name", "namespace"],
@@ -26235,6 +26361,30 @@
           }
         },
         "required": ["project", "copied"],
+        "additionalProperties": false
+      },
+      "OperatorProjectResolution": {
+        "type": "object",
+        "properties": {
+          "directory": {
+            "type": "string"
+          },
+          "project": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "description": "The project's folder"
+              },
+              "git": {
+                "type": "boolean"
+              }
+            },
+            "required": ["key", "git"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["directory"],
         "additionalProperties": false
       },
       "Model": {

@@ -181,6 +181,8 @@ export function createPromptMock(
   projects: Array<{ key: string; name: string }>,
   // An agent's own prompt, if it has one.
   ownPrompt: (agent: string) => string | undefined = () => undefined,
+  // Whether a folder is in a git repository (a project without registering).
+  git: (folder: string) => boolean = () => false,
 ) {
   const state: PromptMock = {
     namespaces: [{ id: "opencode", name: "OpenCode", purpose: "", createdAt: 0, updatedAt: 0 }],
@@ -336,11 +338,34 @@ export function createPromptMock(
     if (method !== "GET") state.writes.push({ method, path: url.pathname, body })
 
     if (url.pathname === "/operator/prompt/preview") return json(route, preview(url))
+    if (url.pathname === "/operator/project-settings/resolve") {
+      const folder = url.searchParams.get("directory") ?? ""
+      if (git(folder)) return json(route, { directory: folder, project: { key: folder, git: true } })
+      const key = Object.keys(state.projects)
+        .filter((item) => folder === item || folder.startsWith(`${item}/`))
+        .toSorted((a, b) => b.length - a.length)[0]
+      return json(route, { directory: folder, ...(key ? { project: { key, git: false } } : {}) })
+    }
+    if (url.pathname === "/operator/project-settings/register") {
+      const input = body as { directory: string; git?: boolean; namespace?: string }
+      state.projects[input.directory] = { namespace: input.namespace ?? "opencode" }
+      return json(route, {
+        key: input.directory,
+        name: nameOf(input.directory),
+        namespace: input.namespace ?? "opencode",
+        registered: true,
+      })
+    }
     if (url.pathname === "/operator/project-settings") {
       if (method === "GET")
         return json(
           route,
-          Object.entries(state.projects).map(([key, setting]) => ({ key, name: nameOf(key), ...setting })),
+          Object.entries(state.projects).map(([key, setting]) => ({
+            key,
+            name: nameOf(key),
+            ...setting,
+            registered: true,
+          })),
         )
       const input = body as {
         key: string

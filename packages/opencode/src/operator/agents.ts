@@ -14,6 +14,7 @@ import { Agent } from "@/agent/agent"
 import { Config } from "@/config/config"
 import { configEntryNameFromPath } from "@/config/entry-name"
 import { InstanceState } from "@/effect/instance-state"
+import { OperatorProjects } from "./projects"
 import { OperatorConfig } from "./config"
 
 export const Source = Schema.Struct({
@@ -205,8 +206,19 @@ const layer = Layer.effect(
         await fs.writeFile(file, matter.stringify(prompt ? `${prompt.trim()}\n` : "", data))
       })
 
+    // A home folder must be inside the agent's project: its sessions belong to that project.
     const ensureHome = (home: string | null | undefined) =>
-      home ? Effect.promise(() => fs.mkdir(home, { recursive: true })).pipe(Effect.asVoid) : Effect.void
+      Effect.gen(function* () {
+        if (!home) return
+        const ctx = yield* InstanceState.context
+        const project = yield* Effect.promise(() => OperatorProjects.keyOf(ctx))
+        const folder = path.resolve(project, home)
+        if (folder !== project && !folder.startsWith(project.endsWith(path.sep) ? project : project + path.sep))
+          return yield* new InvalidError({
+            message: `The home folder ${folder} is outside the project ${project}; it must be inside it`,
+          })
+        yield* Effect.promise(() => fs.mkdir(folder, { recursive: true }))
+      })
 
     const create = Effect.fn("OperatorAgents.create")(function* (
       scope: OperatorConfig.Scope,

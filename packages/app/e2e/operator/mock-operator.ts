@@ -209,6 +209,7 @@ export async function mockOperator(page: Page) {
   const prompt = createPromptMock(
     [{ key: directory, name: "smoke-project" }],
     (name) => (agents.find((agent) => agent.name === name) as { prompt?: string } | undefined)?.prompt,
+    (folder) => folder === directory || folder.startsWith(`${directory}/`) || folder.startsWith(workspace),
   )
   const state: OperatorMock = {
     replies: [],
@@ -292,7 +293,7 @@ export async function mockOperator(page: Page) {
     }
     if (
       url.pathname.startsWith("/operator/namespaces") ||
-      url.pathname === "/operator/project-settings" ||
+      url.pathname.startsWith("/operator/project-settings") ||
       url.pathname.startsWith("/operator/agent-prompt/") ||
       url.pathname === "/operator/prompt/preview"
     )

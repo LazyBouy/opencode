@@ -2362,6 +2362,7 @@ export type OperatorPromptProject = {
   namespace: string
   purpose?: string
   defaultProfile?: string
+  registered?: boolean
 }
 
 export type OperatorPromptOverride = {
@@ -2407,6 +2408,17 @@ export type OperatorPromptCopyResult = {
 export type OperatorProjectSettingResult = {
   project: OperatorPromptProject
   copied: Array<OperatorPromptCopied>
+}
+
+export type OperatorProjectResolution = {
+  directory: string
+  project?: {
+    /**
+     * The project's folder
+     */
+    key: string
+    git: boolean
+  }
 }
 
 export type Model = {
@@ -9086,6 +9098,73 @@ export type OperatorProjectSettingsUpdateResponses = {
 
 export type OperatorProjectSettingsUpdateResponse =
   OperatorProjectSettingsUpdateResponses[keyof OperatorProjectSettingsUpdateResponses]
+
+export type OperatorProjectSettingsResolveData = {
+  body?: never
+  path?: never
+  query: {
+    directory: string
+  }
+  url: "/operator/project-settings/resolve"
+}
+
+export type OperatorProjectSettingsResolveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorProjectSettingsResolveError =
+  OperatorProjectSettingsResolveErrors[keyof OperatorProjectSettingsResolveErrors]
+
+export type OperatorProjectSettingsResolveResponses = {
+  /**
+   * The folder's project
+   */
+  200: OperatorProjectResolution
+}
+
+export type OperatorProjectSettingsResolveResponse =
+  OperatorProjectSettingsResolveResponses[keyof OperatorProjectSettingsResolveResponses]
+
+export type OperatorProjectSettingsRegisterData = {
+  body?: {
+    /**
+     * A folder outside git
+     */
+    directory: string
+    git?: boolean
+    namespace?: string
+  }
+  path?: never
+  query?: never
+  url: "/operator/project-settings/register"
+}
+
+export type OperatorProjectSettingsRegisterErrors = {
+  /**
+   * OperatorProfileInvalidError | InvalidRequestError
+   */
+  400: OperatorProfileInvalidError | InvalidRequestError
+  /**
+   * OperatorProfileNotFoundError
+   */
+  404: OperatorProfileNotFoundError
+}
+
+export type OperatorProjectSettingsRegisterError =
+  OperatorProjectSettingsRegisterErrors[keyof OperatorProjectSettingsRegisterErrors]
+
+export type OperatorProjectSettingsRegisterResponses = {
+  /**
+   * The project
+   */
+  200: OperatorPromptProject
+}
+
+export type OperatorProjectSettingsRegisterResponse =
+  OperatorProjectSettingsRegisterResponses[keyof OperatorProjectSettingsRegisterResponses]
 
 export type EventSubscribeData = {
   body?: never

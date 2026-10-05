@@ -1,4 +1,8 @@
+import path from "path"
+import { OperatorFolders } from "@/operator/folders"
+import { OperatorProfile } from "@/operator/profile"
 import { OperatorProfileStore } from "@/operator/profile-store"
+import { OperatorProjects } from "@/operator/projects"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { ApiProfileInvalidError, ApiProfileNotFoundError } from "../groups/namespaces"
@@ -12,7 +16,10 @@ export const apiError = (error: OperatorProfileStore.InvalidError | OperatorProf
 export const operatorNamespaceHandlers = HttpApiBuilder.group(OperatorRootApi, "operatorNamespace", (handlers) =>
   Effect.gen(function* () {
     const store = yield* OperatorProfileStore.Service
+    const folders = yield* OperatorFolders.Service
     const done = Effect.as(true)
+    const invalid = (message: string) =>
+      new ApiProfileInvalidError({ name: "OperatorProfileInvalidError", data: { message } })
 
     return handlers
       .handle("list", () => store.namespaces())
@@ -72,6 +79,29 @@ export const operatorNamespaceHandlers = HttpApiBuilder.group(OperatorRootApi, "
         ),
       )
       .handle("projects", () => store.projects())
+      .handle("projectResolve", (ctx) =>
+        Effect.promise(async () => {
+          const directory = path.resolve(ctx.query.directory)
+          const project = await OperatorProjects.projectOf(directory)
+          return { directory, ...(project ? { project } : {}) }
+        }),
+      )
+      .handle("projectRegister", (ctx) =>
+        Effect.gen(function* () {
+          const directory = path.resolve(ctx.payload.directory)
+          const current = yield* Effect.promise(() => OperatorProjects.projectOf(directory))
+          if (current?.git) return yield* invalid(`${directory} is already in the git repository ${current.key}`)
+          if (ctx.payload.git) yield* folders.init(directory).pipe(Effect.mapError((error) => invalid(error.message)))
+          // Outside git, the project is its entry in projects.json; a git project gets one for a
+          // namespace other than OpenCode.
+          if (!ctx.payload.git || (ctx.payload.namespace && ctx.payload.namespace !== OperatorProfile.OPENCODE))
+            yield* store
+              .setProject(directory, { namespace: ctx.payload.namespace ?? OperatorProfile.OPENCODE })
+              .pipe(Effect.mapError(apiError))
+          const listed = (yield* store.projects()).find((item) => item.key === directory)
+          return listed ?? { key: directory, name: path.basename(directory), namespace: OperatorProfile.OPENCODE }
+        }),
+      )
       .handle("project", (ctx) =>
         store
           .setProject(ctx.payload.key, {

@@ -389,7 +389,8 @@ export const dict = {
   "operator.agentForm.colorHint": "A hex color such as #FF6600.",
   "operator.agentForm.hiddenHint": "Hide from the @ menu (subagents only)",
   "operator.agentForm.home": "Home folder",
-  "operator.agentForm.homeHint": "Sessions started as this agent open in this folder. It is created if missing.",
+  "operator.agentForm.homeHint":
+    "Sessions started as this agent open in this folder. It must be inside the agent's project, and is created if missing.",
   "operator.agentForm.promptHint":
     "The agent's own prompt. A profile sends it through its Agent prompt slots; OpenCode's profile sends it instead of the base prompt. The Prompt tab chooses the profile.",
   "operator.agentForm.create": "Create agent",
@@ -415,7 +416,24 @@ export const dict = {
   "operator.projects.globalHint": "Sessions started in folders that are not in a git repository",
   "operator.projects.newSession": "New session",
   "operator.projects.notProject": "Not a project",
-  "operator.projects.notProjectHint": "Sessions ran in this folder, but it is not a project.",
+  "operator.gate.title": "This folder is not a project",
+  "operator.gate.body":
+    "Every session, and the agents it runs, belongs to one project. {{folder}} is not part of one: start the session in a project, or make this folder a project.",
+  "operator.gate.use": "Start it in a project",
+  "operator.gate.project": "Project",
+  "operator.gate.chooseProject": "Choose a project",
+  "operator.gate.startThere": "Start there",
+  "operator.gate.make": "Make this folder a project",
+  "operator.gate.how": "As",
+  "operator.gate.asFolder": "A folder (no git)",
+  "operator.gate.asGit": "A git repository",
+  "operator.gate.makeIt": "Make it a project",
+  "operator.help.gateProject":
+    "The session starts in this project's folder, with its agents and settings, instead of this folder.",
+  "operator.help.gateHow":
+    "A folder: registered as it is, and its subfolders belong to it. A git repository: git init is run in it first.",
+  "operator.projects.notProjectHint":
+    "Sessions ran in this folder, but it is not a project, so new sessions cannot start here until it is one.",
   "operator.projects.noneInNamespace": "No projects in this namespace yet.",
   "operator.projects.noSuchProject": "This project is not listed any more.",
   "operator.projects.folderLabel": "Folder",

@@ -5,6 +5,10 @@ import { array, boolean, check, isRecord, object } from "./assertions"
 import { http, route } from "./dsl"
 import { type Scenario } from "./types"
 
+// The fork's session guard refuses sessions outside projects; the shared scenarios start sessions in
+// plain temporary folders, so the exerciser runs with it off (session-guard.test.ts covers it).
+process.env.OPENCODE_PROJECT_GUARD ??= "off"
+
 export const operatorScenarios: Scenario[] = [
   http.protected
     .get("/session/{sessionID}/merge", "session.merge")
@@ -453,6 +457,24 @@ export const operatorScenarios: Scenario[] = [
       body: { key: ctx.directory ?? "/tmp/x", namespace: "missing" },
     }))
     .status(404),
+  http.protected
+    .get("/operator/project-settings/resolve", "operator.projectSettings.resolve")
+    .at((ctx) => ({
+      path: `/operator/project-settings/resolve?directory=${encodeURIComponent(ctx.directory ?? "/tmp")}`,
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => {
+      object(body)
+      check(typeof body.directory === "string", "the folder should come back resolved")
+    }),
+  http.protected
+    .post("/operator/project-settings/register", "operator.projectSettings.register")
+    .at((ctx) => ({
+      path: "/operator/project-settings/register",
+      headers: ctx.headers(),
+      body: { directory: ctx.directory ?? "/tmp/x", namespace: "missing" },
+    }))
+    .status(400),
   http.protected
     .get("/operator/agent-prompt/{name}", "operator.agentPrompt.get")
     .at((ctx) => ({ path: route("/operator/agent-prompt/{name}", { name: "build" }), headers: ctx.headers() }))

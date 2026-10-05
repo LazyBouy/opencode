@@ -21,6 +21,8 @@ export const OperatorNamespacePaths = {
   profile: "/operator/namespaces/:ns/profiles/:id",
   copy: "/operator/namespaces/:ns/copy",
   projects: "/operator/project-settings",
+  resolve: "/operator/project-settings/resolve",
+  register: "/operator/project-settings/register",
 } as const
 
 const profileError = <Name extends string, Status extends number>(name: Name, status: Status) =>
@@ -49,6 +51,16 @@ const ProfileInput = Schema.Struct({ name: Schema.String, group: Schema.String, 
 const Copied = Schema.Struct({ copied: Schema.Array(OperatorProfileStore.Copied) }).annotate({
   identifier: "OperatorPromptCopyResult",
 })
+
+const Resolution = Schema.Struct({
+  directory: Schema.String,
+  project: Schema.optional(
+    Schema.Struct({
+      key: Schema.String.annotate({ description: "The project's folder" }),
+      git: Schema.Boolean,
+    }),
+  ).annotate({ description: "The project the folder belongs to; missing when it is not part of one" }),
+}).annotate({ identifier: "OperatorProjectResolution" })
 
 const doc = (identifier: string, summary: string, description: string) =>
   OpenApi.annotations({ identifier, summary, description })
@@ -289,6 +301,33 @@ export const OperatorNamespaceGroup = HttpApiGroup.make("operatorNamespace")
         "operator.projectSettings.update",
         "Change a project's prompt settings",
         "Set a project's namespace, Project Purpose or default profile. A new namespace moves the project: what it uses is copied there, so its prompts stay the same.",
+      ),
+    ),
+    HttpApiEndpoint.get("projectResolve", OperatorNamespacePaths.resolve, {
+      query: Schema.Struct({ directory: Schema.String }),
+      success: described(Resolution, "The folder's project"),
+    }).annotateMerge(
+      doc(
+        "operator.projectSettings.resolve",
+        "Find a folder's project",
+        "The project a folder belongs to: the git repository it is in, or the registered folder outside git it is in. Sessions can start only in a project.",
+      ),
+    ),
+    HttpApiEndpoint.post("projectRegister", OperatorNamespacePaths.register, {
+      payload: Schema.Struct({
+        directory: Schema.String.annotate({ description: "A folder outside git" }),
+        git: Schema.optional(Schema.Boolean).annotate({
+          description: "Make it a git repository (git init) instead of registering it as it is",
+        }),
+        namespace: Schema.optional(Schema.String).annotate({ description: "Its namespace; OpenCode by default" }),
+      }),
+      success: described(OperatorProfileStore.ProjectInfo, "The project"),
+      error: errors,
+    }).annotateMerge(
+      doc(
+        "operator.projectSettings.register",
+        "Make a folder a project",
+        "Register a folder outside git as a project (its subfolders belong to it too), or make it a git repository. Sessions can start only in a project.",
       ),
     ),
   )

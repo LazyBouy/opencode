@@ -39,6 +39,9 @@ export const ProjectInfo = Schema.Struct({
   namespace: Schema.String,
   purpose: Schema.optional(Schema.String),
   defaultProfile: Schema.optional(Schema.String),
+  registered: Schema.optional(Schema.Boolean).annotate({
+    description: "A git project, or a folder outside git registered as a project",
+  }),
 }).annotate({ identifier: "OperatorPromptProject" })
 export type ProjectInfo = typeof ProjectInfo.Type
 
@@ -276,6 +279,7 @@ const layer = Layer.effect(
           key,
           name: names.get(key) ?? path.basename(key),
           ...(settings[key] ?? { namespace: OperatorProfile.OPENCODE }),
+          registered: names.has(key) || key in settings,
         }))
         .toSorted((a, b) => a.name.localeCompare(b.name))
     })
@@ -590,7 +594,7 @@ const layer = Layer.effect(
       key: string,
       input: { namespace?: string; purpose?: string; defaultProfile?: string; dryRun?: boolean },
     ) {
-      const current = (yield* known()).find((item) => item.key === key) ?? {
+      const current: ProjectInfo = (yield* known()).find((item) => item.key === key) ?? {
         key,
         name: path.basename(key),
         namespace: OperatorProfile.OPENCODE,

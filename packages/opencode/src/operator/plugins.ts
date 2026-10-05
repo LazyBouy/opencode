@@ -2,18 +2,24 @@ import type { Plugin } from "@opencode-ai/plugin"
 import { Fiber } from "effect"
 import { OperatorProfile } from "./profile"
 import { OperatorProfileStore } from "./profile-store"
+import { OperatorProjects } from "./projects"
 import { OperatorPromptText } from "./prompt-text"
 
 // Builds every request's system prompt from the agent's prompt profile (see profile.ts), and picks the
 // version of tool descriptions, reminders and notices the profile holds. Profile files are read for
 // every request, so edits apply to the next message. The agent page's preview calls the same assembler.
 const PromptPlugin: Plugin = async (input) => {
-  const key = OperatorProfile.projectKey({ directory: input.directory, worktree: input.worktree })
-  // One read is shared for a second: preparing one request asks once per tool definition.
+  // One read is shared for a second: preparing one request asks once per tool definition. The project
+  // is looked up each time: a folder outside git can be registered (or its parent) while it is open.
   let recent: { at: number; read: ReturnType<typeof OperatorProfileStore.forProject> } | undefined
   const context = () => {
     if (recent && Date.now() - recent.at < 1000) return recent.read
-    recent = { at: Date.now(), read: OperatorProfileStore.forProject(key) }
+    recent = {
+      at: Date.now(),
+      read: OperatorProjects.keyOf({ directory: input.directory, worktree: input.worktree }).then(
+        OperatorProfileStore.forProject,
+      ),
+    }
     return recent.read
   }
   // The slots an agent's texts come from; without an agent, the project's or namespace's default.

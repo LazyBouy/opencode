@@ -19,6 +19,7 @@ import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOve
 import { requestError } from "./config-helpers"
 import { useProfileNames } from "./profile-data"
 import { namespaceDefault, OPENCODE } from "./profile-model"
+import { RegisterProject } from "../project-gate"
 import { ProjectPromptForm, useProjectSettings } from "./project-prompt"
 
 // A project as the page lists it: a git project the server knows, or a folder outside git — a
@@ -69,19 +70,37 @@ function useProjectRows() {
       namespace: OPENCODE,
     }
   const all = createMemo<Row[]>(() => {
-    const listed = (projects.data ?? []).map((project) => {
-      const registered = !project.folder || !!settings.data?.some((item) => item.key === project.worktree)
-      return {
+    const registered = (settings.data ?? []).filter((item) => item.registered).map((item) => item.key)
+    // A folder outside git belongs to the registered folder it is in (itself, or one above it).
+    const rows = new Map<string, Row>()
+    for (const project of projects.data ?? []) {
+      const key = project.folder ? (registeredRoot(project.worktree, registered) ?? project.worktree) : project.worktree
+      const known = !project.folder || registered.includes(key)
+      const row: Row = {
         ...project,
-        key: project.worktree,
-        ns: registered ? settingOf(project.worktree).namespace : OPENCODE,
-        registered,
+        ...(key !== project.worktree ? { name: key.split("/").filter(Boolean).at(-1) ?? key, worktree: key } : {}),
+        key,
+        ns: known ? settingOf(key).namespace : OPENCODE,
+        registered: known,
       }
-    })
+      const same = rows.get(key)
+      rows.set(
+        key,
+        same
+          ? {
+              ...same,
+              sessions: same.sessions + row.sessions,
+              cost: same.cost + row.cost,
+              lastActivity: Math.max(same.lastActivity ?? 0, row.lastActivity ?? 0) || undefined,
+            }
+          : row,
+      )
+    }
+    const listed = [...rows.values()]
     const keys = new Set(listed.map((row) => row.key))
     // Registered folders outside git where no session ran yet.
     const idle = (settings.data ?? [])
-      .filter((item) => !keys.has(item.key))
+      .filter((item) => item.registered && !keys.has(item.key))
       .map((item) => ({
         id: item.key,
         name: item.name,
@@ -122,6 +141,13 @@ function useProjectRows() {
       return setting.defaultProfile ? name : language.t("operator.projects.namespaceDefault", { name })
     },
   }
+}
+
+// The registered folder a folder outside git is in (itself, or the nearest one above it).
+function registeredRoot(folder: string, registered: ReadonlyArray<string>) {
+  return registered
+    .filter((key) => folder === key || folder.startsWith(key.endsWith("/") ? key : `${key}/`))
+    .toSorted((a, b) => b.length - a.length)[0]
 }
 
 // A project's tags: git or no git, and "not a project" for a folder that is not one.
@@ -445,6 +471,8 @@ function ProjectRecord(props: {
         </dl>
         <Show when={!props.row.registered}>
           <p data-slot="operator-note">{language.t("operator.projects.notProjectHint")}</p>
+          <h3 data-slot="operator-panel-title">{language.t("operator.gate.make")}</h3>
+          <RegisterProject directory={props.row.key} onDone={() => undefined} />
         </Show>
       </RecordView>
     </Show>
