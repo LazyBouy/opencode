@@ -153,6 +153,10 @@ function registeredRoot(folder: string, registered: ReadonlyArray<string>) {
     .toSorted((a, b) => b.length - a.length)[0]
 }
 
+// A project's name: its own, else its folder's.
+const nameOf = (row: { name?: string; worktree: string }) =>
+  row.name ?? row.worktree.split("/").filter(Boolean).at(-1) ?? row.worktree
+
 // A project's tags: git or no git, and "not a project" for a folder that is not one.
 function ProjectTags(props: { row: Row }) {
   const language = useLanguage()
@@ -243,11 +247,11 @@ export default function ProjectsPage() {
           {
             id: "name",
             header: language.t("operator.column.name"),
-            value: (row) => row.name ?? row.worktree,
+            value: (row) => nameOf(row),
             cell: (row) => (
               <span class="flex flex-col">
                 <span class="flex items-center gap-2">
-                  {row.name ?? row.worktree.split("/").filter(Boolean).at(-1) ?? row.worktree}
+                  {nameOf(row)}
                   <ProjectTags row={row} />
                 </span>
                 <span data-slot="operator-cell-clamp">{row.worktree}</span>
@@ -337,7 +341,7 @@ function ProjectOverlay() {
         .filter((project) => project.ns === item.namespace.id)
         .map((project) => ({
           id: project.key,
-          label: project.name ?? project.worktree,
+          label: nameOf(project),
           detail: project.registered ? project.worktree : language.t("operator.projects.notProject"),
         })),
     })),
@@ -403,7 +407,7 @@ function ProjectRecord(props: {
   const locale = () => language.intl()
   const scoped = (page: string) => navigate(`/operator/${page}?dir=${encodeURIComponent(props.row.key)}`)
 
-  const name = () => props.row.name ?? props.row.worktree
+  const name = () => nameOf(props.row)
 
   return (
     <Show
@@ -433,7 +437,7 @@ function ProjectRecord(props: {
         <RecordView
           title={
             <>
-              {props.row.name ?? props.row.worktree}
+              {name()}
               <ProjectTags row={props.row} />
             </>
           }
@@ -532,7 +536,7 @@ function FolderSessions(props: { directory: string; onMoved: (key: string) => vo
   const settings = useProjectSettings()
   const [store, setStore] = createStore({ project: undefined as string | undefined, busy: false, error: "" })
   const projects = () => (settings.data ?? []).filter((item) => item.registered)
-  const nameOf = (key: string) => projects().find((item) => item.key === key)?.name ?? shortPath(key)
+  const labelOf = (key: string) => projects().find((item) => item.key === key)?.name ?? shortPath(key)
   const refresh = () =>
     Promise.all(
       ["project-summaries", "projects", "sessions"].map((key) =>
@@ -552,7 +556,7 @@ function FolderSessions(props: { directory: string; onMoved: (key: string) => vo
       const result = await api.client().operator.folderSessions.move({ directory: props.directory, project })
       const done = result.data ?? { moved: 0, archived: 0 }
       showToast({
-        title: language.t("operator.projects.moved", { count: done.moved, name: nameOf(project) }),
+        title: language.t("operator.projects.moved", { count: done.moved, name: labelOf(project) }),
         ...(done.archived
           ? { description: language.t("operator.projects.movedArchived", { count: done.archived }) }
           : {}),
@@ -578,7 +582,7 @@ function FolderSessions(props: { directory: string; onMoved: (key: string) => vo
             placeholder={language.t("operator.gate.chooseProject")}
             options={projects().map((item) => item.key)}
             current={store.project}
-            label={(key) => `${nameOf(key)} · ${shortPath(key)}`}
+            label={(key) => `${labelOf(key)} · ${shortPath(key)}`}
             onSelect={(key) => key && setStore("project", key)}
           />
         </Field>
