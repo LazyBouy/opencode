@@ -169,7 +169,15 @@ export function createPromptMock(projects: Array<{ key: string; name: string }>)
     agents: {},
     writes: [],
   }
-  const nameOf = (key: string) => projects.find((project) => project.key === key)?.name ?? key
+  const nameOf = (key: string) =>
+    projects.find((project) => project.key === key)?.name ?? key.split("/").filter(Boolean).at(-1) ?? key
+  // A namespace's own item, if there is one with this id.
+  const ownItem = (ns: string, list: "layers" | "profiles", id: string | undefined) => {
+    const found = (state.items[ns]?.[list] as Array<{ id: string; name: string }> | undefined)?.find(
+      (item) => item.id === id,
+    )
+    return found ? [{ list, found }] : []
+  }
   const json = (route: Route, body: unknown, status = 200) =>
     route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) })
   const invalid = (route: Route, message: string) =>
@@ -260,8 +268,23 @@ export function createPromptMock(projects: Array<{ key: string; name: string }>)
         purpose: input.purpose === "" ? undefined : (input.purpose ?? current.purpose),
         defaultProfile: input.defaultProfile === "" ? undefined : (input.defaultProfile ?? current.defaultProfile),
       }
-      if (!input.dryRun) state.projects[input.key] = next
-      return json(route, { project: { key: input.key, name: nameOf(input.key), ...next }, copied: [] })
+      // A move copies the project's own purpose and default profile that the target lacks.
+      const copied =
+        next.namespace === current.namespace
+          ? []
+          : [
+              ...ownItem(current.namespace, "layers", current.purpose),
+              ...ownItem(current.namespace, "profiles", current.defaultProfile),
+            ].filter((item) => !state.items[next.namespace]![item.list].some((there) => there.id === item.found.id))
+      if (!input.dryRun) {
+        for (const item of copied)
+          (state.items[next.namespace]![item.list] as unknown[]).push(structuredClone(item.found))
+        state.projects[input.key] = next
+      }
+      return json(route, {
+        project: { key: input.key, name: nameOf(input.key), ...next },
+        copied: copied.map((item) => ({ kind: item.list.slice(0, -1), id: item.found.id, name: item.found.name })),
+      })
     }
 
     const agent = url.pathname.match(/^\/operator\/agent-prompt\/([^/]+)$/)
