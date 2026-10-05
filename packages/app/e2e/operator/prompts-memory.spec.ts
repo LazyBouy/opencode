@@ -16,8 +16,8 @@ test.beforeEach(async ({ page }) => {
   })
 })
 
-test("an agent's Prompt tab shows every section with its source, and leads to its editor", async ({ page }) => {
-  const state = await mockOperator(page)
+test("an agent's Prompt tab shows every section with its source", async ({ page }) => {
+  await mockOperator(page)
   await page.goto(`/operator/agents/build${dir}&tab=prompt`)
 
   const sections = page.locator('[data-slot="operator-prompt-section"]')
@@ -39,31 +39,6 @@ test("an agent's Prompt tab shows every section with its source, and leads to it
   await expect(page.locator('[data-slot="operator-details"] [data-component="operator-code"]').first()).toHaveText(
     "Be terse.\nWe build editors.",
   )
-
-  state.profile.layers.push({
-    id: "terse",
-    name: "Terse",
-    section: "base",
-    overrides: "base.default",
-    projects: ["opencode"],
-    priority: 50,
-    enabled: true,
-    text: "Be terse.",
-    origin: "profile",
-  })
-  await sections.nth(0).getByRole("button", { name: "Edit" }).click()
-  await expect(page).toHaveURL(/\/operator\/profile\?view=layers&layer=terse/)
-  const editor = page.getByLabel("Text", { exact: true })
-  await expect(editor).toHaveValue("Be terse.")
-  await editor.fill("Be terse and kind.")
-  await page.getByRole("button", { name: "Save", exact: true }).click()
-  await expect.poll(() => state.profileWrites.length).toBe(1)
-  expect(state.profileWrites[0]).toMatchObject({ method: "PUT", path: "/operator/prompt-profile/layer/terse" })
-  expect(state.profileWrites[0].body).toMatchObject({
-    text: "Be terse and kind.",
-    overrides: "base.default",
-    projects: ["opencode"],
-  })
 })
 
 test("add project browses the workspace, creates a git folder and opens it", async ({ page }) => {

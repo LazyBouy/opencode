@@ -796,6 +796,39 @@ html[data-theme="iphi"] [data-component="operator-inspector"] {
   white-space: nowrap;
 }
 
+[data-component="operator-layers"] [data-slot="operator-layer"][draggable="true"] {
+  cursor: grab;
+}
+
+[data-component="operator-layers"] [data-slot="operator-layer"][data-dragging] {
+  opacity: 0.5;
+}
+
+/* A profile's slot: one panel per group type. */
+[data-slot="operator-slot"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--v2-border-border-muted);
+  border-radius: 10px;
+}
+
+[data-slot="operator-slot"][data-changed] {
+  border-color: var(--v2-border-border-base);
+  background: var(--v2-background-bg-layer-01);
+}
+
+[data-slot="operator-slot-title"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--v2-text-text-base);
+}
+
 /* Expandable text: built-in prompt texts, raw system messages, compaction summaries. */
 [data-slot="operator-details"] {
   display: flex;

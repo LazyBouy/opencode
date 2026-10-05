@@ -1,61 +1,46 @@
 import { useNavigate, useSearchParams } from "@solidjs/router"
-import { Icon } from "@opencode-ai/ui/icon"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { CheckboxV2 } from "@opencode-ai/ui/v2/checkbox-v2"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
+import type { OperatorNamespaceSummary } from "@opencode-ai/sdk/v2/client"
 import { useQuery } from "@tanstack/solid-query"
-import { createEffect, createMemo, For, on, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { useOperatorClient } from "../data"
+import { shortPath } from "../format"
+import { CopyToNamespace } from "../ui/copy-to"
 import { useConfirm } from "../ui/confirm"
 import { DataTable } from "../ui/data-table"
 import { Field } from "../ui/field"
-import { type Projects, ProjectScope, scopeLabel } from "../ui/project-scope"
-import { usePromptProfile, useProfileNames } from "./profile-data"
+import { useAllLayers, usePromptCatalog, useProfileNames } from "./profile-data"
+import { SlotEditor, type SlotValue } from "./profile-editor"
 import {
   type Catalog,
   copyName,
-  defaultFor,
-  GROUP_ORDER,
-  type GroupType,
-  move,
-  OPENCODE,
-  type Profile,
-  profileProblem,
-  REQUIRED,
+  copySlots,
+  type Layer,
+  PREFIX,
+  profileUsers,
+  regroup,
+  slotProblem,
 } from "./profile-model"
 
-const HELPER_AGENTS = ["title", "summary", "compaction"]
+const HELPER = `${PREFIX}profile.helper`
 
-type Draft = {
-  id?: string
-  name: string
-  projects: Projects
-  slots: Partial<Record<GroupType, string>>
-  custom: string[]
-  builtin: boolean
-  defaults: string[]
-}
-
-// Prompt profiles: the groups an agent's system prompt is built from, and where each is the default.
-export function ProfileDefinition() {
+// Profile Definition: profiles (a group and the layers in each of its slots), and what uses each.
+export function ProfileDefinition(props: { ns: string; namespaces: ReadonlyArray<OperatorNamespaceSummary> }) {
   const language = useLanguage()
-  const data = usePromptProfile()
   const names = useProfileNames()
-  const [params, setParams] = useSearchParams<{ profile?: string }>()
+  const data = usePromptCatalog(() => props.ns)
   const catalog = () => data.query.data
-  const where = (profile: Profile) =>
-    defaultFor(catalog()!, profile.id)
-      .map((key) =>
-        key === "global"
-          ? language.t("operator.profile.global")
-          : (catalog()!.projects.find((item) => item.key === key)?.name ?? key),
-      )
-      .join(", ")
+  const layers = useAllLayers(catalog)
+  const [params, setParams] = useSearchParams<{ profile?: string }>()
+  const groupName = (id: string) => {
+    const found = catalog()?.groups.find((group) => group.id === id)
+    return found ? names.group(found) : id
+  }
 
   return (
     <div data-slot="operator-columns">
@@ -77,27 +62,25 @@ export function ProfileDefinition() {
               id: "name",
               header: language.t("operator.column.name"),
               cell: (profile) => (
-                <span class="flex items-center gap-2">
+                <span class="flex items-center gap-2" data-selected={params.profile === profile.id ? "" : undefined}>
                   {names.profile(profile)}
                   <Show when={profile.builtin}>
                     <Tag>{language.t("operator.profile.builtin")}</Tag>
                   </Show>
+                  <Show when={catalog()?.namespace.defaultProfile === profile.id}>
+                    <Tag>{language.t("operator.profile.namespaceDefault")}</Tag>
+                  </Show>
                 </span>
               ),
             },
+            { id: "group", header: language.t("operator.profile.group"), cell: (profile) => groupName(profile.group) },
             {
-              id: "scope",
-              header: language.t("operator.profile.scope"),
-              cell: (profile) =>
-                scopeLabel(profile.projects, catalog()?.projects ?? [], language.t("operator.scope.all")),
+              id: "used",
+              header: language.t("operator.profile.usedBy"),
+              cell: (profile) => (
+                <span data-slot="operator-cell-clamp">{usedBy(catalog(), profile.id).join(", ")}</span>
+              ),
             },
-            {
-              id: "groups",
-              header: language.t("operator.profile.groups"),
-              align: "end",
-              cell: (profile) => profile.groups.length,
-            },
-            { id: "default", header: language.t("operator.profile.defaultFor"), cell: where },
           ]}
         />
       </section>
@@ -107,188 +90,110 @@ export function ProfileDefinition() {
           fallback={<p data-slot="operator-note">{language.t("operator.profile.pickProfile")}</p>}
         >
           {(loaded) => (
-            <ProfileEditor catalog={loaded()} id={params.profile!} onSelect={(id) => setParams({ profile: id })} />
+            <ProfilePanel
+              ns={props.ns}
+              namespaces={props.namespaces}
+              catalog={loaded()}
+              layers={layers()}
+              selected={params.profile!}
+              onSelect={(profile) => setParams({ profile })}
+            />
           )}
         </Show>
       </section>
     </div>
   )
+
+  // Short "used by" text for the table: agents that name the profile, projects whose default it is.
+  function usedBy(loaded: Catalog | undefined, id: string) {
+    if (!loaded) return []
+    const users = profileUsers(loaded, id)
+    return [
+      ...(users.namespace ? [language.t("operator.profile.namespaceDefault")] : []),
+      ...(id === HELPER ? [language.t("operator.profile.helperAgents")] : []),
+      ...users.projects.map((project) => language.t("operator.profile.projectName", { name: project.name })),
+      ...users.agents.map((agent) => agent.name),
+    ]
+  }
 }
 
-function ProfileEditor(props: { catalog: Catalog; id: string; onSelect: (id: string | undefined) => void }) {
+function ProfilePanel(props: {
+  ns: string
+  namespaces: ReadonlyArray<OperatorNamespaceSummary>
+  catalog: Catalog
+  layers: ReadonlyArray<Layer>
+  selected: string
+  onSelect: (profile: string | undefined) => void
+}) {
   const language = useLanguage()
   const navigate = useNavigate()
   const names = useProfileNames()
-  const data = usePromptProfile()
+  const data = usePromptCatalog(() => props.ns)
   const api = useOperatorClient()
+  const client = () => api.client().operator.namespace
   const confirm = useConfirm()
-  const typeOf = (id: string) => props.catalog.groups.find((group) => group.id === id)?.type
-
-  const draft = createMemo<Draft | undefined>(() => {
-    if (props.id === "new") {
-      const builtin = props.catalog.profiles.find((item) => item.id === "default")!
-      return { ...fromProfile(builtin), id: undefined, name: "", builtin: false, defaults: [] }
-    }
-    const copy = props.id.startsWith("copy:")
-    const found = props.catalog.profiles.find((item) => item.id === (copy ? props.id.slice(5) : props.id))
-    if (!found) return undefined
-    if (copy)
-      return {
-        ...fromProfile(found),
-        id: undefined,
-        name: copyName(
-          names.profile(found),
-          props.catalog.profiles.map((item) => item.name),
-        ),
-        builtin: false,
-        defaults: [],
+  const copying = () => props.selected.startsWith("copy:")
+  const fresh = () => props.selected === "new" || copying()
+  const source = createMemo(() =>
+    props.catalog.profiles.find((item) => item.id === (copying() ? props.selected.slice(5) : props.selected)),
+  )
+  const [store, setStore] = createStore({ name: "", value: { group: "", slots: {} } as SlotValue, busy: false })
+  createEffect(
+    on([() => props.selected, source], () => {
+      const found = source()
+      if (props.selected === "new") {
+        const group = props.catalog.groups.find((item) => item.id === `${PREFIX}group.spec`) ?? props.catalog.groups[0]
+        return setStore({ name: "", value: { group: group.id, slots: regroup({}, group.types).slots } })
       }
-    return fromProfile(found)
-  })
-  const [store, setStore] = createStore({ draft: draft(), busy: false })
-  createEffect(on(draft, (next) => setStore({ draft: next })))
-
-  function fromProfile(profile: Profile): Draft {
-    const slots: Partial<Record<GroupType, string>> = {}
-    profile.groups.forEach((id) => {
-      const type = typeOf(id)
-      if (type && type !== "custom") slots[type] = id
-    })
-    return {
-      id: profile.id,
-      name: profile.name,
-      projects: profile.projects,
-      slots,
-      custom: profile.groups.filter((id) => typeOf(id) === "custom"),
-      builtin: profile.builtin,
-      defaults: defaultFor(props.catalog, profile.id),
-    }
-  }
-
-  const groups = () => {
-    const current = store.draft
-    if (!current) return []
-    return GROUP_ORDER.flatMap((type) =>
-      type === "custom" ? current.custom : current.slots[type] ? [current.slots[type]!] : [],
-    )
-  }
-  const problem = () => profileProblem(props.catalog, groups())
-  const ofType = (type: GroupType) => props.catalog.groups.filter((group) => group.type === type)
-
-  // Agents of every known project, to show who uses the profile.
-  const agents = useQuery(() => ({
-    queryKey: api.key(
-      "profile-agents",
-      props.catalog.projects.map((item) => item.key),
-    ),
-    queryFn: async () => {
-      const folders = props.catalog.projects.filter((item) => item.key !== OPENCODE)
-      const lists = await Promise.all(
-        folders.map((project) =>
-          api
-            .client()
-            .operator.agent.list({ directory: project.key })
-            .then((result) =>
-              (result.data ?? []).map((agent) => ({
-                name: agent.name,
-                project: agent.source.kind === "builtin" ? OPENCODE : project.key,
-                folder: project.key,
-                profile: (agent.settings.promptProfile as { profile?: string } | undefined)?.profile,
-              })),
+      if (!found) return
+      setStore({
+        name: copying()
+          ? copyName(
+              names.profile(found),
+              props.catalog.profiles.map((item) => item.name),
             )
-            .catch(() => []),
-        ),
-      )
-      const seen = new Set<string>()
-      return lists.flat().filter((agent) => {
-        const key = `${agent.project}:${agent.name}`
-        if (seen.has(key)) return false
-        seen.add(key)
-        return true
+          : found.name,
+        value: { group: found.group, slots: copySlots(found.slots) },
       })
-    },
-  }))
-  const usedBy = createMemo(() => {
-    const id = store.draft?.id
-    if (!id) return []
-    const defaults = props.catalog.defaults
-    return (agents.data ?? []).filter(
-      (agent) =>
-        (agent.profile ??
-          defaults.projects[agent.project] ??
-          defaults.global ??
-          (HELPER_AGENTS.includes(agent.name) ? "helper" : "default")) === id,
-    )
-  })
+    }),
+  )
+  const readOnly = () => !fresh() && !!source()?.builtin
+  const problem = () => slotProblem(props.catalog, store.value.slots)
+  const users = createMemo(() => (fresh() ? undefined : profileUsers(props.catalog, props.selected)))
 
   const save = async () => {
-    const current = store.draft
-    if (!current) return
     setStore("busy", true)
-    const client = api.client().operator.promptProfile
-    const saved = current.builtin
-      ? { id: current.id! }
-      : await (
-          current.id
-            ? client.profile.update({
-                id: current.id,
-                name: current.name.trim(),
-                projects: current.projects === "*" ? ("*" as const) : [...current.projects],
-                groups: groups(),
-              })
-            : client.profile.create({
-                name: current.name.trim(),
-                projects: current.projects === "*" ? ("*" as const) : [...current.projects],
-                groups: groups(),
-              })
-        )
-          .then((result) => result.data)
-          .catch((error: unknown) => {
-            data.fail(error)
-            return undefined
-          })
-    if (!saved) return setStore("busy", false)
-    const before = defaultFor(props.catalog, saved.id)
-    const changed = before.length !== current.defaults.length || before.some((key) => !current.defaults.includes(key))
-    const done = changed
-      ? await client
-          .defaults({
-            ...(current.defaults.includes("global")
-              ? { global: saved.id }
-              : props.catalog.defaults.global && props.catalog.defaults.global !== saved.id
-                ? { global: props.catalog.defaults.global }
-                : {}),
-            projects: Object.fromEntries([
-              ...Object.entries(props.catalog.defaults.projects).filter(
-                (pair) => pair[1] !== saved.id && !current.defaults.includes(pair[0]),
-              ),
-              ...current.defaults.filter((key) => key !== "global").map((key) => [key, saved.id] as const),
-            ]),
-          })
-          .then(() => true)
-          .catch((error: unknown) => {
-            data.fail(error)
-            return false
-          })
-      : true
-    await data.refresh()
-    setStore("busy", false)
-    if (done) props.onSelect(saved.id)
+    const group = props.catalog.groups.find((item) => item.id === store.value.group)
+    const body = {
+      ns: props.ns,
+      name: store.name.trim(),
+      group: store.value.group,
+      slots: group ? regroup(store.value.slots, group.types).slots : store.value.slots,
+    }
+    await (fresh() ? client().profile.create(body) : client().profile.update({ ...body, id: props.selected }))
+      .then(async (result) => {
+        await data.refresh()
+        props.onSelect(result.data?.id)
+      })
+      .catch(data.fail)
+      .finally(() => setStore("busy", false))
   }
-
+  const makeDefault = async () => {
+    await client()
+      .update({ ns: props.ns, defaultProfile: props.selected })
+      .then(() => data.refresh())
+      .catch(data.fail)
+  }
   const remove = async () => {
-    const current = store.draft
-    if (!current?.id) return
     const ok = await confirm({
-      title: language.t("operator.profile.deleteProfileTitle", { name: current.name }),
+      title: language.t("operator.profile.deleteTitle", { name: store.name }),
       description: language.t("operator.profile.deleteProfileBody"),
       confirm: language.t("operator.agent.delete"),
       danger: true,
     })
     if (!ok) return
-    await api
-      .client()
-      .operator.promptProfile.profile.remove({ id: current.id })
+    await client()
+      .profile.remove({ ns: props.ns, id: props.selected })
       .then(async () => {
         await data.refresh()
         props.onSelect(undefined)
@@ -296,214 +201,184 @@ function ProfileEditor(props: { catalog: Catalog; id: string; onSelect: (id: str
       .catch(data.fail)
   }
 
-  const toggleDefault = (key: string, on: boolean) =>
-    setStore("draft", "defaults", (list) => (on ? [...list, key] : list.filter((item) => item !== key)))
-
   return (
-    <Show when={store.draft} fallback={<p data-slot="operator-note">{language.t("operator.profile.noSuchProfile")}</p>}>
-      {(current) => (
-        <>
-          <div data-slot="operator-panel-head">
-            <h2 data-slot="operator-panel-title">
-              {current().id
-                ? names.profile({ id: current().id!, name: current().name, builtin: current().builtin })
-                : language.t("operator.profile.newProfile")}
-            </h2>
-            <Show when={current().id}>
-              <ButtonV2 size="small" variant="outline" onClick={() => props.onSelect(`copy:${current().id}`)}>
-                {language.t("operator.profile.duplicate")}
-              </ButtonV2>
-            </Show>
-          </div>
-          <Show when={current().builtin}>
-            <p data-slot="operator-note">{language.t("operator.profile.builtinProfile")}</p>
+    <Show
+      when={fresh() || source()}
+      fallback={<p data-slot="operator-note">{language.t("operator.profile.noSuchProfile")}</p>}
+    >
+      <div data-slot="operator-panel-head">
+        <h2 data-slot="operator-panel-title">
+          {props.selected === "new"
+            ? language.t("operator.profile.newProfile")
+            : readOnly()
+              ? names.profile(source()!)
+              : store.name || language.t("operator.profile.newProfile")}
+        </h2>
+        <Show when={!fresh()}>
+          <ButtonV2 size="small" variant="outline" onClick={() => props.onSelect(`copy:${props.selected}`)}>
+            {language.t("operator.profile.duplicate")}
+          </ButtonV2>
+        </Show>
+      </div>
+      <Show when={readOnly()}>
+        <p data-slot="operator-note">{language.t("operator.profile.builtinProfile")}</p>
+      </Show>
+      <div data-component="operator-form">
+        <Show when={!readOnly()}>
+          <Field label={language.t("operator.agentForm.name")}>
+            <TextInputV2
+              appearance="base"
+              value={store.name}
+              onInput={(event) => setStore("name", event.currentTarget.value)}
+            />
+          </Field>
+        </Show>
+        <SlotEditor
+          ns={props.ns}
+          catalog={props.catalog}
+          layers={props.layers}
+          value={store.value}
+          disabled={readOnly()}
+          onChange={(value) => setStore("value", value)}
+        />
+      </div>
+      <div data-slot="operator-actions">
+        <Show when={!fresh()}>
+          <Show when={!readOnly()}>
+            <CopyToNamespace ns={props.ns} kind="profile" id={props.selected} namespaces={props.namespaces} />
           </Show>
-          <div data-component="operator-form">
-            <Field label={language.t("operator.agentForm.name")}>
-              <TextInputV2
-                appearance="base"
-                value={current().name}
-                disabled={current().builtin}
-                onInput={(event) => setStore("draft", "name", event.currentTarget.value)}
-              />
-            </Field>
-            <Field group label={language.t("operator.profile.scope")}>
-              <ProjectScope
-                value={current().projects}
-                projects={props.catalog.projects}
-                disabled={current().builtin}
-                onChange={(value) => setStore("draft", "projects", value)}
-              />
-            </Field>
-            <For each={GROUP_ORDER}>
-              {(type) => (
-                <Show
-                  when={type !== "custom"}
-                  fallback={
-                    <Field group label={language.t("operator.profile.customGroups")}>
-                      <ol data-component="operator-layers">
-                        <For each={current().custom}>
-                          {(id, index) => (
-                            <li data-slot="operator-layer">
-                              <span data-slot="operator-layer-open">
-                                <span data-slot="operator-layer-name">
-                                  {names.group(
-                                    props.catalog.groups.find((group) => group.id === id) ?? {
-                                      id,
-                                      name: id,
-                                      builtin: false,
-                                    },
-                                  )}
-                                </span>
-                              </span>
-                              <Show when={!current().builtin}>
-                                <IconButtonV2
-                                  variant="ghost-muted"
-                                  size="small"
-                                  aria-label={language.t("operator.profile.up", { name: id })}
-                                  icon={<Icon name="arrow-up" />}
-                                  onClick={() => setStore("draft", "custom", move(current().custom, index(), -1))}
-                                />
-                                <IconButtonV2
-                                  variant="ghost-muted"
-                                  size="small"
-                                  aria-label={language.t("operator.profile.down", { name: id })}
-                                  icon={<Icon name="chevron-down" />}
-                                  onClick={() => setStore("draft", "custom", move(current().custom, index(), 1))}
-                                />
-                                <IconButtonV2
-                                  variant="ghost-muted"
-                                  size="small"
-                                  aria-label={language.t("operator.profile.removeFrom", { name: id })}
-                                  icon={<Icon name="close-small" />}
-                                  onClick={() =>
-                                    setStore(
-                                      "draft",
-                                      "custom",
-                                      current().custom.filter((item) => item !== id),
-                                    )
-                                  }
-                                />
-                              </Show>
-                            </li>
-                          )}
-                        </For>
-                      </ol>
-                      <Show when={!current().builtin}>
-                        <SelectV2<string>
-                          appearance="base"
-                          aria-label={language.t("operator.profile.addGroup")}
-                          placeholder={language.t("operator.profile.addGroup")}
-                          options={ofType("custom")
-                            .map((group) => group.id)
-                            .filter((id) => !current().custom.includes(id))}
-                          label={(id) => names.group(props.catalog.groups.find((group) => group.id === id)!)}
-                          onSelect={(id) => id && setStore("draft", "custom", [...current().custom, id])}
-                        />
-                      </Show>
-                    </Field>
-                  }
-                >
-                  <Field group label={names.type(type)}>
-                    <SelectV2<string>
-                      appearance="base"
-                      aria-label={names.type(type)}
-                      disabled={current().builtin}
-                      options={[...(REQUIRED.includes(type) ? [] : [""]), ...ofType(type).map((group) => group.id)]}
-                      current={current().slots[type] ?? ""}
-                      label={(id) =>
-                        id
-                          ? names.group(props.catalog.groups.find((group) => group.id === id)!)
-                          : language.t("operator.profile.none")
-                      }
-                      onSelect={(id) => setStore("draft", "slots", type, id || undefined)}
-                    />
-                  </Field>
-                </Show>
-              )}
-            </For>
-            <Field
-              group
-              label={language.t("operator.profile.defaultFor")}
-              hint={language.t("operator.profile.defaultHint")}
-            >
-              <div data-slot="operator-scope-list">
-                <CheckboxV2
-                  label={language.t("operator.profile.global")}
-                  checked={current().defaults.includes("global")}
-                  onChange={(checked: boolean) => toggleDefault("global", checked)}
-                />
-                <For each={props.catalog.projects}>
-                  {(project) => (
-                    <CheckboxV2
-                      label={project.name}
-                      checked={current().defaults.includes(project.key)}
-                      onChange={(checked: boolean) => toggleDefault(project.key, checked)}
-                    />
-                  )}
-                </For>
-              </div>
-            </Field>
-          </div>
-          <Show when={problem()}>
-            {(found) => (
-              <p data-slot="operator-error" role="alert">
-                {found().kind === "required"
-                  ? language.t("operator.profile.needsGroup", { type: names.type(found().type!) })
-                  : language.t("operator.profile.repeated", { layer: found().layer! })}
-              </p>
-            )}
-          </Show>
-          <div data-slot="operator-actions">
-            <Show when={current().id && !current().builtin}>
-              <ButtonV2 variant="danger" disabled={store.busy} onClick={() => void remove()}>
-                {language.t("operator.agent.delete")}
-              </ButtonV2>
-            </Show>
-            <ButtonV2
-              variant="contrast"
-              disabled={store.busy || !current().name.trim() || !!problem()}
-              onClick={() => void save()}
-            >
-              {language.t("operator.config.save")}
+          <Show when={props.catalog.namespace.defaultProfile !== props.selected}>
+            <ButtonV2 variant="neutral" onClick={() => void makeDefault()}>
+              {language.t("operator.profile.makeDefault")}
             </ButtonV2>
-          </div>
-          <Show when={current().id}>
+          </Show>
+          <Show when={!readOnly()}>
+            <ButtonV2 variant="danger" disabled={store.busy} onClick={() => void remove()}>
+              {language.t("operator.agent.delete")}
+            </ButtonV2>
+          </Show>
+        </Show>
+        <Show when={!readOnly()}>
+          <ButtonV2
+            variant="contrast"
+            disabled={store.busy || !store.name.trim() || !!problem()}
+            onClick={() => void save()}
+          >
+            {language.t("operator.config.save")}
+          </ButtonV2>
+        </Show>
+      </div>
+      <Show when={users()}>
+        {(found) => (
+          <>
             <h3 data-slot="operator-panel-title">{language.t("operator.profile.usedBy")}</h3>
             <Show
-              when={usedBy().length}
+              when={found().namespace || found().projects.length || found().agents.length || props.selected === HELPER}
               fallback={<p data-slot="operator-note">{language.t("operator.profile.unused")}</p>}
             >
               <ul data-component="operator-list">
-                <For each={usedBy()}>
+                <Show when={found().namespace}>
+                  <li>{language.t("operator.profile.defaultOf", { namespace: props.catalog.namespace.name })}</li>
+                </Show>
+                <Show when={props.selected === HELPER}>
+                  <li>{language.t("operator.profile.helperAgents")}</li>
+                </Show>
+                <For each={found().projects}>
+                  {(project) => (
+                    <li>
+                      {language.t("operator.profile.projectDefault", { name: project.name })}
+                      <span data-slot="operator-note"> · {shortPath(project.key)}</span>
+                    </li>
+                  )}
+                </For>
+                <For each={found().agents}>
                   {(agent) => (
                     <li>
                       <span>
                         {agent.name}
-                        <span data-slot="operator-note">
-                          {" "}
-                          · {props.catalog.projects.find((item) => item.key === agent.project)?.name ?? agent.project}
-                        </span>
+                        <span data-slot="operator-note"> · {shortPath(agent.project)}</span>
                       </span>
                       <button
                         type="button"
                         data-slot="operator-link"
                         onClick={() =>
                           navigate(
-                            `/operator/agents/${encodeURIComponent(agent.name)}?dir=${encodeURIComponent(agent.folder)}&tab=prompt`,
+                            `/operator/agents/${encodeURIComponent(agent.name)}?dir=${encodeURIComponent(agent.project)}&tab=prompt`,
                           )
                         }
                       >
-                        {language.t("operator.profile.preview")}
+                        {language.t("operator.profile.openAgent")}
                       </button>
                     </li>
                   )}
                 </For>
               </ul>
             </Show>
-          </Show>
-        </>
-      )}
+            <PreviewOnAgent catalog={props.catalog} profile={props.selected} />
+          </>
+        )}
+      </Show>
+    </Show>
+  )
+}
+
+// "Preview on an agent": opens an agent's Prompt tab showing what this profile would send for it.
+function PreviewOnAgent(props: { catalog: Catalog; profile: string }) {
+  const language = useLanguage()
+  const navigate = useNavigate()
+  const api = useOperatorClient()
+  const [project, setProject] = createSignal<string>()
+  const [agent, setAgent] = createSignal<string>()
+  const chosen = () => project() ?? props.catalog.projects[0]?.key
+  const agents = useQuery(() => ({
+    queryKey: api.key("profile-preview-agents", chosen()),
+    enabled: !!chosen(),
+    queryFn: () =>
+      api
+        .client()
+        .operator.agent.list({ directory: chosen() })
+        .then((result) => (result.data ?? []).map((item) => item.name)),
+  }))
+  const name = () => agent() ?? (agents.data?.includes("build") ? "build" : agents.data?.[0])
+
+  return (
+    <Show
+      when={props.catalog.projects.length}
+      fallback={<p data-slot="operator-note">{language.t("operator.profile.previewNoProject")}</p>}
+    >
+      <h3 data-slot="operator-panel-title">{language.t("operator.profile.previewOn")}</h3>
+      <div class="flex items-center gap-2 flex-wrap">
+        <SelectV2<string>
+          appearance="base"
+          aria-label={language.t("operator.profile.previewProject")}
+          options={props.catalog.projects.map((item) => item.key)}
+          current={chosen()}
+          label={(key) => props.catalog.projects.find((item) => item.key === key)?.name ?? shortPath(key)}
+          onSelect={(key) => {
+            if (!key) return
+            setProject(key)
+            setAgent(undefined)
+          }}
+        />
+        <SelectV2<string>
+          appearance="base"
+          aria-label={language.t("operator.profile.previewAgent")}
+          options={agents.data ?? []}
+          current={name()}
+          onSelect={(item) => item && setAgent(item)}
+        />
+        <ButtonV2
+          variant="neutral"
+          disabled={!chosen() || !name()}
+          onClick={() =>
+            navigate(
+              `/operator/agents/${encodeURIComponent(name()!)}?dir=${encodeURIComponent(chosen())}&tab=prompt&previewProfile=${encodeURIComponent(props.profile)}`,
+            )
+          }
+        >
+          {language.t("operator.profile.preview")}
+        </ButtonV2>
+      </div>
     </Show>
   )
 }

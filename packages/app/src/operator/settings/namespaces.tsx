@@ -93,7 +93,7 @@ export const SettingsNamespacesV2: Component = () => {
         <h2 class="settings-v2-tab-title">{language.t("settings.namespaces.title")}</h2>
         <div class="flex items-center justify-between gap-3 w-full">
           <p class="text-12-regular text-v2-text-text-muted">{language.t("settings.namespaces.description")}</p>
-          <ButtonV2 size="small" variant="outline" onClick={() => setStore("selected", "new")}>
+          <ButtonV2 size="small" variant="outline" class="shrink-0" onClick={() => setStore("selected", "new")}>
             {language.t("settings.namespaces.new")}
           </ButtonV2>
         </div>

@@ -1,129 +1,105 @@
 import type {
+  OperatorPromptCatalog,
   OperatorPromptGroup,
   OperatorPromptGroupType,
   OperatorPromptLayer,
-  OperatorPromptLayerSection,
   OperatorPromptProfile,
-  OperatorPromptProfileCatalog,
+  OperatorPromptSection,
 } from "@opencode-ai/sdk/v2/client"
 
-// Pure rules for the Prompt Profile pages, mirroring the server's (operator/profile.ts) so the editors
-// only offer what a save accepts.
+// Pure rules for the Prompt Profile pages, mirroring the server's (operator/profile.ts), so the
+// editors only offer what a save accepts.
 
-export type Catalog = OperatorPromptProfileCatalog
+export type Catalog = OperatorPromptCatalog
 export type Layer = OperatorPromptLayer
 export type Group = OperatorPromptGroup
-export type Profile = OperatorPromptProfile
-export type Section = OperatorPromptLayerSection
 export type GroupType = OperatorPromptGroupType
-export type Projects = Layer["projects"]
+export type Profile = OperatorPromptProfile
+export type Section = OperatorPromptSection
+export type Slots = Record<string, string[]>
 
 export const OPENCODE = "opencode"
+export const PREFIX = "opencode:"
+export const REQUIRED = ["purpose", "role", "identity"]
+export const BUILTIN_TYPES = ["platform", "purpose", "role", "identity", "capabilities", "additional", "output"]
 
-// Layer Definition's sections, in order.
-export const SECTIONS: readonly Section[] = [
-  "base",
-  "purpose",
-  "role",
-  "identity",
-  "tool",
-  "generated",
-  "output",
-  "custom",
-  "message",
+// Layer Definition's sections, in order, with the type a new layer in each gets.
+export const SECTIONS: ReadonlyArray<{ id: Section; type?: string }> = [
+  { id: "base", type: "identity" },
+  { id: "purpose", type: "purpose" },
+  { id: "role", type: "role" },
+  { id: "identity", type: "identity" },
+  { id: "tool", type: "capabilities" },
+  { id: "generated" },
+  { id: "output", type: "output" },
+  { id: "custom", type: "identity" },
+  { id: "message", type: "platform" },
 ]
-
-// Group types in the order a profile holds them.
-export const GROUP_ORDER: readonly GroupType[] = [
-  "platform",
-  "purpose",
-  "role",
-  "identity",
-  "capabilities",
-  "custom",
-  "output",
-  "tool",
-]
-export const REQUIRED: readonly GroupType[] = ["purpose", "role", "identity"]
-export const MANDATORY = ["purpose.org", "purpose.goal"]
-
-// Sections whose layers you write; the others hold OpenCode's texts, which you override.
+// Sections people write layers in.
 export const WRITTEN: readonly Section[] = ["purpose", "role", "identity", "custom"]
 
-export function isBuiltinText(layer: Layer) {
-  return layer.origin === "builtin"
+export function isBuiltin(id: string) {
+  return id.startsWith(PREFIX)
 }
 
-export function isReadOnly(layer: Layer) {
-  return (
-    layer.origin === "builtin" ||
-    layer.origin === "slot" ||
-    layer.origin === "collection" ||
-    layer.origin === "generated"
-  )
+// Where a layer comes from: OpenCode, a copy of one of OpenCode's texts, or this namespace.
+export function origin(layer: Layer): "opencode" | "copy" | "yours" {
+  if (layer.origin !== "user") return "opencode"
+  return layer.replaces ? "copy" : "yours"
 }
 
-// The layers a group of this type can hold (the server refuses others).
-export function allowedIn(type: GroupType, layer: Layer) {
-  if (layer.section === "message") return false
-  if (type === "tool") return layer.section === "tool"
-  if (layer.section === "tool") return false
-  if (type === "capabilities" || type === "output") return layer.section === "generated" || layer.section === "output"
-  if (type === "platform") return layer.section === "custom"
-  if (MANDATORY.includes(layer.id)) return type === "purpose"
-  return true
+// Layers a slot of this type can hold: this namespace's and the built-ins of that type. Purpose holds
+// none (it is automatic).
+export function layersOfType(layers: ReadonlyArray<Layer>, type: string) {
+  if (type === "purpose") return []
+  return layers.filter((layer) => layer.type === type && layer.origin !== "automatic")
 }
 
-export function inScope(projects: Projects, project: string) {
-  return projects === "*" || projects.includes(project)
+// The profiles whose slots hold a layer.
+export function profilesUsing(catalog: Catalog, layer: string) {
+  return catalog.profiles.filter((profile) => Object.values(profile.slots).flat().includes(layer))
 }
 
-// Overrides of a built-in text, most specific first.
-export function overridesOf(catalog: Catalog, id: string) {
-  return catalog.layers
-    .filter((layer) => layer.overrides === id)
-    .toSorted((a, b) => (a.projects === "*" ? 1 : 0) - (b.projects === "*" ? 1 : 0) || a.priority - b.priority)
+// What uses a profile: agents that name it, projects whose default it is, the namespace default.
+export function profileUsers(catalog: Catalog, profile: string) {
+  return {
+    agents: catalog.agents.filter((agent) => agent.profile === profile),
+    projects: catalog.projects.filter((project) => project.defaultProfile === profile),
+    namespace: catalog.namespace.defaultProfile === profile,
+  }
 }
 
-// A project's goal layer, if it has one.
-export function goalOf(catalog: Catalog, project: string) {
-  return catalog.layers.find(
-    (layer) => layer.purpose === "goal" && layer.projects !== "*" && layer.projects.includes(project),
-  )
+// A profile's slots for another group: slots of types the group keeps stay, the others are dropped.
+export function regroup(slots: Slots, types: ReadonlyArray<string>) {
+  return {
+    slots: Object.fromEntries(types.filter((type) => type !== "purpose").map((type) => [type, slots[type] ?? []])),
+    dropped: Object.keys(slots).filter((type) => !types.includes(type) && (slots[type] ?? []).length > 0),
+  }
 }
 
-// The groups that list a layer.
-export function groupsUsing(catalog: Catalog, id: string) {
-  return catalog.groups.filter((group) => group.layers.includes(id))
+// A plain copy of slots (the catalog's are read-only store values).
+export function copySlots(slots: Slots): Slots {
+  return Object.fromEntries(Object.entries(slots).map(([type, ids]) => [type, [...ids]]))
 }
 
-// Profiles that are the default somewhere: "global", or project keys.
-export function defaultFor(catalog: Catalog, profile: string) {
-  return [
-    ...(catalog.defaults.global === profile ? ["global"] : []),
-    ...Object.entries(catalog.defaults.projects)
-      .filter((pair) => pair[1] === profile)
-      .map((pair) => pair[0]),
-  ]
+// Why a profile's slots cannot be saved, or undefined.
+export function slotProblem(catalog: Catalog, slots: Slots) {
+  const all = Object.values(slots).flat()
+  const repeated = all.find((id, index) => all.indexOf(id) !== index)
+  if (repeated) return { kind: "repeated" as const, layer: repeated }
+  const replaced = all
+    .map((id) => catalog.layers.find((layer) => layer.id === id)?.replaces)
+    .filter((id): id is string => id !== undefined)
+  const twice = replaced.find((id, index) => replaced.indexOf(id) !== index)
+  if (twice) return { kind: "copies" as const, layer: twice }
+  return undefined
 }
 
-// A profile's groups after a change to the group of one type; Custom groups keep their order.
-export function profileGroups(catalog: Catalog, groups: ReadonlyArray<string>) {
-  const types = new Map(catalog.groups.map((group) => [group.id, group.type]))
-  return groups.toSorted(
-    (a, b) => GROUP_ORDER.indexOf(types.get(a) ?? "custom") - GROUP_ORDER.indexOf(types.get(b) ?? "custom"),
-  )
-}
-
-// Why a profile cannot be saved, or undefined.
-export function profileProblem(catalog: Catalog, groups: ReadonlyArray<string>) {
-  const found = groups.map((id) => catalog.groups.find((group) => group.id === id))
-  const types = found.map((group) => group?.type)
+// Why a group cannot be saved, or undefined.
+export function groupProblem(types: ReadonlyArray<string>) {
   const absent = REQUIRED.find((type) => !types.includes(type))
   if (absent) return { kind: "required" as const, type: absent }
-  const layers = found.flatMap((group) => group?.layers ?? [])
-  const repeated = layers.find((id, index) => layers.indexOf(id) !== index)
-  if (repeated) return { kind: "repeated" as const, layer: repeated }
+  if (new Set(types).size !== types.length) return { kind: "repeated" as const }
   return undefined
 }
 
@@ -131,13 +107,18 @@ export function profileProblem(catalog: Catalog, groups: ReadonlyArray<string>) 
 export function move<T>(items: ReadonlyArray<T>, index: number, by: number) {
   const target = index + by
   if (target < 0 || target >= items.length) return [...items]
+  return moveTo(items, index, target)
+}
+
+// Moves the item at `from` to `to` (drag and drop).
+export function moveTo<T>(items: ReadonlyArray<T>, from: number, to: number) {
   const next = [...items]
-  const [item] = next.splice(index, 1)
-  next.splice(target, 0, item!)
+  const [item] = next.splice(from, 1)
+  next.splice(to, 0, item)
   return next
 }
 
-// An id for a copy, unique among `taken`.
+// A name for a copy, unique among `taken`.
 export function copyName(name: string, taken: ReadonlyArray<string>) {
   const base = `${name} copy`
   const free = (index: number): string => {
