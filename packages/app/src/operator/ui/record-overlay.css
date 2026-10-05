@@ -108,6 +108,7 @@
 
 [data-component="record-fields"] {
   display: grid;
+  align-items: start;
   grid-template-columns: minmax(120px, 180px) minmax(0, 1fr);
   gap: 10px 16px;
   margin: 0;
