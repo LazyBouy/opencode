@@ -20,7 +20,19 @@ import { NamespaceAction } from "../ui/namespace-picker"
 import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOverlay } from "../ui/record-overlay"
 import { requestError } from "./config-helpers"
 import { usePromptRefresh, useProfileNames, useScopeCatalogs, useToolLayers } from "./profile-data"
-import { ALL, type Catalog, type Layer, origin, PREFIX, type Section, SECTIONS, WRITTEN } from "./profile-model"
+import {
+  ALL,
+  type Catalog,
+  DYNAMIC,
+  isWrittenDynamic,
+  type Layer,
+  origin,
+  PREFIX,
+  type Section,
+  SECTIONS,
+  WRITTEN,
+} from "./profile-model"
+import { PurposeDraft } from "./purpose-draft"
 
 // Each Layer Definition section's icon in the overlay's menu.
 const ICONS: Record<Section, OverlayBlock["icon"]> = {
@@ -311,13 +323,14 @@ function LayerRecord(props: {
   const words = useLayerWords(() => props.layers.map((item) => ({ ns: props.ns, item })))
   const creating = () => SECTIONS.find((item) => `new:${item.id}` === props.selected)?.id
   const layer = createMemo(() => props.layers.find((item) => item.id === props.selected))
-  const [store, setStore] = createStore({ name: "", type: "", text: "", busy: false, editing: false })
+  const [store, setStore] = createStore({ name: "", type: "", text: "", prompt: "", busy: false, editing: false })
   const reset = () => {
     const found = layer()
     setStore({
       name: found?.name ?? "",
       type: found?.type ?? SECTIONS.find((item) => item.id === creating())?.type ?? "identity",
       text: found?.text ?? "",
+      prompt: found?.prompt ?? "",
       editing: !!creating() || (props.edit && found?.origin === "user"),
     })
   }
@@ -326,8 +339,20 @@ function LayerRecord(props: {
   createEffect(on(record, reset))
   createEffect(() => props.onEditing(store.editing))
   const editable = () => layer()?.origin === "user"
-  // OpenCode's texts filled in per request.
-  const dynamic = () => layer()?.origin === "slot" || layer()?.origin === "generated"
+  // Texts filled in per request: OpenCode's, and yours (written by the dynamic generator).
+  const dynamic = () => layer()?.origin === "slot" || layer()?.origin === "generated" || isWrittenDynamic(layer())
+  // The form edits a prompt instead of a text: a Dynamic layer of yours.
+  const prompted = () => store.type === DYNAMIC
+  // The projects a Project Purpose is drafted from: the ones it is linked to, then the namespace's;
+  // every known project when the namespace has none.
+  const draftProjects = () => {
+    const keys = [...linked(), ...props.catalog.projects]
+      .map((project) => project.key)
+      .filter((key, index, all) => all.indexOf(key) === index)
+    return keys.length ? keys : undefined
+  }
+  // A Project Purpose can be drafted by the purpose generator.
+  const purpose = () => (creating() ?? layer()?.section) === "purpose"
   // A layer's type changes only in Custom; copies keep their built-in's type.
   const typeEditable = () => (creating() ?? layer()?.section) === "custom" && !layer()?.replaces
   const types = () => props.catalog.types.filter((type) => type.id !== "purpose")
@@ -342,7 +367,13 @@ function LayerRecord(props: {
   }
   const save = async () => {
     setStore("busy", true)
-    const body = { ns: props.ns!, name: store.name.trim(), type: store.type, text: store.text }
+    const body = {
+      ns: props.ns!,
+      name: store.name.trim(),
+      type: store.type,
+      text: prompted() ? "" : store.text,
+      ...(prompted() ? { prompt: store.prompt.trim() } : {}),
+    }
     await (
       creating()
         ? client().layer.create({ ...body, section: creating() })
@@ -409,18 +440,39 @@ function LayerRecord(props: {
           />
         </Show>
       </Field>
-      <Field
-        label={language.t("operator.prompts.text")}
-        hint={language.t("operator.help.layerText")}
-        note={language.t("operator.profile.chars", { count: store.text.length })}
+      <Show
+        when={!prompted()}
+        fallback={
+          <Field
+            label={language.t("operator.profile.prompt")}
+            hint={language.t("operator.help.layerPrompt")}
+            note={language.t("operator.profile.chars", { count: store.prompt.length })}
+          >
+            <TextareaV2
+              class="operator-editor"
+              rows={8}
+              value={store.prompt}
+              onInput={(event) => setStore("prompt", event.currentTarget.value)}
+            />
+          </Field>
+        }
       >
-        <TextareaV2
-          class="operator-editor"
-          rows={14}
-          value={store.text}
-          onInput={(event) => setStore("text", event.currentTarget.value)}
-        />
-      </Field>
+        <Show when={purpose()}>
+          <PurposeDraft kind="project" projects={draftProjects()} onDraft={(text) => setStore("text", text)} />
+        </Show>
+        <Field
+          label={language.t("operator.prompts.text")}
+          hint={language.t("operator.help.layerText")}
+          note={language.t("operator.profile.chars", { count: store.text.length })}
+        >
+          <TextareaV2
+            class="operator-editor"
+            rows={14}
+            value={store.text}
+            onInput={(event) => setStore("text", event.currentTarget.value)}
+          />
+        </Field>
+      </Show>
     </div>
   )
 
@@ -439,7 +491,11 @@ function LayerRecord(props: {
               <ButtonV2 variant="neutral" onClick={cancel}>
                 {language.t("common.cancel")}
               </ButtonV2>
-              <ButtonV2 variant="contrast" disabled={store.busy || !store.name.trim()} onClick={() => void save()}>
+              <ButtonV2
+                variant="contrast"
+                disabled={store.busy || !store.name.trim() || (prompted() && !store.prompt.trim())}
+                onClick={() => void save()}
+              >
                 {language.t("operator.config.save")}
               </ButtonV2>
             </>
@@ -551,6 +607,16 @@ function LayerRecord(props: {
                 </RecordField>
               </Show>
             </dl>
+            <Show when={isWrittenDynamic(found())}>
+              <dl data-component="record-fields">
+                <RecordField
+                  label={language.t("operator.profile.prompt")}
+                  help={language.t("operator.help.layerPrompt")}
+                >
+                  <pre data-component="operator-code">{found().prompt}</pre>
+                </RecordField>
+              </dl>
+            </Show>
             <Show when={dynamic()}>
               <LayerSample layer={found()} catalog={props.catalog} onSelect={(id) => props.onSelect(id)} />
             </Show>
@@ -673,7 +739,11 @@ function LayerSample(props: { layer: Layer; catalog: Catalog; onSelect: (id: str
             >
               <pre data-component="operator-code">{sample().text}</pre>
             </Show>
-            <p data-slot="operator-note">{language.t("operator.profile.sampleNote")}</p>
+            <p data-slot="operator-note">
+              {language.t(
+                isWrittenDynamic(props.layer) ? "operator.profile.sampleNoteWritten" : "operator.profile.sampleNote",
+              )}
+            </p>
           </div>
         )}
       </Show>

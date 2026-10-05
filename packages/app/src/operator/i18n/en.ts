@@ -555,6 +555,21 @@ export const dict = {
   "operator.prompts.id.helper.compaction": "The compaction agent's prompt: it condenses a long session to continue it.",
   "operator.prompts.id.helper.agent-generator":
     "The agent generator's prompt: it writes a new agent from a description.",
+  "operator.prompts.id.helper.purpose-generator":
+    "The purpose generator's prompt: it drafts org and project purposes from the projects' files and a brief.",
+  "operator.prompts.id.helper.dynamic-generator":
+    "The dynamic generator's prompt: it writes your Dynamic layers for each session from their prompts.",
+  "operator.purposeDraft.title": "Draft with the purpose generator",
+  "operator.purposeDraft.project": "From project",
+  "operator.purposeDraft.brief": "Brief",
+  "operator.purposeDraft.briefPlaceholder": "Optional: what it should say",
+  "operator.purposeDraft.write": "Write a draft",
+  "operator.purposeDraft.writing": "Writing…",
+  "operator.help.purposeDraftProject":
+    "The project whose README, AGENTS.md and manifest the purpose generator reads. The draft replaces the text; edit it before saving.",
+  "operator.help.purposeDraftOrgProject":
+    "The project the purpose generator runs in (its model and settings). It reads the namespace's projects and their purposes.",
+  "operator.help.purposeDraftBrief": "A few words on what the purpose should say. Optional.",
 
   "operator.folders.title": "Add project",
   "operator.folders.hint":
@@ -636,6 +651,12 @@ export const dict = {
   "operator.profile.new.role": "New Role",
   "operator.profile.new.identity": "New Identity",
   "operator.profile.new.helper": "New Helper",
+  "operator.profile.new.dynamic": "New Dynamic layer",
+  "operator.profile.prompt": "Prompt",
+  "operator.help.layerPrompt":
+    "What the dynamic generator writes for each session, from the project, its purposes, its README and AGENTS.md, and the session's first message. It is written once per session (subagents use their session's text) and again when this prompt changes.",
+  "operator.profile.sampleNoteWritten":
+    "Written now by the dynamic generator, without a session. In a session it is written once, from the session's first message too.",
   "operator.profile.new.custom": "New Custom layer",
   "operator.profile.noLayers": "No layers here yet.",
   "operator.profile.noPurposes": "No Project Purposes yet.",
@@ -790,6 +811,8 @@ export const dict = {
   "operator.profileName.helper.summary": "Summary",
   "operator.profileName.helper.compaction": "Compaction",
   "operator.profileName.helper.agent-generator": "Agent generator",
+  "operator.profileName.helper.purpose-generator": "Purpose generator",
+  "operator.profileName.helper.dynamic-generator": "Dynamic generator",
   "operator.profileName.spec": "Spec",
 
   "operator.layer.slot.base": "Base prompt (by model)",

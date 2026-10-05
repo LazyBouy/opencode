@@ -39,8 +39,16 @@ export const DYNAMIC = "dynamic"
 export const HELPER = "helper"
 // OpenCode's helper agents and the helper profile each uses unless it names one.
 export const HELPER_DEFAULTS: ReadonlyMap<string, string> = new Map(
-  ["title", "summary", "compaction", "agent-generator"].map((name) => [name, `${PREFIX}profile.helper.${name}`]),
+  ["title", "summary", "compaction", "agent-generator", "purpose-generator", "dynamic-generator"].map((name) => [
+    name,
+    `${PREFIX}profile.helper.${name}`,
+  ]),
 )
+
+// A Dynamic layer of yours: the dynamic generator writes its text for each session from its prompt.
+export function isWrittenDynamic(layer: { type: string; origin: string } | undefined) {
+  return layer?.type === DYNAMIC && layer.origin === "user"
+}
 
 // Layer Definition's sections, in order, with the type a new layer in each gets.
 export const SECTIONS: ReadonlyArray<{ id: Section; type?: string }> = [
@@ -56,7 +64,7 @@ export const SECTIONS: ReadonlyArray<{ id: Section; type?: string }> = [
   { id: "message", type: "platform" },
 ]
 // Sections people write layers in.
-export const WRITTEN: readonly Section[] = ["purpose", "role", "identity", "helper", "custom"]
+export const WRITTEN: readonly Section[] = ["purpose", "role", "identity", "dynamic", "helper", "custom"]
 
 export function isBuiltin(id: string) {
   return id.startsWith(PREFIX)

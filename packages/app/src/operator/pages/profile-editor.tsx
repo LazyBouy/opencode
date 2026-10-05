@@ -185,7 +185,7 @@ export function SlotEditor(props: {
 
 // The section a layer created inside a slot is filed under in Layer Definition.
 function sectionFor(type: string): Section {
-  if (type === "role" || type === "identity" || type === HELPER) return type
+  if (type === "role" || type === "identity" || type === HELPER || type === DYNAMIC) return type
   return "custom"
 }
 
@@ -213,7 +213,8 @@ function AddLayer(props: {
         name: store.name.trim(),
         type: props.type,
         section: sectionFor(props.type),
-        text: store.text,
+        // A Dynamic layer is a prompt the dynamic generator writes from, for each session.
+        ...(props.type === DYNAMIC ? { text: "", prompt: store.text.trim() } : { text: store.text }),
       })
       .then(async (result) => {
         await data.refresh()
@@ -241,12 +242,9 @@ function AddLayer(props: {
             }}
             onSelect={(id) => id && props.onAdd(id)}
           />
-          {/* Dynamic layers people write come with a prompt (not yet). */}
-          <Show when={props.type !== DYNAMIC}>
-            <ButtonV2 size="small" variant="ghost" onClick={() => setCreating(true)}>
-              {language.t("operator.profile.createLayer")}
-            </ButtonV2>
-          </Show>
+          <ButtonV2 size="small" variant="ghost" onClick={() => setCreating(true)}>
+            {language.t("operator.profile.createLayer")}
+          </ButtonV2>
         </div>
       }
     >
@@ -258,14 +256,21 @@ function AddLayer(props: {
             onInput={(event) => setStore("name", event.currentTarget.value)}
           />
         </Field>
-        <Field label={language.t("operator.prompts.text")} hint={language.t("operator.help.newLayerText")}>
+        <Field
+          label={language.t(props.type === DYNAMIC ? "operator.profile.prompt" : "operator.prompts.text")}
+          hint={language.t(props.type === DYNAMIC ? "operator.help.layerPrompt" : "operator.help.newLayerText")}
+        >
           <TextareaV2 rows={5} value={store.text} onInput={(event) => setStore("text", event.currentTarget.value)} />
         </Field>
         <div data-slot="operator-actions">
           <ButtonV2 variant="neutral" onClick={() => setCreating(false)}>
             {language.t("common.cancel")}
           </ButtonV2>
-          <ButtonV2 variant="contrast" disabled={store.busy || !store.name.trim()} onClick={() => void create()}>
+          <ButtonV2
+            variant="contrast"
+            disabled={store.busy || !store.name.trim() || (props.type === DYNAMIC && !store.text.trim())}
+            onClick={() => void create()}
+          >
             {language.t("operator.profile.createAndAdd")}
           </ButtonV2>
         </div>

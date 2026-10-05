@@ -13,6 +13,7 @@ import { useServerSDK } from "@/context/server-sdk"
 import { showToast } from "@/utils/toast"
 import { shortPath } from "../format"
 import { requestError } from "../pages/config-helpers"
+import { PurposeDraft } from "../pages/purpose-draft"
 import { FieldHelp } from "../ui/field-help"
 
 const OPENCODE = "opencode"
@@ -169,6 +170,18 @@ export const SettingsNamespacesV2: Component = () => {
               value={store.purpose}
               onInput={(event) => setStore("purpose", event.currentTarget.value)}
             />
+            <Show when={(list.latest ?? []).some((item) => item.projects.length)}>
+              {/* The namespace's projects first: the generator runs in one of them. */}
+              <PurposeDraft
+                kind="org"
+                ns={store.selected === "new" ? undefined : store.selected}
+                projects={[
+                  ...(current()?.projects ?? []),
+                  ...(list.latest ?? []).flatMap((item) => item.projects),
+                ].filter((key, index, all) => all.indexOf(key) === index)}
+                onDraft={(text) => setStore("purpose", text)}
+              />
+            </Show>
           </div>
           <Show when={current()}>
             {(found) => (

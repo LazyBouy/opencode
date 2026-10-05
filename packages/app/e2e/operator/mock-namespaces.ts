@@ -345,10 +345,27 @@ export function createPromptMock(
     if (method !== "GET") state.writes.push({ method, path: url.pathname, body })
 
     if (url.pathname === "/operator/prompt/preview") return json(route, preview(url))
+    // The purpose generator's draft.
+    if (url.pathname === "/operator/prompt/purpose") {
+      const input = body as { kind: string; brief?: string }
+      return json(route, { text: `A drafted ${input.kind} purpose${input.brief ? ` (${input.brief})` : ""}.` })
+    }
     // A Dynamic layer's sample: what it fills in for the agent of the project.
     if (url.pathname === "/operator/prompt/sample") {
       const layer = url.searchParams.get("layer") ?? ""
       const agent = url.searchParams.get("agent") ?? "build"
+      // Your Dynamic layers are written by the dynamic generator.
+      const own = Object.values(state.items)
+        .flatMap((items) => items.layers)
+        .find((item) => item.id === layer && item.type === "dynamic")
+      if (own)
+        return json(route, {
+          agent,
+          model: "opencode/claude-opus-4-6",
+          layer,
+          text: `Written from: ${own.prompt}`,
+          source: own.name,
+        })
       const written = generated(url.searchParams.get("directory") ?? "")[layer]
       const base = {
         text: builtinLayers.find((item) => item.id === `${PREFIX}base.default`)!.text,

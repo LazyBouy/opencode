@@ -327,7 +327,7 @@ test("Dynamic layers show a sample for an agent of a project, and where to chang
   await page.goto("/operator/profile?ns=opencode&tab=layers")
   const dynamic = page.locator('[data-section="dynamic"]')
   await expect(dynamic.getByRole("row", { name: /Environment/ })).toBeVisible()
-  await expect(dynamic.getByRole("button", { name: /^New/ })).toHaveCount(0)
+  await expect(dynamic.getByRole("button", { name: "New Dynamic layer" })).toBeVisible()
   await expect(page.locator('[data-section="role"]').getByRole("columnheader", { name: "Used in" })).toHaveCount(0)
   await dynamic.getByRole("row", { name: /Instructions/ }).click()
   const overlay = page.getByRole("dialog")
@@ -352,4 +352,36 @@ test("a helper profile holds one helper layer, and a helper group no other type"
   await page.goto("/operator/profile?ns=opencode&tab=groups&group=opencode:group.helper")
   const overlay = page.getByRole("dialog")
   await expect(overlay).toContainText("Helper")
+})
+
+test("a Dynamic layer of yours is a prompt the dynamic generator writes from", async ({ page }) => {
+  const state = await mockOperator(page)
+  await page.goto("/operator/profile?ns=opencode&tab=layers")
+  await page.locator('[data-section="dynamic"]').getByRole("button", { name: "New Dynamic layer" }).click()
+  const overlay = page.getByRole("dialog")
+  await overlay.getByLabel("Name", { exact: true }).fill("Release date")
+  await expect(overlay.getByLabel("Text", { exact: true })).toHaveCount(0)
+  await overlay.getByLabel("Prompt", { exact: true }).fill("Say when the release is.")
+  await overlay.getByRole("button", { name: "Save", exact: true }).click()
+  await expect.poll(() => state.prompt.writes.length).toBe(1)
+  expect(state.prompt.writes[0]).toMatchObject({
+    method: "POST",
+    path: "/operator/namespaces/opencode/layers",
+    body: { name: "Release date", type: "dynamic", section: "dynamic", text: "", prompt: "Say when the release is." },
+  })
+  await expect(overlay.getByRole("heading", { name: "Release date" })).toBeVisible()
+  await expect(overlay).toContainText("Say when the release is.")
+  await overlay.getByRole("button", { name: "Generate sample" }).click()
+  await expect(overlay.getByRole("status")).toContainText("Written from: Say when the release is.")
+  await expect(overlay.getByRole("status")).toContainText("Written now by the dynamic generator")
+})
+
+test("the purpose generator drafts a Project Purpose into the editor", async ({ page }) => {
+  await mockOperator(page)
+  await page.goto("/operator/profile?ns=opencode&tab=layers")
+  await page.locator('[data-section="purpose"]').getByRole("button", { name: "New Project Purpose" }).click()
+  const overlay = page.getByRole("dialog")
+  await overlay.getByLabel("Brief", { exact: true }).fill("short")
+  await overlay.getByRole("button", { name: "Write a draft" }).click()
+  await expect(overlay.getByLabel("Text", { exact: true })).toHaveValue("A drafted project purpose (short).")
 })
