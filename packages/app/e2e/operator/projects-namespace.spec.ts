@@ -60,6 +60,9 @@ test("a project moves to another namespace after a check, then links its purpose
   await row.getByRole("button", { name: "Prompt settings of smoke-project" }).click()
   const dialog = page.getByRole("dialog")
   await expect(dialog.getByRole("heading", { name: "Prompt settings: smoke-project" })).toBeVisible()
+  await expect(dialog.locator('[data-component="select-v2-root"][aria-label="Default profile"]')).toContainText(
+    "Namespace default (OpenCode)",
+  )
   await pick(page, "Namespace", "Acme")
   await dialog.getByRole("button", { name: "Check the move" }).click()
   await expect(dialog.getByRole("status")).toContainText("These are copied to Acme:")

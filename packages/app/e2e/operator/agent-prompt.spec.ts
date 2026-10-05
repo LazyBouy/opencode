@@ -38,6 +38,9 @@ test("the Prompt tab shows the profile, where it comes from, and every section w
   await expect(facts).toContainText("OpenCode")
   await expect(facts).toContainText("OpenCode (from: namespace default)")
   await expect(page.getByRole("group", { name: "Folder" })).toHaveCount(0)
+  await expect(page.locator('[data-component="select-v2-root"][aria-label="Profile"]')).toContainText(
+    "Use the default (OpenCode)",
+  )
 
   const sections = page.locator('[data-slot="operator-prompt-section"]')
   await expect(sections).toHaveCount(4)

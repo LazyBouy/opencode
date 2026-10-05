@@ -378,7 +378,7 @@ export const dict = {
   "operator.prompts.stopPreview": "Stop previewing",
   "operator.prompts.usePreviewed": "Use this profile",
   "operator.prompts.automatic": "Automatic",
-  "operator.prompts.groupOf": "Group: {{group}}.",
+  "operator.prompts.groupOf": "Group: {{group}}",
   "operator.prompts.agentModel": "The agent's model",
   "operator.prompts.summary": "{{model}} · {{count}} sections · {{chars}} characters",
   "operator.prompts.chars": "{{count}} characters",

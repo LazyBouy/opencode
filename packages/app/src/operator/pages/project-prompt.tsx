@@ -15,7 +15,8 @@ import { requestError } from "./config-helpers"
 import { useNamespaces, useProfileNames } from "./profile-data"
 import { namespaceDefault, OPENCODE } from "./profile-model"
 
-const NONE = ""
+// The option that means "no link" (not a possible layer or profile id).
+const NONE = "@none"
 
 // The prompt settings of every project: its namespace, Project Purpose and default profile.
 export function useProjectSettings() {
@@ -104,7 +105,11 @@ function ProjectPromptDialog(props: { project: OperatorPromptProject; added?: bo
         key: props.project.key,
         ...(moving()
           ? { namespace: store.namespace }
-          : { purpose: store.purpose, defaultProfile: store.defaultProfile }),
+          : {
+              // An empty string clears a link.
+              purpose: store.purpose === NONE ? "" : store.purpose,
+              defaultProfile: store.defaultProfile === NONE ? "" : store.defaultProfile,
+            }),
         ...(dryRun ? { dryRun } : {}),
       })
       .then((result) => result.data!)

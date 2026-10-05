@@ -20,8 +20,8 @@ import { type Catalog, copySlots, PREFIX, type Profile, slotProblem, type Slots 
 
 // The model option that means "whatever the agent uses".
 const AGENT_MODEL = "agent"
-// The profile option that means "no setting of its own".
-const DEFAULT = ""
+// The profile option that means "no setting of its own" (not a possible profile id).
+const DEFAULT = "@default"
 
 // The agent's prompt: which profile it uses, its override of that profile, and the whole system
 // prompt it sends, section by section. The agent belongs to the project of `directory`.
@@ -98,7 +98,10 @@ export function AgentPrompt(props: { agent: string; directory: string }) {
                 }
                 onSelect={(id) => {
                   if (id === null) return
-                  void save({ profile: id || undefined, override: loaded().view.setting.override }).catch(data.fail)
+                  void save({
+                    profile: id === DEFAULT ? undefined : id,
+                    override: loaded().view.setting.override,
+                  }).catch(data.fail)
                 }}
               />
             </Field>
@@ -274,6 +277,7 @@ function Preview(props: { agent: string; directory: string; ns: string; profile?
   const language = useLanguage()
   const navigate = useNavigate()
   const api = useOperatorClient()
+  const names = useProfileNames()
   const openSettings = useSettingsDialog("namespaces")
   const [store, setStore] = createStore({ model: AGENT_MODEL })
 
@@ -375,8 +379,11 @@ function Preview(props: { agent: string; directory: string; ns: string; profile?
                   data().system.reduce((total, item) => total + item.length, 0),
                   language.intl(),
                 ),
-              })}{" "}
-              {language.t("operator.prompts.groupOf", { group: data().group.name })}
+              })}
+              {" · "}
+              {language.t("operator.prompts.groupOf", {
+                group: names.group({ ...data().group, builtin: data().group.id.startsWith(PREFIX) }),
+              })}
             </p>
             <For each={data().sections}>
               {(section) => (
