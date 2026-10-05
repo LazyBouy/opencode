@@ -58,7 +58,7 @@ export const dict = {
   "operator.table.empty": "Nothing to show",
   "operator.fieldHelp.about": "About {{field}}",
   "operator.namespace.all": "All namespaces",
-  "operator.namespace.builtin": "Built in (every namespace)",
+  "operator.namespace.builtin": "OpenCode (built in)",
   "operator.namespace.in": "In namespace",
   "operator.help.namespacePicker":
     "The organization whose items this page shows: all namespaces, or one. Projects and Prompt Profile share the choice until you change it.",
@@ -790,6 +790,13 @@ export const dict = {
   "operator.profile.delivery.tool": "Sent with the tool",
   "operator.profile.delivery.conversation": "Sent in the conversation",
   "operator.profile.makeCopy": "Edit a copy",
+  "operator.profile.perRequestCopy":
+    "Filled in for each request, as OpenCode's layer is; only its name can change. Change what it fills in where it comes from.",
+  "operator.profile.outdated": "OpenCode's text changed",
+  "operator.profile.outdatedNote": "OpenCode's text changed since this copy was made (a new release).",
+  "operator.profile.takeOpenCode": "Take OpenCode's text",
+  "operator.help.layerOutdated":
+    "This copy keeps its own text. Take OpenCode's text replaces it with OpenCode's current one; the copy stays this namespace's.",
   "operator.profile.oneHelper": "A helper profile holds one helper layer.",
   "operator.profile.helperOnly": "A group with the Helper type holds no other type.",
   "operator.prompts.helperAgent":
@@ -824,7 +831,7 @@ export const dict = {
   "operator.profile.types": "Group types",
   "operator.profile.newType": "New type",
   "operator.profile.typesHint":
-    "A group type is a kind of layer and a slot in a prompt. The seven built-in types are the same in every namespace; add your own for anything else.",
+    "A group type is a kind of layer and a slot in a prompt. The built-in types are the same in every namespace; add your own for anything else.",
   "operator.profile.builtinType": "Built-in type. It cannot be changed.",
   "operator.profile.deleteTypeBody":
     "The type goes to Trash, from where you can restore it. A type that a layer or a group uses cannot be deleted.",

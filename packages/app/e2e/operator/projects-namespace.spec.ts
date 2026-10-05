@@ -92,7 +92,8 @@ test("a project opens in the overlay; Edit moves it after a check, then links it
   expect(state.prompt.writes[2]!.body).toEqual({
     key: directory,
     purpose: "ship",
-    defaultProfile: "opencode:profile.spec",
+    // The project is in Acme now: Acme's own copy of the Spec profile.
+    defaultProfile: "profile.spec",
   })
   await expect(overlay.locator('[data-component="record-fields"]')).toContainText("Ship tools")
   await overlay.getByRole("button", { name: "Close" }).click()

@@ -223,16 +223,35 @@ export function createPromptMock(
       .filter(([, setting]) => setting.namespace === namespace.id)
       .map(([key]) => key),
   })
+  // Built-ins belong to OpenCode; another namespace has its own copies ("<id>" for "opencode:<id>").
+  const own = (id: string) => (id.startsWith(PREFIX) ? id.slice(PREFIX.length) : id)
+  const versionId = (ns: string, id: string) => (ns === "opencode" ? id : own(id))
+  const copies = {
+    layers: builtinLayers
+      .filter((layer) => layer.origin !== "automatic")
+      .map((layer): Layer => ({ ...layer, id: own(layer.id), origin: "user", replaces: layer.id })),
+    groups: builtinGroups.map((group): Group => ({ ...group, id: own(group.id), builtin: false })),
+    profiles: builtinProfiles.map(
+      (profile): Profile => ({
+        ...profile,
+        id: own(profile.id),
+        group: own(profile.group),
+        slots: Object.fromEntries(Object.entries(profile.slots).map(([type, ids]) => [type, ids.map(own)])),
+        builtin: false,
+      }),
+    ),
+  }
   const catalog = (ns: string) => {
     const namespace = state.namespaces.find((item) => item.id === ns)!
     const items = state.items[ns]!
     const keys = summary(namespace).projects
+    const opencode = ns === "opencode"
     return {
       namespace,
       types: [...builtinTypes, ...items.types],
-      layers: [...builtinLayers, ...items.layers],
-      groups: [...builtinGroups, ...items.groups],
-      profiles: [...builtinProfiles, ...items.profiles],
+      layers: [...(opencode ? builtinLayers : copies.layers), ...items.layers],
+      groups: [...(opencode ? builtinGroups : copies.groups), ...items.groups],
+      profiles: [...(opencode ? builtinProfiles : copies.profiles), ...items.profiles],
       projects: keys.map((key) => ({ key, name: nameOf(key), ...state.projects[key] })),
       agents: Object.entries(state.agents)
         .map(([id, setting]) => {
@@ -250,10 +269,10 @@ export function createPromptMock(
     const find = (id: string | undefined) => loaded.profiles.find((item) => item.id === id)
     const helpers = ["title", "summary", "compaction", "agent-generator"]
     const fallback =
-      (helpers.includes(name) ? find(`${PREFIX}profile.helper.${name}`) : undefined) ??
+      (helpers.includes(name) ? find(versionId(link.namespace, `${PREFIX}profile.helper.${name}`)) : undefined) ??
       find(link.defaultProfile) ??
       find(loaded.namespace.defaultProfile) ??
-      builtinProfiles[0]!
+      find(versionId(link.namespace, `${PREFIX}profile.opencode`))!
     const source = setting.profile
       ? "agent"
       : helpers.includes(name)
@@ -306,9 +325,11 @@ export function createPromptMock(
       ...group.types
         .filter((type) => type !== "purpose")
         .flatMap((type) =>
-          (override?.slots?.[type] ?? profile.slots[type] ?? []).flatMap((entry) => {
-            const layer = loaded.layers.find((item) => item.id === entry)
+          (override?.slots?.[type] ?? profile.slots[type] ?? []).flatMap((listed) => {
+            const layer = loaded.layers.find((item) => item.id === listed)
             if (!layer) return []
+            // A namespace's copy of a built-in works as the built-in.
+            const entry = layer.replaces && own(layer.replaces) === layer.id ? layer.replaces : listed
             if (entry === `${PREFIX}slot.base`) return [section(type, entry, layer, base.text, "base.default")]
             if (entry === `${PREFIX}slot.agent`) return own ? [section(type, entry, layer, own, name)] : []
             if (entry === `${PREFIX}slot.agent-or-base`)
@@ -318,7 +339,8 @@ export function createPromptMock(
             const written = extra[entry]
             if (written) return [section(type, entry, layer, written.text, written.source)]
             if (layer.type === "helper") return [section(type, entry, layer, layer.text, "OpenCode")]
-            if (layer.origin !== "user" || layer.replaces) return []
+            if (layer.origin !== "user" || (layer.replaces && entry !== layer.replaces)) return []
+            if (layer.replaces && layer.delivery) return []
             return [section(type, entry, layer, layer.text, layer.name)]
           }),
         ),

@@ -6,7 +6,7 @@ import { showToast } from "@/utils/toast"
 import { useOperatorClient } from "../data"
 import { useOperatorProjects } from "../project"
 import { requestError } from "./config-helpers"
-import { ALL, type Catalog, type Group, type Layer, PREFIX, type Profile } from "./profile-model"
+import { ALL, type Catalog, type Group, type Layer, PREFIX, type Profile, OPENCODE } from "./profile-model"
 
 type Key = Parameters<ReturnType<typeof useLanguage>["t"]>[0]
 
@@ -81,7 +81,8 @@ export function usePromptCatalog(ns: () => string) {
 }
 
 // The catalogs of the namespaces in scope (all of them, or one), in the namespaces' order. Built-in
-// items are in every catalog; `scoped` lists each namespace's own items once and the built-ins once.
+// items belong to OpenCode (other namespaces have their own copies); `scoped` lists each namespace's
+// own items, and OpenCode's built-ins (with no namespace) when OpenCode is in scope.
 export function useScopeCatalogs(ns: () => string, namespaces: () => ReadonlyArray<OperatorNamespaceSummary>) {
   const api = useOperatorClient()
   const ids = () => (ns() === ALL ? namespaces().map((item) => item.namespace.id) : [ns()])
@@ -113,8 +114,9 @@ export function useScopeCatalogs(ns: () => string, namespaces: () => ReadonlyArr
           .filter((item) => !builtin(item))
           .map((item) => ({ ns: catalog.namespace.id as string | undefined, item })),
       )
-      const shared = all[0]
-        ? pick(all[0])
+      const opencode = all.find((catalog) => catalog.namespace.id === OPENCODE)
+      const shared = opencode
+        ? pick(opencode)
             .filter(builtin)
             .map((item) => ({ ns: undefined, item }))
         : []
@@ -151,10 +153,11 @@ export function useToolLayers(catalog: () => Catalog | undefined) {
   )
 }
 
-// Every layer of a namespace, with the tool descriptions.
+// Every layer of a namespace, with the tool descriptions in OpenCode (other namespaces hold their own
+// copies of the ones they changed).
 export function useAllLayers(catalog: () => Catalog | undefined) {
   const tools = useToolLayers(catalog)
-  return createMemo(() => [...(catalog()?.layers ?? []), ...tools()])
+  return createMemo(() => [...(catalog()?.layers ?? []), ...(catalog()?.namespace.id === OPENCODE ? tools() : [])])
 }
 
 // Names of built-in types, layers, groups and profiles in the viewer's language.

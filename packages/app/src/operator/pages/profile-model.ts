@@ -46,8 +46,24 @@ export const HELPER_DEFAULTS: ReadonlyMap<string, string> = new Map(
 )
 
 // A Dynamic layer of yours: the dynamic generator writes its text for each session from its prompt.
-export function isWrittenDynamic(layer: { type: string; origin: string } | undefined) {
-  return layer?.type === DYNAMIC && layer.origin === "user"
+export function isWrittenDynamic(layer: { type: string; origin: string; replaces?: string } | undefined) {
+  return layer?.type === DYNAMIC && layer.origin === "user" && !layer.replaces
+}
+
+// OpenCode's built-ins belong to the OpenCode namespace; another namespace has its own copy of the
+// built-in "opencode:<x>" as "<x>" (see the server's profile.ts).
+export function own(id: string) {
+  return id.startsWith(PREFIX) ? id.slice(PREFIX.length) : id
+}
+export function versionId(catalog: Pick<Catalog, "namespace">, builtin: string) {
+  return catalog.namespace.id === OPENCODE ? builtin : own(builtin)
+}
+
+// A layer filled in per request (the agent's prompt, the environment, ...): OpenCode's, or a copy.
+export function isPerRequest(layer: { origin: string; replaces?: string } | undefined) {
+  if (!layer) return false
+  if (layer.origin === "slot" || layer.origin === "generated") return true
+  return !!layer.replaces && /^opencode:(slot|generated)\./.test(layer.replaces)
 }
 
 // Layer Definition's sections, in order, with the type a new layer in each gets.
@@ -93,9 +109,9 @@ export function profilesUsing(catalog: Catalog, layer: string) {
   return catalog.profiles.filter((profile) => Object.values(profile.slots).flat().includes(layer))
 }
 
-// The namespace's default profile: the one it names, else OpenCode's.
+// The namespace's default profile: the one it names, else OpenCode's (the namespace's own copy).
 export function namespaceDefault(catalog: Catalog) {
-  return catalog.namespace.defaultProfile ?? `${PREFIX}profile.opencode`
+  return catalog.namespace.defaultProfile ?? versionId(catalog, `${PREFIX}profile.opencode`)
 }
 
 // What uses a profile: agents that name it, projects whose default it is, the namespace default.
@@ -114,11 +130,12 @@ export function profileFor(catalog: Catalog, project: string, agent: string) {
   const find = (id: string | undefined) => (id ? catalog.profiles.find((profile) => profile.id === id) : undefined)
   const own = find(catalog.agents.find((item) => item.project === project && item.name === agent)?.profile)
   if (own) return { profile: own, source: "agent" as const }
-  const helper = find(HELPER_DEFAULTS.get(agent))
+  const helperDefault = HELPER_DEFAULTS.get(agent)
+  const helper = find(helperDefault && versionId(catalog, helperDefault))
   if (helper) return { profile: helper, source: "helper" as const }
   const fallback = find(catalog.projects.find((item) => item.key === project)?.defaultProfile)
   if (fallback) return { profile: fallback, source: "project" as const }
-  const named = find(namespaceDefault(catalog)) ?? find(`${PREFIX}profile.opencode`)
+  const named = find(namespaceDefault(catalog)) ?? find(versionId(catalog, `${PREFIX}profile.opencode`))
   return named ? { profile: named, source: "namespace" as const } : undefined
 }
 

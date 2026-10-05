@@ -270,7 +270,7 @@ test("built-in groups and profiles are read-only and can be duplicated; the name
   await expect(purpose.getByRole("row", { name: /Ship tools/ })).toContainText("Yours")
 })
 
-test("All namespaces: each item's namespace, OpenCode's items once, New asks the namespace, and the choice is shared", async ({
+test("All namespaces: each item's namespace, built-ins in OpenCode and each namespace's own copies, New asks the namespace, and the choice is shared", async ({
   page,
 }) => {
   const state = await mockOperator(page)
@@ -291,9 +291,11 @@ test("All namespaces: each item's namespace, OpenCode's items once, New asks the
   await expect(purpose.getByRole("row")).toHaveCount(3)
   await expect(purpose.getByRole("row", { name: /Ship tools/ })).toContainText("Acme")
   await expect(purpose.getByRole("row", { name: /Ship goal/ })).toContainText("OpenCode")
+  // Built-ins belong to OpenCode; Acme has its own copy of each.
   const base = page.locator('[data-section="base"]').getByRole("row", { name: /base\.default/ })
-  await expect(base).toHaveCount(1)
-  await expect(base).toContainText("Built in")
+  await expect(base).toHaveCount(2)
+  await expect(base.filter({ hasText: "OpenCode (built in)" })).toHaveCount(1)
+  await expect(base.filter({ hasText: "Acme" })).toHaveCount(1)
 
   await purpose.getByRole("row", { name: /Ship tools/ }).click()
   const overlay = page.getByRole("dialog")

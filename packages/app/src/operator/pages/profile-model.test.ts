@@ -67,9 +67,12 @@ describe("profile model", () => {
     expect(one.namespace).toBe(true)
     expect(one.agents.map((item) => item.name)).toEqual(["build"])
     expect(profileUsers(catalog, "p2").projects.map((item) => item.key)).toEqual(["/repo"])
+    // Unset, it is OpenCode's profile: the namespace's own copy, or in OpenCode the built-in.
     const unset = { ...catalog, namespace: { ...catalog.namespace, defaultProfile: undefined } }
-    expect(namespaceDefault(unset)).toBe("opencode:profile.opencode")
-    expect(profileUsers(unset, "opencode:profile.opencode").namespace).toBe(true)
+    expect(namespaceDefault(unset)).toBe("profile.opencode")
+    expect(profileUsers(unset, "profile.opencode").namespace).toBe(true)
+    const opencode = { ...unset, namespace: { ...unset.namespace, id: "opencode" } }
+    expect(namespaceDefault(opencode)).toBe("opencode:profile.opencode")
   })
 
   test("regroup keeps slots of types the group has, in its order, and names the dropped ones", () => {

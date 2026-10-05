@@ -24,8 +24,10 @@ import {
   ALL,
   type Catalog,
   DYNAMIC,
+  isPerRequest,
   isWrittenDynamic,
   type Layer,
+  OPENCODE,
   origin,
   PREFIX,
   type Section,
@@ -48,8 +50,8 @@ const ICONS: Record<Section, OverlayBlock["icon"]> = {
   message: "speech-bubble",
 }
 
-// A layer as Layer Definition lists it: with its namespace, or none for OpenCode's built-ins (the
-// same in every namespace).
+// A layer as Layer Definition lists it: with its namespace, or none for OpenCode's built-ins (listed
+// under OpenCode only; other namespaces have their own copies).
 type Row = { ns: string | undefined; item: Layer }
 
 // The layers of the namespaces in scope: each namespace's own, then OpenCode's (with every tool's
@@ -64,7 +66,8 @@ function useLayers(ns: () => string, namespaces: () => ReadonlyArray<OperatorNam
         (layer) => layer.origin !== "user",
       )
       .filter((row) => row.item.origin !== "automatic"),
-    ...tools().map((item) => ({ ns: undefined, item })),
+    // Tool descriptions are OpenCode's built-ins (another namespace holds copies of the ones it changed).
+    ...(catalogs.of(OPENCODE) ? tools().map((item) => ({ ns: undefined, item })) : []),
   ])
   return { catalogs, rows }
 }
@@ -340,9 +343,25 @@ function LayerRecord(props: {
   createEffect(() => props.onEditing(store.editing))
   const editable = () => layer()?.origin === "user"
   // Texts filled in per request: OpenCode's, and yours (written by the dynamic generator).
-  const dynamic = () => layer()?.origin === "slot" || layer()?.origin === "generated" || isWrittenDynamic(layer())
+  const dynamic = () => isPerRequest(layer()) || isWrittenDynamic(layer())
   // The form edits a prompt instead of a text: a Dynamic layer of yours.
-  const prompted = () => store.type === DYNAMIC
+  const prompted = () => store.type === DYNAMIC && !layer()?.replaces
+  // A namespace's copy of a per-request layer has no text: only its name changes.
+  const nameOnly = () => isPerRequest(layer())
+  // A copy of one of OpenCode's texts takes OpenCode's current text (after a release changed it).
+  const sync = async () => {
+    const found = layer()
+    if (!found || !props.ns) return
+    await client()
+      .layer.sync({ ns: props.ns, id: found.id })
+      .then(() => data.refresh())
+      .catch(data.fail)
+  }
+  // OpenCode's built-in a copy stands for: in OpenCode itself, else OpenCode's namespace.
+  const openOriginal = (id: string) =>
+    props.ns && props.ns !== OPENCODE
+      ? navigate(`/operator/profile?ns=${OPENCODE}&tab=layers&layer=${encodeURIComponent(id)}`)
+      : props.onSelect(id)
   // The projects a Project Purpose is drafted from: the ones it is linked to, then the namespace's;
   // every known project when the namespace has none.
   const draftProjects = () => {
@@ -441,20 +460,24 @@ function LayerRecord(props: {
         </Show>
       </Field>
       <Show
-        when={!prompted()}
+        when={!prompted() && !nameOnly()}
         fallback={
-          <Field
-            label={language.t("operator.profile.prompt")}
-            hint={language.t("operator.help.layerPrompt")}
-            note={language.t("operator.profile.chars", { count: store.prompt.length })}
-          >
-            <TextareaV2
-              class="operator-editor"
-              rows={8}
-              value={store.prompt}
-              onInput={(event) => setStore("prompt", event.currentTarget.value)}
-            />
-          </Field>
+          nameOnly() ? (
+            <p data-slot="operator-note">{language.t("operator.profile.perRequestCopy")}</p>
+          ) : (
+            <Field
+              label={language.t("operator.profile.prompt")}
+              hint={language.t("operator.help.layerPrompt")}
+              note={language.t("operator.profile.chars", { count: store.prompt.length })}
+            >
+              <TextareaV2
+                class="operator-editor"
+                rows={8}
+                value={store.prompt}
+                onInput={(event) => setStore("prompt", event.currentTarget.value)}
+              />
+            </Field>
+          )
         }
       >
         <Show when={purpose()}>
@@ -570,11 +593,24 @@ function LayerRecord(props: {
                     label={language.t("operator.profile.copyOf")}
                     help={language.t("operator.profile.copyNote")}
                   >
-                    <button type="button" data-slot="operator-link" onClick={() => props.onSelect(original())}>
+                    <button type="button" data-slot="operator-link" onClick={() => openOriginal(original())}>
                       {original().replace("opencode:", "")}
                     </button>
                   </RecordField>
                 )}
+              </Show>
+              <Show when={found().outdated}>
+                <RecordField
+                  label={language.t("operator.profile.outdated")}
+                  help={language.t("operator.help.layerOutdated")}
+                >
+                  <span class="flex items-center gap-2 flex-wrap">
+                    {language.t("operator.profile.outdatedNote")}
+                    <ButtonV2 size="small" variant="outline" onClick={() => void sync()}>
+                      {language.t("operator.profile.takeOpenCode")}
+                    </ButtonV2>
+                  </span>
+                </RecordField>
               </Show>
               <Show when={linked().length}>
                 <RecordField
@@ -589,7 +625,7 @@ function LayerRecord(props: {
                   </button>
                 </RecordField>
               </Show>
-              <Show when={names.about(found())}>
+              <Show when={names.about(found().replaces ? { ...found(), id: found().replaces! } : found())}>
                 {(about) => (
                   <RecordField
                     label={language.t("operator.profile.about")}
@@ -664,7 +700,8 @@ function LayerSample(props: { layer: Layer; catalog: Catalog; onSelect: (id: str
         .operator.agent.list({ directory: project() })
         .then((result) => result.data ?? []),
   }))
-  const suffix = () => props.layer.id.slice(PREFIX.length)
+  // The built-in the layer is, or is a copy of.
+  const suffix = () => (props.layer.replaces ?? props.layer.id).slice(PREFIX.length)
   const generate = async () => {
     const directory = project()
     if (!directory) return
@@ -686,7 +723,12 @@ function LayerSample(props: { layer: Layer; catalog: Catalog; onSelect: (id: str
   }
   const scoped = (page: string) => navigate(`/operator/${page}?dir=${encodeURIComponent(project() ?? "")}`)
   // The base prompt layer a sample came from (Base prompt by model, or an agent without a prompt).
-  const base = () => (store.sample?.source.startsWith("base.") ? `${PREFIX}${store.sample.source}` : undefined)
+  const base = () =>
+    store.sample?.source.startsWith("base.")
+      ? props.catalog.namespace.id === OPENCODE
+        ? `${PREFIX}${store.sample.source}`
+        : store.sample.source
+      : undefined
 
   return (
     <section data-component="operator-form" aria-label={language.t("operator.profile.sample")}>
