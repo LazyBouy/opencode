@@ -1,4 +1,4 @@
-import { useNavigate } from "@solidjs/router"
+import { useNavigate, useSearchParams } from "@solidjs/router"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
@@ -18,7 +18,10 @@ import { useProjectSettings } from "./project-prompt"
 import { type Column, DataTable } from "../ui/data-table"
 import { EmptyState } from "../ui/empty-state"
 import { PageHeader } from "../ui/page-header"
+import { DetailOverlay } from "../ui/detail-overlay"
 import { ProjectAction } from "../ui/project-action"
+import { useRecordOverlay } from "../ui/record-overlay"
+import { AGENT_TABS, AgentDetail } from "./agent"
 import { ScopePicker } from "../ui/scope-picker"
 import { FieldHelp } from "../ui/field-help"
 
@@ -103,6 +106,13 @@ export default function AgentsPage() {
   const [filter, setFilter] = createStore({ text: "" })
 
   const rows = createMemo(() => agents.rows().filter((agent) => store.showHidden || !agent.hidden))
+  // An agent opens in the overlay: `agent` and its project `adir`, and the section `atab`.
+  const [params, setParams] = useSearchParams<{ agent?: string; adir?: string; atab?: string }>()
+  useRecordOverlay(
+    () => !!params.agent,
+    () => <AgentOverlay rows={rows} />,
+    () => setParams({ agent: undefined, adir: undefined, atab: undefined, previewProfile: undefined }),
+  )
   const sourceLabel = (agent: OperatorAgent) => language.t(`operator.agents.source.${agent.source.kind}`)
   const projectName = (key: string) =>
     projects().find((item) => item.directory === key)?.label ?? key.split("/").filter(Boolean).at(-1) ?? key
@@ -271,11 +281,49 @@ export default function AgentsPage() {
           search={(agent) => `${agent.name} ${agent.description ?? ""} ${agentModel(agent)}`}
           loading={agents.pending()}
           initialSort={{ column: "name", direction: "asc" }}
-          onRowClick={(agent) =>
-            navigate(`/operator/agents/${encodeURIComponent(agent.name)}?dir=${encodeURIComponent(agent.project)}`)
-          }
+          onRowClick={(agent) => setParams({ agent: agent.name, adir: agent.project, atab: undefined })}
         />
       </Show>
     </>
+  )
+}
+
+// The overlay an agent opens in: its sections (Overview, Prompt, Permissions, Sessions) on the left;
+// ‹ › move through the agents the page lists.
+function AgentOverlay(props: { rows: () => ReadonlyArray<Row> }) {
+  const language = useLanguage()
+  const scope = useOperatorScope()
+  const projects = useOperatorProjects()
+  const [params, setParams] = useSearchParams<{ agent?: string; adir?: string; atab?: string }>()
+  const directory = () => params.adir ?? scope.directory() ?? projects()[0]?.directory ?? ""
+  const tab = () => (AGENT_TABS.includes(params.atab as (typeof AGENT_TABS)[number]) ? params.atab! : "overview")
+  const keyOf = (project: string, name: string) => `${project}|${name}`
+  const sections = () =>
+    [
+      { id: "overview", icon: "eye" as const },
+      { id: "prompt", icon: "prompt" as const },
+      { id: "permissions", icon: "shield" as const },
+      { id: "sessions", icon: "bubble-5" as const },
+    ].map((item) => ({ ...item, label: language.t(`operator.agent.tab.${item.id}` as "operator.agent.tab.overview") }))
+  return (
+    <DetailOverlay
+      title={params.agent ?? ""}
+      sections={sections()}
+      section={tab()}
+      records={props.rows().map((row) => keyOf(row.project, row.name))}
+      record={keyOf(directory(), params.agent ?? "")}
+      onSection={(id) => setParams({ atab: id })}
+      onRecord={(key) => {
+        const at = key.lastIndexOf("|")
+        setParams({ agent: key.slice(at + 1), adir: key.slice(0, at) })
+      }}
+    >
+      <AgentDetail
+        name={params.agent ?? ""}
+        directory={directory()}
+        tab={tab()}
+        onGone={() => setParams({ agent: undefined, adir: undefined, atab: undefined })}
+      />
+    </DetailOverlay>
   )
 }

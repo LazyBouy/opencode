@@ -1,3 +1,4 @@
+import { useSearchParams } from "@solidjs/router"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
@@ -13,18 +14,15 @@ import { formatCost, formatCount } from "../format"
 import { useScopedProject } from "../project"
 import { type Column, DataTable } from "../ui/data-table"
 import { PageHeader } from "../ui/page-header"
+import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOverlay } from "../ui/record-overlay"
 import { ScopePicker } from "../ui/scope-picker"
 
 type Row = Model & { providerName: string; isDefault: boolean }
 
-export default function ModelsPage() {
-  const language = useLanguage()
+// The project's providers and their models.
+function useModels() {
   const api = useOperatorClient()
   const directory = useScopedProject()
-  const connect = useSettingsDialog("providers")
-  const choose = useSettingsDialog("models")
-  const [filter, setFilter] = createStore({ text: "" })
-
   const providers = useQuery(() => ({
     queryKey: api.key("providers", directory()),
     queryFn: () =>
@@ -41,6 +39,22 @@ export default function ModelsPage() {
         isDefault: providers.data?.default[provider.id] === model.id,
       })),
     ),
+  )
+  return { providers, rows }
+}
+
+// A model opens in the overlay (`model`, as provider/model): the providers on the left.
+export default function ModelsPage() {
+  const language = useLanguage()
+  const connect = useSettingsDialog("providers")
+  const choose = useSettingsDialog("models")
+  const [filter, setFilter] = createStore({ text: "" })
+  const { providers, rows } = useModels()
+  const [params, setParams] = useSearchParams<{ model?: string }>()
+  useRecordOverlay(
+    () => !!params.model,
+    () => <ModelOverlay />,
+    () => setParams({ model: undefined }),
   )
   const locale = () => language.intl()
   const perMillion = (value: number) => (value ? formatCost(value, locale()) : "—")
@@ -191,7 +205,118 @@ export default function ModelsPage() {
         loading={providers.isPending}
         empty={language.t("operator.models.empty")}
         initialSort={{ column: "provider", direction: "asc" }}
+        onRowClick={(model) => setParams({ model: `${model.providerID}/${model.id}` })}
       />
     </>
+  )
+}
+
+// The overlay a model opens in: the providers on the left, a model's limits, prices and capabilities.
+function ModelOverlay() {
+  const language = useLanguage()
+  const { providers, rows } = useModels()
+  const [params, setParams] = useSearchParams<{ model?: string }>()
+  const locale = () => language.intl()
+  const perMillion = (value: number) => (value ? formatCost(value, locale()) : "—")
+  const keyOf = (model: Row) => `${model.providerID}/${model.id}`
+  const model = createMemo(() => rows().find((item) => keyOf(item) === params.model))
+  const blocks = createMemo<OverlayBlock[]>(() =>
+    (providers.data?.providers ?? []).map((provider) => ({
+      id: provider.id,
+      label: provider.name,
+      icon: "models",
+      records: rows()
+        .filter((item) => item.providerID === provider.id)
+        .map((item) => ({ id: keyOf(item), label: item.name, detail: item.id })),
+    })),
+  )
+  const yes = (value: boolean) => (value ? language.t("operator.models.yes") : language.t("operator.models.no"))
+
+  return (
+    <RecordOverlay
+      title={language.t("operator.page.models.title")}
+      namespaces={[]}
+      blocks={blocks()}
+      block={model()?.providerID ?? blocks()[0]?.id ?? ""}
+      record={params.model}
+      editing={false}
+      onBlock={(id) => setParams({ model: blocks().find((block) => block.id === id)?.records[0]?.id })}
+      onRecord={(_, id) => setParams({ model: id })}
+    >
+      <Show when={model()} fallback={<p data-slot="operator-note">{language.t("operator.models.empty")}</p>}>
+        {(found) => (
+          <RecordView
+            title={
+              <>
+                {found().name}
+                <Show when={found().isDefault}>
+                  <Tag variant="accent">{language.t("operator.models.default")}</Tag>
+                </Show>
+              </>
+            }
+          >
+            <dl data-component="record-fields">
+              <RecordField
+                label={language.t("operator.column.provider")}
+                help={language.t("operator.help.modelProvider")}
+              >
+                {found().providerName} · <code>{found().id}</code>
+              </RecordField>
+              <RecordField
+                label={language.t("operator.models.context")}
+                help={language.t("operator.help.modelContext")}
+              >
+                {formatCount(found().limit.context, locale())}
+              </RecordField>
+              <RecordField label={language.t("operator.models.output")} help={language.t("operator.help.modelOutput")}>
+                {formatCount(found().limit.output, locale())}
+              </RecordField>
+              <RecordField
+                label={language.t("operator.models.inputPrice")}
+                help={language.t("operator.help.modelPrice")}
+              >
+                {perMillion(found().cost.input)}
+              </RecordField>
+              <RecordField
+                label={language.t("operator.models.outputPrice")}
+                help={language.t("operator.help.modelPrice")}
+              >
+                {perMillion(found().cost.output)}
+              </RecordField>
+              <RecordField
+                label={language.t("operator.models.cachePrice")}
+                help={language.t("operator.help.modelPrice")}
+              >
+                {perMillion(found().cost.cache.read)}
+              </RecordField>
+              <RecordField
+                label={language.t("operator.models.reasoning")}
+                help={language.t("operator.help.modelCapability")}
+              >
+                {yes(found().capabilities.reasoning)}
+              </RecordField>
+              <RecordField
+                label={language.t("operator.models.images")}
+                help={language.t("operator.help.modelCapability")}
+              >
+                {yes(found().capabilities.input.image)}
+              </RecordField>
+              <RecordField
+                label={language.t("operator.models.tools")}
+                help={language.t("operator.help.modelCapability")}
+              >
+                {yes(found().capabilities.toolcall)}
+              </RecordField>
+              <RecordField
+                label={language.t("operator.models.released")}
+                help={language.t("operator.help.modelReleased")}
+              >
+                {found().release_date || "—"}
+              </RecordField>
+            </dl>
+          </RecordView>
+        )}
+      </Show>
+    </RecordOverlay>
   )
 }

@@ -1,50 +1,67 @@
-import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
+import { Navigate, useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
 import { useQuery, useQueryClient } from "@tanstack/solid-query"
-import { createMemo, type JSX, Show } from "solid-js"
+import { createMemo, type JSX, Match, Show, Switch } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { showToast } from "@/utils/toast"
 import { useOpenSession, useOperatorClient } from "../data"
 import { formatAgo, formatCost } from "../format"
-import { useScopedProject } from "../project"
 import { useConfirm } from "../ui/confirm"
 import { DataTable } from "../ui/data-table"
-import { EmptyState } from "../ui/empty-state"
-import { PageHeader } from "../ui/page-header"
+import { RecordView } from "../ui/record-overlay"
 import { AgentPrompt, useAgentPromptSetting } from "./agent-prompt"
-import { agentModel, useAgents } from "./agents"
+import { agentModel } from "./agents"
 import { requestError } from "./config-helpers"
 import { FieldHelp } from "../ui/field-help"
 
+// Agents open in an overlay on the Agents page; this route (links to /operator/agents/<name>) opens it
+// there, keeping the tab and the folder.
 export default function AgentPage() {
-  const language = useLanguage()
   const params = useParams<{ name: string }>()
-  // The open tab is kept in the URL, so links can open the Prompt tab directly.
-  const [search, setSearch] = useSearchParams<{ tab?: string }>()
-  const tab = () =>
-    ["overview", "prompt", "permissions", "sessions"].includes(search.tab ?? "") ? search.tab! : "overview"
+  const [search] = useSearchParams<{ tab?: string; dir?: string; previewProfile?: string }>()
+  const query = new URLSearchParams({
+    ...(search.dir ? { dir: search.dir, adir: search.dir } : {}),
+    agent: decodeURIComponent(params.name),
+    ...(search.tab ? { atab: search.tab } : {}),
+    ...(search.previewProfile ? { previewProfile: search.previewProfile } : {}),
+  })
+  return <Navigate href={`/operator/agents?${query.toString()}`} />
+}
+
+export const AGENT_TABS = ["overview", "prompt", "permissions", "sessions"] as const
+
+// One agent of a project (`directory`): its name, tags and actions, then the section `tab`. The
+// Agents page shows it in its overlay, with the sections as the left menu.
+export function AgentDetail(props: { name: string; directory: string; tab: string; onGone: () => void }) {
+  const language = useLanguage()
   const api = useOperatorClient()
   const openSession = useOpenSession()
-  const directory = useScopedProject()
-  const agents = useAgents()
-  const agent = createMemo(() => agents.data?.find((item) => item.name === decodeURIComponent(params.name)))
-  const prompt = useAgentPromptSetting(() => decodeURIComponent(params.name), directory)
-  const sessions = useQuery(() => ({
-    queryKey: api.key("sessions", "agent", directory(), params.name),
-    enabled: !!directory(),
+  const directory = () => props.directory
+  const agents = useQuery(() => ({
+    queryKey: api.key("agents", directory()),
     queryFn: () =>
       api
         .client()
-        .operator.session.list({ directory: directory(), agent: decodeURIComponent(params.name), limit: "100" })
+        .operator.agent.list({ directory: directory() })
+        .then((result) => result.data ?? []),
+  }))
+  const agent = createMemo(() => agents.data?.find((item) => item.name === props.name))
+  const prompt = useAgentPromptSetting(() => props.name, directory)
+  const sessions = useQuery(() => ({
+    queryKey: api.key("sessions", "agent", directory(), props.name),
+    enabled: props.tab === "sessions",
+    queryFn: () =>
+      api
+        .client()
+        .operator.session.list({ directory: directory(), agent: props.name, limit: "100" })
         .then((result) => result.data ?? []),
   }))
   const locale = () => language.intl()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const confirm = useConfirm()
-  const dir = () => `?dir=${encodeURIComponent(directory() ?? "")}`
+  const dir = () => `?dir=${encodeURIComponent(directory())}`
   const refresh = () => queryClient.invalidateQueries({ queryKey: api.key("agents", directory()) })
   const fail = (error: unknown) =>
     showToast({ title: language.t("operator.agent.actionFailed"), description: requestError(error) })
@@ -82,7 +99,7 @@ export default function AgentPage() {
       .operator.agent.remove({ name, directory: directory(), scope: "project" })
       .then(async () => {
         await refresh()
-        navigate(`/operator/agents${dir()}`)
+        props.onGone()
       })
       .catch(fail)
   }
@@ -91,61 +108,55 @@ export default function AgentPage() {
     <Show
       when={agent()}
       fallback={
-        <EmptyState
-          icon="brain"
-          title={agents.isPending ? language.t("common.loading") : language.t("operator.agent.notFound")}
-        />
+        <p data-slot="operator-note">
+          {agents.isPending ? language.t("common.loading") : language.t("operator.agent.notFound")}
+        </p>
       }
     >
       {(current) => (
-        <>
-          <PageHeader
-            title={current().name}
-            description={current().description}
-            actions={
-              <span class="flex items-center gap-2 flex-wrap">
-                <Tag>{language.t(`operator.agents.mode.${current().mode}`)}</Tag>
-                <Tag variant={current().source.kind === "builtin" ? "neutral" : "accent"}>
-                  {language.t(`operator.agents.source.${current().source.kind}`)}
-                </Tag>
-                <Show when={current().disabled}>
-                  <Tag>{language.t("operator.agent.off")}</Tag>
-                </Show>
-                <Show when={!current().disabled && current().mode !== "subagent"}>
-                  <ButtonV2 size="small" variant="contrast" onClick={() => void start(current().name, current().home)}>
-                    {language.t("operator.agent.start")}
-                  </ButtonV2>
-                </Show>
-                <ButtonV2
-                  size="small"
-                  variant="outline"
-                  onClick={() => navigate(`/operator/agents/${encodeURIComponent(current().name)}/edit${dir()}`)}
-                >
-                  {language.t("operator.agent.edit")}
+        <RecordView
+          title={
+            <>
+              {current().name}
+              <Tag>{language.t(`operator.agents.mode.${current().mode}`)}</Tag>
+              <Tag variant={current().source.kind === "builtin" ? "neutral" : "accent"}>
+                {language.t(`operator.agents.source.${current().source.kind}`)}
+              </Tag>
+              <Show when={current().disabled}>
+                <Tag>{language.t("operator.agent.off")}</Tag>
+              </Show>
+            </>
+          }
+          actions={
+            <>
+              <Show when={!current().disabled && current().mode !== "subagent"}>
+                <ButtonV2 size="small" variant="contrast" onClick={() => void start(current().name, current().home)}>
+                  {language.t("operator.agent.start")}
                 </ButtonV2>
-                <ButtonV2
-                  size="small"
-                  variant="outline"
-                  onClick={() => void toggle(current().name, current().disabled)}
-                >
-                  {current().disabled ? language.t("operator.agent.turnOn") : language.t("operator.agent.turnOff")}
+              </Show>
+              <ButtonV2
+                size="small"
+                variant="outline"
+                onClick={() => navigate(`/operator/agents/${encodeURIComponent(current().name)}/edit${dir()}`)}
+              >
+                {language.t("operator.agent.edit")}
+              </ButtonV2>
+              <ButtonV2 size="small" variant="outline" onClick={() => void toggle(current().name, current().disabled)}>
+                {current().disabled ? language.t("operator.agent.turnOn") : language.t("operator.agent.turnOff")}
+              </ButtonV2>
+              <Show when={current().source.kind !== "builtin"}>
+                <ButtonV2 size="small" variant="danger" onClick={() => void remove(current().name)}>
+                  {language.t("operator.agent.delete")}
                 </ButtonV2>
-                <Show when={current().source.kind !== "builtin"}>
-                  <ButtonV2 size="small" variant="danger" onClick={() => void remove(current().name)}>
-                    {language.t("operator.agent.delete")}
-                  </ButtonV2>
-                </Show>
-              </span>
-            }
-          />
-          <TabsV2 value={tab()} onChange={(value: string) => setSearch({ tab: value })}>
-            <TabsV2.List>
-              <TabsV2.Trigger value="overview">{language.t("operator.agent.tab.overview")}</TabsV2.Trigger>
-              <TabsV2.Trigger value="prompt">{language.t("operator.agent.tab.prompt")}</TabsV2.Trigger>
-              <TabsV2.Trigger value="permissions">{language.t("operator.agent.tab.permissions")}</TabsV2.Trigger>
-              <TabsV2.Trigger value="sessions">{language.t("operator.agent.tab.sessions")}</TabsV2.Trigger>
-            </TabsV2.List>
-            <TabsV2.Content value="overview">
+              </Show>
+            </>
+          }
+        >
+          <Show when={current().description}>
+            <p data-slot="operator-note">{current().description}</p>
+          </Show>
+          <Switch>
+            <Match when={props.tab === "overview"}>
               <dl data-component="operator-facts">
                 <Fact label={language.t("operator.column.model")} help={language.t("operator.help.agentModelFact")}>
                   {agentModel(current()) || language.t("operator.agents.defaultModel")}
@@ -185,11 +196,11 @@ export default function AgentPage() {
                   {formatAgo(current().sessions.lastUsed, locale()) || "—"}
                 </Fact>
               </dl>
-            </TabsV2.Content>
-            <TabsV2.Content value="prompt">
-              <Show when={directory()}>{(dir) => <AgentPrompt agent={current().name} directory={dir()} />}</Show>
-            </TabsV2.Content>
-            <TabsV2.Content value="permissions">
+            </Match>
+            <Match when={props.tab === "prompt"}>
+              <AgentPrompt agent={current().name} directory={directory()} />
+            </Match>
+            <Match when={props.tab === "permissions"}>
               <p data-slot="operator-note">{language.t("operator.agent.rulesHint")}</p>
               <DataTable
                 columnsKey="agent-permissions"
@@ -222,8 +233,8 @@ export default function AgentPage() {
                   },
                 ]}
               />
-            </TabsV2.Content>
-            <TabsV2.Content value="sessions">
+            </Match>
+            <Match when={props.tab === "sessions"}>
               <DataTable
                 columnsKey="agent-sessions"
                 label={language.t("operator.agent.tab.sessions")}
@@ -251,9 +262,9 @@ export default function AgentPage() {
                   },
                 ]}
               />
-            </TabsV2.Content>
-          </TabsV2>
-        </>
+            </Match>
+          </Switch>
+        </RecordView>
       )}
     </Show>
   )

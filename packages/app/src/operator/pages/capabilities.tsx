@@ -4,7 +4,8 @@ import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import type { McpStatus } from "@opencode-ai/sdk/v2/client"
 import { useQuery, useQueryClient } from "@tanstack/solid-query"
-import { createMemo, Show } from "solid-js"
+import { useSearchParams } from "@solidjs/router"
+import { createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { showToast } from "@/utils/toast"
@@ -14,17 +15,18 @@ import { useScopedProject } from "../project"
 import { DataTable } from "../ui/data-table"
 import { EmptyState } from "../ui/empty-state"
 import { PageHeader } from "../ui/page-header"
+import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOverlay } from "../ui/record-overlay"
 import { ScopePicker } from "../ui/scope-picker"
 
 type Server = { name: string; status: McpStatus }
 
-export default function CapabilitiesPage() {
-  const language = useLanguage()
-  const api = useOperatorClient()
-  const queryClient = useQueryClient()
-  const directory = useScopedProject()
-  const [filter, setFilter] = createStore({ text: "", busy: "" })
+type Kind = "tools" | "skills" | "commands" | "mcp"
+type Params = { kind?: string; item?: string; tab?: string }
 
+// A project's tools, skills, commands and MCP servers.
+function useCapabilities() {
+  const api = useOperatorClient()
+  const directory = useScopedProject()
   const load = <T,>(name: string, fetch: () => Promise<T>) =>
     useQuery(() => ({ queryKey: api.key(name, directory()), enabled: !!directory(), queryFn: fetch }))
   const tools = load("tools", () =>
@@ -52,9 +54,17 @@ export default function CapabilitiesPage() {
       .then((result) => result.data ?? {}),
   )
   const servers = createMemo<Server[]>(() => Object.entries(mcp.data ?? {}).map(([name, status]) => ({ name, status })))
+  return { directory, tools, skills, commands, mcp, servers }
+}
 
+// Connects or disconnects an MCP server of the project.
+function useMcpToggle(directory: () => string | undefined) {
+  const language = useLanguage()
+  const api = useOperatorClient()
+  const queryClient = useQueryClient()
+  const [state, setState] = createStore({ busy: "" })
   const toggle = async (server: Server) => {
-    setFilter("busy", server.name)
+    setState("busy", server.name)
     const client = api.client()
     const request =
       server.status.status === "connected"
@@ -69,8 +79,24 @@ export default function CapabilitiesPage() {
           description: error instanceof Error ? error.message : String(error),
         }),
       )
-      .finally(() => setFilter("busy", ""))
+      .finally(() => setState("busy", ""))
   }
+  return { toggle, busy: () => state.busy }
+}
+
+export default function CapabilitiesPage() {
+  const language = useLanguage()
+  const { directory, tools, skills, commands, mcp, servers } = useCapabilities()
+  const mcpToggle = useMcpToggle(directory)
+  const [filter, setFilter] = createStore({ text: "" })
+  // A row opens in the overlay: `kind` (tools, skills, commands, mcp) and `item`. `tab` is the list shown.
+  const [params, setParams] = useSearchParams<Params>()
+  useRecordOverlay(
+    () => !!params.item,
+    () => <CapabilityOverlay />,
+    () => setParams({ kind: undefined, item: undefined }),
+  )
+  const open = (kind: Kind, item: string) => setParams({ kind, item })
 
   const search = (
     <TextInputV2
@@ -100,7 +126,7 @@ export default function CapabilitiesPage() {
           />
         }
       >
-        <TabsV2 defaultValue="tools">
+        <TabsV2 value={params.tab ?? "tools"} onChange={(value: string) => setParams({ tab: value })}>
           <TabsV2.List>
             <TabsV2.Trigger value="tools">
               {language.t("operator.capabilities.tools", { count: tools.data?.length ?? 0 })}
@@ -125,6 +151,7 @@ export default function CapabilitiesPage() {
               filter={filter.text}
               search={(tool) => `${tool.id} ${tool.description} ${tool.source ?? ""}`}
               initialSort={{ column: "origin", direction: "asc" }}
+              onRowClick={(tool) => open("tools", tool.id)}
               columns={[
                 {
                   id: "id",
@@ -166,6 +193,7 @@ export default function CapabilitiesPage() {
               search={(skill) => `${skill.name} ${skill.description ?? ""}`}
               empty={language.t("operator.capabilities.noSkills")}
               initialSort={{ column: "name", direction: "asc" }}
+              onRowClick={(skill) => open("skills", skill.name)}
               columns={[
                 {
                   id: "name",
@@ -200,6 +228,7 @@ export default function CapabilitiesPage() {
               search={(command) => `${command.name} ${command.description ?? ""}`}
               empty={language.t("operator.capabilities.noCommands")}
               initialSort={{ column: "name", direction: "asc" }}
+              onRowClick={(command) => open("commands", command.name)}
               columns={[
                 {
                   id: "name",
@@ -238,6 +267,7 @@ export default function CapabilitiesPage() {
               loading={mcp.isPending}
               empty={language.t("operator.capabilities.noMcp")}
               initialSort={{ column: "name", direction: "asc" }}
+              onRowClick={(server) => open("mcp", server.name)}
               columns={[
                 {
                   id: "name",
@@ -273,8 +303,11 @@ export default function CapabilitiesPage() {
                     <ButtonV2
                       size="small"
                       variant="outline"
-                      disabled={filter.busy === server.name}
-                      onClick={() => void toggle(server)}
+                      disabled={mcpToggle.busy() === server.name}
+                      onClick={(event: MouseEvent) => {
+                        event.stopPropagation()
+                        void mcpToggle.toggle(server)
+                      }}
                     >
                       {server.status.status === "connected"
                         ? language.t("operator.capabilities.disconnect")
@@ -288,5 +321,176 @@ export default function CapabilitiesPage() {
         </TabsV2>
       </Show>
     </>
+  )
+}
+
+// The overlay a tool, skill, command or MCP server opens in: the four lists on the left.
+function CapabilityOverlay() {
+  const language = useLanguage()
+  const { directory, tools, skills, commands, servers } = useCapabilities()
+  const mcpToggle = useMcpToggle(directory)
+  const [params, setParams] = useSearchParams<Params>()
+  const kind = (): Kind =>
+    ["tools", "skills", "commands", "mcp"].includes(params.kind ?? "") ? (params.kind as Kind) : "tools"
+  const blocks = createMemo<OverlayBlock[]>(() => [
+    {
+      id: "tools",
+      label: language.t("operator.capabilities.toolsLabel"),
+      icon: "console",
+      records: (tools.data ?? []).map((tool) => ({ id: tool.id, label: tool.id, detail: tool.origin })),
+    },
+    {
+      id: "skills",
+      label: language.t("operator.capabilities.skillsLabel"),
+      icon: "brain",
+      empty: language.t("operator.capabilities.noSkills"),
+      records: (skills.data ?? []).map((skill) => ({ id: skill.name, label: skill.name })),
+    },
+    {
+      id: "commands",
+      label: language.t("operator.capabilities.commandsLabel"),
+      icon: "code",
+      empty: language.t("operator.capabilities.noCommands"),
+      records: (commands.data ?? []).map((command) => ({ id: command.name, label: `/${command.name}` })),
+    },
+    {
+      id: "mcp",
+      label: language.t("operator.capabilities.mcpLabel"),
+      icon: "mcp",
+      empty: language.t("operator.capabilities.noMcp"),
+      records: servers().map((server) => ({ id: server.name, label: server.name })),
+    },
+  ])
+  const tool = () => (kind() === "tools" ? tools.data?.find((item) => item.id === params.item) : undefined)
+  const skill = () => (kind() === "skills" ? skills.data?.find((item) => item.name === params.item) : undefined)
+  const command = () => (kind() === "commands" ? commands.data?.find((item) => item.name === params.item) : undefined)
+  const server = () => (kind() === "mcp" ? servers().find((item) => item.name === params.item) : undefined)
+
+  return (
+    <RecordOverlay
+      title={language.t("operator.page.capabilities.title")}
+      namespaces={[]}
+      blocks={blocks()}
+      block={kind()}
+      record={params.item}
+      editing={false}
+      onBlock={(id) => setParams({ kind: id, item: undefined, tab: id })}
+      onRecord={(block, id) => setParams({ kind: block, item: id })}
+    >
+      <Show when={tool()}>
+        {(found) => (
+          <RecordView title={<code>{found().id}</code>}>
+            <dl data-component="record-fields">
+              <RecordField label={language.t("operator.column.source")} help={language.t("operator.help.toolSource")}>
+                {language.t(`operator.capabilities.origin.${found().origin}`)}
+                <Show when={found().source}>{(source) => ` · ${source()}`}</Show>
+              </RecordField>
+              <RecordField
+                label={language.t("operator.column.description")}
+                help={language.t("operator.help.toolDescription")}
+              >
+                <pre data-component="operator-code">{found().description}</pre>
+              </RecordField>
+            </dl>
+          </RecordView>
+        )}
+      </Show>
+      <Show when={skill()}>
+        {(found) => (
+          <RecordView title={found().name}>
+            <dl data-component="record-fields">
+              <RecordField
+                label={language.t("operator.column.description")}
+                help={language.t("operator.help.skillDescription")}
+              >
+                {found().description ?? "—"}
+              </RecordField>
+              <RecordField
+                label={language.t("operator.column.location")}
+                help={language.t("operator.help.skillLocation")}
+              >
+                {found().location}
+              </RecordField>
+            </dl>
+          </RecordView>
+        )}
+      </Show>
+      <Show when={command()}>
+        {(found) => (
+          <RecordView title={<code>/{found().name}</code>}>
+            <dl data-component="record-fields">
+              <RecordField
+                label={language.t("operator.column.description")}
+                help={language.t("operator.help.commandDescription")}
+              >
+                {found().description ?? "—"}
+              </RecordField>
+              <RecordField label={language.t("operator.column.agent")} help={language.t("operator.help.commandAgent")}>
+                {found().agent ?? "—"}
+              </RecordField>
+              <RecordField
+                label={language.t("operator.column.source")}
+                help={language.t("operator.help.commandSource")}
+              >
+                {found().source ?? "—"}
+              </RecordField>
+              <Show when={found().template}>
+                {(template) => (
+                  <RecordField
+                    label={language.t("operator.capabilities.template")}
+                    help={language.t("operator.help.commandTemplate")}
+                  >
+                    <pre data-component="operator-code">{String(template())}</pre>
+                  </RecordField>
+                )}
+              </Show>
+            </dl>
+          </RecordView>
+        )}
+      </Show>
+      <Show when={server()}>
+        {(found) => (
+          <RecordView
+            title={found().name}
+            actions={
+              <ButtonV2
+                variant="outline"
+                disabled={mcpToggle.busy() === found().name}
+                onClick={() => void mcpToggle.toggle(found())}
+              >
+                {found().status.status === "connected"
+                  ? language.t("operator.capabilities.disconnect")
+                  : language.t("operator.capabilities.connect")}
+              </ButtonV2>
+            }
+          >
+            <dl data-component="record-fields">
+              <RecordField label={language.t("operator.column.status")} help={language.t("operator.help.mcpStatus")}>
+                {language.t(`operator.capabilities.mcpStatus.${found().status.status}`)}
+                <Show when={"error" in found().status ? (found().status as { error: string }).error : undefined}>
+                  {(error) => ` · ${error()}`}
+                </Show>
+              </RecordField>
+              <RecordField
+                label={language.t("operator.capabilities.toolsLabel")}
+                help={language.t("operator.help.mcpTools")}
+              >
+                <Show when={(tools.data ?? []).filter((tool) => tool.source === found().name).length} fallback="—">
+                  <ul>
+                    <For each={(tools.data ?? []).filter((tool) => tool.source === found().name)}>
+                      {(tool) => (
+                        <li>
+                          <code>{tool.id}</code>
+                        </li>
+                      )}
+                    </For>
+                  </ul>
+                </Show>
+              </RecordField>
+            </dl>
+          </RecordView>
+        )}
+      </Show>
+    </RecordOverlay>
   )
 }

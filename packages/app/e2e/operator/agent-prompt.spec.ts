@@ -18,7 +18,11 @@ test.beforeEach(async ({ page }) => {
 
 const pick = async (page: Page, label: string, option: string) => {
   await page.locator(`[data-component="select-v2-root"][aria-label="${label}"] [data-component="select-v2"]`).click()
-  await page.getByRole("option", { name: option, exact: true }).click()
+  // In the overlay (a modal dialog) the options are listed as menu items.
+  await page
+    .locator('[data-component="menu-v2-item"]')
+    .filter({ hasText: new RegExp(`^${option}$`) })
+    .click()
 }
 
 const user = (id: string, name: string, type: string, text: string) => ({

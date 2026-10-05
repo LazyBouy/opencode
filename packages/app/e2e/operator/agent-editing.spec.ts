@@ -45,7 +45,8 @@ test("creating an agent sends its settings and rules, then opens it", async ({ p
     prompt: "Write clear docs.",
     permission: { edit: "ask" },
   })
-  await expect(page).toHaveURL(/\/operator\/agents\/docs\?dir=/)
+  // Saved: the agent opens in the Agents page's overlay.
+  await expect(page).toHaveURL(/\/operator\/agents\?.*agent=docs/)
 })
 
 test("editing a built-in agent sends only what changed and resets cleared settings", async ({ page }) => {

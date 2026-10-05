@@ -51,13 +51,15 @@ test("the agents table filters, hides hidden agents and opens an agent", async (
   await expect(table.locator("tbody tr")).toHaveCount(1)
   await table.getByRole("row", { name: /reviewer/ }).click()
 
-  await expect(page).toHaveURL(/\/operator\/agents\/reviewer\?dir=/)
-  await expect(page.getByRole("heading", { level: 1, name: "reviewer" })).toBeVisible()
-  await page.getByRole("tab", { name: "Prompt" }).click()
-  await expect(page).toHaveURL(/tab=prompt/)
-  await expect(page.locator('[data-slot="operator-prompt-section"]').filter({ hasText: "Agent prompt" })).toContainText(
-    "Review the diff carefully.",
-  )
+  // The agent opens in the overlay, its sections on the left.
+  await expect(page).toHaveURL(/agent=reviewer/)
+  const overlay = page.getByRole("dialog")
+  await expect(overlay.getByRole("heading", { name: /reviewer/ })).toBeVisible()
+  await overlay.getByRole("tab", { name: "Prompt" }).click()
+  await expect(page).toHaveURL(/atab=prompt/)
+  await expect(
+    overlay.locator('[data-slot="operator-prompt-section"]').filter({ hasText: "Agent prompt" }),
+  ).toContainText("Review the diff carefully.")
 })
 
 test("Agents lists every project's agents with their project, and New agent asks which project", async ({ page }) => {
@@ -95,8 +97,9 @@ test("the projects page lists projects and opens a project's agents", async ({ p
 test("an agent's permission rules are listed in order", async ({ page }) => {
   await mockOperator(page)
   await page.goto(`/operator/agents/build${dir}`)
-  await page.getByRole("tab", { name: "Permissions" }).click()
-  const rows = page.locator('[data-component="operator-table"] tbody tr')
+  const overlay = page.getByRole("dialog")
+  await overlay.getByRole("tab", { name: "Permissions" }).click()
+  const rows = overlay.locator('[data-component="operator-table"] tbody tr')
   await expect(rows).toHaveCount(2)
   await expect(rows.nth(1)).toContainText("rm *")
   await expect(rows.nth(1)).toContainText("Ask")
@@ -170,4 +173,24 @@ test("the models page lists the catalog with limits and prices", async ({ page }
   await expect(row).toContainText("200K")
   await expect(row).toContainText("$15.00")
   await expect(row).toContainText("Default")
+})
+
+test("capabilities and inbox requests open in the overlay, with ‹ › through the list", async ({ page }) => {
+  const state = await mockOperator(page)
+  await page.goto(`/operator/capabilities${dir}`)
+  await page.locator('[data-component="operator-table"]').getByRole("row", { name: /read/ }).first().click()
+  const overlay = page.getByRole("dialog")
+  await expect(
+    overlay.getByRole("tablist", { name: "Capabilities" }).getByRole("tab", { name: "Skills" }),
+  ).toBeVisible()
+  await expect(overlay.getByRole("button", { name: "Next record" })).toBeVisible()
+  await overlay.getByRole("button", { name: "Close" }).click()
+
+  await page.goto("/operator/inbox")
+  await page.locator('[data-component="operator-ask"]').first().locator('[data-slot="operator-ask-patterns"]').click()
+  await expect(page).toHaveURL(/ask=/)
+  await overlay.getByRole("button", { name: "Allow once" }).click()
+  // The last request answered: the overlay closes.
+  await expect(overlay).toBeHidden()
+  expect(state.pending).toHaveLength(0)
 })

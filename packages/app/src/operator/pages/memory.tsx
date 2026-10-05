@@ -15,23 +15,15 @@ import { useScopedProject } from "../project"
 import { DataTable } from "../ui/data-table"
 import { EmptyState } from "../ui/empty-state"
 import { PageHeader } from "../ui/page-header"
+import { type OverlayBlock, RecordOverlay, RecordView, useRecordOverlay } from "../ui/record-overlay"
 import { ScopePicker } from "../ui/scope-picker"
 import { StatTile } from "../ui/stat-tile"
 import { requestError } from "./config-helpers"
 
-// What OpenCode keeps for a project: the files it adds to prompts, and its database of sessions,
-// messages and compaction summaries.
-export default function MemoryPage() {
-  const language = useLanguage()
+// What OpenCode keeps for a project: its files and database, read for the page and its overlay.
+function useMemory(directory: () => string | undefined) {
   const api = useOperatorClient()
-  const queryClient = useQueryClient()
-  const directory = useScopedProject()
-  const openSession = useOpenSession()
-  const [params, setParams] = useSearchParams<{ tab?: string; file?: string }>()
-  const [store, setStore] = createStore({ text: "", saved: "", error: "", busy: false })
-  const locale = () => language.intl()
-
-  const memory = useQuery(() => ({
+  return useQuery(() => ({
     queryKey: api.key("memory", directory()),
     enabled: !!directory(),
     queryFn: () =>
@@ -40,42 +32,23 @@ export default function MemoryPage() {
         .operator.memory.overview({ directory: directory() })
         .then((result) => result.data!),
   }))
-  const selected = createMemo(() => memory.data?.files.find((file) => file.path === params.file))
-  const creating = createMemo(() => memory.data?.creatable.find((item) => item.path === params.file))
+}
 
-  const file = useQuery(() => ({
-    queryKey: api.key("memory-file", directory(), params.file),
-    enabled: !!directory() && !!selected()?.editable,
-    queryFn: () =>
-      api
-        .client()
-        .operator.memory.read({ directory: directory(), path: params.file! })
-        .then((result) => result.data?.text ?? ""),
-  }))
-  createEffect(
-    on([() => params.file, () => file.data], () => {
-      const text = creating() ? "" : (file.data ?? "")
-      setStore({ text, saved: text, error: "" })
-    }),
+// What OpenCode keeps for a project: the files it adds to prompts, and its database of sessions,
+// messages and compaction summaries. A file or summary opens in the overlay.
+export default function MemoryPage() {
+  const language = useLanguage()
+  const api = useOperatorClient()
+  const directory = useScopedProject()
+  const [params, setParams] = useSearchParams<{ tab?: string; file?: string; summary?: string }>()
+  const locale = () => language.intl()
+  const memory = useMemory(directory)
+  // A file (or a compaction summary) opens in the overlay.
+  useRecordOverlay(
+    () => !!(params.file || params.summary),
+    () => <MemoryOverlay />,
+    () => setParams({ file: undefined, summary: undefined }),
   )
-
-  const save = async () => {
-    const path = params.file
-    if (!path) return
-    setStore({ busy: true, error: "" })
-    await api
-      .client()
-      .operator.memory.write({ directory: directory(), path, text: store.text })
-      .then(async () => {
-        showToast({ title: language.t("operator.memory.saved"), description: shortPath(path) })
-        setStore("saved", store.text)
-        await queryClient.invalidateQueries({ queryKey: api.key("memory", directory()) })
-        await queryClient.invalidateQueries({ queryKey: api.key("memory-file", directory(), path) })
-        await queryClient.invalidateQueries({ queryKey: api.key("prompt-preview", directory()) })
-      })
-      .catch((error: unknown) => setStore("error", requestError(error)))
-      .finally(() => setStore("busy", false))
-  }
 
   const loaded = (file: OperatorMemoryFile) => language.t(`operator.memory.loaded.${file.loaded}`)
   const totalRows = createMemo(() =>
@@ -126,7 +99,7 @@ export default function MemoryPage() {
               rows={memory.data?.files ?? []}
               loading={memory.isPending}
               empty={language.t("operator.memory.noFiles")}
-              onRowClick={(row) => row.editable && setParams({ file: row.path })}
+              onRowClick={(row) => setParams({ file: row.path })}
               columns={[
                 {
                   id: "kind",
@@ -183,46 +156,6 @@ export default function MemoryPage() {
                 },
               ]}
             />
-            <Show when={selected() || creating()}>
-              <section data-component="operator-panel">
-                <div data-slot="operator-panel-head">
-                  <h2 data-slot="operator-panel-title" title={params.file}>
-                    {creating() ? language.t("operator.memory.new", { path: params.file! }) : params.file}
-                  </h2>
-                  <ButtonV2 size="small" variant="ghost" onClick={() => setParams({ file: undefined })}>
-                    {language.t("common.close")}
-                  </ButtonV2>
-                </div>
-                <Show when={selected()}>
-                  {(current) => (
-                    <p data-slot="operator-note">
-                      {language.t(`operator.memory.kindHint.${current().kind}`)} · {loaded(current())}
-                    </p>
-                  )}
-                </Show>
-                <TextareaV2
-                  class="operator-editor"
-                  rows={18}
-                  aria-label={language.t("operator.prompts.text")}
-                  value={store.text}
-                  onInput={(event) => setStore("text", event.currentTarget.value)}
-                />
-                <Show when={store.error}>
-                  <pre data-slot="operator-error" role="alert">
-                    {store.error}
-                  </pre>
-                </Show>
-                <div data-slot="operator-actions">
-                  <ButtonV2
-                    variant="contrast"
-                    disabled={store.busy || store.text === store.saved}
-                    onClick={() => void save()}
-                  >
-                    {language.t("operator.config.save")}
-                  </ButtonV2>
-                </div>
-              </section>
-            </Show>
           </TabsV2.Content>
 
           <TabsV2.Content value="database">
@@ -279,15 +212,14 @@ export default function MemoryPage() {
                   fallback={<p data-slot="operator-note">{language.t("operator.memory.noSummaries")}</p>}
                 >
                   {(summary) => (
-                    <details data-slot="operator-details">
-                      <summary>
-                        {summary.title} · {formatAgo(summary.time, locale())}
-                      </summary>
-                      <pre data-component="operator-code">{summary.text}</pre>
-                      <ButtonV2 size="small" variant="outline" onClick={() => openSession(summary.sessionID)}>
-                        {language.t("operator.memory.openSession")}
-                      </ButtonV2>
-                    </details>
+                    <button
+                      type="button"
+                      data-slot="record-overlay-item"
+                      onClick={() => setParams({ summary: summary.sessionID })}
+                    >
+                      <span data-slot="record-overlay-item-label">{summary.title}</span>
+                      <span data-slot="record-overlay-item-detail">{formatAgo(summary.time, locale())}</span>
+                    </button>
                   )}
                 </For>
               </section>
@@ -296,5 +228,181 @@ export default function MemoryPage() {
         </TabsV2>
       </Show>
     </>
+  )
+}
+
+// The overlay a memory file or compaction summary opens in: files and summaries on the left. A file
+// shows read-only, with Edit (Cancel or Save then) when it can be written; a new file opens in edit
+// mode.
+function MemoryOverlay() {
+  const language = useLanguage()
+  const api = useOperatorClient()
+  const queryClient = useQueryClient()
+  const openSession = useOpenSession()
+  const directory = useScopedProject()
+  const memory = useMemory(directory)
+  const [params, setParams] = useSearchParams<{ file?: string; summary?: string }>()
+  const [store, setStore] = createStore({ text: "", saved: "", error: "", busy: false, editing: false })
+  const locale = () => language.intl()
+  const selected = createMemo(() => memory.data?.files.find((file) => file.path === params.file))
+  const creating = createMemo(() => memory.data?.creatable.find((item) => item.path === params.file))
+  const summary = createMemo(() => memory.data?.summaries.find((item) => item.sessionID === params.summary))
+  const file = useQuery(() => ({
+    queryKey: api.key("memory-file", directory(), params.file),
+    enabled: !!directory() && !!selected()?.editable,
+    queryFn: () =>
+      api
+        .client()
+        .operator.memory.read({ directory: directory(), path: params.file! })
+        .then((result) => result.data?.text ?? ""),
+  }))
+  createEffect(
+    on([() => params.file, () => file.data], () => {
+      const text = creating() ? "" : (file.data ?? "")
+      setStore({ text, saved: text, error: "", editing: !!creating() })
+    }),
+  )
+  const blocks = createMemo<OverlayBlock[]>(() => [
+    {
+      id: "files",
+      label: language.t("operator.memory.filesLabel"),
+      icon: "open-file",
+      empty: language.t("operator.memory.noFiles"),
+      records: (memory.data?.files ?? []).map((item) => ({
+        id: item.path,
+        label: item.kind === "url" ? item.path : shortPath(item.path),
+        detail: language.t(`operator.memory.kind.${item.kind}`),
+      })),
+    },
+    {
+      id: "summaries",
+      label: language.t("operator.memory.summaries"),
+      icon: "archive",
+      empty: language.t("operator.memory.noSummaries"),
+      records: (memory.data?.summaries ?? []).map((item) => ({
+        id: item.sessionID,
+        label: item.title,
+        detail: formatAgo(item.time, locale()),
+      })),
+    },
+  ])
+
+  const save = async () => {
+    const path = params.file
+    if (!path) return
+    setStore({ busy: true, error: "" })
+    await api
+      .client()
+      .operator.memory.write({ directory: directory(), path, text: store.text })
+      .then(async () => {
+        showToast({ title: language.t("operator.memory.saved"), description: shortPath(path) })
+        setStore({ saved: store.text, editing: false })
+        await queryClient.invalidateQueries({ queryKey: api.key("memory", directory()) })
+        await queryClient.invalidateQueries({ queryKey: api.key("memory-file", directory(), path) })
+        await queryClient.invalidateQueries({ queryKey: api.key("prompt-preview", directory()) })
+      })
+      .catch((error: unknown) => setStore("error", requestError(error)))
+      .finally(() => setStore("busy", false))
+  }
+  const cancel = () => {
+    if (creating()) return setParams({ file: undefined })
+    setStore({ text: store.saved, editing: false, error: "" })
+  }
+
+  return (
+    <RecordOverlay
+      title={language.t("operator.page.memory.title")}
+      namespaces={[]}
+      blocks={blocks()}
+      block={params.summary ? "summaries" : "files"}
+      record={params.file ?? params.summary}
+      editing={store.editing}
+      onBlock={(id) =>
+        setParams({ file: undefined, summary: undefined, tab: id === "summaries" ? "database" : "files" })
+      }
+      onRecord={(block, id) =>
+        block === "summaries"
+          ? setParams({ summary: id, file: undefined })
+          : setParams({ file: id, summary: undefined })
+      }
+    >
+      <Show when={params.file}>
+        <RecordView
+          title={
+            <span title={params.file}>
+              {creating() ? language.t("operator.memory.new", { path: params.file! }) : shortPath(params.file!)}
+            </span>
+          }
+          actions={
+            <Show
+              when={store.editing}
+              fallback={
+                <Show when={selected()?.editable}>
+                  <ButtonV2 variant="contrast" onClick={() => setStore("editing", true)}>
+                    {language.t("operator.profile.edit")}
+                  </ButtonV2>
+                </Show>
+              }
+            >
+              <ButtonV2 variant="neutral" onClick={cancel}>
+                {language.t("common.cancel")}
+              </ButtonV2>
+              <ButtonV2
+                variant="contrast"
+                disabled={store.busy || (!creating() && store.text === store.saved)}
+                onClick={() => void save()}
+              >
+                {language.t("operator.config.save")}
+              </ButtonV2>
+            </Show>
+          }
+        >
+          <Show when={selected()}>
+            {(current) => (
+              <p data-slot="operator-note">
+                {language.t(`operator.memory.kindHint.${current().kind}`)} ·{" "}
+                {language.t(`operator.memory.loaded.${current().loaded}`)}
+              </p>
+            )}
+          </Show>
+          <Show
+            when={store.editing}
+            fallback={
+              <Show when={selected()?.editable} fallback={<p data-slot="operator-note">{params.file}</p>}>
+                <pre data-component="operator-code">{store.saved || "—"}</pre>
+              </Show>
+            }
+          >
+            <TextareaV2
+              class="operator-editor"
+              rows={18}
+              aria-label={language.t("operator.prompts.text")}
+              value={store.text}
+              onInput={(event) => setStore("text", event.currentTarget.value)}
+            />
+          </Show>
+          <Show when={store.error}>
+            <pre data-slot="operator-error" role="alert">
+              {store.error}
+            </pre>
+          </Show>
+        </RecordView>
+      </Show>
+      <Show when={summary()}>
+        {(found) => (
+          <RecordView
+            title={found().title}
+            actions={
+              <ButtonV2 variant="outline" onClick={() => openSession(found().sessionID)}>
+                {language.t("operator.memory.openSession")}
+              </ButtonV2>
+            }
+          >
+            <p data-slot="operator-note">{formatAgo(found().time, locale())}</p>
+            <pre data-component="operator-code">{found().text}</pre>
+          </RecordView>
+        )}
+      </Show>
+    </RecordOverlay>
   )
 }

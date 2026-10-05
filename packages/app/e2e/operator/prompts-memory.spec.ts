@@ -63,20 +63,26 @@ test("memory lists files and the database, and edits AGENTS.md", async ({ page }
   await expect(table).toContainText("1.5 KB")
   await expect(page.getByRole("button", { name: "Create global AGENTS.md" })).toBeVisible()
 
+  // A file opens in the overlay, read-only; Edit, then Save.
   await table.getByRole("row", { name: /SmokeProject\/AGENTS\.md/ }).click()
-  const editor = page.getByLabel("Text", { exact: true })
+  const overlay = page.getByRole("dialog")
+  await expect(overlay.locator('[data-component="operator-code"]')).toHaveText("# Project rules\nUse Bun.\n")
+  await overlay.getByRole("button", { name: "Edit", exact: true }).click()
+  const editor = overlay.getByLabel("Text", { exact: true })
   await expect(editor).toHaveValue("# Project rules\nUse Bun.\n")
   await editor.fill("# Project rules\nUse Bun 1.3.\n")
-  await page.getByRole("button", { name: "Save", exact: true }).click()
+  await overlay.getByRole("button", { name: "Save", exact: true }).click()
   await expect.poll(() => state.memoryWrites.length).toBe(1)
   expect(state.memoryWrites[0].body).toEqual({
     path: `${directory}/AGENTS.md`,
     text: "# Project rules\nUse Bun 1.3.\n",
   })
+  await overlay.getByRole("button", { name: "Close" }).click()
 
   await page.getByRole("tab", { name: "Database" }).click()
   await expect(page.locator('[data-slot="operator-tiles"]')).toContainText("5 MB")
   await expect(page.locator('[data-component="operator-table"]')).toContainText("session")
-  await page.getByText(/Fix the parser ·/).click()
-  await expect(page.getByText("We fixed the tokenizer and added tests.")).toBeVisible()
+  // A compaction summary opens in the overlay too.
+  await page.getByRole("button", { name: /Fix the parser/ }).click()
+  await expect(overlay.getByText("We fixed the tokenizer and added tests.")).toBeVisible()
 })
