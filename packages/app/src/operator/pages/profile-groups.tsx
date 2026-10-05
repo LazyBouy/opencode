@@ -14,61 +14,112 @@ import { useConfirm } from "../ui/confirm"
 import { DataTable } from "../ui/data-table"
 import { Field } from "../ui/field"
 import { OrderedList } from "../ui/ordered-list"
+import { NamespaceAction } from "../ui/namespace-picker"
 import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOverlay } from "../ui/record-overlay"
-import { usePromptCatalog, useProfileNames } from "./profile-data"
-import { type Catalog, copyName, groupProblem, REQUIRED } from "./profile-model"
+import { usePromptRefresh, useProfileNames, useScopeCatalogs } from "./profile-data"
+import { ALL, type Catalog, copyName, type Group, type GroupType, groupProblem, REQUIRED } from "./profile-model"
 
 type Block = "types" | "groups"
-type Params = { type?: string; group?: string; block?: string }
+type Params = { type?: string; group?: string; rns?: string; block?: string }
+type Scoped<T> = { ns: string | undefined; item: T }
 
-// Group Definition: group types (kinds of layer) and groups (orders of types). A record opens in
-// the overlay.
+// The key of a record in the overlay: the id, with its namespace when all namespaces are shown.
+const keyOf = <T extends { id: string }>(row: Scoped<T>, all: boolean) =>
+  all && row.ns ? `${row.ns}|${row.item.id}` : row.item.id
+
+// The types and groups of the namespaces in scope: each namespace's own, then OpenCode's once.
+function useGroupRows(ns: () => string, namespaces: () => ReadonlyArray<OperatorNamespaceSummary>) {
+  const catalogs = useScopeCatalogs(ns, namespaces)
+  return {
+    catalogs,
+    types: createMemo(() =>
+      catalogs.scoped(
+        (catalog) => catalog.types,
+        (type) => type.builtin,
+      ),
+    ),
+    groups: createMemo(() =>
+      catalogs.scoped(
+        (catalog) => catalog.groups,
+        (group) => group.builtin,
+      ),
+    ),
+  }
+}
+
+// Group Definition: group types (kinds of layer) and groups (orders of types) of the namespaces in
+// scope. A record opens in the overlay.
 export function GroupDefinition(props: { ns: string; namespaces: ReadonlyArray<OperatorNamespaceSummary> }) {
   const language = useLanguage()
   const names = useProfileNames()
-  const data = usePromptCatalog(() => props.ns)
-  const catalog = () => data.query.data
+  const all = () => props.ns === ALL
+  const rows = useGroupRows(
+    () => props.ns,
+    () => props.namespaces,
+  )
+  const nsName = (id: string | undefined) =>
+    id
+      ? (props.namespaces.find((item) => item.namespace.id === id)?.namespace.name ?? id)
+      : language.t("operator.namespace.builtin")
+  const catalogOf = (id: string | undefined) => rows.catalogs.of(id) ?? rows.catalogs.first()
   const [params, setParams] = useSearchParams<Params>()
   useRecordOverlay(
     () => !!(params.type || params.group || params.block),
     () => <GroupOverlay ns={props.ns} namespaces={props.namespaces} />,
-    () => setParams({ type: undefined, group: undefined, block: undefined }),
+    () => setParams({ type: undefined, group: undefined, rns: undefined, block: undefined }),
   )
+  const namespaceColumn = <T,>() =>
+    all()
+      ? [
+          {
+            id: "namespace",
+            optional: true,
+            header: language.t("operator.column.namespace"),
+            value: (row: Scoped<T>) => nsName(row.ns),
+            cell: (row: Scoped<T>) => nsName(row.ns),
+          },
+        ]
+      : []
 
   return (
     <div class="flex flex-col gap-4 min-w-0">
       <section data-component="operator-panel" data-section="types">
         <div data-slot="operator-panel-head">
           <h2 data-slot="operator-panel-title">{language.t("operator.profile.types")}</h2>
-          <ButtonV2 size="small" variant="outline" onClick={() => setParams({ type: "new", block: "types" })}>
-            {language.t("operator.profile.newType")}
-          </ButtonV2>
+          <NamespaceAction
+            size="small"
+            label={language.t("operator.profile.newType")}
+            ns={all() ? undefined : props.ns}
+            namespaces={props.namespaces}
+            run={(ns) => setParams({ type: "new", rns: ns, block: "types" })}
+          />
         </div>
         <p data-slot="operator-note">{language.t("operator.profile.typesHint")}</p>
         <DataTable
           columnsKey="profile-types"
           label={language.t("operator.profile.types")}
-          rows={catalog()?.types ?? []}
-          loading={data.query.isPending}
-          onRowClick={(type) => setParams({ type: type.id, block: "types" })}
+          rows={rows.types()}
+          loading={rows.catalogs.query.isPending}
+          onRowClick={(row) => setParams({ type: row.item.id, rns: row.ns, block: "types" })}
           columns={[
             {
               id: "name",
               header: language.t("operator.column.name"),
-              cell: (type) => (
+              cell: (row) => (
                 <span class="flex items-center gap-2">
-                  {names.type(type)}
-                  <Show when={type.builtin}>
+                  {names.type(row.item)}
+                  <Show when={row.item.builtin}>
                     <Tag>{language.t("operator.profile.builtin")}</Tag>
                   </Show>
                 </span>
               ),
             },
+            ...namespaceColumn<GroupType>(),
             {
               id: "about",
               optional: true,
               header: language.t("operator.column.description"),
-              cell: (type) => <span data-slot="operator-cell-clamp">{names.typeAbout(type)}</span>,
+              cell: (row) => <span data-slot="operator-cell-clamp">{names.typeAbout(row.item)}</span>,
             },
           ]}
         />
@@ -76,37 +127,42 @@ export function GroupDefinition(props: { ns: string; namespaces: ReadonlyArray<O
       <section data-component="operator-panel" data-section="groups">
         <div data-slot="operator-panel-head">
           <h2 data-slot="operator-panel-title">{language.t("operator.profile.groups")}</h2>
-          <ButtonV2 size="small" variant="outline" onClick={() => setParams({ group: "new", block: "groups" })}>
-            {language.t("operator.profile.newGroup")}
-          </ButtonV2>
+          <NamespaceAction
+            size="small"
+            label={language.t("operator.profile.newGroup")}
+            ns={all() ? undefined : props.ns}
+            namespaces={props.namespaces}
+            run={(ns) => setParams({ group: "new", rns: ns, block: "groups" })}
+          />
         </div>
         <p data-slot="operator-note">{language.t("operator.profile.groupsHint")}</p>
         <DataTable
           columnsKey="profile-groups"
           label={language.t("operator.profile.groups")}
-          rows={catalog()?.groups ?? []}
-          loading={data.query.isPending}
-          onRowClick={(group) => setParams({ group: group.id, block: "groups" })}
+          rows={rows.groups()}
+          loading={rows.catalogs.query.isPending}
+          onRowClick={(row) => setParams({ group: row.item.id, rns: row.ns, block: "groups" })}
           columns={[
             {
               id: "name",
               header: language.t("operator.column.name"),
-              cell: (group) => (
+              cell: (row) => (
                 <span class="flex items-center gap-2">
-                  {names.group(group)}
-                  <Show when={group.builtin}>
+                  {names.group(row.item)}
+                  <Show when={row.item.builtin}>
                     <Tag>{language.t("operator.profile.builtin")}</Tag>
                   </Show>
                 </span>
               ),
             },
+            ...namespaceColumn<Group>(),
             {
               id: "types",
               optional: true,
               header: language.t("operator.profile.order"),
-              cell: (group) => (
+              cell: (row) => (
                 <span data-slot="operator-cell-clamp">
-                  {group.types.map((type) => names.typeId(catalog(), type)).join(" → ")}
+                  {row.item.types.map((type) => names.typeId(catalogOf(row.ns), type)).join(" → ")}
                 </span>
               ),
             },
@@ -114,7 +170,14 @@ export function GroupDefinition(props: { ns: string; namespaces: ReadonlyArray<O
               id: "used",
               optional: true,
               header: language.t("operator.profile.usedIn"),
-              cell: (group) => profilesOf(catalog(), group.id, names.profile),
+              cell: (row) =>
+                [
+                  ...new Set(
+                    (row.ns ? [catalogOf(row.ns)] : rows.catalogs.list()).flatMap((catalog) =>
+                      profilesOf(catalog, row.item.id, names.profile),
+                    ),
+                  ),
+                ].join(", "),
             },
           ]}
         />
@@ -129,21 +192,30 @@ function profilesOf(
   group: string,
   name: (profile: Catalog["profiles"][number]) => string,
 ) {
-  return (catalog?.profiles ?? [])
-    .filter((profile) => profile.group === group)
-    .map(name)
-    .join(", ")
+  return (catalog?.profiles ?? []).filter((profile) => profile.group === group).map(name)
 }
 
 // The overlay of Group Definition: Group types and Groups on the left, their records on the right.
 function GroupOverlay(props: { ns: string; namespaces: ReadonlyArray<OperatorNamespaceSummary> }) {
   const language = useLanguage()
   const names = useProfileNames()
-  const data = usePromptCatalog(() => props.ns)
+  const all = () => props.ns === ALL
+  const rows = useGroupRows(
+    () => props.ns,
+    () => props.namespaces,
+  )
   const [params, setParams] = useSearchParams<Params>()
   const [editing, setEditing] = createSignal(false)
+  const recordNs = () => (all() ? params.rns : props.ns)
   const block = (): Block =>
     params.type ? "types" : params.group ? "groups" : params.block === "groups" ? "groups" : "types"
+  const detail = (row: Scoped<{ builtin: boolean }>) =>
+    all()
+      ? (props.namespaces.find((entry) => entry.namespace.id === row.ns)?.namespace.name ??
+        language.t("operator.namespace.builtin"))
+      : row.item.builtin
+        ? language.t("operator.profile.builtin")
+        : undefined
   const blocks = createMemo<OverlayBlock[]>(() => [
     {
       id: "types",
@@ -153,13 +225,10 @@ function GroupOverlay(props: { ns: string; namespaces: ReadonlyArray<OperatorNam
       empty: language.t("operator.table.empty"),
       create: {
         label: language.t("operator.profile.newType"),
-        run: () => setParams({ type: "new", group: undefined }),
+        ns: all() ? undefined : props.ns,
+        run: (ns) => setParams({ type: "new", rns: ns, group: undefined }),
       },
-      records: (data.query.data?.types ?? []).map((type) => ({
-        id: type.id,
-        label: names.type(type),
-        detail: type.builtin ? language.t("operator.profile.builtin") : undefined,
-      })),
+      records: rows.types().map((row) => ({ id: keyOf(row, all()), label: names.type(row.item), detail: detail(row) })),
     },
     {
       id: "groups",
@@ -169,54 +238,62 @@ function GroupOverlay(props: { ns: string; namespaces: ReadonlyArray<OperatorNam
       empty: language.t("operator.table.empty"),
       create: {
         label: language.t("operator.profile.newGroup"),
-        run: () => setParams({ group: "new", type: undefined }),
+        ns: all() ? undefined : props.ns,
+        run: (ns) => setParams({ group: "new", rns: ns, type: undefined }),
       },
-      records: (data.query.data?.groups ?? []).map((group) => ({
-        id: group.id,
-        label: names.group(group),
-        detail: group.builtin ? language.t("operator.profile.builtin") : undefined,
-      })),
+      records: rows
+        .groups()
+        .map((row) => ({ id: keyOf(row, all()), label: names.group(row.item), detail: detail(row) })),
     },
   ])
-  const select = (id: Block, record: string | undefined) =>
+  // Opens a record (a key from the overlay, or an id and its namespace), or a block's list.
+  const select = (id: Block, key: string | undefined, ns?: string) => {
+    const [first, second] = key?.split("|") ?? []
+    const record = second ?? first
+    const rns = second ? first : (ns ?? (all() ? undefined : props.ns))
     setParams(
       id === "types"
-        ? { type: record, group: undefined, block: "types" }
-        : { group: record, type: undefined, block: "groups" },
+        ? { type: record, group: undefined, rns: record ? rns : undefined, block: "types" }
+        : { group: record, type: undefined, rns: record ? rns : undefined, block: "groups" },
     )
+  }
+  const current = () => (block() === "types" ? params.type : params.group)
+  const owned = () =>
+    (block() === "types" ? rows.types() : rows.groups()).some((row) => row.item.id === current() && !!row.ns)
 
   return (
     <RecordOverlay
       title={language.t("operator.profile.tab.groups")}
+      namespaces={props.namespaces}
       blocks={blocks()}
       block={block()}
-      record={block() === "types" ? params.type : params.group}
+      record={current() && all() && params.rns && owned() ? `${params.rns}|${current()}` : current()}
       editing={editing()}
       onBlock={(id) => select(id as Block, undefined)}
-      onRecord={(id, record) => select(id as Block, record)}
+      onRecord={(id, key) => select(id as Block, key)}
     >
-      <Show when={data.query.data}>
+      <Show when={rows.catalogs.of(recordNs()) ?? rows.catalogs.first()}>
         {(catalog) => (
           <Show
             when={block() === "types"}
             fallback={
               <GroupRecord
-                ns={props.ns}
+                ns={recordNs()}
                 namespaces={props.namespaces}
                 catalog={catalog()}
                 selected={params.group!}
                 onEditing={setEditing}
-                onSelect={(group) => select("groups", group)}
+                onSelect={(group, ns) => select("groups", group, ns)}
               />
             }
           >
             <TypeRecord
-              ns={props.ns}
+              ns={recordNs()}
               namespaces={props.namespaces}
               catalog={catalog()}
               selected={params.type!}
               onEditing={setEditing}
-              onSelect={(type) => select("types", type)}
+              onSelect={(type, ns) => select("types", type, ns)}
             />
           </Show>
         )}
@@ -226,16 +303,17 @@ function GroupOverlay(props: { ns: string; namespaces: ReadonlyArray<OperatorNam
 }
 
 function TypeRecord(props: {
-  ns: string
+  // The type's namespace; none for OpenCode's types while all namespaces are shown.
+  ns: string | undefined
   namespaces: ReadonlyArray<OperatorNamespaceSummary>
   catalog: Catalog
   selected: string
   onEditing: (editing: boolean) => void
-  onSelect: (type: string | undefined) => void
+  onSelect: (type: string | undefined, ns?: string) => void
 }) {
   const language = useLanguage()
   const names = useProfileNames()
-  const data = usePromptCatalog(() => props.ns)
+  const data = usePromptRefresh()
   const api = useOperatorClient()
   const client = () => api.client().operator.namespace
   const confirm = useConfirm()
@@ -244,17 +322,19 @@ function TypeRecord(props: {
   const [store, setStore] = createStore({ name: "", description: "", busy: false, editing: false })
   const reset = () =>
     setStore({ name: type()?.name ?? "", description: type()?.description ?? "", editing: creating() })
-  createEffect(on(() => props.selected, reset))
+  // Only a change of record resets the form (not a refresh of the data around it).
+  const record = createMemo(() => `${props.ns ?? ""}|${props.selected}`)
+  createEffect(on(record, reset))
   createEffect(() => props.onEditing(store.editing))
 
   const save = async () => {
     setStore("busy", true)
-    const body = { ns: props.ns, name: store.name.trim(), description: store.description }
+    const body = { ns: props.ns!, name: store.name.trim(), description: store.description }
     await (creating() ? client().type.create(body) : client().type.update({ ...body, id: props.selected }))
       .then(async (result) => {
         await data.refresh()
         setStore("editing", false)
-        props.onSelect(result.data?.id)
+        props.onSelect(result.data?.id, props.ns)
       })
       .catch(data.fail)
       .finally(() => setStore("busy", false))
@@ -268,7 +348,7 @@ function TypeRecord(props: {
     })
     if (!ok) return
     await client()
-      .type.remove({ ns: props.ns, id: props.selected })
+      .type.remove({ ns: props.ns!, id: props.selected })
       .then(async () => {
         await data.refresh()
         props.onSelect(undefined)
@@ -332,7 +412,7 @@ function TypeRecord(props: {
                 <ButtonV2 variant="contrast" onClick={() => setStore("editing", true)}>
                   {language.t("operator.profile.edit")}
                 </ButtonV2>
-                <CopyToNamespace ns={props.ns} kind="type" id={found().id} namespaces={props.namespaces} />
+                <CopyToNamespace ns={props.ns!} kind="type" id={found().id} namespaces={props.namespaces} />
                 <ButtonV2 variant="danger" disabled={store.busy} onClick={() => void remove()}>
                   {language.t("operator.agent.delete")}
                 </ButtonV2>
@@ -367,16 +447,17 @@ function TypeRecord(props: {
 }
 
 function GroupRecord(props: {
-  ns: string
+  // The group's namespace; none for OpenCode's groups while all namespaces are shown.
+  ns: string | undefined
   namespaces: ReadonlyArray<OperatorNamespaceSummary>
   catalog: Catalog
   selected: string
   onEditing: (editing: boolean) => void
-  onSelect: (group: string | undefined) => void
+  onSelect: (group: string | undefined, ns?: string) => void
 }) {
   const language = useLanguage()
   const names = useProfileNames()
-  const data = usePromptCatalog(() => props.ns)
+  const data = usePromptRefresh()
   const api = useOperatorClient()
   const client = () => api.client().operator.namespace
   const confirm = useConfirm()
@@ -398,18 +479,20 @@ function GroupRecord(props: {
       editing: fresh(),
     })
   }
-  createEffect(on(() => props.selected, reset))
+  // Only a change of record resets the form (not a refresh of the data around it).
+  const record = createMemo(() => `${props.ns ?? ""}|${props.selected}`)
+  createEffect(on(record, reset))
   createEffect(() => props.onEditing(store.editing))
   const problem = () => groupProblem(store.types)
 
   const save = async () => {
     setStore("busy", true)
-    const body = { ns: props.ns, name: store.name.trim(), types: store.types }
+    const body = { ns: props.ns!, name: store.name.trim(), types: store.types }
     await (fresh() ? client().group.create(body) : client().group.update({ ...body, id: props.selected }))
       .then(async (result) => {
         await data.refresh()
         setStore("editing", false)
-        props.onSelect(result.data?.id)
+        props.onSelect(result.data?.id, props.ns)
       })
       .catch(data.fail)
       .finally(() => setStore("busy", false))
@@ -423,7 +506,7 @@ function GroupRecord(props: {
     })
     if (!ok) return
     await client()
-      .group.remove({ ns: props.ns, id: props.selected })
+      .group.remove({ ns: props.ns!, id: props.selected })
       .then(async () => {
         await data.refresh()
         props.onSelect(undefined)
@@ -432,7 +515,8 @@ function GroupRecord(props: {
   }
   const cancel = () => {
     if (props.selected === "new") return props.onSelect(undefined)
-    if (props.selected.startsWith("copy:")) return props.onSelect(props.selected.slice(5))
+    if (props.selected.startsWith("copy:"))
+      return props.onSelect(props.selected.slice(5), source()?.builtin ? undefined : props.ns)
     reset()
   }
 
@@ -517,11 +601,14 @@ function GroupRecord(props: {
                     {language.t("operator.profile.edit")}
                   </ButtonV2>
                 </Show>
-                <ButtonV2 variant="outline" onClick={() => props.onSelect(`copy:${found().id}`)}>
-                  {language.t("operator.profile.duplicate")}
-                </ButtonV2>
+                <NamespaceAction
+                  label={language.t("operator.profile.duplicate")}
+                  ns={props.ns}
+                  namespaces={props.namespaces}
+                  run={(ns) => props.onSelect(`copy:${found().id}`, ns)}
+                />
                 <Show when={!found().builtin}>
-                  <CopyToNamespace ns={props.ns} kind="group" id={found().id} namespaces={props.namespaces} />
+                  <CopyToNamespace ns={props.ns!} kind="group" id={found().id} namespaces={props.namespaces} />
                   <ButtonV2 variant="danger" disabled={store.busy} onClick={() => void remove()}>
                     {language.t("operator.agent.delete")}
                   </ButtonV2>
@@ -541,7 +628,7 @@ function GroupRecord(props: {
                 />
               </RecordField>
               <RecordField label={language.t("operator.profile.usedIn")} help={language.t("operator.help.groupUsedIn")}>
-                {profilesOf(props.catalog, found().id, names.profile) || "—"}
+                {profilesOf(props.catalog, found().id, names.profile).join(", ") || "—"}
               </RecordField>
             </dl>
             <Show when={found().builtin}>

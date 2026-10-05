@@ -14,74 +14,129 @@ import { CopyToNamespace } from "../ui/copy-to"
 import { useConfirm } from "../ui/confirm"
 import { DataTable } from "../ui/data-table"
 import { Field } from "../ui/field"
+import { NamespaceAction } from "../ui/namespace-picker"
 import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOverlay } from "../ui/record-overlay"
-import { useAllLayers, usePromptCatalog, useProfileNames } from "./profile-data"
+import { useAllLayers, usePromptRefresh, useProfileNames, useScopeCatalogs } from "./profile-data"
 import { SlotEditor, type SlotValue } from "./profile-editor"
 import {
+  ALL,
   type Catalog,
   copyName,
   copySlots,
   type Layer,
   namespaceDefault,
   PREFIX,
+  type Profile,
   regroup,
   slotProblem,
 } from "./profile-model"
 
-// Profile Definition: profiles (a group and the layers in each of its slots). A profile opens in the
-// overlay.
+type Row = { ns: string | undefined; item: Profile }
+
+// The key of a record in the overlay: the id, with its namespace when all namespaces are shown.
+const keyOf = (row: Row, all: boolean) => (all && row.ns ? `${row.ns}|${row.item.id}` : row.item.id)
+
+// The profiles of the namespaces in scope (each namespace's own, then OpenCode's once), and where
+// each is the namespace default.
+function useProfileRows(ns: () => string, namespaces: () => ReadonlyArray<OperatorNamespaceSummary>) {
+  const catalogs = useScopeCatalogs(ns, namespaces)
+  return {
+    catalogs,
+    rows: createMemo<Row[]>(() =>
+      catalogs.scoped(
+        (catalog) => catalog.profiles,
+        (profile) => profile.builtin,
+      ),
+    ),
+    defaultIn: (row: Row) =>
+      (row.ns ? [catalogs.of(row.ns)] : catalogs.list())
+        .filter((catalog): catalog is Catalog => !!catalog && namespaceDefault(catalog) === row.item.id)
+        .map((catalog) => catalog.namespace.name),
+  }
+}
+
+// Profile Definition: profiles (a group and the layers in each of its slots) of the namespaces in
+// scope. A profile opens in the overlay.
 export function ProfileDefinition(props: { ns: string; namespaces: ReadonlyArray<OperatorNamespaceSummary> }) {
   const language = useLanguage()
   const names = useProfileNames()
-  const data = usePromptCatalog(() => props.ns)
-  const catalog = () => data.query.data
-  const [params, setParams] = useSearchParams<{ profile?: string; block?: string }>()
-  const groupName = (id: string) => {
-    const found = catalog()?.groups.find((group) => group.id === id)
-    return found ? names.group(found) : id
+  const all = () => props.ns === ALL
+  const data = useProfileRows(
+    () => props.ns,
+    () => props.namespaces,
+  )
+  const [params, setParams] = useSearchParams<{ profile?: string; rns?: string; block?: string }>()
+  const groupName = (row: Row) => {
+    const found = (data.catalogs.of(row.ns) ?? data.catalogs.first())?.groups.find(
+      (group) => group.id === row.item.group,
+    )
+    return found ? names.group(found) : row.item.group
   }
+  const nsName = (id: string | undefined) =>
+    id
+      ? (props.namespaces.find((item) => item.namespace.id === id)?.namespace.name ?? id)
+      : language.t("operator.namespace.builtin")
   useRecordOverlay(
     () => !!(params.profile || params.block),
     () => <ProfileOverlay ns={props.ns} namespaces={props.namespaces} />,
-    () => setParams({ profile: undefined, block: undefined }),
+    () => setParams({ profile: undefined, rns: undefined, block: undefined }),
   )
 
   return (
     <section data-component="operator-panel" data-section="profiles">
       <div data-slot="operator-panel-head">
         <h2 data-slot="operator-panel-title">{language.t("operator.profile.profiles")}</h2>
-        <ButtonV2 size="small" variant="outline" onClick={() => setParams({ profile: "new" })}>
-          {language.t("operator.profile.newProfile")}
-        </ButtonV2>
+        <NamespaceAction
+          size="small"
+          label={language.t("operator.profile.newProfile")}
+          ns={all() ? undefined : props.ns}
+          namespaces={props.namespaces}
+          run={(ns) => setParams({ profile: "new", rns: ns })}
+        />
       </div>
       <p data-slot="operator-note">{language.t("operator.profile.profilesHint")}</p>
       <DataTable
         columnsKey="profiles"
         label={language.t("operator.profile.profiles")}
-        rows={catalog()?.profiles ?? []}
-        loading={data.query.isPending}
-        onRowClick={(profile) => setParams({ profile: profile.id })}
+        rows={data.rows()}
+        loading={data.catalogs.query.isPending}
+        onRowClick={(row) => setParams({ profile: row.item.id, rns: row.ns })}
         columns={[
           {
             id: "name",
             header: language.t("operator.column.name"),
-            cell: (profile) => (
+            cell: (row) => (
               <span class="flex items-center gap-2">
-                {names.profile(profile)}
-                <Show when={profile.builtin}>
+                {names.profile(row.item)}
+                <Show when={row.item.builtin}>
                   <Tag>{language.t("operator.profile.builtin")}</Tag>
                 </Show>
-                <Show when={catalog() && namespaceDefault(catalog()!) === profile.id}>
-                  <Tag>{language.t("operator.profile.namespaceDefault")}</Tag>
+                <Show when={data.defaultIn(row).length}>
+                  <Tag>
+                    {all()
+                      ? language.t("operator.profile.defaultIn", { namespaces: data.defaultIn(row).join(", ") })
+                      : language.t("operator.profile.namespaceDefault")}
+                  </Tag>
                 </Show>
               </span>
             ),
           },
+          ...(all()
+            ? [
+                {
+                  id: "namespace",
+                  optional: true,
+                  header: language.t("operator.column.namespace"),
+                  value: (row: Row) => nsName(row.ns),
+                  cell: (row: Row) => nsName(row.ns),
+                },
+              ]
+            : []),
           {
             id: "group",
             optional: true,
             header: language.t("operator.profile.group"),
-            cell: (profile) => groupName(profile.group),
+            cell: (row) => groupName(row),
           },
         ]}
       />
@@ -93,10 +148,16 @@ export function ProfileDefinition(props: { ns: string; namespaces: ReadonlyArray
 function ProfileOverlay(props: { ns: string; namespaces: ReadonlyArray<OperatorNamespaceSummary> }) {
   const language = useLanguage()
   const names = useProfileNames()
-  const data = usePromptCatalog(() => props.ns)
-  const layers = useAllLayers(() => data.query.data)
-  const [params, setParams] = useSearchParams<{ profile?: string; block?: string }>()
+  const all = () => props.ns === ALL
+  const data = useProfileRows(
+    () => props.ns,
+    () => props.namespaces,
+  )
+  const [params, setParams] = useSearchParams<{ profile?: string; rns?: string; block?: string }>()
   const [editing, setEditing] = createSignal(false)
+  const recordNs = () => (all() ? params.rns : props.ns)
+  const catalog = () => data.catalogs.of(recordNs()) ?? data.catalogs.first()
+  const layers = useAllLayers(catalog)
   const blocks = createMemo<OverlayBlock[]>(() => [
     {
       id: "profiles",
@@ -104,35 +165,53 @@ function ProfileOverlay(props: { ns: string; namespaces: ReadonlyArray<OperatorN
       icon: "prompt",
       description: language.t("operator.profile.profilesHint"),
       empty: language.t("operator.table.empty"),
-      create: { label: language.t("operator.profile.newProfile"), run: () => setParams({ profile: "new" }) },
-      records: (data.query.data?.profiles ?? []).map((profile) => ({
-        id: profile.id,
-        label: names.profile(profile),
-        detail: profile.builtin ? language.t("operator.profile.builtin") : undefined,
+      create: {
+        label: language.t("operator.profile.newProfile"),
+        ns: all() ? undefined : props.ns,
+        run: (ns) => setParams({ profile: "new", rns: ns }),
+      },
+      records: data.rows().map((row) => ({
+        id: keyOf(row, all()),
+        label: names.profile(row.item),
+        detail: all()
+          ? (props.namespaces.find((entry) => entry.namespace.id === row.ns)?.namespace.name ??
+            language.t("operator.namespace.builtin"))
+          : row.item.builtin
+            ? language.t("operator.profile.builtin")
+            : undefined,
       })),
     },
   ])
+  const open = (key: string | undefined, ns?: string) => {
+    if (!key) return setParams({ profile: undefined, rns: undefined, block: "profiles" })
+    const [first, second] = key.split("|")
+    if (second) return setParams({ profile: second, rns: first, block: undefined })
+    setParams({ profile: first, rns: ns ?? (all() ? undefined : props.ns), block: undefined })
+  }
+  const owned = () => data.rows().some((row) => row.item.id === params.profile && !!row.ns)
 
   return (
     <RecordOverlay
       title={language.t("operator.profile.tab.profiles")}
+      namespaces={props.namespaces}
       blocks={blocks()}
       block="profiles"
-      record={params.profile}
+      record={params.profile && all() && params.rns && owned() ? `${params.rns}|${params.profile}` : params.profile}
       editing={editing()}
-      onBlock={() => setParams({ profile: undefined, block: "profiles" })}
-      onRecord={(_, profile) => setParams({ profile })}
+      onBlock={() => open(undefined)}
+      onRecord={(_, key) => open(key)}
     >
-      <Show when={data.query.data}>
-        {(catalog) => (
+      <Show when={catalog()}>
+        {(loaded) => (
           <ProfileRecord
-            ns={props.ns}
+            ns={recordNs()}
             namespaces={props.namespaces}
-            catalog={catalog()}
+            catalog={loaded()}
             layers={layers()}
             selected={params.profile!}
+            defaultIn={(id) => data.defaultIn({ ns: recordNs(), item: { id } as Profile })}
             onEditing={setEditing}
-            onSelect={(profile) => setParams({ profile, block: profile ? undefined : "profiles" })}
+            onSelect={(profile, ns) => open(profile, ns)}
           />
         )}
       </Show>
@@ -143,17 +222,20 @@ function ProfileOverlay(props: { ns: string; namespaces: ReadonlyArray<OperatorN
 // One profile: read-only (its group and slots), with Edit for the namespace's own profiles (Cancel or
 // Save then), Duplicate, Use as namespace default and Preview on an agent.
 function ProfileRecord(props: {
-  ns: string
+  // The profile's namespace; none for OpenCode's profiles while all namespaces are shown.
+  ns: string | undefined
   namespaces: ReadonlyArray<OperatorNamespaceSummary>
   catalog: Catalog
   layers: ReadonlyArray<Layer>
   selected: string
+  // The namespaces whose default the profile is.
+  defaultIn: (id: string) => string[]
   onEditing: (editing: boolean) => void
-  onSelect: (profile: string | undefined) => void
+  onSelect: (profile: string | undefined, ns?: string) => void
 }) {
   const language = useLanguage()
   const names = useProfileNames()
-  const data = usePromptCatalog(() => props.ns)
+  const data = usePromptRefresh()
   const api = useOperatorClient()
   const client = () => api.client().operator.namespace
   const confirm = useConfirm()
@@ -190,7 +272,9 @@ function ProfileRecord(props: {
       editing: fresh(),
     })
   }
-  createEffect(on(() => props.selected, reset))
+  // Only a change of record resets the form (not a refresh of the data around it).
+  const record = createMemo(() => `${props.ns ?? ""}|${props.selected}`)
+  createEffect(on(record, reset))
   createEffect(() => props.onEditing(store.editing))
   const problem = () => slotProblem(props.catalog, store.value.slots)
   const groupName = (id: string) => {
@@ -202,7 +286,7 @@ function ProfileRecord(props: {
     setStore("busy", true)
     const group = props.catalog.groups.find((item) => item.id === store.value.group)
     const body = {
-      ns: props.ns,
+      ns: props.ns!,
       name: store.name.trim(),
       group: store.value.group,
       slots: group ? regroup(store.value.slots, group.types).slots : store.value.slots,
@@ -211,14 +295,14 @@ function ProfileRecord(props: {
       .then(async (result) => {
         await data.refresh()
         setStore("editing", false)
-        props.onSelect(result.data?.id)
+        props.onSelect(result.data?.id, props.ns)
       })
       .catch(data.fail)
       .finally(() => setStore("busy", false))
   }
-  const makeDefault = async () => {
+  const makeDefault = async (ns: string) => {
     await client()
-      .update({ ns: props.ns, defaultProfile: props.selected })
+      .update({ ns, defaultProfile: props.selected })
       .then(() => data.refresh())
       .catch(data.fail)
   }
@@ -231,7 +315,7 @@ function ProfileRecord(props: {
     })
     if (!ok) return
     await client()
-      .profile.remove({ ns: props.ns, id: props.selected })
+      .profile.remove({ ns: props.ns!, id: props.selected })
       .then(async () => {
         await data.refresh()
         props.onSelect(undefined)
@@ -240,7 +324,7 @@ function ProfileRecord(props: {
   }
   const cancel = () => {
     if (props.selected === "new") return props.onSelect(undefined)
-    if (copying()) return props.onSelect(props.selected.slice(5))
+    if (copying()) return props.onSelect(props.selected.slice(5), source()?.builtin ? undefined : props.ns)
     reset()
   }
 
@@ -278,7 +362,7 @@ function ProfileRecord(props: {
               />
             </Field>
             <SlotEditor
-              ns={props.ns}
+              ns={props.ns!}
               catalog={props.catalog}
               layers={props.layers}
               value={store.value}
@@ -297,8 +381,14 @@ function ProfileRecord(props: {
                 <Show when={found().builtin}>
                   <Tag>{language.t("operator.profile.builtin")}</Tag>
                 </Show>
-                <Show when={namespaceDefault(props.catalog) === found().id}>
-                  <Tag>{language.t("operator.profile.namespaceDefault")}</Tag>
+                <Show when={props.defaultIn(found().id).length}>
+                  <Tag>
+                    {props.ns
+                      ? language.t("operator.profile.namespaceDefault")
+                      : language.t("operator.profile.defaultIn", {
+                          namespaces: props.defaultIn(found().id).join(", "),
+                        })}
+                  </Tag>
                 </Show>
               </>
             }
@@ -309,16 +399,23 @@ function ProfileRecord(props: {
                     {language.t("operator.profile.edit")}
                   </ButtonV2>
                 </Show>
-                <ButtonV2 variant="outline" onClick={() => props.onSelect(`copy:${found().id}`)}>
-                  {language.t("operator.profile.duplicate")}
-                </ButtonV2>
-                <Show when={namespaceDefault(props.catalog) !== found().id}>
-                  <ButtonV2 variant="neutral" onClick={() => void makeDefault()}>
-                    {language.t("operator.profile.makeDefault")}
-                  </ButtonV2>
+                <NamespaceAction
+                  label={language.t("operator.profile.duplicate")}
+                  ns={props.ns}
+                  namespaces={props.namespaces}
+                  run={(ns) => props.onSelect(`copy:${found().id}`, ns)}
+                />
+                <Show when={!props.ns || namespaceDefault(props.catalog) !== found().id}>
+                  <NamespaceAction
+                    variant="neutral"
+                    label={language.t("operator.profile.makeDefault")}
+                    ns={props.ns}
+                    namespaces={props.namespaces}
+                    run={(ns) => void makeDefault(ns)}
+                  />
                 </Show>
                 <Show when={!found().builtin}>
-                  <CopyToNamespace ns={props.ns} kind="profile" id={found().id} namespaces={props.namespaces} />
+                  <CopyToNamespace ns={props.ns!} kind="profile" id={found().id} namespaces={props.namespaces} />
                   <ButtonV2 variant="danger" disabled={store.busy} onClick={() => void remove()}>
                     {language.t("operator.agent.delete")}
                   </ButtonV2>
@@ -332,7 +429,7 @@ function ProfileRecord(props: {
               </RecordField>
             </dl>
             <SlotEditor
-              ns={props.ns}
+              ns={props.ns ?? props.catalog.namespace.id}
               catalog={props.catalog}
               layers={props.layers}
               value={{ group: found().group, slots: found().slots }}

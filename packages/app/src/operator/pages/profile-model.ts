@@ -19,6 +19,8 @@ export type Section = OperatorPromptSection
 export type Slots = Record<string, string[]>
 
 export const OPENCODE = "opencode"
+// "All namespaces" in a namespace scope.
+export const ALL = "*"
 export const PREFIX = "opencode:"
 export const HELPER_AGENTS = ["title", "summary", "compaction"]
 export const REQUIRED = ["purpose", "role", "identity"]

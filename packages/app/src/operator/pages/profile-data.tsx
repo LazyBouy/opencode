@@ -1,4 +1,4 @@
-import { useSearchParams } from "@solidjs/router"
+import type { OperatorNamespaceSummary } from "@opencode-ai/sdk/v2/client"
 import { useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createMemo } from "solid-js"
 import { useLanguage } from "@/context/language"
@@ -6,7 +6,7 @@ import { showToast } from "@/utils/toast"
 import { useOperatorClient } from "../data"
 import { useOperatorProjects } from "../project"
 import { requestError } from "./config-helpers"
-import { type Catalog, type Group, type Layer, OPENCODE, PREFIX, type Profile } from "./profile-model"
+import { ALL, type Catalog, type Group, type Layer, PREFIX, type Profile } from "./profile-model"
 
 type Key = Parameters<ReturnType<typeof useLanguage>["t"]>[0]
 
@@ -22,12 +22,6 @@ const NAMED_LAYERS = [
   "generated.instructions",
 ]
 
-// The namespace a Prompt Profile view shows, kept in the URL as ?ns=.
-export function useNamespaceParam() {
-  const [params, setParams] = useSearchParams<{ ns?: string }>()
-  return { ns: () => params.ns || OPENCODE, setNs: (ns: string) => setParams({ ns }) }
-}
-
 export function useNamespaces() {
   const api = useOperatorClient()
   return useQuery(() => ({
@@ -38,6 +32,23 @@ export function useNamespaces() {
         .operator.namespace.list()
         .then((result) => result.data ?? []),
   }))
+}
+
+// After a change: refresh what it can affect (every catalog, preview and setting), or report a failure.
+export function usePromptRefresh() {
+  const api = useOperatorClient()
+  const queryClient = useQueryClient()
+  const language = useLanguage()
+  return {
+    refresh: () =>
+      Promise.all(
+        ["prompt-catalog", "namespaces", "prompt-preview", "agent-prompt", "project-settings"].map((key) =>
+          queryClient.invalidateQueries({ queryKey: api.key(key) }),
+        ),
+      ),
+    fail: (error: unknown) =>
+      showToast({ title: language.t("operator.profile.saveFailed"), description: requestError(error) }),
+  }
 }
 
 // A namespace's prompt items, and helpers to refresh them after a change.
@@ -66,6 +77,49 @@ export function usePromptCatalog(ns: () => string) {
       ]),
     fail: (error: unknown) =>
       showToast({ title: language.t("operator.profile.saveFailed"), description: requestError(error) }),
+  }
+}
+
+// The catalogs of the namespaces in scope (all of them, or one), in the namespaces' order. Built-in
+// items are in every catalog; `scoped` lists each namespace's own items once and the built-ins once.
+export function useScopeCatalogs(ns: () => string, namespaces: () => ReadonlyArray<OperatorNamespaceSummary>) {
+  const api = useOperatorClient()
+  const ids = () => (ns() === ALL ? namespaces().map((item) => item.namespace.id) : [ns()])
+  const query = useQuery(() => ({
+    queryKey: api.key("prompt-catalog", "scope", ids()),
+    enabled: ids().length > 0,
+    queryFn: () =>
+      Promise.all(
+        ids().map((id) =>
+          api
+            .client()
+            .operator.namespace.catalog({ ns: id })
+            .then((result) => result.data!),
+        ),
+      ),
+  }))
+  const list = (): Catalog[] => query.data ?? []
+  return {
+    query,
+    list,
+    // The catalog that built-in items are read from (all have them).
+    first: () => list()[0],
+    of: (id: string | undefined) => (id ? list().find((catalog) => catalog.namespace.id === id) : undefined),
+    // Items of every catalog: each namespace's own, then the built-ins once (with no namespace).
+    scoped: <T extends { id: string }>(pick: (catalog: Catalog) => ReadonlyArray<T>, builtin: (item: T) => boolean) => {
+      const all = list()
+      const own = all.flatMap((catalog) =>
+        pick(catalog)
+          .filter((item) => !builtin(item))
+          .map((item) => ({ ns: catalog.namespace.id as string | undefined, item })),
+      )
+      const shared = all[0]
+        ? pick(all[0])
+            .filter(builtin)
+            .map((item) => ({ ns: undefined, item }))
+        : []
+      return [...shared, ...own]
+    },
   }
 }
 

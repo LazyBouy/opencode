@@ -35,7 +35,7 @@ const user = (id: string, name: string, type: string, section: string, text: str
 
 test("Layer Definition: a new role layer and an editable copy open in the overlay", async ({ page }) => {
   const state = await mockOperator(page)
-  await page.goto("/operator/profile")
+  await page.goto("/operator/profile?ns=opencode")
   await expect(page.getByRole("tab", { name: "Layer Definition" })).toHaveAttribute("aria-selected", "true")
 
   // Only project purposes: the org purpose comes from the namespace, not from a layer here.
@@ -96,7 +96,7 @@ test("Layer Definition: a new role layer and an editable copy open in the overla
 
 test("the overlay's menu lists a block's records, and ‹ › move through every record on the page", async ({ page }) => {
   await mockOperator(page)
-  await page.goto("/operator/profile?tab=layers&layer=opencode:base.default")
+  await page.goto("/operator/profile?ns=opencode&tab=layers&layer=opencode:base.default")
   const overlay = page.getByRole("dialog")
   await expect(overlay.getByRole("heading", { name: "base.default" })).toBeVisible()
   const menu = overlay.getByRole("tablist", { name: "Layer Definition" })
@@ -135,7 +135,7 @@ test("the overlay's menu lists a block's records, and ‹ › move through every
 
 test("Group Definition: a custom type, and a group that orders it with the required types", async ({ page }) => {
   const state = await mockOperator(page)
-  await page.goto("/operator/profile?tab=groups")
+  await page.goto("/operator/profile?ns=opencode&tab=groups")
 
   const types = page.getByRole("table", { name: "Group types" })
   await expect(types.getByRole("row", { name: /Stable capability boundaries/ })).toContainText("Built-in")
@@ -181,7 +181,7 @@ test("Profile Definition: layers in two slots, reordered, and the profile made t
     user("voice", "Voice", "identity", "identity", "Speak plainly."),
     user("rules", "House rules", "identity", "identity", "Use Bun."),
   )
-  await page.goto("/operator/profile?tab=profiles")
+  await page.goto("/operator/profile?ns=opencode&tab=profiles")
   await page.getByRole("button", { name: "New profile" }).click()
   const overlay = page.getByRole("dialog")
   await overlay.getByLabel("Name", { exact: true }).fill("Release")
@@ -231,7 +231,7 @@ test("built-in groups and profiles are read-only and can be duplicated; the name
     groups: [],
     profiles: [],
   }
-  await page.goto("/operator/profile?tab=groups&group=opencode:group.spec")
+  await page.goto("/operator/profile?ns=opencode&tab=groups&group=opencode:group.spec")
   const overlay = page.getByRole("dialog")
 
   await expect(overlay.getByText("OpenCode's own group.")).toBeVisible()
@@ -246,7 +246,7 @@ test("built-in groups and profiles are read-only and can be duplicated; the name
   })
   await overlay.getByRole("button", { name: "Close" }).click()
 
-  await page.goto("/operator/profile?tab=profiles&profile=opencode:profile.helper")
+  await page.goto("/operator/profile?ns=opencode&tab=profiles&profile=opencode:profile.helper")
   await expect(overlay.getByText("OpenCode's own profile.")).toBeVisible()
   await expect(overlay.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0)
   await expect(overlay.getByRole("button", { name: "Save", exact: true })).toHaveCount(0)
@@ -262,4 +262,57 @@ test("built-in groups and profiles are read-only and can be duplicated; the name
   const purpose = page.locator('[data-section="purpose"]')
   await expect(purpose.getByRole("row")).toHaveCount(2)
   await expect(purpose.getByRole("row", { name: /Ship tools/ })).toContainText("Yours")
+})
+
+test("All namespaces: each item's namespace, OpenCode's items once, New asks the namespace, and the choice is shared", async ({
+  page,
+}) => {
+  const state = await mockOperator(page)
+  state.prompt.namespaces.push({ id: "acme", name: "Acme", purpose: "", createdAt: 1, updatedAt: 1 })
+  state.prompt.items.acme = {
+    types: [],
+    layers: [user("ship", "Ship tools", "purpose", "purpose", "Ship the tools.")],
+    groups: [],
+    profiles: [],
+  }
+  state.prompt.items.opencode!.layers.push(user("ship", "Ship goal", "purpose", "purpose", "Ship the goal."))
+  await page.goto("/operator/profile")
+  const picker = page.locator('[data-component="select-v2-root"][aria-label="Namespace"]')
+  await expect(picker).toContainText("All namespaces")
+
+  // The same id in two namespaces: two rows, each with its namespace.
+  const purpose = page.locator('[data-section="purpose"]')
+  await expect(purpose.getByRole("row")).toHaveCount(3)
+  await expect(purpose.getByRole("row", { name: /Ship tools/ })).toContainText("Acme")
+  await expect(purpose.getByRole("row", { name: /Ship goal/ })).toContainText("OpenCode")
+  const base = page.locator('[data-section="base"]').getByRole("row", { name: /base\.default/ })
+  await expect(base).toHaveCount(1)
+  await expect(base).toContainText("Built in")
+
+  await purpose.getByRole("row", { name: /Ship tools/ }).click()
+  const overlay = page.getByRole("dialog")
+  await expect(overlay.getByRole("heading", { name: "Ship tools" })).toBeVisible()
+  await expect(overlay).toContainText("Ship the tools.")
+  await expect(page).toHaveURL(/rns=acme/)
+  await overlay.getByRole("button", { name: "Close" }).click()
+
+  // New asks which namespace.
+  await page.locator('[data-section="role"]').getByRole("button", { name: "New layer" }).click()
+  await page.getByRole("menuitem", { name: "Acme" }).click()
+  await overlay.getByLabel("Name", { exact: true }).fill("Reviewer")
+  await overlay.getByLabel("Text", { exact: true }).fill("Review.")
+  await overlay.getByRole("button", { name: "Save", exact: true }).click()
+  await expect.poll(() => state.prompt.writes.length).toBe(1)
+  expect(state.prompt.writes[0]).toMatchObject({ method: "POST", path: "/operator/namespaces/acme/layers" })
+  await overlay.getByRole("button", { name: "Close" }).click()
+
+  // The namespace choice is shared with Projects until it is changed.
+  await page.goto("/operator/projects")
+  await expect(picker).toContainText("All namespaces")
+  await expect(page.getByRole("row", { name: /smoke-project/ })).toBeVisible()
+  await pick(page, "Namespace", "Acme")
+  await expect(page.getByRole("row", { name: /smoke-project/ })).toHaveCount(0)
+  await page.goto("/operator/profile")
+  await expect(picker).toContainText("Acme")
+  await expect(page.locator('[data-section="purpose"]').getByRole("row", { name: /Ship goal/ })).toHaveCount(0)
 })

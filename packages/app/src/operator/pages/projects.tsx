@@ -13,6 +13,7 @@ import { useOperatorClient } from "../data"
 import { formatAgo, formatCost, formatCount } from "../format"
 import { DataTable } from "../ui/data-table"
 import { useFolderBrowser } from "../ui/folder-browser"
+import { NamespacePicker, useNamespaceScope } from "../ui/namespace-picker"
 import { PageHeader } from "../ui/page-header"
 import { requestError } from "./config-helpers"
 import { useNamespaces, useProfileNames } from "./profile-data"
@@ -76,6 +77,7 @@ export default function ProjectsPage() {
       name: key.split("/").filter(Boolean).at(-1) ?? key,
       namespace: OPENCODE,
     }
+  const scope = useNamespaceScope()
   const rows = createMemo<Row[]>(() => {
     const known = projects.data ?? []
     const worktrees = new Set(known.map((project) => project.worktree))
@@ -92,7 +94,10 @@ export default function ProjectsPage() {
         created: 0,
         folder: true,
       }))
-    return [...known, ...folders]
+    // The namespace scope: all projects, or one namespace's (folders outside git are in OpenCode).
+    return [...known, ...folders].filter(
+      (project) => scope.all() || (project.global ? OPENCODE : settingOf(project.worktree).namespace) === scope.ns(),
+    )
   })
   const nsName = (key: string) => {
     const ns = settingOf(key).namespace
@@ -155,9 +160,12 @@ export default function ProjectsPage() {
         title={language.t("operator.page.projects.title")}
         description={language.t("operator.page.projects.description")}
         actions={
-          <ButtonV2 size="small" variant="contrast" onClick={() => void choose()}>
-            {language.t("operator.projects.add")}
-          </ButtonV2>
+          <span class="flex items-center gap-2">
+            <NamespacePicker />
+            <ButtonV2 size="small" variant="contrast" onClick={() => void choose()}>
+              {language.t("operator.projects.add")}
+            </ButtonV2>
+          </span>
         }
       />
       <p data-slot="operator-note">{language.t("operator.projects.hint")}</p>

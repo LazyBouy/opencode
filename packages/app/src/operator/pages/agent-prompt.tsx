@@ -183,17 +183,16 @@ function Override(props: {
     slots: {} as Slots,
     busy: false,
   })
-  // The saved override, whenever it changes on the server.
+  // The saved override, whenever it changes on the server (a memo, so a refetch of the same setting
+  // does not reset edits in progress).
+  const saved = createMemo(() => JSON.stringify(props.setting.override ?? null))
   createEffect(
-    on(
-      () => JSON.stringify(props.setting.override ?? null),
-      () => {
-        const override = props.setting.override
-        // Slots are replaced, not merged, so slots the saved override dropped go.
-        setStore({ open: !!override, group: override?.group })
-        setStore("slots", reconcile(copySlots(override?.slots ?? {})))
-      },
-    ),
+    on(saved, () => {
+      const override = props.setting.override
+      // Slots are replaced, not merged, so slots the saved override dropped go.
+      setStore({ open: !!override, group: override?.group })
+      setStore("slots", reconcile(copySlots(override?.slots ?? {})))
+    }),
   )
   const value = createMemo<SlotValue>(() => {
     const group = store.group ?? props.profile?.group ?? ""

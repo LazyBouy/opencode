@@ -14,9 +14,10 @@ import { CopyToNamespace } from "../ui/copy-to"
 import { useConfirm } from "../ui/confirm"
 import { DataTable } from "../ui/data-table"
 import { Field } from "../ui/field"
+import { NamespaceAction } from "../ui/namespace-picker"
 import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOverlay } from "../ui/record-overlay"
-import { useAllLayers, usePromptCatalog, useProfileNames } from "./profile-data"
-import { type Catalog, type Layer, origin, profilesUsing, type Section, SECTIONS, WRITTEN } from "./profile-model"
+import { usePromptRefresh, useProfileNames, useScopeCatalogs, useToolLayers } from "./profile-data"
+import { ALL, type Catalog, type Layer, origin, profilesUsing, type Section, SECTIONS, WRITTEN } from "./profile-model"
 
 // Each Layer Definition section's icon in the overlay's menu.
 const ICONS: Record<Section, OverlayBlock["icon"]> = {
@@ -31,58 +32,89 @@ const ICONS: Record<Section, OverlayBlock["icon"]> = {
   message: "speech-bubble",
 }
 
-// The layers Layer Definition lists: the namespace's and the built-ins (with every tool's
+// A layer as Layer Definition lists it: with its namespace, or none for OpenCode's built-ins (the
+// same in every namespace).
+type Row = { ns: string | undefined; item: Layer }
+
+// The layers of the namespaces in scope: each namespace's own, then OpenCode's (with every tool's
 // description). The org purpose is not one: it comes from the namespace (Settings → Namespaces).
-function useLayers(ns: () => string) {
-  const data = usePromptCatalog(ns)
-  const all = useAllLayers(() => data.query.data)
-  return { data, layers: createMemo(() => all().filter((layer) => layer.origin !== "automatic")) }
+function useLayers(ns: () => string, namespaces: () => ReadonlyArray<OperatorNamespaceSummary>) {
+  const catalogs = useScopeCatalogs(ns, namespaces)
+  const tools = useToolLayers(catalogs.first)
+  const rows = createMemo<Row[]>(() => [
+    ...catalogs
+      .scoped(
+        (catalog) => catalog.layers,
+        (layer) => layer.origin !== "user",
+      )
+      .filter((row) => row.item.origin !== "automatic"),
+    ...tools().map((item) => ({ ns: undefined, item })),
+  ])
+  return { catalogs, rows }
 }
 
+// The key of a row in the overlay: the id, with its namespace when all namespaces are shown.
+const keyOf = (row: Row, all: boolean) => (all && row.ns ? `${row.ns}|${row.item.id}` : row.item.id)
+
 // Where a layer comes from, and what uses it, in words.
-function useLayerWords(catalog: () => Catalog | undefined, layers: () => ReadonlyArray<Layer>) {
+function useLayerWords(catalogs: () => ReadonlyArray<Catalog>, rows: () => ReadonlyArray<Row>, all: () => boolean) {
   const language = useLanguage()
   const names = useProfileNames()
   return {
     origin: (layer: Layer) => {
       const kind = origin(layer)
       if (kind !== "copy") return language.t(`operator.profile.origin.${kind}`)
-      const original = layers().find((item) => item.id === layer.replaces)
+      const original = rows().find((row) => row.item.id === layer.replaces)?.item
       return language.t("operator.profile.origin.copy", {
         name: original ? names.layer(original) : (layer.replaces ?? ""),
       })
     },
-    usedIn: (layer: Layer) => {
-      const loaded = catalog()
-      if (!loaded) return ""
-      const profiles = profilesUsing(loaded, layer.id).map((profile) => names.profile(profile))
-      const projects = loaded.projects.filter((project) => project.purpose === layer.id).map((project) => project.name)
-      return [...profiles, ...projects.map((name) => language.t("operator.profile.projectName", { name }))].join(", ")
+    usedIn: (row: Row) => {
+      const used = new Set<string>()
+      for (const catalog of catalogs().filter((item) => !row.ns || item.namespace.id === row.ns)) {
+        for (const profile of profilesUsing(catalog, row.item.id))
+          used.add(
+            profile.builtin || !all()
+              ? names.profile(profile)
+              : `${names.profile(profile)} (${catalog.namespace.name})`,
+          )
+        for (const project of catalog.projects.filter((item) => item.purpose === row.item.id))
+          used.add(language.t("operator.profile.projectName", { name: project.name }))
+      }
+      return [...used].join(", ")
     },
   }
 }
 
-// Layer Definition: every layer of the namespace by section. A layer opens in the overlay.
+// Layer Definition: every layer of the namespaces in scope, by section. A layer opens in the overlay.
 export function LayerDefinition(props: { ns: string; namespaces: ReadonlyArray<OperatorNamespaceSummary> }) {
   const language = useLanguage()
   const names = useProfileNames()
-  const { data, layers } = useLayers(() => props.ns)
-  const catalog = () => data.query.data
-  const words = useLayerWords(catalog, layers)
-  const [params, setParams] = useSearchParams<{ layer?: string; block?: string; q?: string }>()
+  const all = () => props.ns === ALL
+  const { catalogs, rows } = useLayers(
+    () => props.ns,
+    () => props.namespaces,
+  )
+  const words = useLayerWords(catalogs.list, rows, all)
+  const nsName = (id: string | undefined) =>
+    id
+      ? (props.namespaces.find((item) => item.namespace.id === id)?.namespace.name ?? id)
+      : language.t("operator.namespace.builtin")
+  const [params, setParams] = useSearchParams<{ layer?: string; rns?: string; block?: string; q?: string }>()
   useRecordOverlay(
     () => !!(params.layer || params.block),
     () => <LayerOverlay ns={props.ns} namespaces={props.namespaces} />,
-    () => setParams({ layer: undefined, block: undefined }),
+    () => setParams({ layer: undefined, rns: undefined, block: undefined }),
   )
 
   const sections = createMemo(() => {
     const query = (params.q ?? "").trim().toLowerCase()
-    const shown = layers().filter(
-      (layer) =>
-        !query || `${layer.id} ${layer.name} ${names.layer(layer)} ${layer.text}`.toLowerCase().includes(query),
+    const shown = rows().filter(
+      (row) =>
+        !query ||
+        `${row.item.id} ${row.item.name} ${names.layer(row.item)} ${row.item.text}`.toLowerCase().includes(query),
     )
-    return SECTIONS.map((section) => ({ ...section, rows: shown.filter((layer) => layer.section === section.id) }))
+    return SECTIONS.map((section) => ({ ...section, rows: shown.filter((row) => row.item.section === section.id) }))
   })
 
   return (
@@ -103,11 +135,17 @@ export function LayerDefinition(props: { ns: string; namespaces: ReadonlyArray<O
             <div data-slot="operator-panel-head">
               <h2 data-slot="operator-panel-title">{names.section(section.id)}</h2>
               <Show when={WRITTEN.includes(section.id)}>
-                <ButtonV2 size="small" variant="outline" onClick={() => setParams({ layer: `new:${section.id}` })}>
-                  {section.id === "purpose"
-                    ? language.t("operator.profile.newPurpose")
-                    : language.t("operator.profile.newLayer")}
-                </ButtonV2>
+                <NamespaceAction
+                  size="small"
+                  label={
+                    section.id === "purpose"
+                      ? language.t("operator.profile.newPurpose")
+                      : language.t("operator.profile.newLayer")
+                  }
+                  ns={all() ? undefined : props.ns}
+                  namespaces={props.namespaces}
+                  run={(ns) => setParams({ layer: `new:${section.id}`, rns: ns, block: section.id })}
+                />
               </Show>
             </div>
             <p data-slot="operator-note">{language.t(`operator.layerSection.about.${section.id}`)}</p>
@@ -115,39 +153,50 @@ export function LayerDefinition(props: { ns: string; namespaces: ReadonlyArray<O
               columnsKey="profile-layers"
               label={names.section(section.id)}
               rows={section.rows}
-              loading={data.query.isPending}
+              loading={catalogs.query.isPending}
               empty={
                 section.id === "purpose"
                   ? language.t("operator.profile.noPurposes")
                   : language.t("operator.profile.noLayers")
               }
-              onRowClick={(row) => setParams({ layer: row.id, block: section.id })}
+              onRowClick={(row) => setParams({ layer: row.item.id, rns: row.ns, block: section.id })}
               columns={[
                 {
                   id: "name",
                   header: language.t("operator.column.name"),
-                  value: (row) => names.layer(row),
+                  value: (row) => names.layer(row.item),
                   cell: (row) => (
                     <span class="flex items-center gap-2">
-                      {names.layer(row)}
-                      <Show when={row.delivery}>
+                      {names.layer(row.item)}
+                      <Show when={row.item.delivery}>
                         {(delivery) => <Tag>{language.t(`operator.profile.delivery.${delivery()}`)}</Tag>}
                       </Show>
                     </span>
                   ),
                 },
+                ...(all()
+                  ? [
+                      {
+                        id: "namespace",
+                        optional: true,
+                        header: language.t("operator.column.namespace"),
+                        value: (row: Row) => nsName(row.ns),
+                        cell: (row: Row) => nsName(row.ns),
+                      },
+                    ]
+                  : []),
                 {
                   id: "type",
                   optional: true,
                   header: language.t("operator.profile.type"),
-                  value: (row) => row.type,
-                  cell: (row) => names.typeId(catalog(), row.type),
+                  value: (row) => row.item.type,
+                  cell: (row) => names.typeId(catalogs.of(row.ns) ?? catalogs.first(), row.item.type),
                 },
                 {
                   id: "origin",
                   optional: true,
                   header: language.t("operator.profile.origin"),
-                  cell: (row) => words.origin(row),
+                  cell: (row) => words.origin(row.item),
                 },
                 {
                   id: "used",
@@ -168,15 +217,21 @@ export function LayerDefinition(props: { ns: string; namespaces: ReadonlyArray<O
 function LayerOverlay(props: { ns: string; namespaces: ReadonlyArray<OperatorNamespaceSummary> }) {
   const language = useLanguage()
   const names = useProfileNames()
-  const { data, layers } = useLayers(() => props.ns)
-  const [params, setParams] = useSearchParams<{ layer?: string; block?: string }>()
+  const all = () => props.ns === ALL
+  const { catalogs, rows } = useLayers(
+    () => props.ns,
+    () => props.namespaces,
+  )
+  const [params, setParams] = useSearchParams<{ layer?: string; rns?: string; block?: string }>()
   const [editing, setEditing] = createSignal(false)
+  // The record's namespace: the one the page shows, or (all of them) the one in the URL.
+  const recordNs = () => (all() ? params.rns : props.ns)
   const creating = () => SECTIONS.find((item) => `new:${item.id}` === params.layer)?.id
+  const row = createMemo(() =>
+    rows().find((item) => item.item.id === params.layer && (!all() || !item.ns || item.ns === params.rns)),
+  )
   const block = () =>
-    creating() ??
-    layers().find((layer) => layer.id === params.layer)?.section ??
-    SECTIONS.find((item) => item.id === params.block)?.id ??
-    SECTIONS[0]!.id
+    creating() ?? row()?.item.section ?? SECTIONS.find((item) => item.id === params.block)?.id ?? SECTIONS[0]!.id
   const blocks = createMemo<OverlayBlock[]>(() =>
     SECTIONS.map((section) => ({
       id: section.id,
@@ -191,39 +246,54 @@ function LayerOverlay(props: { ns: string; namespaces: ReadonlyArray<OperatorNam
               section.id === "purpose"
                 ? language.t("operator.profile.newPurpose")
                 : language.t("operator.profile.newLayer"),
-            run: () => setParams({ layer: `new:${section.id}`, block: section.id }),
+            ns: all() ? undefined : props.ns,
+            run: (ns: string) => setParams({ layer: `new:${section.id}`, rns: ns, block: section.id }),
           }
         : undefined,
-      records: layers()
-        .filter((layer) => layer.section === section.id)
-        .map((layer) => ({
-          id: layer.id,
-          label: names.layer(layer),
-          detail: names.typeId(data.query.data, layer.type),
+      records: rows()
+        .filter((item) => item.item.section === section.id)
+        .map((item) => ({
+          id: keyOf(item, all()),
+          label: names.layer(item.item),
+          detail: all()
+            ? (props.namespaces.find((entry) => entry.namespace.id === item.ns)?.namespace.name ??
+              language.t("operator.namespace.builtin"))
+            : names.typeId(catalogs.first(), item.item.type),
         })),
     })),
   )
+  const open = (key: string | undefined, ns?: string) => {
+    if (!key) return setParams({ layer: undefined, rns: undefined, block: block() })
+    const [first, second] = key.split("|")
+    if (second) return setParams({ layer: second, rns: first, block: undefined })
+    setParams({ layer: first, rns: ns ?? (all() ? undefined : props.ns), block: undefined })
+  }
 
   return (
     <RecordOverlay
       title={language.t("operator.profile.tab.layers")}
+      namespaces={props.namespaces}
       blocks={blocks()}
       block={block()}
-      record={params.layer}
+      record={
+        params.layer ? (all() && params.rns && row()?.ns ? `${params.rns}|${params.layer}` : params.layer) : undefined
+      }
       editing={editing()}
-      onBlock={(id) => setParams({ block: id, layer: undefined })}
-      onRecord={(id, layer) => setParams({ block: id, layer })}
+      onBlock={(id) => setParams({ block: id, layer: undefined, rns: undefined })}
+      onRecord={(_, key) => open(key)}
     >
-      <Show when={data.query.data}>
+      <Show when={catalogs.of(recordNs()) ?? catalogs.first()}>
         {(catalog) => (
           <LayerRecord
-            ns={props.ns}
+            ns={recordNs()}
             namespaces={props.namespaces}
             selected={params.layer!}
             catalog={catalog()}
-            layers={layers()}
+            layers={rows()
+              .filter((item) => !item.ns || item.ns === recordNs())
+              .map((item) => item.item)}
             onEditing={setEditing}
-            onSelect={(layer) => setParams({ layer, block: layer ? undefined : block() })}
+            onSelect={(layer, ns) => open(layer, ns)}
           />
         )}
       </Show>
@@ -234,24 +304,26 @@ function LayerOverlay(props: { ns: string; namespaces: ReadonlyArray<OperatorNam
 // One layer: read-only, with Edit for the namespace's own layers (Cancel or Save then), and Make
 // editable copy for OpenCode's texts. A new layer opens straight in edit mode.
 function LayerRecord(props: {
-  ns: string
+  // The layer's namespace; none for OpenCode's layers while all namespaces are shown.
+  ns: string | undefined
   namespaces: ReadonlyArray<OperatorNamespaceSummary>
   selected: string
   catalog: Catalog
   layers: ReadonlyArray<Layer>
   onEditing: (editing: boolean) => void
-  onSelect: (layer: string | undefined) => void
+  onSelect: (layer: string | undefined, ns?: string) => void
 }) {
   const language = useLanguage()
   const navigate = useNavigate()
   const names = useProfileNames()
-  const data = usePromptCatalog(() => props.ns)
+  const data = usePromptRefresh()
   const api = useOperatorClient()
   const client = () => api.client().operator.namespace
   const confirm = useConfirm()
   const words = useLayerWords(
-    () => props.catalog,
-    () => props.layers,
+    () => [props.catalog],
+    () => props.layers.map((item) => ({ ns: props.ns, item })),
+    () => false,
   )
   const creating = () => SECTIONS.find((item) => `new:${item.id}` === props.selected)?.id
   const layer = createMemo(() => props.layers.find((item) => item.id === props.selected))
@@ -265,7 +337,9 @@ function LayerRecord(props: {
       editing: !!creating(),
     })
   }
-  createEffect(on(() => props.selected, reset))
+  // Only a change of record resets the form (not a refresh of the data around it).
+  const record = createMemo(() => `${props.ns ?? ""}|${props.selected}`)
+  createEffect(on(record, reset))
   createEffect(() => props.onEditing(store.editing))
   const editable = () => layer()?.origin === "user"
   // A layer's type changes only in Custom; copies keep their built-in's type.
@@ -279,7 +353,7 @@ function LayerRecord(props: {
   }
   const save = async () => {
     setStore("busy", true)
-    const body = { ns: props.ns, name: store.name.trim(), type: store.type, text: store.text }
+    const body = { ns: props.ns!, name: store.name.trim(), type: store.type, text: store.text }
     await (
       creating()
         ? client().layer.create({ ...body, section: creating() })
@@ -288,20 +362,20 @@ function LayerRecord(props: {
       .then(async (result) => {
         await data.refresh()
         setStore("editing", false)
-        props.onSelect(result.data?.id)
+        props.onSelect(result.data?.id, props.ns)
       })
       .catch(data.fail)
       .finally(() => setStore("busy", false))
   }
-  const copy = async () => {
+  const copy = async (ns: string) => {
     const found = layer()
     if (!found) return
     setStore("busy", true)
     await client()
-      .layer.copy({ ns: props.ns, id: found.id, ...(found.section === "tool" ? { text: found.text } : {}) })
+      .layer.copy({ ns, id: found.id, ...(found.section === "tool" ? { text: found.text } : {}) })
       .then(async (result) => {
         await data.refresh()
-        props.onSelect(result.data?.id)
+        props.onSelect(result.data?.id, ns)
       })
       .catch(data.fail)
       .finally(() => setStore("busy", false))
@@ -317,7 +391,7 @@ function LayerRecord(props: {
     })
     if (!ok) return
     await client()
-      .layer.remove({ ns: props.ns, id: found.id })
+      .layer.remove({ ns: props.ns!, id: found.id })
       .then(async () => {
         await data.refresh()
         props.onSelect(undefined)
@@ -406,7 +480,7 @@ function LayerRecord(props: {
                     {language.t("operator.profile.edit")}
                   </ButtonV2>
                   <CopyToNamespace
-                    ns={props.ns}
+                    ns={props.ns!}
                     kind="layer"
                     id={found().id}
                     namespaces={props.namespaces}
@@ -417,9 +491,14 @@ function LayerRecord(props: {
                   </ButtonV2>
                 </Show>
                 <Show when={found().origin === "builtin"}>
-                  <ButtonV2 variant="contrast" disabled={store.busy} onClick={() => void copy()}>
-                    {language.t("operator.profile.makeCopy")}
-                  </ButtonV2>
+                  <NamespaceAction
+                    variant="contrast"
+                    label={language.t("operator.profile.makeCopy")}
+                    ns={props.ns}
+                    namespaces={props.namespaces}
+                    disabled={store.busy}
+                    run={(ns) => void copy(ns)}
+                  />
                 </Show>
                 <Show when={found().id === "opencode:generated.instructions"}>
                   <ButtonV2 variant="outline" onClick={() => navigate("/operator/memory")}>
@@ -455,7 +534,7 @@ function LayerRecord(props: {
                 )}
               </Show>
               <RecordField label={language.t("operator.profile.usedIn")} help={language.t("operator.help.layerUsedIn")}>
-                {words.usedIn(found()) || "—"}
+                {words.usedIn({ ns: props.ns, item: found() }) || "—"}
               </RecordField>
               <Show when={linked().length}>
                 <RecordField

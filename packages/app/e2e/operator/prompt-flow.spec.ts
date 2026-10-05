@@ -17,7 +17,9 @@ test.beforeEach(async ({ page }) => {
 // Picks an option from the select with this accessible name. Inside a modal dialog the list is not
 // in the accessibility tree, so options are found by their items there.
 const pick = async (page: Page, label: string, option: string, inDialog = false) => {
-  await page.locator(`[data-component="select-v2-root"][aria-label="${label}"] [data-component="select-v2"]`).click()
+  await (inDialog ? page.getByRole("dialog") : page)
+    .locator(`[data-component="select-v2-root"][aria-label="${label}"] [data-component="select-v2"]`)
+    .click()
   if (!inDialog) return page.getByRole("option", { name: option, exact: true }).click()
   await page
     .locator('[data-component="menu-v2-item"]')

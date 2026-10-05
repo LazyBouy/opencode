@@ -1,13 +1,14 @@
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Icon } from "@opencode-ai/ui/icon"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Dialog } from "@opencode-ai/ui/v2/dialog-v2"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
 import { createEffect, createMemo, For, Index, type JSX, on, onCleanup, onMount, Show, untrack } from "solid-js"
 import "@/components/settings-v2/settings-v2.css"
 import { useLanguage } from "@/context/language"
+import type { OperatorNamespaceSummary } from "@opencode-ai/sdk/v2/client"
 import { FieldHelp } from "./field-help"
+import { NamespaceAction } from "./namespace-picker"
 import "./record-overlay.css"
 
 type IconName = Parameters<typeof Icon>[0]["name"]
@@ -23,7 +24,8 @@ export type OverlayBlock = {
   description?: JSX.Element
   records: ReadonlyArray<OverlayRecord>
   empty?: string
-  create?: { label: string; run: () => void }
+  // New record: in `ns`, or (no namespace, all of them shown) in the one chosen from a menu.
+  create?: { label: string; ns: string | undefined; run: (ns: string) => void }
 }
 
 // The overlay a page's records open in, laid out like Settings: the page's blocks on the left; on
@@ -32,6 +34,7 @@ export type OverlayBlock = {
 // `children`, shown when `record` is set.
 export function RecordOverlay(props: {
   title: string
+  namespaces: ReadonlyArray<OperatorNamespaceSummary>
   blocks: ReadonlyArray<OverlayBlock>
   block: string
   record?: string
@@ -151,7 +154,13 @@ export function RecordOverlay(props: {
               <div class="settings-v2-tab-body" data-slot="record-overlay-body" tabIndex={-1}>
                 <Show
                   when={props.record}
-                  fallback={<BlockList block={block()} onOpen={(id) => props.onRecord(block().id, id)} />}
+                  fallback={
+                    <BlockList
+                      block={block()}
+                      namespaces={props.namespaces}
+                      onOpen={(id) => props.onRecord(block().id, id)}
+                    />
+                  }
                 >
                   {props.children}
                 </Show>
@@ -165,7 +174,11 @@ export function RecordOverlay(props: {
 }
 
 // A block's records, as a list to open one from.
-function BlockList(props: { block: OverlayBlock; onOpen: (id: string) => void }) {
+function BlockList(props: {
+  block: OverlayBlock
+  namespaces: ReadonlyArray<OperatorNamespaceSummary>
+  onOpen: (id: string) => void
+}) {
   return (
     <div class="flex flex-col gap-3">
       <div class="flex items-start justify-between gap-3">
@@ -174,9 +187,15 @@ function BlockList(props: { block: OverlayBlock; onOpen: (id: string) => void })
         </Show>
         <Show when={props.block.create}>
           {(create) => (
-            <ButtonV2 size="small" variant="outline" class="shrink-0" onClick={create().run}>
-              {create().label}
-            </ButtonV2>
+            <span class="shrink-0">
+              <NamespaceAction
+                size="small"
+                label={create().label}
+                ns={create().ns}
+                namespaces={props.namespaces}
+                run={create().run}
+              />
+            </span>
           )}
         </Show>
       </div>

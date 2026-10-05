@@ -55,6 +55,10 @@ test("the agent's Overview shows its profile and where it comes from", async ({ 
   await mockOperator(page)
   await page.goto(`/operator/agents/build${dir}`)
   await expect(page.locator('[data-component="operator-facts"]')).toContainText("OpenCode (from: namespace default)")
+})
+
+test("a helper agent's Overview shows the helper profile", async ({ page }) => {
+  await mockOperator(page)
   await page.goto(`/operator/agents/title${dir}`)
   await expect(page.locator('[data-component="operator-facts"]')).toContainText("OpenCode helper (from: helper)")
 })
@@ -63,6 +67,6 @@ test("Profile Definition has no Used by column", async ({ page }) => {
   await mockOperator(page)
   await page.goto("/operator/profile?tab=profiles")
   const table = page.getByRole("table", { name: "Profiles" })
-  await expect(table.getByRole("columnheader", { name: "Name" })).toBeVisible()
+  await expect(table.getByRole("columnheader", { name: "Name", exact: true })).toBeVisible()
   await expect(table.getByRole("columnheader", { name: "Used by" })).toHaveCount(0)
 })

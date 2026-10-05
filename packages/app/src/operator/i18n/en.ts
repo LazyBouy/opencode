@@ -57,6 +57,12 @@ export const dict = {
   "operator.planned.title": "Coming soon",
   "operator.table.empty": "Nothing to show",
   "operator.fieldHelp.about": "About {{field}}",
+  "operator.namespace.all": "All namespaces",
+  "operator.namespace.builtin": "Built in (every namespace)",
+  "operator.namespace.in": "In namespace",
+  "operator.help.namespacePicker":
+    "The organization whose items this page shows: all namespaces, or one. Projects and Prompt Profile share the choice until you change it.",
+  "operator.profile.defaultIn": "Default in {{namespaces}}",
   "operator.overlay.previous": "Previous record",
   "operator.overlay.next": "Next record",
   "operator.overlay.position": "{{index}} of {{count}}",
