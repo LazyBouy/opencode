@@ -36,7 +36,9 @@ test("Layer Definition: sections, a new role layer and an editable copy of a bui
 
   const purpose = page.locator('[data-section="purpose"]')
   await expect(purpose.getByRole("heading", { name: "Project Purpose" })).toBeVisible()
-  await expect(purpose.getByRole("row", { name: /Org purpose/ })).toBeVisible()
+  // Only project purposes: the org purpose comes from the namespace, not from a layer here.
+  await expect(purpose.getByRole("row", { name: /Org purpose/ })).toHaveCount(0)
+  await expect(purpose).toContainText("No Project Purposes yet.")
   const messages = page.locator('[data-section="message"]')
   await expect(messages.getByRole("row", { name: /reminder\.plan/ })).toContainText("Sent in the conversation")
 
@@ -152,7 +154,12 @@ test("built-in groups and profiles are read-only and can be duplicated; the name
 }) => {
   const state = await mockOperator(page)
   state.prompt.namespaces.push({ id: "acme", name: "Acme", purpose: "Build tools.", createdAt: 1, updatedAt: 1 })
-  state.prompt.items.acme = { types: [], layers: [], groups: [], profiles: [] }
+  state.prompt.items.acme = {
+    types: [],
+    layers: [user("ship", "Ship tools", "purpose", "purpose", "Ship the tools.")],
+    groups: [],
+    profiles: [],
+  }
   await page.goto("/operator/profile?tab=groups&group=opencode:group.spec")
 
   await expect(page.getByText("OpenCode's own group.")).toBeVisible()
@@ -177,9 +184,7 @@ test("built-in groups and profiles are read-only and can be duplicated; the name
   await expect(page).toHaveURL(/ns=acme/)
   await expect(page).toHaveURL(/tab=profiles/)
   await page.getByRole("tab", { name: "Layer Definition" }).click()
-  await page
-    .locator('[data-section="purpose"]')
-    .getByRole("row", { name: /Org purpose/ })
-    .click()
-  await expect(page.locator('[data-slot="operator-sticky"]')).toContainText("Build tools.")
+  const purpose = page.locator('[data-section="purpose"]')
+  await expect(purpose.getByRole("row")).toHaveCount(2)
+  await expect(purpose.getByRole("row", { name: /Ship tools/ })).toContainText("Yours")
 })

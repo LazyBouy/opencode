@@ -490,6 +490,7 @@ export const dict = {
   "operator.profile.newPurpose": "New Project Purpose",
   "operator.profile.newIn": "New layer: {{section}}",
   "operator.profile.noLayers": "No layers here yet.",
+  "operator.profile.noPurposes": "No Project Purposes yet.",
   "operator.profile.pickLayer": "Choose a layer to read or change it.",
   "operator.profile.noSuchLayer": "This layer no longer exists.",
   "operator.profile.type": "Type",
@@ -506,7 +507,6 @@ export const dict = {
     "A copy is used instead of OpenCode's text only in the profiles that hold it. A profile holds at most one copy of each text.",
   "operator.profile.copyOf": "Editable copy of",
   "operator.profile.chars": "{{count}} characters",
-  "operator.profile.noPurpose": "This namespace has no org purpose yet.",
   "operator.profile.editInSettings": "Edit in Settings → Namespaces",
   "operator.profile.linkedBy": "Linked by projects: {{projects}}",
   "operator.profile.deleteLayerBody":
@@ -583,7 +583,7 @@ export const dict = {
   "operator.layerSection.about.base":
     "OpenCode's base prompt for each model family, and the slots that pick one for the request's model.",
   "operator.layerSection.about.purpose":
-    "The org purpose goes first in every agent's prompt. Each project can link one Project Purpose, sent after it.",
+    "Purposes of this namespace's projects. A project links one on the Projects page; its agents get it in Purpose, after the namespace's org purpose (set in Settings → Namespaces).",
   "operator.layerSection.about.role": "What an agent is responsible for.",
   "operator.layerSection.about.identity": "Who the agents are and how they work.",
   "operator.layerSection.about.tool":
@@ -621,7 +621,6 @@ export const dict = {
   "operator.layer.slot.base": "Base prompt (by model)",
   "operator.layer.slot.agent-or-base": "Agent prompt, else base prompt",
   "operator.layer.slot.agent": "Agent prompt",
-  "operator.layer.purpose.org": "Org purpose",
   "operator.layer.generated.environment": "Environment",
   "operator.layer.generated.references": "References",
   "operator.layer.generated.instructions": "Instructions",
@@ -632,7 +631,6 @@ export const dict = {
   "operator.layer.about.slot.agent-or-base":
     "The agent's own prompt if it has one, else the base prompt of the request's model. This is OpenCode's own rule.",
   "operator.layer.about.slot.agent": "The running agent's own prompt; empty for agents without one.",
-  "operator.layer.about.purpose.org": "The namespace's org purpose, sent first in every agent's prompt.",
   "operator.layer.about.generated.environment": "The model's name, the working folder, git, platform and date.",
   "operator.layer.about.generated.references": "Project references from config, when they have a description.",
   "operator.layer.about.generated.instructions":

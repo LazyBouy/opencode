@@ -20,7 +20,6 @@ const NAMED_LAYERS = [
   "generated.environment",
   "generated.references",
   "generated.instructions",
-  "purpose.org",
 ]
 
 // The namespace a Prompt Profile view shows, kept in the URL as ?ns=.

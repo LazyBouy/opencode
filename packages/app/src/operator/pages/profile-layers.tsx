@@ -7,7 +7,6 @@ import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
 import type { OperatorNamespaceSummary } from "@opencode-ai/sdk/v2/client"
 import { createEffect, createMemo, For, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useSettingsDialog } from "@/components/settings-dialog"
 import { useLanguage } from "@/context/language"
 import { useOperatorClient } from "../data"
 import { CopyToNamespace } from "../ui/copy-to"
@@ -25,8 +24,9 @@ export function LayerDefinition(props: { ns: string; namespaces: ReadonlyArray<O
   const names = useProfileNames()
   const data = usePromptCatalog(() => props.ns)
   const catalog = () => data.query.data
-  const layers = useAllLayers(catalog)
-  const settings = useSettingsDialog("namespaces")
+  const all = useAllLayers(catalog)
+  // The org purpose is not a layer to pick: it comes from the namespace (Settings → Namespaces).
+  const layers = createMemo(() => all().filter((layer) => layer.origin !== "automatic"))
   const [params, setParams] = useSearchParams<{ layer?: string; q?: string }>()
 
   // The section each layer shows in. OpenCode's texts and copies of them show in their own section.
@@ -92,7 +92,11 @@ export function LayerDefinition(props: { ns: string; namespaces: ReadonlyArray<O
                 label={names.section(section.id)}
                 rows={section.rows}
                 loading={data.query.isPending}
-                empty={language.t("operator.profile.noLayers")}
+                empty={
+                  section.id === "purpose"
+                    ? language.t("operator.profile.noPurposes")
+                    : language.t("operator.profile.noLayers")
+                }
                 onRowClick={(row) => setParams({ layer: row.id })}
                 columns={[
                   {
@@ -144,7 +148,6 @@ export function LayerDefinition(props: { ns: string; namespaces: ReadonlyArray<O
               layers={layers()}
               onSelect={(layer) => setParams({ layer })}
               onOpenMemory={() => navigate("/operator/memory")}
-              onOpenSettings={settings}
               onOpenProjects={() => navigate("/operator/projects")}
             />
           )}
@@ -162,7 +165,6 @@ function LayerPanel(props: {
   layers: ReadonlyArray<Layer>
   onSelect: (layer: string | undefined) => void
   onOpenMemory: () => void
-  onOpenSettings: () => void
   onOpenProjects: () => void
 }) {
   const language = useLanguage()
@@ -259,14 +261,6 @@ function LayerPanel(props: {
               <Show when={found().id === "opencode:generated.instructions"}>
                 <ButtonV2 size="small" variant="outline" onClick={props.onOpenMemory}>
                   {language.t("operator.prompts.openMemory")}
-                </ButtonV2>
-              </Show>
-              <Show when={found().origin === "automatic"}>
-                <pre data-component="operator-code">
-                  {props.catalog.namespace.purpose || language.t("operator.profile.noPurpose")}
-                </pre>
-                <ButtonV2 size="small" variant="outline" onClick={props.onOpenSettings}>
-                  {language.t("operator.profile.editInSettings")}
                 </ButtonV2>
               </Show>
               <Show when={found().origin === "builtin"}>
