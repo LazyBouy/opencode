@@ -428,6 +428,39 @@ export const dict = {
   "operator.gate.asFolder": "A folder (no git)",
   "operator.gate.asGit": "A git repository",
   "operator.gate.makeIt": "Make it a project",
+  "operator.gate.folder": "Folder",
+  "operator.help.gateFolder":
+    "The new project's folder: an absolute path on the server. A folder that does not exist yet is created. It must not be part of a project already.",
+  "operator.gate.from": "Copy from",
+  "operator.gate.fromNone": "Nothing (an empty project)",
+  "operator.help.gateFrom":
+    "Another project to copy: its agents with their prompt settings, and its tools, skills and commands (its .opencode folder and project config). Files the folder already has are kept. The other project stays as it is.",
+  "operator.gate.copySessions": "Copy its sessions",
+  "operator.help.gateCopySessions":
+    "Also copy the project's sessions with their messages (not archived ones, nor subagents' sessions). Off by default.",
+  "operator.gate.sharedProfiles": "Both projects use the prompt profiles of {{namespace}}; they are not copied.",
+  "operator.gate.copiedProfiles":
+    "The prompt profiles the project uses in {{from}}, with their groups and layers, are copied to {{namespace}}.",
+  "operator.gate.copyIt": "Copy the project",
+  "operator.gate.copied": "Copied {{name}}",
+  "operator.gate.copiedSummary": "{{files}} files, {{items}} prompt items and {{sessions}} sessions copied.",
+  "operator.gate.copiedKept": "{{count}} files the folder already had were kept as they were.",
+  "operator.gate.continue": "Continue",
+  "operator.projects.copy": "Copy project",
+  "operator.projects.copyTitle": "Copy {{name}}",
+  "operator.projects.copyHint":
+    "A new project with this project's agents and their prompt settings, its tools, skills and commands, and its sessions if you choose. {{name}} stays as it is.",
+  "operator.projects.folderSessions": "Or move its sessions",
+  "operator.projects.folderSessionsHint":
+    "Its sessions can move into a project, and continue there; the files they changed stay in this folder. Or archive them.",
+  "operator.projects.moveTo": "Move to",
+  "operator.help.folderMoveTo":
+    "The project this folder's sessions move to, with their subagents' sessions. A session that cannot be moved is archived.",
+  "operator.projects.moveSessions": "Move sessions",
+  "operator.projects.archiveSessions": "Archive sessions",
+  "operator.projects.moved": "Moved {{count}} sessions to {{name}}",
+  "operator.projects.movedArchived": "{{count}} could not be moved and were archived.",
+  "operator.projects.archived": "Archived {{count}} sessions",
   "operator.help.gateProject":
     "The session starts in this project's folder, with its agents and settings, instead of this folder.",
   "operator.help.gateHow":

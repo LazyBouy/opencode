@@ -1,17 +1,20 @@
 import { useNavigate, useSearchParams } from "@solidjs/router"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import type { OperatorProject, OperatorPromptCatalog, OperatorPromptProject } from "@opencode-ai/sdk/v2/client"
 import { useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createEffect, createMemo, createSignal, on, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
 import { useServer } from "@/context/server"
 import { useTabs } from "@/context/tabs"
 import { showToast } from "@/utils/toast"
 import { useOperatorClient } from "../data"
-import { formatAgo, formatCost, formatCount } from "../format"
+import { formatAgo, formatCost, formatCount, shortPath } from "../format"
 import { DataTable } from "../ui/data-table"
+import { Field } from "../ui/field"
 import { useFolderBrowser } from "../ui/folder-browser"
 import { NamespacePicker, useNamespaceScope } from "../ui/namespace-picker"
 import { PageHeader } from "../ui/page-header"
@@ -309,10 +312,14 @@ function ProjectOverlay() {
   // Kept here, not in the project's view: a move to another namespace switches the pane (and the view
   // with it) while the edit finishes.
   const [editing, setEditing] = createSignal(params.edit === "added")
+  const [copying, setCopying] = createSignal(false)
   createEffect(
     on(
       () => params.project,
-      () => setEditing(params.edit === "added"),
+      () => {
+        setEditing(params.edit === "added")
+        setCopying(false)
+      },
       { defer: true },
     ),
   )
@@ -343,7 +350,7 @@ function ProjectOverlay() {
       blocks={blocks()}
       block={block()}
       record={params.project}
-      editing={editing()}
+      editing={editing() || copying()}
       onBlock={(id) => setParams({ block: id, project: undefined, edit: undefined })}
       onRecord={(_, key) => setParams({ project: key, block: undefined, edit: undefined })}
     >
@@ -358,6 +365,9 @@ function ProjectOverlay() {
             added={params.edit === "added"}
             editing={editing()}
             onEditing={setEditing}
+            copying={copying()}
+            onCopying={setCopying}
+            onOpen={(key) => setParams({ project: key, block: undefined, edit: undefined })}
             onDone={() => {
               setEditing(false)
               setParams({ edit: undefined })
@@ -370,7 +380,8 @@ function ProjectOverlay() {
 }
 
 // One project: its details, Edit for its prompt settings (Cancel or Save then), and what can be done
-// with it — its agents, config and sessions, or a new session there.
+// with it — its agents, config and sessions, a new session there, or a copy of it. A folder that is
+// not a project can become one, or its sessions can move into a project or be archived.
 function ProjectRecord(props: {
   row: Row
   setting: OperatorPromptProject
@@ -380,6 +391,9 @@ function ProjectRecord(props: {
   added: boolean
   editing: boolean
   onEditing: (editing: boolean) => void
+  copying: boolean
+  onCopying: (copying: boolean) => void
+  onOpen: (key: string) => void
   onDone: () => void
 }) {
   const language = useLanguage()
@@ -389,92 +403,197 @@ function ProjectRecord(props: {
   const locale = () => language.intl()
   const scoped = (page: string) => navigate(`/operator/${page}?dir=${encodeURIComponent(props.row.key)}`)
 
+  const name = () => props.row.name ?? props.row.worktree
+
   return (
     <Show
       when={!props.editing}
       fallback={<ProjectPromptForm project={props.setting} added={props.added} onDone={props.onDone} />}
     >
-      <RecordView
-        title={
-          <>
-            {props.row.name ?? props.row.worktree}
-            <ProjectTags row={props.row} />
-          </>
-        }
-        actions={
-          <>
-            <Show when={props.row.registered}>
-              <ButtonV2 variant="contrast" onClick={() => props.onEditing(true)}>
-                {language.t("operator.profile.edit")}
-              </ButtonV2>
-              <ButtonV2
-                variant="outline"
-                onClick={() => void tabs.newDraft({ server: server.key, directory: props.row.key })}
-              >
-                {language.t("operator.projects.newSession")}
-              </ButtonV2>
-              <ButtonV2 variant="neutral" onClick={() => scoped("agents")}>
-                {language.t("operator.page.agents.title")}
-              </ButtonV2>
-              <ButtonV2 variant="neutral" onClick={() => scoped("config")}>
-                {language.t("operator.page.config.title")}
-              </ButtonV2>
-            </Show>
-            <ButtonV2 variant="neutral" onClick={() => scoped("sessions")}>
-              {language.t("operator.page.sessions.title")}
+      <Show when={props.copying}>
+        <RecordView
+          title={language.t("operator.projects.copyTitle", { name: name() })}
+          actions={
+            <ButtonV2 variant="neutral" onClick={() => props.onCopying(false)}>
+              {language.t("common.cancel")}
             </ButtonV2>
-          </>
-        }
-      >
-        <dl data-component="record-fields">
-          <RecordField
-            label={language.t("operator.projects.folderLabel")}
-            help={language.t("operator.help.projectFolder")}
-          >
-            {props.row.worktree}
-          </RecordField>
-          <RecordField
-            label={language.t("operator.column.namespace")}
-            help={language.t("operator.help.projectNamespace")}
-          >
-            {props.nsName}
-          </RecordField>
-          <Show when={props.row.registered}>
+          }
+        >
+          <p data-slot="operator-note">{language.t("operator.projects.copyHint", { name: name() })}</p>
+          <RegisterProject
+            from={props.row.key}
+            onDone={(key) => {
+              props.onCopying(false)
+              props.onOpen(key)
+            }}
+          />
+        </RecordView>
+      </Show>
+      <Show when={!props.copying}>
+        <RecordView
+          title={
+            <>
+              {props.row.name ?? props.row.worktree}
+              <ProjectTags row={props.row} />
+            </>
+          }
+          actions={
+            <>
+              <Show when={props.row.registered}>
+                <ButtonV2 variant="contrast" onClick={() => props.onEditing(true)}>
+                  {language.t("operator.profile.edit")}
+                </ButtonV2>
+                <ButtonV2
+                  variant="outline"
+                  onClick={() => void tabs.newDraft({ server: server.key, directory: props.row.key })}
+                >
+                  {language.t("operator.projects.newSession")}
+                </ButtonV2>
+                <ButtonV2 variant="neutral" onClick={() => scoped("agents")}>
+                  {language.t("operator.page.agents.title")}
+                </ButtonV2>
+                <ButtonV2 variant="neutral" onClick={() => scoped("config")}>
+                  {language.t("operator.page.config.title")}
+                </ButtonV2>
+                <ButtonV2 variant="neutral" onClick={() => props.onCopying(true)}>
+                  {language.t("operator.projects.copy")}
+                </ButtonV2>
+              </Show>
+              <ButtonV2 variant="neutral" onClick={() => scoped("sessions")}>
+                {language.t("operator.page.sessions.title")}
+              </ButtonV2>
+            </>
+          }
+        >
+          <dl data-component="record-fields">
             <RecordField
-              label={language.t("operator.column.purpose")}
-              help={language.t("operator.projects.purposeHint")}
+              label={language.t("operator.projects.folderLabel")}
+              help={language.t("operator.help.projectFolder")}
             >
-              {props.purpose}
+              {props.row.worktree}
             </RecordField>
             <RecordField
-              label={language.t("operator.column.defaultProfile")}
-              help={language.t("operator.help.projectDefaultProfile")}
+              label={language.t("operator.column.namespace")}
+              help={language.t("operator.help.projectNamespace")}
             >
-              {props.profile}
+              {props.nsName}
             </RecordField>
+            <Show when={props.row.registered}>
+              <RecordField
+                label={language.t("operator.column.purpose")}
+                help={language.t("operator.projects.purposeHint")}
+              >
+                {props.purpose}
+              </RecordField>
+              <RecordField
+                label={language.t("operator.column.defaultProfile")}
+                help={language.t("operator.help.projectDefaultProfile")}
+              >
+                {props.profile}
+              </RecordField>
+            </Show>
+            <RecordField
+              label={language.t("operator.column.sessions")}
+              help={language.t("operator.help.projectSessions")}
+            >
+              {formatCount(props.row.sessions, locale())}
+            </RecordField>
+            <RecordField label={language.t("operator.column.cost")} help={language.t("operator.help.projectCost")}>
+              {formatCost(props.row.cost, locale())}
+            </RecordField>
+            <RecordField
+              label={language.t("operator.column.lastUsed")}
+              help={language.t("operator.help.projectLastUsed")}
+            >
+              {formatAgo(props.row.lastActivity, locale()) || "—"}
+            </RecordField>
+          </dl>
+          <Show when={!props.row.registered}>
+            <p data-slot="operator-note">{language.t("operator.projects.notProjectHint")}</p>
+            <h3 data-slot="operator-panel-title">{language.t("operator.gate.make")}</h3>
+            <RegisterProject directory={props.row.key} onDone={() => undefined} />
+            <Show when={props.row.sessions > 0}>
+              <h3 data-slot="operator-panel-title">{language.t("operator.projects.folderSessions")}</h3>
+              <FolderSessions directory={props.row.key} onMoved={props.onOpen} />
+            </Show>
           </Show>
-          <RecordField
-            label={language.t("operator.column.sessions")}
-            help={language.t("operator.help.projectSessions")}
-          >
-            {formatCount(props.row.sessions, locale())}
-          </RecordField>
-          <RecordField label={language.t("operator.column.cost")} help={language.t("operator.help.projectCost")}>
-            {formatCost(props.row.cost, locale())}
-          </RecordField>
-          <RecordField
-            label={language.t("operator.column.lastUsed")}
-            help={language.t("operator.help.projectLastUsed")}
-          >
-            {formatAgo(props.row.lastActivity, locale()) || "—"}
-          </RecordField>
-        </dl>
-        <Show when={!props.row.registered}>
-          <p data-slot="operator-note">{language.t("operator.projects.notProjectHint")}</p>
-          <h3 data-slot="operator-panel-title">{language.t("operator.gate.make")}</h3>
-          <RegisterProject directory={props.row.key} onDone={() => undefined} />
-        </Show>
-      </RecordView>
+        </RecordView>
+      </Show>
     </Show>
+  )
+}
+
+// The sessions of a folder that is not a project: moved into a project (with their subagent
+// sessions; one that cannot be moved is archived), or archived. The files they changed stay here.
+function FolderSessions(props: { directory: string; onMoved: (key: string) => void }) {
+  const language = useLanguage()
+  const api = useOperatorClient()
+  const queryClient = useQueryClient()
+  const settings = useProjectSettings()
+  const [store, setStore] = createStore({ project: undefined as string | undefined, busy: false, error: "" })
+  const projects = () => (settings.data ?? []).filter((item) => item.registered)
+  const nameOf = (key: string) => projects().find((item) => item.key === key)?.name ?? shortPath(key)
+  const refresh = () =>
+    Promise.all(
+      ["project-summaries", "projects", "sessions"].map((key) =>
+        queryClient.invalidateQueries({ queryKey: api.key(key) }),
+      ),
+    )
+  const run = (work: () => Promise<void>) => {
+    setStore({ busy: true, error: "" })
+    void work()
+      .catch((error: unknown) => setStore("error", requestError(error)))
+      .finally(() => setStore("busy", false))
+  }
+  const move = () =>
+    run(async () => {
+      const project = store.project
+      if (!project) return
+      const result = await api.client().operator.folderSessions.move({ directory: props.directory, project })
+      const done = result.data ?? { moved: 0, archived: 0 }
+      showToast({
+        title: language.t("operator.projects.moved", { count: done.moved, name: nameOf(project) }),
+        ...(done.archived
+          ? { description: language.t("operator.projects.movedArchived", { count: done.archived }) }
+          : {}),
+      })
+      await refresh()
+      props.onMoved(project)
+    })
+  const archive = () =>
+    run(async () => {
+      const result = await api.client().operator.folderSessions.archive({ directory: props.directory })
+      showToast({ title: language.t("operator.projects.archived", { count: result.data?.archived ?? 0 }) })
+      await refresh()
+    })
+
+  return (
+    <div data-component="operator-form">
+      <p data-slot="operator-note">{language.t("operator.projects.folderSessionsHint")}</p>
+      <div class="flex items-end gap-2 flex-wrap">
+        <Field group label={language.t("operator.projects.moveTo")} hint={language.t("operator.help.folderMoveTo")}>
+          <SelectV2<string>
+            appearance="base"
+            aria-label={language.t("operator.projects.moveTo")}
+            placeholder={language.t("operator.gate.chooseProject")}
+            options={projects().map((item) => item.key)}
+            current={store.project}
+            label={(key) => `${nameOf(key)} · ${shortPath(key)}`}
+            onSelect={(key) => key && setStore("project", key)}
+          />
+        </Field>
+        <ButtonV2 variant="contrast" disabled={store.busy || !store.project} onClick={move}>
+          {language.t("operator.projects.moveSessions")}
+        </ButtonV2>
+        <ButtonV2 variant="neutral" disabled={store.busy} onClick={archive}>
+          {language.t("operator.projects.archiveSessions")}
+        </ButtonV2>
+      </div>
+      <Show when={store.error}>
+        <p data-slot="operator-error" role="alert">
+          {store.error}
+        </p>
+      </Show>
+    </div>
   )
 }

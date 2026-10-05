@@ -347,15 +347,27 @@ export function createPromptMock(
       return json(route, { directory: folder, ...(key ? { project: { key, git: false } } : {}) })
     }
     if (url.pathname === "/operator/project-settings/register") {
-      const input = body as { directory: string; git?: boolean; namespace?: string }
-      state.projects[input.directory] = { namespace: input.namespace ?? "opencode" }
+      const input = body as { directory: string; git?: boolean; namespace?: string; from?: string; sessions?: boolean }
+      const namespace =
+        input.namespace ?? (input.from ? state.projects[input.from]?.namespace : undefined) ?? "opencode"
+      state.projects[input.directory] = { namespace }
       return json(route, {
-        key: input.directory,
-        name: nameOf(input.directory),
-        namespace: input.namespace ?? "opencode",
-        registered: true,
+        project: { key: input.directory, name: nameOf(input.directory), namespace, registered: true },
+        // A copy brings the source's agents and tools, and its sessions when asked.
+        ...(input.from
+          ? {
+              copied: {
+                files: [".opencode/agents/docs.md", ".opencode/tools/hello.ts"],
+                kept: [],
+                items: [],
+                sessions: input.sessions ? 2 : 0,
+              },
+            }
+          : {}),
       })
     }
+    if (url.pathname === "/operator/project-settings/folder/move") return json(route, { moved: 1, archived: 0 })
+    if (url.pathname === "/operator/project-settings/folder/archive") return json(route, { archived: 1 })
     if (url.pathname === "/operator/project-settings") {
       if (method === "GET")
         return json(
