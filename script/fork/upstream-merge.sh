@@ -54,12 +54,26 @@ step() {
   "${compose[@]}" run --rm -T tools timeout "$2" bash -c "$3"
 }
 
+# The HttpApi gate can hang on an upstream race (FORK.md, "Upstream's worktree race"): when it hits
+# its time limit, it runs once more, and says so. Any other failure fails the check.
+step_retry() {
+  echo "-- $1"
+  local status=0
+  "${compose[@]}" run --rm -T tools timeout "$2" bash -c "$3" || status=$?
+  if [[ $status == 124 ]]; then
+    echo "   timed out after $2s (upstream's worktree race, see FORK.md); running it once more"
+    "${compose[@]}" run --rm -T tools timeout "$2" bash -c "$3"
+  elif [[ $status != 0 ]]; then
+    return "$status"
+  fi
+}
+
 echo "== Typechecking and testing"
 for pkg in schema core opencode app session-ui ui tui; do
   step "typecheck $pkg" 600 "cd packages/$pkg && bun typecheck"
 done
 step "merge and operator tests" 900 "cd packages/opencode && bun run test test/merge test/operator"
-step "HttpApi coverage gate" 1800 "cd packages/opencode && bun run test:httpapi"
+step_retry "HttpApi coverage gate" 600 "cd packages/opencode && bun run test:httpapi"
 step "app unit tests" 600 "cd packages/app && bun run test:unit"
 
 echo "== Upstream files the fork edits that FORK.md does not mention"

@@ -172,18 +172,24 @@ const layer = Layer.effect(
     const complete = Effect.fnUntraced(function* (
       trace: ReadonlyArray<OperatorProfile.TraceStep>,
       ns: string,
-      agent: string,
+      agent: { name: string; prompt?: string },
     ) {
-      const layered = trace.some((step) => ["builtin-layer", "copy-layer", "own-layer", "layer"].includes(step.kind))
       const steps: OperatorProfile.TraceStep[] = []
       for (const step of trace) {
         steps.push(step)
-        if (step.kind === "agent-own" && !layered) {
-          const found = yield* operatorAgents.promptOrigin(agent)
+        if (step.kind === "agent-own") {
+          const found = yield* operatorAgents.promptOrigin(agent.name)
           if (found.kind === "file" && found.path) steps.push({ kind: "agent-file", path: found.path })
-          if (found.kind === "config" && found.path) steps.push({ kind: "agent-config", name: agent, path: found.path })
-          // A built-in agent's prompt that is not one of the built-in layers: its definition.
-          if (found.kind === "builtin") steps.push({ kind: "file", path: "packages/opencode/src/agent/agent.ts" })
+          if (found.kind === "config" && found.path)
+            steps.push({ kind: "agent-config", name: agent.name, path: found.path })
+          // A built-in agent's own prompt (explore's): OpenCode's definition, and the file the text is in.
+          if (found.kind === "builtin") {
+            steps.push({ kind: "agent-builtin", name: agent.name, path: OperatorPromptText.AGENT_DEFINITIONS })
+            const file = OperatorPromptText.AGENT_PROMPTS.find(
+              (item) => item.name === agent.name && item.text.trim() === agent.prompt?.trim(),
+            )?.file
+            if (file) steps.push({ kind: "file", path: file })
+          }
         }
         if (step.kind === "references")
           for (const source of (yield* operatorConfig.layers()).sources) {
@@ -217,7 +223,7 @@ const layer = Layer.effect(
             { kind: "layer", name: own.name, detail: own.id },
           ],
           ns,
-          agent.name,
+          agent,
         )
         return { ...head, text, source: own.name, trace }
       }
@@ -233,7 +239,7 @@ const layer = Layer.effect(
         input.layer,
       )
       if (!found) return yield* new NotFoundError({ message: `No layer "${input.layer}"` })
-      return { ...head, text: found.text, source: found.source, trace: yield* complete(found.trace, ns, agent.name) }
+      return { ...head, text: found.text, source: found.source, trace: yield* complete(found.trace, ns, agent) }
     })
 
     const preview = Effect.fn("OperatorPrompts.preview")(function* (input: {
@@ -264,7 +270,7 @@ const layer = Layer.effect(
       })
       const ns = loaded.catalog.namespace.id
       const sections = yield* Effect.forEach(result.sections, (section) =>
-        complete(section.trace, ns, agent.name).pipe(Effect.map((trace) => ({ ...section, trace }))),
+        complete(section.trace, ns, agent).pipe(Effect.map((trace) => ({ ...section, trace }))),
       )
       return {
         agent: agent.name,

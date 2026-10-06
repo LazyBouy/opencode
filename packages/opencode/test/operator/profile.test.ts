@@ -373,14 +373,14 @@ describe("save checks", () => {
 describe("tracing a prompt to its source", () => {
   test("every built-in text names a file of OpenCode's code that exists", async () => {
     const root = new URL("../../../../", import.meta.url).pathname
-    const files = OperatorPromptText.BUILTINS.flatMap((item) => (item.file ? [item.file] : []))
+    const files = [
+      ...OperatorPromptText.BUILTINS.flatMap((item) => (item.file ? [item.file] : [])),
+      ...OperatorPromptText.AGENT_PROMPTS.map((item) => item.file),
+      OperatorPromptText.AGENT_DEFINITIONS,
+    ]
     expect(files.length).toBeGreaterThan(20)
     for (const file of files) expect(await Bun.file(root + file).exists()).toBe(true)
-    expect(OperatorProfile.BUILTIN_LAYERS.find((item) => item.id === `${P}agent.explore`)).toMatchObject({
-      section: "agent",
-      type: "identity",
-      file: "packages/opencode/src/agent/prompt/explore.txt",
-    })
+    expect(OperatorProfile.BUILTIN_LAYERS.find((item) => item.file?.endsWith("explore.txt"))).toBeUndefined()
   })
 
   test("the base prompt's rule is the one that chose its family", () => {
@@ -418,13 +418,8 @@ describe("tracing a prompt to its source", () => {
       { kind: "builtin-layer", name: "base.gemini", detail: `${P}base.gemini` },
       { kind: "file", path: "packages/opencode/src/session/prompt/gemini.txt" },
     ])
-    const explore = OperatorPromptText.BUILTINS.find((item) => item.id === "agent.explore")!.text
-    expect(section({ name: "explore", prompt: explore }).trace).toEqual([
-      { kind: "agent-own", name: "explore" },
-      { kind: "builtin-layer", name: "agent.explore", detail: `${P}agent.explore` },
-      { kind: "file", path: "packages/opencode/src/agent/prompt/explore.txt" },
-    ])
-    // Another agent's prompt is defined in config or its agent file, which the caller names.
+    // Where an agent's own prompt is defined (OpenCode's definition, config, its agent file) is named
+    // by the caller, which can read them.
     expect(section({ name: "triage", prompt: "Triage." }).trace).toEqual([{ kind: "agent-own", name: "triage" }])
     const instructions = OperatorProfile.assemble(input({ name: "build" })).sections.find(
       (item) => item.entry === `${P}generated.instructions`,

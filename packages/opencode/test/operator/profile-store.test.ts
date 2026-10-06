@@ -368,6 +368,26 @@ it.instance("a namespace made before gets its own copies once, its settings poin
   ),
 )
 
+it.instance("copies of a built-in OpenCode no longer has: its own copy is not read, an edited copy stays a layer", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      const store = yield* OperatorProfileStore.Service
+      const team = yield* store.createNamespace({ name: "Team" })
+      const layers = path.join(OperatorProfileStore.root(), team.id, "layers")
+      const copy = (id: string, name: string) =>
+        `---\nid: ${id}\nname: ${name}\ntype: identity\nsection: agent\nreplaces: ${P}agent.gone\norigin: user\n---\nOld text.\n`
+      yield* Effect.promise(async () => {
+        await fs.writeFile(path.join(layers, "agent.gone.md"), copy("agent.gone", "agent.gone"))
+        await fs.writeFile(path.join(layers, "gone-copy.md"), copy("gone-copy", "gone – copy"))
+      })
+      const found = (yield* store.catalog(team.id)).layers
+      expect(found.some((item) => item.id === "agent.gone")).toBe(false)
+      expect(found.find((item) => item.id === "gone-copy")).toMatchObject({ text: "Old text.", section: "custom" })
+      expect(found.find((item) => item.id === "gone-copy")?.replaces).toBeUndefined()
+    }),
+  ),
+)
+
 it.instance("a copy of OpenCode's text whose original changed is marked, and takes the new text", () =>
   withGlobal(() =>
     Effect.gen(function* () {

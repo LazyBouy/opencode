@@ -40,7 +40,6 @@ export const HELPER = "helper"
 
 export const Section = Schema.Literals([
   "base",
-  "agent",
   "purpose",
   "role",
   "identity",
@@ -105,6 +104,7 @@ export const TraceStep = Schema.Struct({
     "agent-none",
     "agent-file",
     "agent-config",
+    "agent-builtin",
     "model-rule",
     "builtin-layer",
     "copy-layer",
@@ -122,7 +122,7 @@ export const TraceStep = Schema.Struct({
     "skill",
   ]).annotate({
     description:
-      "agent-own / agent-none: the agent has its own prompt, or none; agent-file / agent-config: where it is defined; model-rule: the base prompt's model and the rule that chose it; builtin-layer / copy-layer / own-layer / layer: the layer the text is in; file: the file it is in; org-purpose: the namespace's purpose; dynamic-written: written for each session by the dynamic generator; written: written by OpenCode for each request; references / config: the references in config files; instruction-file / instruction-url, mcp, skill: what a per-request text was made from",
+      "agent-own / agent-none: the agent has its own prompt, or none; agent-file / agent-config / agent-builtin: where it is defined (its agent file, a config file, OpenCode's own definition); model-rule: the base prompt's model and the rule that chose it; builtin-layer / copy-layer / own-layer / layer: the layer the text is in; file: the file it is in; org-purpose: the namespace's purpose; dynamic-written: written for each session by the dynamic generator; written: written by OpenCode for each request; references / config: the references in config files; instruction-file / instruction-url, mcp, skill: what a per-request text was made from",
   }),
   name: Schema.optional(Schema.String).annotate({ description: "An agent, layer, model, namespace or server" }),
   path: Schema.optional(Schema.String).annotate({ description: "A file or URL" }),
@@ -218,10 +218,6 @@ const FILES = new Map(OperatorPromptText.BUILTINS.flatMap((item) => (item.file ?
 export const BUILTIN_LAYERS: readonly Layer[] = [
   ...OperatorPromptText.BUILTINS.filter((item) => item.kind === "base" && item.id !== "base").map((item) =>
     layer(base(item.id), item.id, "identity", "base", "builtin", item.text),
-  ),
-  // Built-in agents' own prompts: the slots for the agent's prompt use them for that agent.
-  ...OperatorPromptText.BUILTINS.filter((item) => item.kind === "agent").map((item) =>
-    layer(base(item.id), item.id, "identity", "agent", "builtin", item.text),
   ),
   layer(base("slot.base"), "Base prompt (by model)", DYNAMIC, "dynamic", "slot"),
   layer(base("slot.agent-or-base"), "Agent prompt, else base prompt", DYNAMIC, "dynamic", "slot"),
@@ -673,19 +669,9 @@ function resolve(input: AssembleInput, copies: Map<string, Layer>, entry: string
       chosen.layer ?? listed,
     )
   }
-  // The agent's own prompt. A built-in agent's (explore's) is a built-in layer, so it can be copied; any
-  // other is defined in config or an agent file, which the caller names.
-  const agentPrompt = () => {
-    const prompt = input.agent.prompt
-    const own: TraceStep = { kind: "agent-own", name: input.agent.name }
-    const id = base(`agent.${input.agent.name}`)
-    const original = BUILTIN_LAYERS.find((item) => item.id === id)
-    if (prompt && original && original.text === prompt) {
-      const chosen = family(id)
-      return one(chosen.text, chosen.layer?.name ?? own.name!, [own, ...chosen.trace], chosen.layer ?? original)
-    }
-    return one(prompt, input.agent.name, [own])
-  }
+  // The agent's own prompt; where it is defined (its agent file, a config file, OpenCode's own
+  // definition) is named by the caller, which can read them.
+  const agentPrompt = () => one(input.agent.prompt, input.agent.name, [{ kind: "agent-own", name: input.agent.name }])
   // Copies stand in for their built-in where it is used; on their own they add nothing.
   // A helper agent's prompt is its helper layer, a copy or OpenCode's.
   if (found.type === HELPER)
@@ -699,7 +685,7 @@ function resolve(input: AssembleInput, copies: Map<string, Layer>, entry: string
     if (found.replaces !== base("notice.structured-output") || !input.parts.output) return []
     return one(found.text, found.name, traced(listed))
   }
-  if ((found.section === "base" || found.section === "agent") && found.origin === "builtin") {
+  if (found.section === "base" && found.origin === "builtin") {
     const chosen = family(found.id)
     return one(chosen.text, chosen.layer?.name ?? "OpenCode", chosen.trace, chosen.layer ?? listed)
   }

@@ -1212,8 +1212,12 @@ async function readLayers(dir: string): Promise<OperatorProfile.Layer[]> {
       const section = Schema.decodeUnknownOption(OperatorProfile.Section)(data.section)
       const type = typeof data.type === "string" ? data.type : "identity"
       const body = parsed.content.replace(/\n$/, "")
-      const replaces = typeof data.replaces === "string" ? data.replaces : undefined
-      const original = replaces ? OperatorProfile.builtinLayerById(replaces) : undefined
+      const listed = typeof data.replaces === "string" ? data.replaces : undefined
+      const original = listed ? OperatorProfile.builtinLayerById(listed) : undefined
+      // A built-in OpenCode no longer has: the namespace's own copy of it (made automatically) is not
+      // read; a copy made with Edit a copy is an ordinary layer of the namespace.
+      if (listed && !original && path.basename(file, ".md") === OperatorProfile.own(listed)) return undefined
+      const replaces = original ? listed : undefined
       const basedOn = typeof data.basedOn === "string" ? data.basedOn : undefined
       // Your Dynamic layers hold a prompt; copies of OpenCode's per-request layers hold nothing.
       const written = type === OperatorProfile.DYNAMIC && !replaces

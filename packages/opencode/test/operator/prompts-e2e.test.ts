@@ -295,10 +295,10 @@ unix("every section is traced to its source, down to the file", () =>
             Effect.map((preview) => preview.sections.find((item) => item.entry === `${P}slot.agent-or-base`)!.trace),
           )
 
-      // explore: its own prompt is OpenCode's built-in layer agent.explore, from explore.txt.
+      // explore: its own prompt is in OpenCode's definition of it, from explore.txt.
       const explore: OperatorProfile.TraceStep[] = [
         { kind: "agent-own", name: "explore" },
-        { kind: "builtin-layer", name: "agent.explore", detail: `${P}agent.explore` },
+        { kind: "agent-builtin", name: "explore", path: "packages/opencode/src/agent/agent.ts" },
         { kind: "file", path: "packages/opencode/src/agent/prompt/explore.txt" },
       ]
       expect(yield* traceOf("explore")).toEqual(explore)
@@ -340,30 +340,12 @@ unix("every section is traced to its source, down to the file", () =>
   ),
 )
 
-unix("a copy of explore's prompt in its profile replaces it, traced to the copy's file", () =>
-  withGlobal((global) =>
+unix("an unsaved override is previewed in place of the saved one; null previews none", () =>
+  withGlobal(() =>
     Effect.gen(function* () {
       yield* configure()
       const store = yield* OperatorProfileStore.Service
       const prompts = yield* OperatorPrompts.Service
-      const key = (yield* prompts.preview({ agent: "explore" })).project.key
-      const copy = yield* store.copyBuiltin("opencode", `${P}agent.explore`, "Explore differently.")
-      const opencode = OperatorProfile.BUILTIN_PROFILES.find((item) => item.id === OperatorProfile.OPENCODE_PROFILE)!
-      const profile = yield* store.saveProfile("opencode", undefined, {
-        name: "Explore copy",
-        group: opencode.group,
-        slots: { ...opencode.slots, identity: [copy.id] },
-      })
-      yield* store.setAgent(key, "explore", { profile: profile.id })
-      const preview = yield* prompts.preview({ agent: "explore" })
-      const section = preview.sections.find((item) => item.entry === `${P}slot.agent-or-base`)!
-      expect(section.text).toBe("Explore differently.")
-      expect(section.trace).toEqual([
-        { kind: "agent-own", name: "explore" },
-        { kind: "copy-layer", name: copy.name, detail: copy.id },
-        { kind: "file", path: path.join(global, "namespaces", "opencode", "layers", `${copy.id}.md`) },
-      ])
-      // An unsaved override is previewed in place of the saved one; null previews none.
       const role = yield* store.saveLayer("opencode", undefined, {
         name: "Scout",
         type: "role",
@@ -373,6 +355,11 @@ unix("a copy of explore's prompt in its profile replaces it, traced to the copy'
       const draft = yield* prompts.preview({ agent: "explore", override: { slots: { role: [role.id] } } })
       expect(draft.override).toEqual(["role"])
       expect(String(draft.system[0])).toStartWith("You scout.\n")
+      const section = draft.sections.find((item) => item.layer === role.id)!
+      expect(section.trace).toEqual([
+        { kind: "layer", name: "Scout", detail: role.id },
+        { kind: "file", path: OperatorProfileStore.itemFile("opencode", "layer", role.id) },
+      ])
       expect((yield* prompts.preview({ agent: "explore", override: null })).override).toEqual([])
     }),
   ),

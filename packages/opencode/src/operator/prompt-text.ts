@@ -33,7 +33,7 @@ import { SystemPrompt } from "@/session/system"
 // Mirrors session/prompt.ts; kept in sync by the end-to-end prompt tests.
 export const STRUCTURED_OUTPUT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
-export type Kind = "base" | "reminder" | "notice" | "helper" | "agent"
+export type Kind = "base" | "reminder" | "notice" | "helper"
 
 interface Builtin {
   readonly id: string
@@ -92,8 +92,14 @@ export const BUILTINS: readonly Builtin[] = [
     text: DYNAMIC_GENERATOR,
     file: "packages/opencode/src/operator/helper/dynamic-generator.txt",
   },
-  // Built-in agents' own prompts (of build, plan, general and explore, only explore has one).
-  { id: "agent.explore", kind: "agent", text: PROMPT_EXPLORE, file: `${AGENT}/prompt/explore.txt` },
+]
+
+// Built-in agents' own prompts (of build, plan, general and explore, only explore has one), set in
+// agent/agent.ts. They are not layers: an agent's prompt goes through the agent-prompt slots; they are
+// listed so the agent page can name the file a built-in agent's prompt comes from.
+export const AGENT_DEFINITIONS = "packages/opencode/src/agent/agent.ts"
+export const AGENT_PROMPTS: ReadonlyArray<{ name: string; text: string; file: string }> = [
+  { name: "explore", text: PROMPT_EXPLORE, file: `${AGENT}/prompt/explore.txt` },
 ]
 
 // Versions of built-in texts by their id, for rewriteReminder and text().
