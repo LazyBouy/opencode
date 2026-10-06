@@ -5,6 +5,7 @@ import { OperatorProfile } from "@/operator/profile"
 import { OperatorProfileStore } from "@/operator/profile-store"
 import { OperatorProjectCopy } from "@/operator/project-copy"
 import { OperatorProjectSessions } from "@/operator/project-sessions"
+import { OperatorProjectRecords } from "@/operator/project-records"
 import { OperatorProjects } from "@/operator/projects"
 import { InstanceStore } from "@/project/instance-store"
 import { Effect } from "effect"
@@ -117,6 +118,8 @@ export const operatorNamespaceHandlers = HttpApiBuilder.group(OperatorRootApi, "
                   .copyProject(source, directory, { namespace })
                   .pipe(Effect.mapError(apiError))
                 const files = yield* Effect.promise(() => OperatorProjectCopy.copyFiles(source, directory))
+                // Its record too: description, status, members, groups, manager.
+                yield* Effect.promise(() => OperatorProjectRecords.copy(source, directory))
                 return { files: files.copied, kept: files.kept, items: settings.copied, sessions: 0 }
               })
             : undefined

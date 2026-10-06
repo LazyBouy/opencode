@@ -68,3 +68,23 @@ export function compareNames(would: ReadonlyArray<string>, last: ReadonlyArray<s
     onlyLast: last.filter((name) => !built.has(name)),
   }
 }
+
+// JSON laid out for reading: indented, with the line breaks inside texts (a tool's description)
+// shown as lines instead of `\n`. Not valid JSON; Raw shows the exact text.
+export function readableJson(value: unknown, indent = ""): string {
+  const next = `${indent}  `
+  if (typeof value === "string") {
+    if (!value.includes("\n")) return JSON.stringify(value)
+    return `"${value.split("\n").join(`\n${next}`)}"`
+  }
+  if (Array.isArray(value)) {
+    if (!value.length) return "[]"
+    return `[\n${value.map((item) => next + readableJson(item, next)).join(",\n")}\n${indent}]`
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value)
+    if (!entries.length) return "{}"
+    return `{\n${entries.map(([key, item]) => `${next}${JSON.stringify(key)}: ${readableJson(item, next)}`).join(",\n")}\n${indent}}`
+  }
+  return JSON.stringify(value) ?? "null"
+}

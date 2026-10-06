@@ -116,23 +116,35 @@ export const dict = {
   "operator.help.hidden": "A hidden subagent is not offered in the @ menu; other agents can still call it.",
   "operator.help.agentProfile":
     "The prompt profile this agent's system prompt is built from, and where that choice comes from. Change it on the Prompt tab.",
-  "operator.help.toolTokens": "Tokens are an estimate: characters ÷ 4.",
-  "operator.help.toolName": "The tool's name as sent to the model.",
+  "operator.help.toolTokens": "An estimate: about 4 characters per token. The provider counts exactly.",
+  "operator.help.toolName": "The name the model sees and uses to call the tool.",
   "operator.help.toolPromptSource":
-    "Where the tool comes from: OpenCode, a project tool file, a plugin or an MCP server.",
+    "Where the tool comes from: built into OpenCode, a tool file in this project, a plugin, or an MCP server.",
   "operator.help.toolVersion":
-    "Which text the description uses: OpenCode's, this namespace's own version, or an edited copy in the agent's profile.",
-  "operator.help.toolAppended": "Text OpenCode adds after the description: task's subagent list, or the MCP catalog.",
-  "operator.help.toolDescriptionSize": "Characters of the description as sent.",
-  "operator.help.toolSchemaSize": "Characters of the input schema as sent.",
-  "operator.help.toolTotal": "Description and schema, in characters, and an estimate in tokens (characters ÷ 4).",
+    "Which wording the model gets for this tool: OpenCode's own, your organization's version, or an edited copy in this agent's prompt profile.",
+  "operator.help.toolAppended":
+    "Text OpenCode adds to the description itself, for example the list of subagents task can start.",
+  "operator.help.toolDescriptionSize": "How long the tool's description is, in characters.",
+  "operator.help.toolSchemaSize": "How long the description of the tool's inputs is, in characters.",
+  "operator.help.toolTotal": "How much this tool adds to every request: characters, and an estimate in tokens.",
   "operator.help.toolAccess":
-    "What the rules for the tool's permission do when it is called. They don't change what is sent; open the tool for every rule.",
-  "operator.help.toolAsSent": "The size of the tool's entry in the request body, in the provider's format.",
-  "operator.help.toolWhy": "Permission or session rule, running as a subagent, the model, a flag, or OpenCode itself.",
-  "operator.help.toolWhyDetail": "The rule that removes the tool and where it comes from, or the model or flag.",
+    "What happens when the agent uses the tool: allowed, it asks you first, or it is denied, depending on what it is used on. This doesn't change what the model sees.",
+  "operator.help.toolAsSent": "How much this tool took up in the request that was really sent.",
+  "operator.help.toolWhy": "Why the model doesn't get this tool.",
+  "operator.help.toolWhyDetail": "The rule, model or setting that keeps this tool out, and where it is set.",
   "operator.help.ruleFrom":
-    "Where the rule is written: OpenCode's code, a config file, the agent's own rules, or the session's own rules.",
+    "Where the rule is set: by OpenCode itself, in a config file, in this agent's own settings, or for this session only.",
+  "operator.help.projectGoal":
+    "What this project is for. Every agent working here reads it at the start of its instructions, after your organization's purpose.",
+  "operator.help.projectDescription": "A short note about the project, for people. Agents don't see it.",
+  "operator.help.projectStatus":
+    "Where the project stands. While it is paused, messages queued for its agents wait until it is active again.",
+  "operator.help.projectManager":
+    "The agent in charge of the project. Later it will decide where messages from outside the project go.",
+  "operator.help.projectMembers":
+    "The agents that can work in this project. When you choose some, other agents can't start sessions or receive messages here. OpenCode's helper agents and the subagents a member starts are always allowed.",
+  "operator.help.projectGroups":
+    "Named sets of members, so messages and permissions can address several agents at once.",
   "operator.help.agentModelFact":
     "The model this agent's requests use, and where it is set: the agent's own model (its config entry or agent file), else the default model (config model, set on Providers & Models), else OpenCode's own choice. The title agent uses the small model. In chat, a session can pick another model in the composer; a new session starts with this one.",
   "operator.help.agentSource": "Where the agent is defined: built in, in a config file, or in its own markdown file.",
@@ -392,6 +404,9 @@ export const dict = {
   "operator.agents.mode.subagent": "Subagent",
   "operator.agents.mode.all": "Primary and subagent",
   "operator.agent.notFound": "Agent not found in this project",
+  "operator.agent.notMember": "Not a member",
+  "operator.agent.notMemberHint":
+    "This project names its members and this agent isn't one, so it can't start sessions or get messages here. Change the members on the Projects page.",
   "operator.agent.tab.overview": "Overview",
   "operator.agent.tab.prompt": "Sys Prompt",
   "operator.agent.tab.tools": "Tool Prompt",
@@ -534,7 +549,7 @@ export const dict = {
   "operator.agentForm.create": "Create agent",
   "operator.agentForm.saved": "{{name}} saved",
 
-  "operator.rules.permission": "Permission, such as bash or edit",
+  "operator.rules.permission": "Permission",
   "operator.rules.pattern": "Pattern",
   "operator.rules.action": "Action",
   "operator.rules.up": "Move up",
@@ -638,6 +653,10 @@ export const dict = {
   "operator.permissionEditor.showAll": "Show all",
   "operator.permissionEditor.openConfig": "Open in Config",
   "operator.permissionEditor.override": "Override",
+  "operator.permissionEditor.overrideHint":
+    "Override: adds a rule with the same permission and pattern to the rules you can edit, where it wins",
+  "operator.permissionEditor.editColumn": "Edit",
+  "operator.permissionEditor.editRule": "Edit rule {{index}}",
   "operator.permissionEditor.permissionOf": "Permission of rule {{index}}",
   "operator.permissionEditor.patternOf": "Pattern of rule {{index}}",
   "operator.permissionEditor.actionOf": "Action of rule {{index}}",
@@ -780,6 +799,29 @@ export const dict = {
   "operator.projects.promptTitle": "Prompt settings: {{name}}",
   "operator.projects.addedTitle": "Namespace for {{name}}",
   "operator.projects.addedHint": "A new project goes to OpenCode unless you choose another namespace.",
+  "operator.projects.editProject": "Edit project",
+  "operator.projects.editPrompt": "Prompt settings",
+  "operator.projectRecord.goal": "Goal",
+  "operator.projectRecord.noGoal": "No goal yet. Edit the project to write one.",
+  "operator.projectRecord.goalShared": "This goal is shared with {{projects}}: changing it changes theirs too.",
+  "operator.projectRecord.goalName": "{{name}} goal",
+  "operator.projectRecord.description": "Description",
+  "operator.projectRecord.status": "Status",
+  "operator.projectRecord.status.draft": "Draft",
+  "operator.projectRecord.status.active": "Active",
+  "operator.projectRecord.status.paused": "Paused",
+  "operator.projectRecord.status.completed": "Completed",
+  "operator.projectRecord.status.archived": "Archived",
+  "operator.projectRecord.manager": "Manager",
+  "operator.projectRecord.noManager": "No manager",
+  "operator.projectRecord.members": "Members",
+  "operator.projectRecord.everyAgent": "Every agent can take part (no members chosen).",
+  "operator.projectRecord.membersOnly": "Only these agents can start sessions or get messages in this project.",
+  "operator.projectRecord.groups": "Groups",
+  "operator.projectRecord.groupName": "Group name",
+  "operator.projectRecord.newGroup": "New group",
+  "operator.projectRecord.addGroup": "Add group",
+  "operator.projectRecord.removeGroup": "Remove group",
   "operator.projects.keep": "Keep in OpenCode",
   "operator.projects.noPurpose": "None",
   "operator.projects.purposeHint": "Sent after the org purpose in every agent's prompt in this project.",
@@ -1085,26 +1127,26 @@ export const dict = {
   "operator.origin.sessionOpencode": "Session · added by OpenCode",
 
   "operator.toolPrompt.modelHint":
-    "The model the list is built for. The model decides some tools (GPT models get apply_patch instead of edit and write), rewrites schemas for some providers and adds strict for OpenAI. The agent's model is the one its requests use.",
+    'Which model to show the list for. The model matters: GPT models get apply_patch instead of edit and write, and some providers need the tool definitions adjusted. "The agent\'s model" is the one this agent really uses.',
   "operator.toolPrompt.runsAs": "Runs as",
   "operator.toolPrompt.runsAsHint":
-    "Primary: the agent runs directly. Subagent: started by task, with the rules a subagent session gets (todowrite and task are denied unless the agent's own rules mention them). In a session: one of this agent's sessions, with that session's own rules.",
+    "How the agent is running. Primary: you talk to it directly. Subagent: another agent started it, and it then loses todowrite and task unless its own rules allow them. In a session: one of its existing sessions, with that session's own rules.",
   "operator.toolPrompt.primary": "Primary",
   "operator.toolPrompt.subagent": "Subagent",
   "operator.toolPrompt.inSession": "In a session…",
   "operator.toolPrompt.session": "Session",
   "operator.toolPrompt.sessionHint":
-    "The list this session's next request sends, with the session's own rules after the agent's.",
+    "Shows the tools this session's next request would get, including the rules you set for this session only.",
   "operator.toolPrompt.noSessions": "This agent has no sessions in this project yet.",
   "operator.toolPrompt.subagentNote":
-    "A real subagent session also gets its parent session's deny rules, which can't be known in advance.",
+    "When another agent starts this one, the rules that block tools for that other agent apply here too. They depend on which agent starts it, so they aren't shown.",
   "operator.toolPrompt.view": "View",
   "operator.toolPrompt.viewHint":
-    "Would be sent: built now from the current settings. Last sent: the tools part of this agent's most recent real request in this project, exactly as recorded.",
+    "Would be sent: worked out now from the current settings. Last sent: the tools that went out with this agent's most recent real request in this project.",
   "operator.toolPrompt.would": "Would be sent",
   "operator.toolPrompt.last": "Last sent",
   "operator.toolPrompt.notCaptured":
-    "Last sent: not captured yet. It appears once this agent has made a request in this project (with call recording on).",
+    "Last sent isn't available yet. It appears after this agent makes a request in this project.",
   "operator.toolPrompt.summary":
     "{{count}} tools sent · {{chars}} characters (descriptions {{description}}, schemas {{schema}}) · ≈{{tokens}} tokens · {{notSent}} not sent",
   "operator.toolPrompt.tokens": "Tokens",
@@ -1144,12 +1186,12 @@ export const dict = {
   "operator.toolPrompt.version.none": "Its own text",
   "operator.toolPrompt.fixedTemplate": "Fixed template",
   "operator.toolPrompt.fixedTemplateHint":
-    "This copy is fixed text. It keeps the values it was made with (for bash: the OS, shell and temp folder). OpenCode fills its own text in again when they change; the copy does not.",
+    "This edited copy is plain text. OpenCode fills some details into its own wording (for bash: the operating system, the shell and the temp folder) each time; your copy keeps the ones it was made with.",
   "operator.toolPrompt.appended.subagents": "subagent list ({{count}})",
   "operator.toolPrompt.appended.catalog": "MCP catalog",
   "operator.toolPrompt.appended.subagentsHint":
-    "The agents task can start: every agent that is not primary-only, minus those this agent's task rules deny.",
-  "operator.toolPrompt.appended.mcp": "The tools of connected MCP servers that code mode can call.",
+    "The agents this agent may start with task: every agent that isn't primary-only, minus the ones its task rules block.",
+  "operator.toolPrompt.appended.mcp": "The MCP tools that code mode can use.",
   "operator.toolPrompt.subagentKept": "listed",
   "operator.toolPrompt.subagentDropped": "left out",
   "operator.toolPrompt.subagentKeptBy": "listed (rule #{{rule}})",
@@ -1186,27 +1228,34 @@ export const dict = {
   "operator.toolPrompt.notSent.internal.invalid": "Never offered; it repairs malformed tool calls",
   "operator.toolPrompt.overall": "Exactly as sent",
   "operator.toolPrompt.overallHint":
-    "The list in the form OpenCode hands to the AI SDK, sorted as sent: name, description and input_schema (after the provider's rewrite). The provider's adapter then wraps each tool in its own format; Last sent shows that.",
-  "operator.toolPrompt.lastHint":
-    "The tools value of the request body, in the provider's format. Copy as sent copies the exact bytes.",
+    "The whole tool list as OpenCode passes it on. The provider then puts each tool in its own format; Last sent shows that version.",
+  "operator.toolPrompt.lastHint": "The tool list exactly as it went to the provider, in the provider's own format.",
   "operator.toolPrompt.copy": "Copy",
-  "operator.toolPrompt.copyAsSent": "Copy as sent",
+  "operator.toolPrompt.raw": "Raw",
+  "operator.toolPrompt.read": "Read",
+  "operator.toolPrompt.format": "Format",
+  "operator.toolPrompt.characters": "{{count}} characters",
   "operator.toolPrompt.copied": "Copied",
   "operator.toolPrompt.copyFailed": "Couldn't copy",
-  "operator.toolPrompt.changes": "What changes this list",
+  "operator.toolPrompt.changes": "What decides which tools the model gets",
   "operator.toolPrompt.change.deny":
-    "A final * deny for a tool's permission removes the tool (edit covers edit, write and apply_patch).",
-  "operator.toolPrompt.change.task": "task rules change the subagent list in task's description.",
+    "A rule that blocks a tool everywhere (pattern *, action deny) removes it. The edit permission covers three tools: edit, write and apply_patch.",
+  "operator.toolPrompt.change.task":
+    "Rules for task decide which subagents this agent may start. That list is part of task's description.",
   "operator.toolPrompt.change.subagent":
-    "Running as a subagent removes todowrite and task unless the agent's rules mention them.",
-  "operator.toolPrompt.change.model": "The model: which tools are offered, the schema rewrite and strict.",
-  "operator.toolPrompt.change.flags": "Flags: code mode, web search, the LSP tool, the question tool.",
-  "operator.toolPrompt.change.mcp": "Connected MCP servers and the project's tool files.",
+    "When another agent starts this one, it doesn't get todowrite or task unless its own rules allow them.",
+  "operator.toolPrompt.change.model":
+    "The model: some tools are only offered to some models, and some providers need the tool definitions adjusted.",
+  "operator.toolPrompt.change.flags":
+    "OpenCode's optional features: code mode, web search, the LSP tool and the question tool are only there when turned on.",
+  "operator.toolPrompt.change.mcp":
+    "Your MCP servers and the tool files in the project's .opencode folder add their own tools.",
   "operator.toolPrompt.change.versions":
-    "The profile's tool versions (Prompt Profile → Layer Definition → Tool Group): they change only the wording.",
-  "operator.toolPrompt.change.switches": "A client's tool switches sent with a message.",
+    "Your prompt profile can change how a tool is described (Prompt Profile → Layer Definition → Tool Group), but not whether it is sent.",
+  "operator.toolPrompt.change.switches":
+    "An app or script that talks to OpenCode can switch tools off for one message.",
   "operator.toolPrompt.patterns":
-    "Patterns never change a tool's description or schema: they are checked when the tool is called.",
+    "Rules for something specific (a folder, a command, a website) don't change this list. They are checked each time the agent uses the tool.",
   "operator.toolPrompt.asSent": "Exactly as sent",
   "operator.toolPrompt.asLastSent": "Exactly as last sent",
   "operator.toolPrompt.notInLast": "This tool was not in the last request.",
@@ -1231,8 +1280,8 @@ export const dict = {
   "operator.toolPrompt.strict": "Sent with strict: false (OpenAI, Azure and Bedrock).",
   "operator.toolPrompt.rules": "Rules for {{permission}}",
   "operator.toolPrompt.rulesHint":
-    "Checked from the bottom up: the last rule that matches wins. The last rule decides whether the tool is sent: a * deny removes it.",
-  "operator.toolPrompt.noRules": "No rule names this permission: OpenCode asks.",
+    "The last rule that fits a use of the tool decides it. The very last rule also decides whether the tool is offered at all: if it blocks everything, the tool is removed.",
+  "operator.toolPrompt.noRules": "No rule mentions this tool, so OpenCode asks you each time.",
   "operator.toolPrompt.decides": "Decides",
   "operator.toolPrompt.changeWording": "Change wording",
   "operator.toolPrompt.changeAccess": "Change access",

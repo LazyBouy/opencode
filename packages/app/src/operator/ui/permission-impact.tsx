@@ -54,7 +54,7 @@ export function PermissionImpact(props: {
   const number = (value: number) => new Intl.NumberFormat(language.intl()).format(value)
 
   return (
-    <aside data-component="operator-panel" data-slot="operator-permission-impact" data-testid="permission-impact">
+    <aside data-slot="operator-permission-impact" data-testid="permission-impact">
       <h3 data-slot="operator-panel-title">{language.t("operator.impact.title")}</h3>
       <Show when={props.dirty} fallback={<p data-slot="operator-note">{language.t("operator.impact.noChanges")}</p>}>
         <Show when={impact.error}>

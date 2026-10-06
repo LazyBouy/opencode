@@ -676,6 +676,32 @@ export const operatorScenarios: Scenario[] = [
     }))
     .status(404),
   http.protected
+    .get("/operator/project-records", "operator.projectRecord.list")
+    .global()
+    .json(200, (body) => {
+      array(body)
+    }),
+  http.protected
+    .put("/operator/project-records", "operator.projectRecord.update")
+    .mutating()
+    .at((ctx) => ({
+      path: "/operator/project-records",
+      headers: ctx.headers(),
+      body: { key: ctx.directory ?? "/tmp/x", description: "Ship it", members: ["build"], manager: "build" },
+    }))
+    .json(200, (body) => {
+      object(body)
+      check(body.manager === "build", "the manager should be saved")
+    }),
+  http.protected
+    .put("/operator/project-records", "operator.projectRecord.update.invalid")
+    .at((ctx) => ({
+      path: "/operator/project-records",
+      headers: ctx.headers(),
+      body: { key: ctx.directory ?? "/tmp/x", members: ["build"], manager: "plan" },
+    }))
+    .status(400),
+  http.protected
     .get("/operator/project-settings/resolve", "operator.projectSettings.resolve")
     .at((ctx) => ({
       path: `/operator/project-settings/resolve?directory=${encodeURIComponent(ctx.directory ?? "/tmp")}`,

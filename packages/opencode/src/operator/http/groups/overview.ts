@@ -8,6 +8,7 @@ import { QueryBoolean } from "@/server/routes/instance/httpapi/groups/query"
 import { Authorization } from "@/server/routes/instance/httpapi/middleware/authorization"
 import { SchemaErrorMiddleware } from "@/server/routes/instance/httpapi/middleware/schema-error"
 import { OperatorFolderGroup } from "./folders"
+import { OperatorProjectRecordGroup } from "./project-records"
 import { OperatorNamespaceGroup } from "./namespaces"
 import { OperatorTrashGroup } from "./trash"
 
@@ -97,6 +98,7 @@ export const OperatorRootApi = HttpApi.make("operator-root")
   .add(OperatorFolderGroup)
   .add(OperatorNamespaceGroup)
   .add(OperatorTrashGroup)
+  .add(OperatorProjectRecordGroup)
   .middleware(SchemaErrorMiddleware)
   .middleware(Authorization)
   .annotateMerge(

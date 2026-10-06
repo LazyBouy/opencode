@@ -1062,12 +1062,6 @@ html[data-theme="iphi"] [data-component="operator-inspector"] {
   align-items: start;
 }
 
-@media (min-width: 1500px) {
-  [data-slot="operator-permission-layout"] {
-    grid-template-columns: minmax(0, 3fr) minmax(280px, 2fr);
-  }
-}
-
 [data-component="operator-permission-editor"] {
   display: flex;
   flex-direction: column;
@@ -1139,8 +1133,22 @@ html[data-theme="iphi"] [data-component="operator-inspector"] {
   font-weight: 600;
 }
 
+/* The impact of unsaved rules: a note below the editor, which keeps the full width. */
 [data-slot="operator-permission-impact"] {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--v2-border-border-base);
+  background: var(--v2-background-bg-layer-01);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+[data-slot="operator-permission-impact"] [data-slot="operator-panel-title"] {
+  font-size: 12px;
+  margin: 0;
 }
 
 [data-slot="operator-text-diff"] [data-change="removed"] {
@@ -1164,4 +1172,57 @@ html[data-theme="iphi"] [data-component="operator-inspector"] {
   align-items: center;
   gap: 6px;
   margin-bottom: 8px;
+}
+
+/* A list of checkboxes (members, group members). */
+[data-slot="operator-checklist"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+[data-slot="operator-group-edit"] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--v2-border-border-muted);
+  border-radius: 8px;
+}
+
+/* Something exactly as sent: collapsed until opened, with Read | Raw and Copy. */
+details[data-slot="operator-as-sent"] > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  cursor: pointer;
+}
+
+[data-slot="operator-as-sent-tools"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+details[data-slot="operator-as-sent"] [data-component="operator-code"][data-mode="raw"] {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Settings → Namespaces: a row opens its namespace in an overlay. */
+[data-slot="settings-namespace"] {
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+[data-slot="settings-namespace"]:hover,
+[data-slot="settings-namespace"]:focus-visible {
+  background: var(--v2-background-bg-layer-01);
+}
+
+[data-slot="settings-namespace-overlay"] {
+  height: 100%;
+  overflow-y: auto;
+  padding: 0 16px 16px;
 }

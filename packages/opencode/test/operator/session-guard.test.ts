@@ -199,4 +199,46 @@ describe("project of a folder", () => {
     expect(await OperatorProjects.keyOf({ directory: sub, worktree: "/" })).toBe(tmp.path)
     expect(await OperatorProjects.keyOf({ directory: sub, worktree: "/repo" })).toBe("/repo")
   })
+
+  test("a project's members: only they start sessions or get messages; none named means everyone", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const records = (body: object) =>
+      app().request("/operator/project-records", { method: "PUT", headers: json, body: JSON.stringify(body) })
+    expect((await create(tmp.path, { agent: "plan" })).status).toBe(200)
+
+    const saved = await records({ key: tmp.path, members: ["build"], description: "Ship it", status: "active" })
+    expect(saved.status).toBe(200)
+    expect(await saved.json()).toMatchObject({ key: tmp.path, members: ["build"], description: "Ship it" })
+
+    const refused = await create(tmp.path, { agent: "plan" })
+    expect(refused.status).toBe(403)
+    expect(await refused.json()).toMatchObject({ name: "OperatorNotAMemberError", data: { agent: "plan" } })
+    const made = await create(tmp.path, { agent: "build" })
+    expect(made.status).toBe(200)
+    const { id } = (await made.json()) as { id: string }
+
+    // A message to a session, as a non-member and as a member.
+    const message = (agent: string) =>
+      post(`/session/${id}/message`, { agent, noReply: true, parts: [{ type: "text", text: "hello" }] })
+    expect((await message("plan")).status).toBe(403)
+    expect((await message("build")).status).toBe(200)
+
+    // The manager and group members must be members.
+    expect((await records({ key: tmp.path, manager: "plan" })).status).toBe(400)
+    expect((await records({ key: tmp.path, groups: [{ id: "g", name: "Reviewers", members: ["plan"] }] })).status).toBe(
+      400,
+    )
+    expect((await records({ key: tmp.path, manager: "build" })).status).toBe(200)
+
+    // A copy of the project gets its record.
+    await using copy = await tmpdir()
+    const target = path.join(copy.path, "copied")
+    expect((await register({ directory: target, from: tmp.path })).status).toBe(200)
+    const all = (await (await app().request("/operator/project-records")).json()) as {
+      key: string
+      members: string[]
+      manager?: string
+    }[]
+    expect(all.find((item) => item.key === target)).toMatchObject({ members: ["build"], manager: "build" })
+  })
 })

@@ -2511,6 +2511,37 @@ export type OperatorTrashEmptied = {
   purged: number
 }
 
+export type OperatorProjectStatus = "draft" | "active" | "paused" | "completed" | "archived"
+
+export type OperatorProjectGroup = {
+  id: string
+  name: string
+  /**
+   * Agent names
+   */
+  members: Array<string>
+}
+
+export type OperatorProjectRecord = {
+  key: string
+  description: string
+  status: OperatorProjectStatus
+  manager?: string
+  /**
+   * The agents that may participate (project-roles); none: every agent may
+   */
+  members: Array<string>
+  groups: Array<OperatorProjectGroup>
+  updatedAt?: number
+}
+
+export type OperatorProjectRecordInvalidError = {
+  name: "OperatorProjectRecordInvalidError"
+  data: {
+    message: string
+  }
+}
+
 export type Model = {
   id: string
   providerID: string
@@ -10220,6 +10251,69 @@ export type OperatorTrashPurgeResponses = {
 }
 
 export type OperatorTrashPurgeResponse = OperatorTrashPurgeResponses[keyof OperatorTrashPurgeResponses]
+
+export type OperatorProjectRecordListData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/operator/project-records"
+}
+
+export type OperatorProjectRecordListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorProjectRecordListError = OperatorProjectRecordListErrors[keyof OperatorProjectRecordListErrors]
+
+export type OperatorProjectRecordListResponses = {
+  /**
+   * Every project's record that was set
+   */
+  200: Array<OperatorProjectRecord>
+}
+
+export type OperatorProjectRecordListResponse =
+  OperatorProjectRecordListResponses[keyof OperatorProjectRecordListResponses]
+
+export type OperatorProjectRecordUpdateData = {
+  body?: {
+    /**
+     * The project
+     */
+    key: string
+    description?: string
+    status?: OperatorProjectStatus
+    manager?: string
+    members?: Array<string>
+    groups?: Array<OperatorProjectGroup>
+  }
+  path?: never
+  query?: never
+  url: "/operator/project-records"
+}
+
+export type OperatorProjectRecordUpdateErrors = {
+  /**
+   * OperatorProjectRecordInvalidError | InvalidRequestError
+   */
+  400: OperatorProjectRecordInvalidError | InvalidRequestError
+}
+
+export type OperatorProjectRecordUpdateError =
+  OperatorProjectRecordUpdateErrors[keyof OperatorProjectRecordUpdateErrors]
+
+export type OperatorProjectRecordUpdateResponses = {
+  /**
+   * The project's record
+   */
+  200: OperatorProjectRecord
+}
+
+export type OperatorProjectRecordUpdateResponse =
+  OperatorProjectRecordUpdateResponses[keyof OperatorProjectRecordUpdateResponses]
 
 export type EventSubscribeData = {
   body?: never

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { accessOf, compareNames, lastTools, type RuleRow } from "./tool-prompt-model"
+import { accessOf, compareNames, lastTools, readableJson, type RuleRow } from "./tool-prompt-model"
 
 const rule = (index: number, pattern: string, action: RuleRow["action"], permission = "read"): RuleRow => ({
   index,
@@ -68,5 +68,28 @@ describe("the tools of a recorded request", () => {
       onlyWould: ["task"],
       onlyLast: ["webfetch"],
     })
+  })
+})
+
+describe("JSON laid out for reading", () => {
+  test("texts with line breaks show them as lines; the rest is indented JSON", () => {
+    expect(
+      readableJson([{ name: "bash", description: "Runs a command.\nUsage:\n- quote paths", input: { n: 1 } }]),
+    ).toBe(
+      [
+        "[",
+        "  {",
+        '    "name": "bash",',
+        '    "description": "Runs a command.',
+        "      Usage:",
+        '      - quote paths",',
+        '    "input": {',
+        '      "n": 1',
+        "    }",
+        "  }",
+        "]",
+      ].join("\n"),
+    )
+    expect(readableJson({ a: [], b: {}, c: null })).toBe('{\n  "a": [],\n  "b": {},\n  "c": null\n}')
   })
 })

@@ -3421,6 +3421,127 @@
         ]
       }
     },
+    "/operator/project-records": {
+      "get": {
+        "tags": ["operator project records"],
+        "operationId": "operator.projectRecord.list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Every project's record that was set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorProjectRecord"
+                  },
+                  "description": "Every project's record that was set"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Each project's description, status, manager, members (the agents that may participate) and groups. A project without a record is active, with no members (every agent may participate).",
+        "summary": "List projects' records",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.projectRecord.list({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "tags": ["operator project records"],
+        "operationId": "operator.projectRecord.update",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The project's record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectRecord"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProjectRecordInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProjectRecordInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Change a project's description, status, manager, members or groups. The manager and every group member must be members when the project names members.",
+        "summary": "Change a project's record",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "description": "The project"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "$ref": "#/components/schemas/OperatorProjectStatus"
+                  },
+                  "manager": {
+                    "type": "string"
+                  },
+                  "members": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "groups": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/OperatorProjectGroup"
+                    }
+                  }
+                },
+                "required": ["key"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.projectRecord.update({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/event": {
       "get": {
         "tags": ["event"],
@@ -28441,6 +28562,86 @@
         "required": ["purged"],
         "additionalProperties": false
       },
+      "OperatorProjectStatus": {
+        "type": "string",
+        "enum": ["draft", "active", "paused", "completed", "archived"]
+      },
+      "OperatorProjectGroup": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Agent names"
+          }
+        },
+        "required": ["id", "name", "members"],
+        "additionalProperties": false
+      },
+      "OperatorProjectRecord": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OperatorProjectStatus"
+          },
+          "manager": {
+            "type": "string"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The agents that may participate (project-roles); none: every agent may"
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorProjectGroup"
+            }
+          },
+          "updatedAt": {
+            "type": "number"
+          }
+        },
+        "required": ["key", "description", "status", "members", "groups"],
+        "additionalProperties": false
+      },
+      "OperatorProjectRecordInvalidError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorProjectRecordInvalidError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
       "Model": {
         "type": "object",
         "properties": {
@@ -46039,6 +46240,10 @@
     {
       "name": "operator trash",
       "description": "Trash routes."
+    },
+    {
+      "name": "operator project records",
+      "description": "Project record routes."
     },
     {
       "name": "event",

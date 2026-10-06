@@ -15,7 +15,7 @@ import type {
   OperatorToolSource,
 } from "@opencode-ai/sdk/v2/client"
 import { useQuery } from "@tanstack/solid-query"
-import { createMemo, For, type JSX, onCleanup, Show } from "solid-js"
+import { createMemo, createSignal, For, type JSX, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
@@ -30,7 +30,7 @@ import { useModelSourceText } from "../ui/prompt-trace"
 import { useAgentPromptSetting } from "./agent-prompt"
 import { requestError } from "./config-helpers"
 import { OPENCODE, PREFIX } from "./profile-model"
-import { accessOf, compareNames, type LastTool, lastTools } from "./tool-prompt-model"
+import { accessOf, compareNames, type LastTool, lastTools, readableJson } from "./tool-prompt-model"
 
 type Key = Parameters<ReturnType<typeof useLanguage>["t"]>[0]
 type RunsAs = "primary" | "subagent" | "session"
@@ -284,7 +284,6 @@ function WouldBeSent(props: { data: OperatorToolPrompt; agent: string; onOpen: (
   const whyText = useWhyText()
   const number = (value: number) => exact(language, value)
   const rowsOf = (tool: OperatorToolSent) => props.data.rows.filter((row) => tool.rules.includes(row.index))
-  const pretty = () => JSON.stringify(props.data.list, null, 2)
 
   return (
     <>
@@ -422,25 +421,12 @@ function WouldBeSent(props: { data: OperatorToolPrompt; agent: string; onOpen: (
         />
       </section>
 
-      <section data-component="operator-panel" data-testid="tool-prompt-json">
-        <div data-slot="operator-panel-head">
-          <h2 data-slot="operator-panel-title">{language.t("operator.toolPrompt.overall")}</h2>
-          <span class="flex items-center gap-1">
-            <ButtonV2 size="small" variant="outline" onClick={() => copyText(language, pretty())}>
-              {language.t("operator.toolPrompt.copy")}
-            </ButtonV2>
-            <ButtonV2
-              size="small"
-              variant="outline"
-              onClick={() => copyText(language, JSON.stringify(props.data.list))}
-            >
-              {language.t("operator.toolPrompt.copyAsSent")}
-            </ButtonV2>
-          </span>
-        </div>
-        <p data-slot="operator-note">{language.t("operator.toolPrompt.overallHint")}</p>
-        <pre data-component="operator-code">{pretty()}</pre>
-      </section>
+      <AsSent
+        testid="tool-prompt-json"
+        title={language.t("operator.toolPrompt.overall")}
+        hint={language.t("operator.toolPrompt.overallHint")}
+        raw={JSON.stringify(props.data.list)}
+      />
     </>
   )
 }
@@ -455,14 +441,6 @@ function LastSent(props: {
   const language = useLanguage()
   const navigate = useNavigate()
   const tools = createMemo(() => lastTools(props.last.tools))
-  const pretty = createMemo(() => {
-    if (!props.last.tools) return ""
-    try {
-      return JSON.stringify(JSON.parse(props.last.tools), null, 2)
-    } catch {
-      return props.last.tools
-    }
-  })
   const chars = () => tools().reduce((sum, item) => sum + item.chars, 0)
   const compared = createMemo(() =>
     compareNames(
@@ -549,21 +527,12 @@ function LastSent(props: {
             ]}
           />
         </section>
-        <section data-component="operator-panel" data-testid="tool-prompt-json">
-          <div data-slot="operator-panel-head">
-            <h2 data-slot="operator-panel-title">{language.t("operator.toolPrompt.overall")}</h2>
-            <span class="flex items-center gap-1">
-              <ButtonV2 size="small" variant="outline" onClick={() => copyText(language, pretty())}>
-                {language.t("operator.toolPrompt.copy")}
-              </ButtonV2>
-              <ButtonV2 size="small" variant="outline" onClick={() => copyText(language, props.last.tools ?? "")}>
-                {language.t("operator.toolPrompt.copyAsSent")}
-              </ButtonV2>
-            </span>
-          </div>
-          <p data-slot="operator-note">{language.t("operator.toolPrompt.lastHint")}</p>
-          <pre data-component="operator-code">{pretty()}</pre>
-        </section>
+        <AsSent
+          testid="tool-prompt-json"
+          title={language.t("operator.toolPrompt.overall")}
+          hint={language.t("operator.toolPrompt.lastHint")}
+          raw={props.last.tools ?? ""}
+        />
       </Show>
     </>
   )
@@ -592,16 +561,13 @@ function ToolOverlay(props: {
   )
   const rows = () => props.prompt.rows.filter((row) => props.tool.rules.includes(row.index))
   const decisive = () => rows().at(-1)?.index
+  // This tool's entry exactly as sent (in the view's format).
   const entry = () =>
     props.view === "last"
       ? props.last
-        ? JSON.stringify(props.last.entry, null, 2)
+        ? JSON.stringify(props.last.entry)
         : undefined
-      : JSON.stringify(
-          props.prompt.list.find((item) => item.name === props.tool.name),
-          null,
-          2,
-        )
+      : JSON.stringify(props.prompt.list.find((item) => item.name === props.tool.name))
   // The text's layer: the copy or namespace version, else OpenCode's built-in (in OpenCode's namespace).
   const wording = () => {
     const ns = setting.data?.namespace.id
@@ -624,26 +590,19 @@ function ToolOverlay(props: {
       </DialogHeader>
       <DialogBody>
         <div data-slot="operator-tool-overlay" data-testid="tool-overlay">
-          <section data-component="operator-panel">
-            <div data-slot="operator-panel-head">
-              <h3 data-slot="operator-panel-title">
-                {language.t(props.view === "last" ? "operator.toolPrompt.asLastSent" : "operator.toolPrompt.asSent")}
-              </h3>
-              <Show when={entry()}>
-                {(text) => (
-                  <ButtonV2 size="small" variant="outline" onClick={() => copyText(language, text())}>
-                    {language.t("operator.toolPrompt.copy")}
-                  </ButtonV2>
+          <Show
+            when={entry()}
+            fallback={<p data-slot="operator-note">{language.t("operator.toolPrompt.notInLast")}</p>}
+          >
+            {(text) => (
+              <AsSent
+                title={language.t(
+                  props.view === "last" ? "operator.toolPrompt.asLastSent" : "operator.toolPrompt.asSent",
                 )}
-              </Show>
-            </div>
-            <Show
-              when={entry()}
-              fallback={<p data-slot="operator-note">{language.t("operator.toolPrompt.notInLast")}</p>}
-            >
-              {(text) => <pre data-component="operator-code">{text()}</pre>}
-            </Show>
-          </section>
+                raw={text()}
+              />
+            )}
+          </Show>
 
           <section data-component="operator-panel" data-testid="tool-overlay-text">
             <h3 data-slot="operator-panel-title">
@@ -802,6 +761,53 @@ function ToolOverlay(props: {
         </div>
       </DialogBody>
     </Dialog>
+  )
+}
+
+// Something exactly as sent, collapsed until opened: Read lays the JSON out for reading (line breaks
+// in texts shown as lines), Raw shows the exact text with its `\n`s. Copy copies what is shown.
+function AsSent(props: { title: string; hint?: string; raw: string; testid?: string }) {
+  const language = useLanguage()
+  const [mode, setMode] = createSignal<"read" | "raw">("read")
+  const readable = createMemo(() => {
+    try {
+      return readableJson(JSON.parse(props.raw))
+    } catch {
+      return props.raw
+    }
+  })
+  const shown = () => (mode() === "raw" ? props.raw : readable())
+  return (
+    <details data-component="operator-panel" data-slot="operator-as-sent" data-testid={props.testid}>
+      <summary>
+        <span data-slot="operator-panel-title">{props.title}</span>
+        <span data-slot="operator-note">
+          {language.t("operator.toolPrompt.characters", {
+            count: new Intl.NumberFormat(language.intl()).format(props.raw.length),
+          })}
+        </span>
+      </summary>
+      <div data-slot="operator-as-sent-tools">
+        <SegmentedControlV2
+          class="operator-segmented-fit"
+          value={mode()}
+          onChange={(value) => value && setMode(value as "read" | "raw")}
+          aria-label={language.t("operator.toolPrompt.format")}
+        >
+          <SegmentedControlItemV2 value="read">{language.t("operator.toolPrompt.read")}</SegmentedControlItemV2>
+          <SegmentedControlItemV2 value="raw">{language.t("operator.toolPrompt.raw")}</SegmentedControlItemV2>
+        </SegmentedControlV2>
+        <ButtonV2 size="small" variant="outline" onClick={() => copyText(language, shown())}>
+          {language.t("operator.toolPrompt.copy")}
+        </ButtonV2>
+      </div>
+      <Show when={props.hint}>
+        <p data-slot="operator-note">{props.hint}</p>
+      </Show>
+      <pre data-component="operator-code" data-mode={mode()}>
+        {shown()}
+      </pre>
+    </details>
   )
 }
 

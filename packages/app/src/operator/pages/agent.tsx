@@ -13,6 +13,7 @@ import { RecordView } from "../ui/record-overlay"
 import { AgentPrompt, useAgentPromptSetting } from "./agent-prompt"
 import { AgentToolPrompt } from "./agent-tools"
 import { AgentPermissions } from "./agent-permissions"
+import { recordOf, useProjectRecords } from "./project-record"
 import { requestError } from "./config-helpers"
 import { FieldHelp } from "../ui/field-help"
 import { ModelWithSource } from "../ui/prompt-trace"
@@ -49,6 +50,12 @@ export function AgentDetail(props: { name: string; directory: string; tab: strin
   }))
   const agent = createMemo(() => agents.data?.find((item) => item.name === props.name))
   const prompt = useAgentPromptSetting(() => props.name, directory)
+  // Whether the agent may work in this project (its members; none named: every agent).
+  const records = useProjectRecords()
+  const member = (name: string) => {
+    const members = recordOf(records.data, directory()).members
+    return !members.length || members.includes(name) || ["title", "summary", "compaction"].includes(name)
+  }
   const sessions = useQuery(() => ({
     queryKey: api.key("sessions", "agent", directory(), props.name),
     enabled: props.tab === "sessions",
@@ -128,6 +135,11 @@ export function AgentDetail(props: { name: string; directory: string; tab: strin
               </Show>
               <Show when={current().disabled}>
                 <Tag>{language.t("operator.agent.off")}</Tag>
+              </Show>
+              <Show when={!member(current().name)}>
+                <Tag data-warning="" title={language.t("operator.agent.notMemberHint")}>
+                  {language.t("operator.agent.notMember")}
+                </Tag>
               </Show>
             </>
           }

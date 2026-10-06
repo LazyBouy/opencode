@@ -24,6 +24,7 @@ import { useProfileNames } from "./profile-data"
 import { namespaceDefault, OPENCODE } from "./profile-model"
 import { RegisterProject } from "../project-gate"
 import { useMoveToTrash } from "../ui/confirm"
+import { ProjectRecordFields, ProjectRecordForm } from "./project-record"
 import { ProjectPromptForm, useProjectSettings } from "./project-prompt"
 
 // A project as the page lists it: a git project the server knows, or a folder outside git — a
@@ -430,10 +431,27 @@ function ProjectRecord(props: {
         ),
     )
 
+  // What Edit edits: the project (its goal, members, …) or its prompt settings (also what a newly added
+  // project opens in, to choose its namespace).
+  const [mode, setMode] = createSignal<"project" | "prompt">("prompt")
+  const edit = (next: "project" | "prompt") => {
+    setMode(next)
+    props.onEditing(true)
+  }
+
   return (
     <Show
       when={!props.editing}
-      fallback={<ProjectPromptForm project={props.setting} added={props.added} onDone={props.onDone} />}
+      fallback={
+        <Show
+          when={mode() === "project"}
+          fallback={<ProjectPromptForm project={props.setting} added={props.added} onDone={props.onDone} />}
+        >
+          <RecordView title={name()}>
+            <ProjectRecordForm setting={props.setting} name={name()} onDone={props.onDone} />
+          </RecordView>
+        </Show>
+      }
     >
       <Show when={props.copying}>
         <RecordView
@@ -465,8 +483,11 @@ function ProjectRecord(props: {
           actions={
             <>
               <Show when={props.row.registered}>
-                <ButtonV2 variant="contrast" onClick={() => props.onEditing(true)}>
-                  {language.t("operator.profile.edit")}
+                <ButtonV2 variant="contrast" onClick={() => edit("project")}>
+                  {language.t("operator.projects.editProject")}
+                </ButtonV2>
+                <ButtonV2 variant="outline" onClick={() => edit("prompt")}>
+                  {language.t("operator.projects.editPrompt")}
                 </ButtonV2>
                 <ButtonV2
                   variant="outline"
@@ -507,12 +528,7 @@ function ProjectRecord(props: {
               {props.nsName}
             </RecordField>
             <Show when={props.row.registered}>
-              <RecordField
-                label={language.t("operator.column.purpose")}
-                help={language.t("operator.projects.purposeHint")}
-              >
-                {props.purpose}
-              </RecordField>
+              <ProjectRecordFields setting={props.setting} />
               <RecordField
                 label={language.t("operator.column.defaultProfile")}
                 help={language.t("operator.help.projectDefaultProfile")}

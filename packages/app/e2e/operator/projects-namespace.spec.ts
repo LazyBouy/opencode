@@ -64,10 +64,10 @@ test("a project opens in the overlay; Edit moves it after a check, then links it
   const overlay = page.getByRole("dialog")
   await expect(overlay.getByRole("heading", { name: /smoke-project/ })).toBeVisible()
   await expect(overlay.getByRole("tab", { name: "OpenCode" })).toHaveAttribute("aria-selected", "true")
-  for (const action of ["Edit", "New session", "Agents", "Config", "Sessions"])
+  for (const action of ["Edit project", "Prompt settings", "New session", "Agents", "Config", "Sessions"])
     await expect(overlay.getByRole("button", { name: action, exact: true })).toBeVisible()
 
-  await overlay.getByRole("button", { name: "Edit", exact: true }).click()
+  await overlay.getByRole("button", { name: "Prompt settings", exact: true }).click()
   await expect(overlay.locator('[data-component="select-v2-root"][aria-label="Default profile"]')).toContainText(
     "Namespace default (OpenCode)",
   )
@@ -77,25 +77,26 @@ test("a project opens in the overlay; Edit moves it after a check, then links it
   await expect(overlay.getByRole("status")).toContainText("Release goal")
   expect(state.prompt.projects[directory]!.namespace).toBe("opencode")
   await overlay.getByRole("button", { name: "Move", exact: true }).click()
-  await expect(overlay.getByRole("button", { name: "Edit", exact: true })).toBeVisible()
+  await expect(overlay.getByRole("button", { name: "Edit project", exact: true })).toBeVisible()
   expect(state.prompt.writes.map((write) => write.body)).toEqual([
     { key: directory, namespace: "acme", dryRun: true },
     { key: directory, namespace: "acme" },
   ])
   await expect(overlay.locator('[data-component="record-fields"]')).toContainText("Acme")
 
-  await overlay.getByRole("button", { name: "Edit", exact: true }).click()
+  await overlay.getByRole("button", { name: "Prompt settings", exact: true }).click()
   await pick(page, "Project Purpose", "Ship tools")
   await pick(page, "Default profile", "Spec")
   await overlay.getByRole("button", { name: "Save", exact: true }).click()
-  await expect(overlay.getByRole("button", { name: "Edit", exact: true })).toBeVisible()
+  await expect(overlay.getByRole("button", { name: "Edit project", exact: true })).toBeVisible()
   expect(state.prompt.writes[2]!.body).toEqual({
     key: directory,
     purpose: "ship",
     // The project is in Acme now: Acme's own copy of the Spec profile.
     defaultProfile: "profile.spec",
   })
-  await expect(overlay.locator('[data-component="record-fields"]')).toContainText("Ship tools")
+  // The goal is the linked Project Purpose layer's text.
+  await expect(overlay.getByTestId("project-goal")).toContainText("Ship.")
   await overlay.getByRole("button", { name: "Close" }).click()
   await expect(row).toContainText("Acme")
   await expect(row).toContainText("Spec")
@@ -134,6 +135,48 @@ test("an added project stays in OpenCode unless another namespace is chosen", as
   await overlay.getByRole("button", { name: "Check the move" }).click()
   await expect(overlay.getByRole("status")).toContainText("Acme already has everything")
   await overlay.getByRole("button", { name: "Move", exact: true }).click()
-  await expect(overlay.getByRole("button", { name: "Edit", exact: true })).toBeVisible()
+  await expect(overlay.getByRole("button", { name: "Edit project", exact: true })).toBeVisible()
   expect(state.prompt.projects[`${workspace}/site`]).toEqual({ namespace: "acme" })
+})
+
+test("a project's record: goal, description, status, members, manager and groups", async ({ page }) => {
+  const state = await mockOperator(page)
+  state.prompt.items.opencode!.layers.push({
+    id: "goal",
+    name: "Release goal",
+    type: "purpose",
+    section: "purpose",
+    text: "Release.",
+    origin: "user",
+  })
+  state.prompt.projects[directory] = { namespace: "opencode", purpose: "goal" }
+  await page.goto("/operator/projects")
+  await page.getByRole("row", { name: /smoke-project/ }).click()
+  const overlay = page.getByRole("dialog")
+  await expect(overlay.getByTestId("project-goal")).toContainText("Release.")
+  await expect(overlay.getByTestId("project-members")).toContainText("Every agent can take part")
+
+  await overlay.getByRole("button", { name: "Edit project", exact: true }).click()
+  const form = overlay.getByTestId("project-record-form")
+  await form.getByRole("textbox").first().fill("Release the parser.")
+  const members = form.getByTestId("project-members-edit")
+  await members.getByText("build", { exact: true }).click()
+  await members.getByText("reviewer", { exact: true }).click()
+  await pick(page, "Manager", "build")
+  await form.getByRole("button", { name: "Add group" }).click()
+  await form.getByRole("textbox", { name: "Group name" }).fill("Reviewers")
+  await form.locator('[data-slot="operator-group-edit"]').getByText("reviewer", { exact: true }).click()
+  await form.getByRole("button", { name: "Save", exact: true }).click()
+
+  await expect.poll(() => state.projectRecordWrites.length).toBe(1)
+  expect(state.projectRecordWrites[0]).toMatchObject({
+    key: directory,
+    status: "active",
+    manager: "build",
+    members: ["build", "reviewer"],
+    groups: [{ name: "Reviewers", members: ["reviewer"] }],
+  })
+  // The goal was changed in its layer.
+  expect(state.prompt.items.opencode!.layers.find((layer) => layer.id === "goal")?.text).toBe("Release the parser.")
+  await expect(overlay.getByTestId("project-members")).toContainText("build, reviewer")
 })

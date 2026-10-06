@@ -74,6 +74,17 @@ export function PermissionEditor(props: {
   // `number` follows the rows above it (it changes as editable rules are added or removed).
   const Locked = (row: OperatorPermissionRow, number: () => number) => (
     <tr data-locked="" data-part={row.part} hidden={!shown(row.permission)}>
+      <td>
+        {/* Override: a rule with the same permission and pattern at the end of the editable part. */}
+        <IconButtonV2
+          variant="ghost-muted"
+          size="small"
+          icon={<Icon name="edit" />}
+          aria-label={language.t("operator.permissionEditor.override")}
+          title={language.t("operator.permissionEditor.overrideHint")}
+          onClick={() => add({ permission: row.permission, pattern: row.pattern, action: row.action })}
+        />
+      </td>
       <td data-align="end">{number()}</td>
       <td>
         <code>{row.permission}</code>
@@ -96,15 +107,7 @@ export function PermissionEditor(props: {
           </Show>
         </span>
       </td>
-      <td data-align="end">
-        <ButtonV2
-          size="small"
-          variant="ghost"
-          onClick={() => add({ permission: row.permission, pattern: row.pattern, action: row.action })}
-        >
-          {language.t("operator.permissionEditor.override")}
-        </ButtonV2>
-      </td>
+      <td />
     </tr>
   )
 
@@ -125,6 +128,7 @@ export function PermissionEditor(props: {
       <div data-component="operator-table">
         <table aria-label={language.t("operator.permissionEditor.label")}>
           <colgroup>
+            <col style={{ width: "36px" }} />
             <col style={{ width: "40px" }} />
             <col style={{ width: "18%" }} />
             <col style={{ width: "20%" }} />
@@ -134,6 +138,7 @@ export function PermissionEditor(props: {
           </colgroup>
           <thead>
             <tr>
+              <th scope="col" aria-label={language.t("operator.permissionEditor.editColumn")} />
               <th scope="col" data-align="end">
                 #
               </th>
@@ -182,6 +187,19 @@ export function PermissionEditor(props: {
                       }}
                       onDragEnd={() => setDragging(undefined)}
                     >
+                      <td>
+                        <IconButtonV2
+                          variant="ghost-muted"
+                          size="small"
+                          icon={<Icon name="edit" />}
+                          aria-label={language.t("operator.permissionEditor.editRule", { index: index + 1 })}
+                          onClick={(event) =>
+                            (
+                              event.currentTarget.closest("tr")?.querySelector("input") as HTMLInputElement | null
+                            )?.focus()
+                          }
+                        />
+                      </td>
                       <td data-align="end">{before().length + index + 1}</td>
                       <td>
                         <TextInputV2
@@ -265,6 +283,7 @@ export function PermissionEditor(props: {
                     <Show when={hint()}>
                       {(kind) => (
                         <tr data-slot="operator-rule-hint" hidden={!shown(rule().permission)}>
+                          <td />
                           <td />
                           <td colSpan={5}>
                             <p data-slot="operator-note" data-warning="" data-testid="rule-hint">

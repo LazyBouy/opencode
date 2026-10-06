@@ -230,6 +230,8 @@ export interface OperatorMock {
   permissionWrites: Array<{ agent: string; body: { scope: string; rules: Array<Record<string, string>> } }>
   ownRules: Record<string, Array<{ permission: string; pattern: string; action: "allow" | "ask" | "deny" }>>
   drafts: unknown[]
+  projectRecordWrites: Array<Record<string, unknown>>
+  projectRecords: Record<string, Record<string, unknown>>
   sessionPermissionWrites: Array<{ sessionID: string; body: { rules: Array<Record<string, string>> } }>
   sessionRules: Record<
     string,
@@ -264,6 +266,8 @@ export async function mockOperator(page: Page) {
     drafts: [],
     sessionPermissionWrites: [],
     sessionRules: {},
+    projectRecordWrites: [],
+    projectRecords: {},
   }
   const repositories = new Set([`${workspace}/site`])
   const listing = (path: string) => ({
@@ -391,6 +395,27 @@ export async function mockOperator(page: Page) {
       return found
         ? json(route, found)
         : json(route, { name: "OperatorCallNotFoundError", data: { message: "No call" } }, 404)
+    }
+    if (url.pathname === "/operator/project-records") {
+      if (method === "PUT") {
+        const body = route.request().postDataJSON() as { key: string; manager?: string }
+        state.projectRecordWrites.push(body)
+        const { manager, ...rest } = body
+        state.projectRecords[body.key] = {
+          description: "",
+          status: "active",
+          members: [],
+          groups: [],
+          ...state.projectRecords[body.key],
+          ...rest,
+          ...(manager ? { manager } : {}),
+        }
+        return json(route, { key: body.key, ...state.projectRecords[body.key] })
+      }
+      return json(
+        route,
+        Object.entries(state.projectRecords).map(([key, record]) => ({ key, ...record })),
+      )
     }
     const sessionPermissions = url.pathname.match(/^\/operator\/session\/([^/]+)\/permissions$/)
     if (sessionPermissions) {
