@@ -14500,6 +14500,201 @@
         ]
       }
     },
+    "/operator/agent/{name}/tool-prompt": {
+      "get": {
+        "tags": ["operator tool prompt"],
+        "operationId": "operator.toolPrompt.get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "runsAs",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/OperatorToolRunsAs"
+            },
+            "required": false
+          },
+          {
+            "name": "session",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The tool prompt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorToolPrompt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorToolPromptNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorToolPromptNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The tools an agent's request sends with a model, each with its description and schema as sent, the version of its description, its size and the rules for its permission, and the tools not sent with the reason. Built live from the current settings.",
+        "summary": "An agent's tool prompt",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.toolPrompt.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/agent/{name}/tool-prompt/draft": {
+      "post": {
+        "tags": ["operator tool prompt"],
+        "operationId": "operator.toolPrompt.draft",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The tool prompt with the draft rules, and its diff",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorToolPromptDraft"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorToolPromptNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorToolPromptNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The tool prompt built from unsaved permission rules (the agent's own, or a session's), and what changes against the saved rules: tools added or removed (with the rule that caused it), descriptions changed, and the total size.",
+        "summary": "Preview a tool prompt with unsaved rules",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "runsAs": {
+                    "$ref": "#/components/schemas/OperatorToolRunsAs"
+                  },
+                  "agentRules": {
+                    "$ref": "#/components/schemas/PermissionRuleset"
+                  },
+                  "sessionID": {
+                    "type": "string"
+                  },
+                  "sessionRules": {
+                    "$ref": "#/components/schemas/PermissionRuleset"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.toolPrompt.draft({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "tags": ["opencode HttpApi"],
@@ -30117,6 +30312,520 @@
         "type": "string",
         "enum": ["skill", "command", "tool", "mcp", "memory"]
       },
+      "OperatorToolRunsAs": {
+        "type": "string",
+        "enum": ["primary", "subagent", "session"]
+      },
+      "OperatorPermissionOrigin": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "opencode-default",
+              "opencode-agent",
+              "config-permission",
+              "config-tools",
+              "agent",
+              "truncation",
+              "session-user",
+              "session-always",
+              "session-task",
+              "session-client",
+              "session-opencode"
+            ],
+            "description": "opencode-default / opencode-agent: OpenCode's code (its defaults, its definition of the agent); config-permission / config-tools: a config file's `permission` or legacy `tools` key; agent: the agent's own `permission` (its agent file or config entry); truncation: OpenCode's truncation folder allow; session-*: the session's own rules, set by you, by Always allow, added by `task` for a subagent, by a client's tool switch, or by OpenCode"
+          },
+          "path": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "time": {
+            "type": "number"
+          }
+        },
+        "required": ["kind"],
+        "additionalProperties": false
+      },
+      "OperatorPermissionRow": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "number",
+            "description": "1-based, in evaluation order"
+          },
+          "permission": {
+            "type": "string"
+          },
+          "pattern": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": ["allow", "ask", "deny"]
+          },
+          "part": {
+            "type": "string",
+            "enum": ["opencode", "config", "agent", "truncation", "session"]
+          },
+          "from": {
+            "$ref": "#/components/schemas/OperatorPermissionOrigin"
+          }
+        },
+        "required": ["index", "permission", "pattern", "action", "part", "from"],
+        "additionalProperties": false
+      },
+      "OperatorToolSource": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["builtin", "file", "plugin", "mcp", "mcp-resources", "noop"]
+          },
+          "path": {
+            "type": "string"
+          },
+          "server": {
+            "type": "string"
+          }
+        },
+        "required": ["kind"],
+        "additionalProperties": false
+      },
+      "OperatorToolTemplate": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "values": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["file", "values"],
+        "additionalProperties": false
+      },
+      "OperatorToolVersion": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["opencode", "namespace", "copy", "none"],
+            "description": "opencode: OpenCode's text; namespace: the namespace's own version; copy: an edited copy in the agent's profile; none: not a versioned text (MCP and other tools)"
+          },
+          "layer": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "profile": {
+            "type": "string"
+          },
+          "override": {
+            "type": "boolean"
+          },
+          "file": {
+            "type": "string"
+          },
+          "template": {
+            "$ref": "#/components/schemas/OperatorToolTemplate"
+          },
+          "fixedTemplate": {
+            "type": "boolean"
+          }
+        },
+        "required": ["kind"],
+        "additionalProperties": false
+      },
+      "OperatorToolSubagent": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kept": {
+            "type": "boolean"
+          },
+          "rule": {
+            "type": "number"
+          }
+        },
+        "required": ["name", "kept"],
+        "additionalProperties": false
+      },
+      "OperatorToolAppended": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["subagents", "mcp-catalog"]
+          },
+          "text": {
+            "type": "string"
+          },
+          "subagents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorToolSubagent"
+            }
+          }
+        },
+        "required": ["kind", "text"],
+        "additionalProperties": false
+      },
+      "OperatorToolSizes": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "number"
+          },
+          "schema": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          },
+          "tokens": {
+            "type": "number",
+            "description": "Estimated: characters ÷ 4"
+          }
+        },
+        "required": ["description", "schema", "total", "tokens"],
+        "additionalProperties": false
+      },
+      "OperatorToolSent": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "permission": {
+            "type": "string",
+            "description": "The permission the tool is checked by"
+          },
+          "source": {
+            "$ref": "#/components/schemas/OperatorToolSource"
+          },
+          "version": {
+            "$ref": "#/components/schemas/OperatorToolVersion"
+          },
+          "versionText": {
+            "type": "string",
+            "description": "The description's own text, before OpenCode's additions"
+          },
+          "appended": {
+            "$ref": "#/components/schemas/OperatorToolAppended"
+          },
+          "description": {
+            "type": "string",
+            "description": "The description as sent"
+          },
+          "schema": {},
+          "rewrite": {
+            "type": "string"
+          },
+          "strict": {
+            "type": "boolean"
+          },
+          "sizes": {
+            "$ref": "#/components/schemas/OperatorToolSizes"
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "Indexes of the rules for this tool's permission"
+          }
+        },
+        "required": [
+          "name",
+          "permission",
+          "source",
+          "version",
+          "versionText",
+          "description",
+          "schema",
+          "sizes",
+          "rules"
+        ],
+        "additionalProperties": false
+      },
+      "OperatorToolNotSent": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "permission": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "enum": ["permission", "session", "subagent", "model", "flag", "internal"]
+          },
+          "rule": {
+            "type": "number"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/OperatorToolSource"
+          }
+        },
+        "required": ["name", "reason"],
+        "additionalProperties": false
+      },
+      "OperatorToolEntry": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "input_schema": {},
+          "strict": {
+            "type": "boolean"
+          }
+        },
+        "required": ["name", "description", "input_schema"],
+        "additionalProperties": false
+      },
+      "OperatorToolPrompt": {
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string",
+            "description": "provider/model the list is built for"
+          },
+          "modelSource": {
+            "$ref": "#/components/schemas/OperatorModelSource"
+          },
+          "runsAs": {
+            "$ref": "#/components/schemas/OperatorToolRunsAs"
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPermissionRow"
+            },
+            "description": "The rules that apply (the agent's, then the session's), in evaluation order"
+          },
+          "sent": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorToolSent"
+            }
+          },
+          "notSent": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorToolNotSent"
+            }
+          },
+          "sizes": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "number"
+              },
+              "schema": {
+                "type": "number"
+              },
+              "total": {
+                "type": "number"
+              },
+              "tokens": {
+                "type": "number"
+              }
+            },
+            "required": ["description", "schema", "total", "tokens"],
+            "additionalProperties": false
+          },
+          "list": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorToolEntry"
+            },
+            "description": "The list as OpenCode hands it to the AI SDK, sorted as sent: { name, description, input_schema }"
+          }
+        },
+        "required": ["agent", "model", "runsAs", "rows", "sent", "notSent", "sizes", "list"],
+        "additionalProperties": false
+      },
+      "OperatorToolPromptNotFoundError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorToolPromptNotFoundError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorToolPromptDiff": {
+        "type": "object",
+        "properties": {
+          "added": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "rule": {
+                  "type": "number"
+                }
+              },
+              "required": ["name"],
+              "additionalProperties": false
+            }
+          },
+          "removed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "rule": {
+                  "type": "number"
+                }
+              },
+              "required": ["name"],
+              "additionalProperties": false
+            }
+          },
+          "changed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "before": {
+                  "type": "string"
+                },
+                "after": {
+                  "type": "string"
+                }
+              },
+              "required": ["name", "before", "after"],
+              "additionalProperties": false
+            }
+          },
+          "before": {
+            "type": "number",
+            "description": "Total characters, saved"
+          },
+          "after": {
+            "type": "number",
+            "description": "Total characters, with the draft"
+          }
+        },
+        "required": ["added", "removed", "changed", "before", "after"],
+        "additionalProperties": false
+      },
+      "OperatorToolPromptDraft": {
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string",
+            "description": "provider/model the list is built for"
+          },
+          "modelSource": {
+            "$ref": "#/components/schemas/OperatorModelSource"
+          },
+          "runsAs": {
+            "$ref": "#/components/schemas/OperatorToolRunsAs"
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPermissionRow"
+            },
+            "description": "The rules that apply (the agent's, then the session's), in evaluation order"
+          },
+          "sent": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorToolSent"
+            }
+          },
+          "notSent": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorToolNotSent"
+            }
+          },
+          "sizes": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "number"
+              },
+              "schema": {
+                "type": "number"
+              },
+              "total": {
+                "type": "number"
+              },
+              "tokens": {
+                "type": "number"
+              }
+            },
+            "required": ["description", "schema", "total", "tokens"],
+            "additionalProperties": false
+          },
+          "list": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorToolEntry"
+            },
+            "description": "The list as OpenCode hands it to the AI SDK, sorted as sent: { name, description, input_schema }"
+          },
+          "diff": {
+            "$ref": "#/components/schemas/OperatorToolPromptDiff"
+          }
+        },
+        "required": ["agent", "model", "runsAs", "rows", "sent", "notSent", "sizes", "list", "diff"],
+        "additionalProperties": false
+      },
       "UnauthorizedError": {
         "type": "object",
         "properties": {
@@ -43785,6 +44494,10 @@
     {
       "name": "operator trash items",
       "description": "Trash routes."
+    },
+    {
+      "name": "operator tool prompt",
+      "description": "Tool prompt routes."
     },
     {
       "name": "opencode HttpApi",

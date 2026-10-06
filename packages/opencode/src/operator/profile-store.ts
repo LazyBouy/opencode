@@ -575,7 +575,7 @@ const layer = Layer.effect(
           name: catalog.namespace.name,
           namespace: id,
           paths: [path.join(root(), id)],
-        }),
+        }).finally(() => revision++),
       )
     })
 
@@ -773,7 +773,9 @@ const layer = Layer.effect(
       const name = (items as ReadonlyArray<{ id: string; name: string }>).find((item) => item.id === id)?.name ?? id
       // To Trash, from where it can be restored.
       yield* Effect.promise(() =>
-        OperatorTrashFiles.put({ kind, name, namespace: ns, paths: [itemFile(ns, kind, id)] }),
+        OperatorTrashFiles.put({ kind, name, namespace: ns, paths: [itemFile(ns, kind, id)] }).finally(
+          () => revision++,
+        ),
       )
     })
 
@@ -1266,6 +1268,14 @@ async function writeJson(file: string, data: unknown) {
 async function write(file: string, text: string) {
   await fs.mkdir(path.dirname(file), { recursive: true })
   await Bun.write(file, text)
+  revision++
+}
+
+// Bumped on every write and removal, so readers that cache a read (the prompt plugin) see a change at
+// once.
+let revision = 0
+export function storeRevision() {
+  return revision
 }
 
 // An id made from the name that no file in `dir` (and none of `taken`) uses yet.

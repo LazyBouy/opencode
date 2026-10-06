@@ -5,6 +5,7 @@ import { OperatorMemoryApi } from "./groups/memory"
 import { MergeApi } from "./groups/merge"
 import { OperatorProjectApi } from "./groups/project"
 import { OperatorPromptApi } from "./groups/prompts"
+import { OperatorToolPromptApi } from "./groups/tool-prompt"
 import { OperatorTrashItemApi } from "./groups/trash"
 
 export { OperatorRootApi } from "./groups/overview"
@@ -21,3 +22,4 @@ export const OperatorApi = HttpApi.make("operator")
   .addHttpApi(OperatorMemoryApi)
   .addHttpApi(OperatorAgentPromptApi)
   .addHttpApi(OperatorTrashItemApi)
+  .addHttpApi(OperatorToolPromptApi)

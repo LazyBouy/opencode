@@ -233,6 +233,11 @@ import type {
   OperatorStatusResponses,
   OperatorToolListErrors,
   OperatorToolListResponses,
+  OperatorToolPromptDraftErrors,
+  OperatorToolPromptDraftResponses,
+  OperatorToolPromptGetErrors,
+  OperatorToolPromptGetResponses,
+  OperatorToolRunsAs,
   OperatorTrashEmptyErrors,
   OperatorTrashEmptyResponses,
   OperatorTrashItemErrors,
@@ -3703,6 +3708,101 @@ export class AgentPrompt extends HeyApiClient {
   }
 }
 
+export class ToolPrompt extends HeyApiClient {
+  /**
+   * An agent's tool prompt
+   *
+   * The tools an agent's request sends with a model, each with its description and schema as sent, the version of its description, its size and the rules for its permission, and the tools not sent with the reason. Built live from the current settings.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+      model?: string
+      runsAs?: OperatorToolRunsAs
+      session?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "model" },
+            { in: "query", key: "runsAs" },
+            { in: "query", key: "session" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorToolPromptGetResponses,
+      OperatorToolPromptGetErrors,
+      ThrowOnError
+    >({
+      url: "/operator/agent/{name}/tool-prompt",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Preview a tool prompt with unsaved rules
+   *
+   * The tool prompt built from unsaved permission rules (the agent's own, or a session's), and what changes against the saved rules: tools added or removed (with the rule that caused it), descriptions changed, and the total size.
+   */
+  public draft<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+      model?: string
+      runsAs?: OperatorToolRunsAs
+      agentRules?: PermissionRuleset
+      sessionID?: string
+      sessionRules?: PermissionRuleset
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "model" },
+            { in: "body", key: "runsAs" },
+            { in: "body", key: "agentRules" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "sessionRules" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorToolPromptDraftResponses,
+      OperatorToolPromptDraftErrors,
+      ThrowOnError
+    >({
+      url: "/operator/agent/{name}/tool-prompt/draft",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Operator extends HeyApiClient {
   /**
    * Get server status
@@ -3819,6 +3919,11 @@ export class Operator extends HeyApiClient {
   private _agentPrompt?: AgentPrompt
   get agentPrompt(): AgentPrompt {
     return (this._agentPrompt ??= new AgentPrompt({ client: this.client }))
+  }
+
+  private _toolPrompt?: ToolPrompt
+  get toolPrompt(): ToolPrompt {
+    return (this._toolPrompt ??= new ToolPrompt({ client: this.client }))
   }
 }
 

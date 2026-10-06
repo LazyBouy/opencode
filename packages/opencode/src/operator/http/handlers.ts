@@ -7,6 +7,7 @@ import { mergeHandlers } from "./handlers/merge"
 import { operatorOverviewHandlers } from "./handlers/overview"
 import { operatorProjectHandlers } from "./handlers/project"
 import { operatorPromptHandlers } from "./handlers/prompts"
+import { operatorToolPromptHandlers } from "./handlers/tool-prompt"
 import { operatorTrashHandlers, operatorTrashItemHandlers } from "./handlers/trash"
 
 // Handler layers for OperatorApi (per project) and OperatorRootApi (server-wide), provided by
@@ -19,6 +20,7 @@ export const operatorHandlers = [
   operatorMemoryHandlers,
   operatorAgentPromptHandlers,
   operatorTrashItemHandlers,
+  operatorToolPromptHandlers,
 ] as const
 export const operatorRootHandlers = [
   operatorOverviewHandlers,

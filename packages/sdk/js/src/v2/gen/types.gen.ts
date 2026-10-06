@@ -3484,6 +3484,219 @@ export type OperatorAgentPromptView = {
 
 export type OperatorTrashItemKind = "skill" | "command" | "tool" | "mcp" | "memory"
 
+export type OperatorToolRunsAs = "primary" | "subagent" | "session"
+
+export type OperatorPermissionOrigin = {
+  /**
+   * opencode-default / opencode-agent: OpenCode's code (its defaults, its definition of the agent); config-permission / config-tools: a config file's `permission` or legacy `tools` key; agent: the agent's own `permission` (its agent file or config entry); truncation: OpenCode's truncation folder allow; session-*: the session's own rules, set by you, by Always allow, added by `task` for a subagent, by a client's tool switch, or by OpenCode
+   */
+  kind:
+    | "opencode-default"
+    | "opencode-agent"
+    | "config-permission"
+    | "config-tools"
+    | "agent"
+    | "truncation"
+    | "session-user"
+    | "session-always"
+    | "session-task"
+    | "session-client"
+    | "session-opencode"
+  path?: string
+  agent?: string
+  time?: number
+}
+
+export type OperatorPermissionRow = {
+  /**
+   * 1-based, in evaluation order
+   */
+  index: number
+  permission: string
+  pattern: string
+  action: "allow" | "ask" | "deny"
+  part: "opencode" | "config" | "agent" | "truncation" | "session"
+  from: OperatorPermissionOrigin
+}
+
+export type OperatorToolSource = {
+  kind: "builtin" | "file" | "plugin" | "mcp" | "mcp-resources" | "noop"
+  path?: string
+  server?: string
+}
+
+export type OperatorToolTemplate = {
+  file: string
+  values: {
+    [key: string]: string
+  }
+}
+
+export type OperatorToolVersion = {
+  /**
+   * opencode: OpenCode's text; namespace: the namespace's own version; copy: an edited copy in the agent's profile; none: not a versioned text (MCP and other tools)
+   */
+  kind: "opencode" | "namespace" | "copy" | "none"
+  layer?: string
+  name?: string
+  profile?: string
+  override?: boolean
+  file?: string
+  template?: OperatorToolTemplate
+  fixedTemplate?: boolean
+}
+
+export type OperatorToolSubagent = {
+  name: string
+  kept: boolean
+  rule?: number
+}
+
+export type OperatorToolAppended = {
+  kind: "subagents" | "mcp-catalog"
+  text: string
+  subagents?: Array<OperatorToolSubagent>
+}
+
+export type OperatorToolSizes = {
+  description: number
+  schema: number
+  total: number
+  /**
+   * Estimated: characters ÷ 4
+   */
+  tokens: number
+}
+
+export type OperatorToolSent = {
+  name: string
+  /**
+   * The permission the tool is checked by
+   */
+  permission: string
+  source: OperatorToolSource
+  version: OperatorToolVersion
+  /**
+   * The description's own text, before OpenCode's additions
+   */
+  versionText: string
+  appended?: OperatorToolAppended
+  /**
+   * The description as sent
+   */
+  description: string
+  schema: unknown
+  rewrite?: string
+  strict?: boolean
+  sizes: OperatorToolSizes
+  /**
+   * Indexes of the rules for this tool's permission
+   */
+  rules: Array<number>
+}
+
+export type OperatorToolNotSent = {
+  name: string
+  permission?: string
+  reason: "permission" | "session" | "subagent" | "model" | "flag" | "internal"
+  rule?: number
+  detail?: string
+  source?: OperatorToolSource
+}
+
+export type OperatorToolEntry = {
+  name: string
+  description: string
+  input_schema: unknown
+  strict?: boolean
+}
+
+export type OperatorToolPrompt = {
+  agent: string
+  /**
+   * provider/model the list is built for
+   */
+  model: string
+  modelSource?: OperatorModelSource
+  runsAs: OperatorToolRunsAs
+  sessionID?: string
+  /**
+   * The rules that apply (the agent's, then the session's), in evaluation order
+   */
+  rows: Array<OperatorPermissionRow>
+  sent: Array<OperatorToolSent>
+  notSent: Array<OperatorToolNotSent>
+  sizes: {
+    description: number
+    schema: number
+    total: number
+    tokens: number
+  }
+  /**
+   * The list as OpenCode hands it to the AI SDK, sorted as sent: { name, description, input_schema }
+   */
+  list: Array<OperatorToolEntry>
+}
+
+export type OperatorToolPromptNotFoundError = {
+  name: "OperatorToolPromptNotFoundError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorToolPromptDiff = {
+  added: Array<{
+    name: string
+    rule?: number
+  }>
+  removed: Array<{
+    name: string
+    rule?: number
+  }>
+  changed: Array<{
+    name: string
+    before: string
+    after: string
+  }>
+  /**
+   * Total characters, saved
+   */
+  before: number
+  /**
+   * Total characters, with the draft
+   */
+  after: number
+}
+
+export type OperatorToolPromptDraft = {
+  agent: string
+  /**
+   * provider/model the list is built for
+   */
+  model: string
+  modelSource?: OperatorModelSource
+  runsAs: OperatorToolRunsAs
+  sessionID?: string
+  /**
+   * The rules that apply (the agent's, then the session's), in evaluation order
+   */
+  rows: Array<OperatorPermissionRow>
+  sent: Array<OperatorToolSent>
+  notSent: Array<OperatorToolNotSent>
+  sizes: {
+    description: number
+    schema: number
+    total: number
+    tokens: number
+  }
+  /**
+   * The list as OpenCode hands it to the AI SDK, sorted as sent: { name, description, input_schema }
+   */
+  list: Array<OperatorToolEntry>
+  diff: OperatorToolPromptDiff
+}
+
 export type UnauthorizedError = {
   _tag: "UnauthorizedError"
   message: string
@@ -14293,6 +14506,83 @@ export type OperatorTrashItemResponses = {
 }
 
 export type OperatorTrashItemResponse = OperatorTrashItemResponses[keyof OperatorTrashItemResponses]
+
+export type OperatorToolPromptGetData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+    model?: string
+    runsAs?: OperatorToolRunsAs
+    session?: string
+  }
+  url: "/operator/agent/{name}/tool-prompt"
+}
+
+export type OperatorToolPromptGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * OperatorToolPromptNotFoundError
+   */
+  404: OperatorToolPromptNotFoundError
+}
+
+export type OperatorToolPromptGetError = OperatorToolPromptGetErrors[keyof OperatorToolPromptGetErrors]
+
+export type OperatorToolPromptGetResponses = {
+  /**
+   * The tool prompt
+   */
+  200: OperatorToolPrompt
+}
+
+export type OperatorToolPromptGetResponse = OperatorToolPromptGetResponses[keyof OperatorToolPromptGetResponses]
+
+export type OperatorToolPromptDraftData = {
+  body?: {
+    model?: string
+    runsAs?: OperatorToolRunsAs
+    agentRules?: PermissionRuleset
+    sessionID?: string
+    sessionRules?: PermissionRuleset
+  }
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/agent/{name}/tool-prompt/draft"
+}
+
+export type OperatorToolPromptDraftErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * OperatorToolPromptNotFoundError
+   */
+  404: OperatorToolPromptNotFoundError
+}
+
+export type OperatorToolPromptDraftError = OperatorToolPromptDraftErrors[keyof OperatorToolPromptDraftErrors]
+
+export type OperatorToolPromptDraftResponses = {
+  /**
+   * The tool prompt with the draft rules, and its diff
+   */
+  200: OperatorToolPromptDraft
+}
+
+export type OperatorToolPromptDraftResponse = OperatorToolPromptDraftResponses[keyof OperatorToolPromptDraftResponses]
 
 export type V2HealthGetData = {
   body?: never

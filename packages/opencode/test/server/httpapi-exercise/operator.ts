@@ -205,6 +205,46 @@ export const operatorScenarios: Scenario[] = [
     object(body.small)
     check(typeof body.model.source === "string", "the default model should say where it comes from")
   }),
+  http.protected
+    .get("/operator/agent/{name}/tool-prompt", "operator.toolPrompt.get")
+    .withLlm()
+    .at((ctx) => ({
+      path: route("/operator/agent/{name}/tool-prompt", { name: "build" }) + "?model=test/test-model",
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => {
+      object(body)
+      array(body.sent)
+      array(body.notSent)
+      check(
+        body.sent.some((item) => isRecord(item) && item.name === "read"),
+        "build's tool prompt should send read",
+      )
+    }),
+  http.protected
+    .get("/operator/agent/{name}/tool-prompt", "operator.toolPrompt.get.missing")
+    .at((ctx) => ({
+      path: route("/operator/agent/{name}/tool-prompt", { name: "no-such-agent" }) + "?model=test/test-model",
+      headers: ctx.headers(),
+    }))
+    .status(404),
+  http.protected
+    .post("/operator/agent/{name}/tool-prompt/draft", "operator.toolPrompt.draft")
+    .withLlm()
+    .at((ctx) => ({
+      path: route("/operator/agent/{name}/tool-prompt/draft", { name: "build" }),
+      headers: ctx.headers(),
+      body: { model: "test/test-model", agentRules: [{ permission: "webfetch", pattern: "*", action: "deny" }] },
+    }))
+    .json(200, (body) => {
+      object(body)
+      object(body.diff)
+      array(body.diff.removed)
+      check(
+        body.diff.removed.some((item) => isRecord(item) && item.name === "webfetch"),
+        "denying webfetch should remove it",
+      )
+    }),
   http.protected.get("/operator/tool", "operator.tool.list").json(200, (body) => {
     array(body)
     check(

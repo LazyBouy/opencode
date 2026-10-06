@@ -553,6 +553,33 @@ export function versionOf(input: { catalog: Catalog; slots: Slots; builtin: stri
   )
 }
 
+// Which version of a tool's description (or another delivered text) an agent uses, and where it
+// comes from: a copy in its effective profile (from the profile's slot, or the agent's override of
+// it), the namespace's own version, or OpenCode's text. The same order as versionOf.
+export type TextVersion =
+  | { kind: "copy"; layer: Layer; profile: Profile; override: boolean }
+  | { kind: "namespace"; layer: Layer }
+  | { kind: "opencode" }
+export function textVersion(input: {
+  catalog: Catalog
+  agent: string
+  setting?: AgentSetting
+  project?: ProjectSetting
+  builtin: string
+}): TextVersion {
+  const chosen = profileFor(input.catalog, { agent: input.agent, setting: input.setting, project: input.project })
+  const shape = effective(input.catalog, chosen.profile, input.setting?.override)
+  const copy = copiesIn(input.catalog, shape.slots).get(input.builtin)
+  if (copy) {
+    const type = Object.entries(shape.slots).find(([, ids]) => ids.includes(copy.id))?.[0]
+    return { kind: "copy", layer: copy, profile: chosen.profile, override: !!type && shape.changed.includes(type) }
+  }
+  const mine = isOpenCode(input.catalog)
+    ? undefined
+    : input.catalog.layers.find((item) => item.id === own(input.builtin))
+  return mine ? { kind: "namespace", layer: mine } : { kind: "opencode" }
+}
+
 // What a profile-or-agent combination looks like once resolved, for texts that are not in the
 // system prompt.
 export function slotsFor(

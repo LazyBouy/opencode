@@ -11,13 +11,16 @@ import { OperatorRegistry } from "./registry"
 // version of tool descriptions, reminders and notices the profile holds. Profile files are read for
 // every request, so edits apply to the next message. The agent page's preview calls the same assembler.
 const PromptPlugin: Plugin = async (input) => {
-  // One read is shared for a second: preparing one request asks once per tool definition. The project
-  // is looked up each time: a folder outside git can be registered (or its parent) while it is open.
-  let recent: { at: number; read: ReturnType<typeof OperatorProfileStore.forProject> } | undefined
+  // One read is shared for a second, until the store changes: preparing one request asks once per tool
+  // definition. The project is looked up each time: a folder outside git can be registered (or its
+  // parent) while it is open.
+  let recent: { at: number; revision: number; read: ReturnType<typeof OperatorProfileStore.forProject> } | undefined
   const context = () => {
-    if (recent && Date.now() - recent.at < 1000) return recent.read
+    const revision = OperatorProfileStore.storeRevision()
+    if (recent && recent.revision === revision && Date.now() - recent.at < 1000) return recent.read
     recent = {
       at: Date.now(),
+      revision,
       read: OperatorProjects.keyOf({ directory: input.directory, worktree: input.worktree }).then(
         OperatorProfileStore.forProject,
       ),

@@ -15,6 +15,8 @@ import { OperatorTrashItems } from "./trash-items"
 import { OperatorProjectSessions } from "./project-sessions"
 import { OperatorPrompts } from "./prompts"
 import { OperatorTools } from "./tools"
+import { OperatorPermissionRules } from "./permission-rules"
+import { OperatorToolPrompt } from "./tool-prompt"
 
 // Services the fork's routes need, added to the server's service graph in one place.
 export const operatorNodes = [
@@ -26,6 +28,8 @@ export const operatorNodes = [
   OperatorAgents.node,
   OperatorModels.node,
   OperatorTools.node,
+  OperatorPermissionRules.node,
+  OperatorToolPrompt.node,
   OperatorPrompts.node,
   OperatorFolders.node,
   OperatorMemory.node,
