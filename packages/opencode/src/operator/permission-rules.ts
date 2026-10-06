@@ -7,6 +7,7 @@ import { parse } from "jsonc-parser"
 import { Context, Effect, Layer, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { Wildcard } from "@opencode-ai/core/util/wildcard"
 import { Agent } from "@/agent/agent"
 import { Config } from "@/config/config"
 import { Permission } from "@/permission"
@@ -58,6 +59,110 @@ export const Row = Schema.Struct({
 export type Row = typeof Row.Type
 
 type Rule = PermissionV1.Rule
+type Action = Rule["action"]
+export type PermissionConfig = Record<string, Action | Record<string, Action>>
+
+// The agent's own rules as written in config form (an agent file's frontmatter or `agent.<name>`):
+// grouped by permission, in the order each permission first appears; a permission whose only rule is
+// `*` is a plain action. A permission + pattern pair can be written once: a later rule with the same
+// pair replaces the earlier one and takes its place after the rules in between (the last rule that
+// matches wins, so the later one is the one that counted).
+export function toConfig(rules: ReadonlyArray<Rule>): PermissionConfig {
+  const groups = new Map<string, Map<string, Action>>()
+  for (const rule of rules) {
+    const permission = rule.permission.trim()
+    if (!permission) continue
+    const pattern = rule.pattern.trim() || "*"
+    const group = groups.get(permission) ?? new Map<string, Action>()
+    group.delete(pattern)
+    group.set(pattern, rule.action)
+    groups.set(permission, group)
+  }
+  return Object.fromEntries(
+    [...groups].map(([permission, group]) => {
+      const entries = [...group]
+      return entries.length === 1 && entries[0]![0] === "*"
+        ? [permission, entries[0]![1]]
+        : [permission, Object.fromEntries(entries)]
+    }),
+  )
+}
+
+// Rules in config form, as written (patterns are not expanded, unlike Permission.fromConfig).
+export function writtenRules(config: unknown): Rule[] {
+  if (!config || typeof config !== "object") return []
+  return Object.entries(config as Record<string, unknown>).flatMap(([permission, value]) => {
+    if (value === "allow" || value === "ask" || value === "deny") return [{ permission, pattern: "*", action: value }]
+    if (!value || typeof value !== "object") return []
+    return Object.entries(value as Record<string, unknown>).flatMap(([pattern, action]) =>
+      action === "allow" || action === "ask" || action === "deny" ? [{ permission, pattern, action }] : [],
+    )
+  })
+}
+
+// What saving these rules in config form does to their order: pairs written twice (the later replaces
+// the earlier), and rules whose order against another rule they can both match flips when grouped by
+// permission, with a different action, so the result can change. Indexes are positions in `rules`.
+export function orderCheck(rules: ReadonlyArray<Rule>) {
+  const key = (rule: Rule) => `${rule.permission.trim()}\n${rule.pattern.trim() || "*"}`
+  const duplicates: Array<{ earlier: number; later: number }> = []
+  const seen = new Map<string, number>()
+  rules.forEach((rule, index) => {
+    const found = seen.get(key(rule))
+    if (found !== undefined) duplicates.push({ earlier: found, later: index })
+    seen.set(key(rule), index)
+  })
+  const saved = Permission.fromConfig(toConfig(rules))
+  const position = (rule: Rule) => saved.findIndex((item) => key(item) === key(rule) && item.action === rule.action)
+  const overlaps = (a: string, b: string) => Wildcard.match(a, b) || Wildcard.match(b, a)
+  const patterns = (a: string, b: string) => a === b || /[*?]/.test(a) || /[*?]/.test(b)
+  const changed = new Set<number>()
+  rules.forEach((a, i) =>
+    rules.forEach((b, j) => {
+      if (j <= i || a.action === b.action) return
+      if (!overlaps(a.permission.trim(), b.permission.trim()) || !patterns(a.pattern, b.pattern)) return
+      const pa = position(a)
+      const pb = position(b)
+      if (pa < 0 || pb < 0 || pa < pb) return
+      changed.add(i)
+      changed.add(j)
+    }),
+  )
+  return { duplicates, changed: [...changed].sort((a, b) => a - b), saved }
+}
+
+// The pattern a permission is asked with, from its tool's `ctx.ask` calls: a path relative to the
+// project (read, edit/write/apply_patch), an absolute folder (external_directory), the command (bash),
+// the search pattern (glob, grep), the URL (webfetch), the query (websearch), the subagent (task), the
+// skill's name (skill), the tool's name (doom_loop), or always `*` (todowrite, lsp, MCP tools).
+export const PatternForm = Schema.Literals([
+  "path",
+  "absolute",
+  "command",
+  "search",
+  "url",
+  "query",
+  "agent",
+  "skill",
+  "tool",
+  "any",
+]).annotate({ identifier: "OperatorPermissionPatternForm" })
+export type PatternForm = typeof PatternForm.Type
+export const FORMS: Record<string, PatternForm> = {
+  read: "path",
+  edit: "path",
+  external_directory: "absolute",
+  bash: "command",
+  glob: "search",
+  grep: "search",
+  webfetch: "url",
+  websearch: "query",
+  task: "agent",
+  skill: "skill",
+  doom_loop: "tool",
+  todowrite: "any",
+  lsp: "any",
+}
 
 // The permission a tool is checked by: edit, write and apply_patch share `edit`; the MCP resource
 // tools are `read` (as Permission.disabled maps them).
@@ -242,7 +347,9 @@ const layer = Layer.effect(
         part: "config",
         from: configOrigin(rule, parsed),
       }))
-      const ownRows: Row[] = (draft ?? list.slice(ownStart, ownEnd)).map((rule) => ({
+      // A draft is used as saving it would write it (grouped by permission, see toConfig).
+      const normalized = draft ? Permission.fromConfig(toConfig(draft)) : undefined
+      const ownRows: Row[] = (normalized ?? list.slice(ownStart, ownEnd)).map((rule) => ({
         ...rule,
         index: 0,
         part: "agent",
@@ -250,8 +357,8 @@ const layer = Layer.effect(
       }))
       // OpenCode adds the truncation allow unless the list denies that folder (agent/agent.ts); with a
       // draft, as saving it would.
-      const keepsTruncation = draft
-        ? ![...opencode, ...configRows, ...draft].some(
+      const keepsTruncation = normalized
+        ? ![...opencode, ...configRows, ...normalized].some(
             (rule) =>
               rule.permission === "external_directory" && rule.action === "deny" && rule.pattern === Truncate.GLOB,
           )

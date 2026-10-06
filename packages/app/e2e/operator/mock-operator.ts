@@ -1,6 +1,6 @@
 import type { Page, Route } from "@playwright/test"
 import { createPromptMock, type PromptMock } from "./mock-namespaces"
-import { lastFor, toolPromptFor } from "./mock-tool-prompt"
+import { draftFor, lastFor, permissionsFor, toolPromptFor } from "./mock-tool-prompt"
 
 // Responses for the fork's operator endpoints, layered over mockOpenCodeServer (later routes win).
 
@@ -226,6 +226,9 @@ export interface OperatorMock {
   }>
   trashWrites: Array<{ method: string; path: string; body: unknown }>
   toolPromptQueries: URLSearchParams[]
+  permissionWrites: Array<{ agent: string; body: { scope: string; rules: Array<Record<string, string>> } }>
+  ownRules: Record<string, Array<{ permission: string; pattern: string; action: "allow" | "ask" | "deny" }>>
+  drafts: unknown[]
 }
 
 export async function mockOperator(page: Page) {
@@ -250,6 +253,9 @@ export async function mockOperator(page: Page) {
     trash: [],
     trashWrites: [],
     toolPromptQueries: [],
+    permissionWrites: [],
+    ownRules: {},
+    drafts: [],
   }
   const repositories = new Set([`${workspace}/site`])
   const listing = (path: string) => ({
@@ -354,6 +360,23 @@ export async function mockOperator(page: Page) {
       url.pathname === "/operator/prompt/purpose"
     )
       return prompt.handle(route, url, method)
+    const permissions = url.pathname.match(/^\/operator\/agent\/([^/]+)\/permissions$/)
+    if (permissions) {
+      const name = decodeURIComponent(permissions[1]!)
+      if (method === "PUT") {
+        const body = route.request().postDataJSON() as { scope: string; rules: Array<Record<string, string>> }
+        state.permissionWrites.push({ agent: name, body })
+        state.ownRules[name] = body.rules as never
+        return json(route, { path: `${directory}/.opencode/opencode.jsonc` })
+      }
+      return json(route, permissionsFor(directory, name, state.ownRules[name]))
+    }
+    const draft = url.pathname.match(/^\/operator\/agent\/([^/]+)\/tool-prompt\/draft$/)
+    if (draft && method === "POST") {
+      const body = route.request().postDataJSON() as { agentRules?: never }
+      state.drafts.push(body)
+      return json(route, draftFor(directory, decodeURIComponent(draft[1]!), body))
+    }
     const toolPrompt = url.pathname.match(/^\/operator\/agent\/([^/]+)\/tool-prompt(\/last)?$/)
     if (toolPrompt && method === "GET") {
       state.toolPromptQueries.push(url.searchParams)

@@ -538,6 +538,66 @@ export const dict = {
   "operator.rules.up": "Move up",
   "operator.rules.remove": "Remove rule",
   "operator.rules.add": "Add rule",
+  "operator.permissionEditor.label": "Permission rules",
+  "operator.permissionEditor.order": "Checked from the bottom up: the last rule that matches wins.",
+  "operator.permissionEditor.filtered": "Showing the rules for {{permission}} (and rules for every permission).",
+  "operator.permissionEditor.showAll": "Show all",
+  "operator.permissionEditor.openConfig": "Open in Config",
+  "operator.permissionEditor.override": "Override",
+  "operator.permissionEditor.permissionOf": "Permission of rule {{index}}",
+  "operator.permissionEditor.patternOf": "Pattern of rule {{index}}",
+  "operator.permissionEditor.actionOf": "Action of rule {{index}}",
+  "operator.permissionEditor.newRule": "New, not saved",
+  "operator.permissionEditor.taskNote":
+    "Added by task for this subagent session. Removing it gives the subagent that tool.",
+  "operator.permissionEditor.replaced": "Replaced by a later rule",
+  "operator.permissionEditor.down": "Move down",
+  "operator.permissionEditor.newPermission": "New rule's permission",
+  "operator.permissionEditor.newPattern": "New rule's pattern",
+  "operator.permissionEditor.newAction": "New rule's action",
+  "operator.permissionEditor.noAgentRules":
+    "The agent has no rules of its own. Add one below, or Override a rule above.",
+  "operator.permissionEditor.sameAsAgent": "Same as the agent until you change it here.",
+  "operator.permissionEditor.hint.absolute":
+    "This pattern is absolute; {{permission}} checks paths relative to the project, so it matches no file in the project.",
+  "operator.permissionEditor.hint.relative":
+    "This pattern is relative; {{permission}} checks absolute folder paths, so it matches nothing.",
+  "operator.permissionEditor.hint.any":
+    "{{permission}} is always asked with *, so only a pattern that matches * applies.",
+  "operator.permissionEditor.duplicate":
+    "Rules #{{earlier}} and #{{later}} have the same permission and pattern: the later one replaces the earlier one.",
+  "operator.permissionEditor.removeEarlier": "Remove the earlier one",
+  "operator.permissionEditor.reorder":
+    "Agent rules are saved grouped by permission, which changes the order of the highlighted rules and can change what they decide. This is the order they will be saved in:",
+  "operator.permissionEditor.useSavedOrder": "Use this order",
+  "operator.impact.title": "Tool prompt impact",
+  "operator.impact.noChanges": "No unsaved changes.",
+  "operator.impact.none": "No change to the tool prompt.",
+  "operator.impact.removed": "Removed",
+  "operator.impact.added": "Added",
+  "operator.impact.byRule": "by rule #{{rule}}",
+  "operator.impact.descriptionChanged": "{{name}}'s description changes:",
+  "operator.impact.size": "{{chars}} characters ({{tokens}} tokens, estimated) · {{total}} characters in all",
+  "operator.agentPermissions.edit": "Edit permissions",
+  "operator.agentPermissions.save": "Save permissions",
+  "operator.agentPermissions.scope": "Save to",
+  "operator.agentPermissions.scopeHint":
+    "This project: the project's config file, for this project only. Global: your global config file, for every project.",
+  "operator.agentPermissions.project": "This project",
+  "operator.agentPermissions.global": "Global",
+  "operator.agentPermissions.targetConfig": "Saved to {{path}} → agent.{{name}}.permission",
+  "operator.agentPermissions.targetFile": "Saved to the agent's file {{path}}",
+  "operator.agentPermissions.tracked":
+    "This file is tracked by the project's git repository: the change shows up there.",
+  "operator.agentPermissions.alsoIn":
+    "This agent's permission is also set in {{paths}}. Rules there are merged with what you save.",
+  "operator.agentPermissions.saved": "Permissions saved to {{path}}",
+  "operator.agentPermissions.duplicatesBlock":
+    "Two rules have the same permission and pattern. Remove the earlier one before saving.",
+  "operator.agentPermissions.confirmOrderTitle": "Save rules grouped by permission?",
+  "operator.agentPermissions.confirmOrderBody":
+    "Agent rules are saved grouped by permission. That changes the order of some rules and can change what they decide. Save anyway, or cancel and use the order shown.",
+  "operator.agentPermissions.confirmOrder": "Save anyway",
 
   "operator.profile.up": "Move {{name}} up",
   "operator.profile.down": "Move {{name}} down",

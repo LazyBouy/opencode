@@ -7,6 +7,7 @@ import { OperatorProjectApi } from "./groups/project"
 import { OperatorPromptApi } from "./groups/prompts"
 import { OperatorCallApi } from "./groups/calls"
 import { OperatorToolPromptApi } from "./groups/tool-prompt"
+import { OperatorAgentPermissionApi } from "./groups/agent-permissions"
 import { OperatorTrashItemApi } from "./groups/trash"
 
 export { OperatorRootApi } from "./groups/overview"
@@ -25,3 +26,4 @@ export const OperatorApi = HttpApi.make("operator")
   .addHttpApi(OperatorTrashItemApi)
   .addHttpApi(OperatorToolPromptApi)
   .addHttpApi(OperatorCallApi)
+  .addHttpApi(OperatorAgentPermissionApi)

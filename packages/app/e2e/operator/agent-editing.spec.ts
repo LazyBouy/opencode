@@ -28,8 +28,8 @@ test("creating an agent sends its settings and rules, then opens it", async ({ p
   await page.getByLabel("Temperature", { exact: true }).fill("0.3")
   await page.getByLabel("Home folder", { exact: true }).fill("/work/docs")
   await page.getByLabel("Prompt", { exact: true }).fill("Write clear docs.")
+  await page.getByRole("combobox", { name: "New rule's permission" }).fill("edit")
   await page.getByRole("button", { name: "Add rule" }).click()
-  await page.getByRole("textbox", { name: "Permission, such as bash or edit" }).fill("edit")
   await page.getByRole("button", { name: "Create agent" }).click()
 
   await expect.poll(() => state.agentWrites.length).toBe(1)

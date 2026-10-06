@@ -256,6 +256,52 @@ export const operatorScenarios: Scenario[] = [
       check(typeof body.captured === "boolean", "Last sent should say whether it was captured")
     }),
   http.protected
+    .get("/operator/agent/{name}/permissions", "operator.agentPermissions.get")
+    .at((ctx) => ({ path: route("/operator/agent/{name}/permissions", { name: "build" }), headers: ctx.headers() }))
+    .json(200, (body) => {
+      object(body)
+      array(body.rows)
+      check(
+        body.rows.some((row) => isRecord(row) && isRecord(row.from) && row.from.kind === "opencode-default"),
+        "rows should say where each rule comes from",
+      )
+      object(body.targets)
+    }),
+  http.protected
+    .get("/operator/agent/{name}/permissions", "operator.agentPermissions.get.missing")
+    .at((ctx) => ({ path: route("/operator/agent/{name}/permissions", { name: "missing" }), headers: ctx.headers() }))
+    .status(404),
+  http.protected
+    .put("/operator/agent/{name}/permissions", "operator.agentPermissions.save")
+    .mutating()
+    .at((ctx) => ({
+      path: route("/operator/agent/{name}/permissions", { name: "build" }),
+      headers: ctx.headers(),
+      body: { scope: "project", rules: [{ permission: "webfetch", pattern: "*", action: "deny" }] },
+    }))
+    .json(
+      200,
+      (body) => {
+        object(body)
+        check(String(body.path).endsWith("opencode.jsonc"), "a built-in agent's rules go to the project config")
+      },
+      "status",
+    ),
+  http.protected
+    .put("/operator/agent/{name}/permissions", "operator.agentPermissions.save.duplicate")
+    .at((ctx) => ({
+      path: route("/operator/agent/{name}/permissions", { name: "build" }),
+      headers: ctx.headers(),
+      body: {
+        scope: "project",
+        rules: [
+          { permission: "read", pattern: "*", action: "allow" },
+          { permission: "read", pattern: "*", action: "deny" },
+        ],
+      },
+    }))
+    .status(400),
+  http.protected
     .get("/operator/session/{sessionID}/calls", "operator.call.list")
     .at((ctx) => ({
       path: route("/operator/session/{sessionID}/calls", { sessionID: "ses_nocalls" }),

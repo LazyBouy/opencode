@@ -582,7 +582,7 @@ function ToolOverlay(props: {
   const language = useLanguage()
   const dialog = useDialog()
   const navigate = useNavigate()
-  const [, setParams] = useSearchParams<{ atab?: string; aperm?: string }>()
+  const [, setParams] = useSearchParams<{ atab?: string; aperm?: string; aedit?: string }>()
   const origin = useOriginText()
   const sourceText = useSourceText()
   const number = (value: number) => exact(language, value)
@@ -787,7 +787,7 @@ function ToolOverlay(props: {
               variant="outline"
               onClick={() => {
                 dialog.close()
-                setParams({ atab: "permissions", aperm: props.tool.permission })
+                setParams({ atab: "permissions", aperm: props.tool.permission, aedit: "1" })
               }}
             >
               {language.t("operator.toolPrompt.changeAccess")}

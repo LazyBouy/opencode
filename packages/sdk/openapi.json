@@ -15083,6 +15083,177 @@
         ]
       }
     },
+    "/operator/agent/{name}/permissions": {
+      "get": {
+        "tags": ["operator agent permissions"],
+        "operationId": "operator.agentPermissions.get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The agent's permissions for the editor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAgentPermissions"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorAgentPermissionsNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAgentPermissionsNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The agent's full permission list in evaluation order, each rule with where it comes from (OpenCode's code, a config file, the agent's own rules), which rules are the agent's own, those rules as written, the pattern each permission is asked with, and the file a save writes at each scope.",
+        "summary": "An agent's permissions, with where each rule comes from",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.agentPermissions.get({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "tags": ["operator agent permissions"],
+        "operationId": "operator.agentPermissions.save",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The file that was written",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAgentPermissionsWritten"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorAgentPermissionsInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorAgentPermissionsInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorAgentPermissionsNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAgentPermissionsNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Write the agent's own rules, in order, to its agent file or its `agent.<name>` config entry at the scope (a built-in agent gets an entry). A permission + pattern pair written twice is refused, and so is an order that saving grouped by permission would change the result of, unless confirmed. The project reloads.",
+        "summary": "Save an agent's own permission rules",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "$ref": "#/components/schemas/OperatorConfigScope"
+                  },
+                  "rules": {
+                    "$ref": "#/components/schemas/PermissionRuleset"
+                  },
+                  "confirmOrder": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["scope", "rules"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.agentPermissions.save({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "tags": ["opencode HttpApi"],
@@ -31883,6 +32054,153 @@
         "required": ["text", "bytes"],
         "additionalProperties": false
       },
+      "OperatorPermissionPatternForm": {
+        "type": "string",
+        "enum": ["path", "absolute", "command", "search", "url", "query", "agent", "skill", "tool", "any"]
+      },
+      "OperatorAgentPermissionTarget": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["file", "config"],
+            "description": "file: the agent's own file (at every scope); config: `agent.<name>.permission` in this file"
+          },
+          "tracked": {
+            "type": "boolean",
+            "description": "The file is tracked by the project's git repository"
+          }
+        },
+        "required": ["path", "kind", "tracked"],
+        "additionalProperties": false
+      },
+      "OperatorAgentPermissions": {
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPermissionRow"
+            },
+            "description": "The agent's full list, in evaluation order, each rule with where it comes from"
+          },
+          "own": {
+            "type": "object",
+            "properties": {
+              "start": {
+                "type": "number"
+              },
+              "end": {
+                "type": "number"
+              }
+            },
+            "required": ["start", "end"],
+            "additionalProperties": false,
+            "description": "The agent's own rules: rows[start] up to (not including) rows[end]"
+          },
+          "written": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PermissionRule"
+            },
+            "description": "The agent's own rules as written (patterns as in the file, `~` not expanded)"
+          },
+          "forms": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/OperatorPermissionPatternForm"
+            },
+            "description": "The pattern each permission is asked with, for the editor's hints"
+          },
+          "known": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Permissions and tools to pick from"
+          },
+          "targets": {
+            "type": "object",
+            "properties": {
+              "project": {
+                "$ref": "#/components/schemas/OperatorAgentPermissionTarget"
+              },
+              "global": {
+                "$ref": "#/components/schemas/OperatorAgentPermissionTarget"
+              }
+            },
+            "required": ["project", "global"],
+            "additionalProperties": false
+          },
+          "alsoIn": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Config files that set this agent's `permission` (merged with what a save writes)"
+          }
+        },
+        "required": ["agent", "rows", "own", "written", "forms", "known", "targets", "alsoIn"],
+        "additionalProperties": false
+      },
+      "OperatorAgentPermissionsNotFoundError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorAgentPermissionsNotFoundError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorAgentPermissionsWritten": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": ["path"],
+        "additionalProperties": false
+      },
+      "OperatorAgentPermissionsInvalidError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorAgentPermissionsInvalidError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
       "UnauthorizedError": {
         "type": "object",
         "properties": {
@@ -45559,6 +45877,10 @@
     {
       "name": "operator calls",
       "description": "Recorded model calls."
+    },
+    {
+      "name": "operator agent permissions",
+      "description": "Agent permission routes."
     },
     {
       "name": "opencode HttpApi",

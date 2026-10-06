@@ -179,9 +179,23 @@ export function jsonSchema() {
   return schemaDocument
 }
 
+// A patch value written as a whole, replacing the value there instead of being merged into it (so
+// keys it leaves out go, and its keys keep its order): an agent's `permission`, whose order matters.
+const WHOLE = Symbol.for("opencode.operator.config.whole")
+export function whole(value: unknown): Record<string, unknown> {
+  return { [WHOLE]: value }
+}
+
 // Applies a JSON merge patch to JSONC text, keeping comments and formatting. A `null` value
 // removes the key, so a project setting can be reset to the inherited value.
 function patchJsonc(input: string, patch: unknown, at: string[] = []): string {
+  if (isRecord(patch) && WHOLE in patch)
+    return applyEdits(
+      input,
+      modify(input, at, (patch as Record<symbol, unknown>)[WHOLE], {
+        formattingOptions: { insertSpaces: true, tabSize: 2 },
+      }),
+    )
   if (isRecord(patch))
     return Object.entries(patch).reduce((text, [key, value]) => patchJsonc(text, value, [...at, key]), input)
   return applyEdits(

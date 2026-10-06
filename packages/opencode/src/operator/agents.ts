@@ -310,7 +310,10 @@ const layer = Layer.effect(
         yield* write(file, omitPrompt(data), prompt)
         return file
       }
-      return (yield* operatorConfig.update(scope, { agent: { [name]: settings(patch) } })).path
+      const values = settings(patch)
+      // Rules are written as a whole: merged, removed rules would stay and the order would not change.
+      if (values.permission) values.permission = OperatorConfig.whole(values.permission)
+      return (yield* operatorConfig.update(scope, { agent: { [name]: values } })).path
     })
 
     const remove = Effect.fn("OperatorAgents.remove")(function* (scope: OperatorConfig.Scope, name: string) {

@@ -12,6 +12,7 @@ import { DataTable } from "../ui/data-table"
 import { RecordView } from "../ui/record-overlay"
 import { AgentPrompt, useAgentPromptSetting } from "./agent-prompt"
 import { AgentToolPrompt } from "./agent-tools"
+import { AgentPermissions } from "./agent-permissions"
 import { requestError } from "./config-helpers"
 import { FieldHelp } from "../ui/field-help"
 import { ModelWithSource } from "../ui/prompt-trace"
@@ -212,38 +213,7 @@ export function AgentDetail(props: { name: string; directory: string; tab: strin
               />
             </Match>
             <Match when={props.tab === "permissions"}>
-              <p data-slot="operator-note">{language.t("operator.agent.rulesHint")}</p>
-              <DataTable
-                columnsKey="agent-permissions"
-                label={language.t("operator.agent.tab.permissions")}
-                rows={current().permission.map((rule, index) => ({ ...rule, index: index + 1 }))}
-                empty={language.t("operator.agent.noRules")}
-                columns={[
-                  { id: "index", header: "#", width: "48px", cell: (rule) => rule.index, value: (rule) => rule.index },
-                  {
-                    id: "permission",
-                    header: language.t("operator.column.permission"),
-                    cell: (rule) => <code>{rule.permission}</code>,
-                    value: (rule) => rule.permission,
-                  },
-                  {
-                    id: "pattern",
-                    header: language.t("operator.column.pattern"),
-                    cell: (rule) => <code>{rule.pattern}</code>,
-                    value: (rule) => rule.pattern,
-                  },
-                  {
-                    id: "action",
-                    header: language.t("operator.column.action"),
-                    cell: (rule) => (
-                      <Tag variant={rule.action === "allow" ? "accent" : "neutral"}>
-                        {language.t(`operator.permission.action.${rule.action}`)}
-                      </Tag>
-                    ),
-                    value: (rule) => rule.action,
-                  },
-                ]}
-              />
+              <AgentPermissions agent={current().name} directory={directory()} />
             </Match>
             <Match when={props.tab === "sessions"}>
               <DataTable

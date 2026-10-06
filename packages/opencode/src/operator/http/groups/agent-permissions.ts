@@ -1,0 +1,82 @@
+import { OperatorAgentPermissions } from "@/operator/agent-permissions"
+import { OperatorConfig } from "@/operator/config"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { Schema } from "effect"
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { Authorization } from "@/server/routes/instance/httpapi/middleware/authorization"
+import { InstanceContextMiddleware } from "@/server/routes/instance/httpapi/middleware/instance-context"
+import {
+  WorkspaceRoutingMiddleware,
+  WorkspaceRoutingQuery,
+} from "@/server/routes/instance/httpapi/middleware/workspace-routing"
+import { described } from "@/server/routes/instance/httpapi/groups/metadata"
+
+// Under /operator/agent (the API's agent routes), never the app's /operator/agents pages.
+export const OperatorAgentPermissionPaths = {
+  agent: "/operator/agent/:name/permissions",
+} as const
+
+const permissionError = <Name extends string, Status extends number>(name: Name, status: Status) =>
+  Schema.ErrorClass<{ readonly name: Name; readonly data: { readonly message: string } }>(name)(
+    { name: Schema.Literal(name), data: Schema.Struct({ message: Schema.String }) },
+    { httpApiStatus: status },
+  )
+export class ApiAgentPermissionsNotFoundError extends permissionError("OperatorAgentPermissionsNotFoundError", 404) {}
+export class ApiAgentPermissionsInvalidError extends permissionError("OperatorAgentPermissionsInvalidError", 400) {}
+
+export const AgentPermissionsWritten = Schema.Struct({ path: Schema.String }).annotate({
+  identifier: "OperatorAgentPermissionsWritten",
+})
+
+export const OperatorAgentPermissionApi = HttpApi.make("operator-agent-permissions")
+  .add(
+    HttpApiGroup.make("operatorAgentPermissions")
+      .add(
+        HttpApiEndpoint.get("get", OperatorAgentPermissionPaths.agent, {
+          params: { name: Schema.String },
+          query: WorkspaceRoutingQuery,
+          success: described(OperatorAgentPermissions.Info, "The agent's permissions for the editor"),
+          error: ApiAgentPermissionsNotFoundError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.agentPermissions.get",
+            summary: "An agent's permissions, with where each rule comes from",
+            description:
+              "The agent's full permission list in evaluation order, each rule with where it comes from (OpenCode's code, a config file, the agent's own rules), which rules are the agent's own, those rules as written, the pattern each permission is asked with, and the file a save writes at each scope.",
+          }),
+        ),
+        HttpApiEndpoint.put("save", OperatorAgentPermissionPaths.agent, {
+          params: { name: Schema.String },
+          query: WorkspaceRoutingQuery,
+          payload: Schema.Struct({
+            scope: OperatorConfig.Scope,
+            rules: PermissionV1.Ruleset.annotate({ description: "The agent's own rules, in order" }),
+            confirmOrder: Schema.optional(Schema.Boolean).annotate({
+              description: "Save even though grouping the rules by permission changes their order",
+            }),
+          }),
+          success: described(AgentPermissionsWritten, "The file that was written"),
+          error: [ApiAgentPermissionsNotFoundError, ApiAgentPermissionsInvalidError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.agentPermissions.save",
+            summary: "Save an agent's own permission rules",
+            description:
+              "Write the agent's own rules, in order, to its agent file or its `agent.<name>` config entry at the scope (a built-in agent gets an entry). A permission + pattern pair written twice is refused, and so is an order that saving grouped by permission would change the result of, unless confirmed. The project reloads.",
+          }),
+        ),
+      )
+      .annotateMerge(
+        OpenApi.annotations({ title: "operator agent permissions", description: "Agent permission routes." }),
+      )
+      .middleware(InstanceContextMiddleware)
+      .middleware(WorkspaceRoutingMiddleware)
+      .middleware(Authorization),
+  )
+  .annotateMerge(
+    OpenApi.annotations({
+      title: "opencode operator agent permissions HttpApi",
+      version: "0.0.1",
+      description: "Agent permission routes.",
+    }),
+  )

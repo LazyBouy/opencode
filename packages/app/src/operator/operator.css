@@ -767,19 +767,6 @@ html[data-theme="iphi"] [data-component="operator-inspector"] {
   color: var(--v2-text-text-muted);
 }
 
-[data-component="operator-rules"] {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-[data-component="operator-rules"] [data-slot="operator-rule"] {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(110px, 1fr) auto auto;
-  gap: 6px;
-  align-items: center;
-}
-
 /* Prompt Profile */
 
 [data-component="operator-layers"] {
@@ -1054,4 +1041,96 @@ html[data-theme="iphi"] [data-component="operator-inspector"] {
 [data-slot="operator-tool-overlay"] [data-component="operator-code"] {
   max-height: 320px;
   overflow: auto;
+}
+
+/* The permission editor (agent Permissions tab, agent Edit form, session permissions) and its impact
+   panel: side by side on wide screens, the panel below on narrow ones. */
+[data-slot="operator-permission-edit"] {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+[data-slot="operator-permission-layout"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+@media (min-width: 1500px) {
+  [data-slot="operator-permission-layout"] {
+    grid-template-columns: minmax(0, 3fr) minmax(280px, 2fr);
+  }
+}
+
+[data-component="operator-permission-editor"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+[data-component="operator-permission-editor"] tr[data-locked] td {
+  color: var(--v2-text-text-muted);
+}
+
+[data-component="operator-permission-editor"] tr[data-editable] td {
+  padding-block: 4px;
+}
+
+[data-component="operator-permission-editor"] :is(tr[data-duplicate], tr[data-changed]) td {
+  background: var(--v2-state-bg-warning);
+}
+
+[data-component="operator-permission-editor"] tr[data-dragging] td {
+  opacity: 0.5;
+}
+
+[data-component="operator-permission-editor"] tr[data-slot="operator-rule-hint"] td {
+  padding-top: 0;
+}
+
+[data-slot="operator-rule-add"] {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(110px, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
+[data-slot="operator-order-check"] {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+[data-slot="operator-saved-order"] {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 12px;
+}
+
+[data-slot="operator-saved-order"] li[data-changed] {
+  color: var(--v2-state-fg-warning);
+  font-weight: 600;
+}
+
+[data-slot="operator-permission-impact"] {
+  min-width: 0;
+}
+
+[data-slot="operator-text-diff"] [data-change="removed"] {
+  color: var(--v2-state-fg-danger);
+}
+
+[data-slot="operator-text-diff"] [data-change="added"] {
+  color: var(--v2-state-fg-success);
+}
+
+/* Selects in the editor fill their cell (the trigger is 280px wide by default). */
+[data-component="operator-permission-editor"] [data-component="select-v2-root"],
+[data-component="operator-permission-editor"] [data-component="select-v2"] {
+  width: 100%;
+  min-width: 96px;
 }

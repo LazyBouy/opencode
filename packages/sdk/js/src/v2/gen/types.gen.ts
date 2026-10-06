@@ -3938,6 +3938,85 @@ export type OperatorCallRaw = {
   bytes: number
 }
 
+export type OperatorPermissionPatternForm =
+  | "path"
+  | "absolute"
+  | "command"
+  | "search"
+  | "url"
+  | "query"
+  | "agent"
+  | "skill"
+  | "tool"
+  | "any"
+
+export type OperatorAgentPermissionTarget = {
+  path: string
+  /**
+   * file: the agent's own file (at every scope); config: `agent.<name>.permission` in this file
+   */
+  kind: "file" | "config"
+  /**
+   * The file is tracked by the project's git repository
+   */
+  tracked: boolean
+}
+
+export type OperatorAgentPermissions = {
+  agent: string
+  /**
+   * The agent's full list, in evaluation order, each rule with where it comes from
+   */
+  rows: Array<OperatorPermissionRow>
+  /**
+   * The agent's own rules: rows[start] up to (not including) rows[end]
+   */
+  own: {
+    start: number
+    end: number
+  }
+  /**
+   * The agent's own rules as written (patterns as in the file, `~` not expanded)
+   */
+  written: Array<PermissionRule>
+  /**
+   * The pattern each permission is asked with, for the editor's hints
+   */
+  forms: {
+    [key: string]: OperatorPermissionPatternForm
+  }
+  /**
+   * Permissions and tools to pick from
+   */
+  known: Array<string>
+  targets: {
+    project: OperatorAgentPermissionTarget
+    global: OperatorAgentPermissionTarget
+  }
+  /**
+   * Config files that set this agent's `permission` (merged with what a save writes)
+   */
+  alsoIn: Array<string>
+}
+
+export type OperatorAgentPermissionsNotFoundError = {
+  name: "OperatorAgentPermissionsNotFoundError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorAgentPermissionsWritten = {
+  path: string
+}
+
+export type OperatorAgentPermissionsInvalidError = {
+  name: "OperatorAgentPermissionsInvalidError"
+  data: {
+    message: string
+  }
+}
+
 export type UnauthorizedError = {
   _tag: "UnauthorizedError"
   message: string
@@ -14989,6 +15068,82 @@ export type OperatorCallRawResponses = {
 }
 
 export type OperatorCallRawResponse = OperatorCallRawResponses[keyof OperatorCallRawResponses]
+
+export type OperatorAgentPermissionsGetData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/agent/{name}/permissions"
+}
+
+export type OperatorAgentPermissionsGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * OperatorAgentPermissionsNotFoundError
+   */
+  404: OperatorAgentPermissionsNotFoundError
+}
+
+export type OperatorAgentPermissionsGetError =
+  OperatorAgentPermissionsGetErrors[keyof OperatorAgentPermissionsGetErrors]
+
+export type OperatorAgentPermissionsGetResponses = {
+  /**
+   * The agent's permissions for the editor
+   */
+  200: OperatorAgentPermissions
+}
+
+export type OperatorAgentPermissionsGetResponse =
+  OperatorAgentPermissionsGetResponses[keyof OperatorAgentPermissionsGetResponses]
+
+export type OperatorAgentPermissionsSaveData = {
+  body?: {
+    scope: OperatorConfigScope
+    rules: PermissionRuleset
+    confirmOrder?: boolean
+  }
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/agent/{name}/permissions"
+}
+
+export type OperatorAgentPermissionsSaveErrors = {
+  /**
+   * OperatorAgentPermissionsInvalidError | InvalidRequestError
+   */
+  400: OperatorAgentPermissionsInvalidError | InvalidRequestError
+  /**
+   * OperatorAgentPermissionsNotFoundError
+   */
+  404: OperatorAgentPermissionsNotFoundError
+}
+
+export type OperatorAgentPermissionsSaveError =
+  OperatorAgentPermissionsSaveErrors[keyof OperatorAgentPermissionsSaveErrors]
+
+export type OperatorAgentPermissionsSaveResponses = {
+  /**
+   * The file that was written
+   */
+  200: OperatorAgentPermissionsWritten
+}
+
+export type OperatorAgentPermissionsSaveResponse =
+  OperatorAgentPermissionsSaveResponses[keyof OperatorAgentPermissionsSaveResponses]
 
 export type V2HealthGetData = {
   body?: never

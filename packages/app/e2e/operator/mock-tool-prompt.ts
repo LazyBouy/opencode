@@ -141,3 +141,86 @@ export function lastFor(agent: string) {
     inputTokens: 12_345,
   }
 }
+
+type Rule = { permission: string; pattern: string; action: "allow" | "ask" | "deny" }
+
+// An agent's permissions for the editor: OpenCode's defaults, the agent's definition, a config rule,
+// the agent's own rules (from its settings), and the truncation folder.
+export function permissionsFor(directory: string, agent: string, own: Rule[] = []) {
+  const before: Row[] = [
+    { index: 1, permission: "*", pattern: "*", action: "allow", part: "opencode", from: { kind: "opencode-default" } },
+    {
+      index: 2,
+      permission: "question",
+      pattern: "*",
+      action: "deny",
+      part: "opencode",
+      from: { kind: "opencode-default" },
+    },
+    {
+      index: 3,
+      permission: "read",
+      pattern: "*.env",
+      action: "ask",
+      part: "opencode",
+      from: { kind: "opencode-default" },
+    },
+    {
+      index: 4,
+      permission: "webfetch",
+      pattern: "*",
+      action: "ask",
+      part: "config",
+      from: { kind: "config-permission", path: `${directory}/.opencode/opencode.jsonc` },
+    },
+  ]
+  const rows = [
+    ...before,
+    ...own.map((rule, index) => ({
+      ...rule,
+      index: before.length + index + 1,
+      part: "agent",
+      from: { kind: "agent", path: `${directory}/.opencode/opencode.jsonc` },
+    })),
+    {
+      index: before.length + own.length + 1,
+      permission: "external_directory",
+      pattern: "/tmp/opencode/tool-output/*",
+      action: "allow" as const,
+      part: "truncation",
+      from: { kind: "truncation" },
+    },
+  ]
+  return {
+    agent,
+    rows,
+    own: { start: before.length, end: before.length + own.length },
+    written: own,
+    forms: { read: "path", edit: "path", external_directory: "absolute", todowrite: "any" },
+    known: ["*", "bash", "edit", "external_directory", "read", "task", "todowrite", "webfetch"],
+    targets: {
+      project: { path: `${directory}/.opencode/opencode.jsonc`, kind: "config", tracked: true },
+      global: { path: "/home/me/.config/opencode/opencode.jsonc", kind: "config", tracked: false },
+    },
+    alsoIn: [],
+  }
+}
+
+// The tool prompt with draft agent rules: a final `webfetch * deny` removes webfetch (from the list
+// without the config's deny, where it is sent); other rules change nothing.
+export function draftFor(directory: string, agent: string, body: { agentRules?: Rule[]; sessionRules?: Rule[] }) {
+  const prompt = toolPromptFor(directory, agent, null)
+  const rules = body.agentRules ?? body.sessionRules ?? []
+  const at = rules.findLastIndex((rule) => rule.permission === "webfetch")
+  const removed = at >= 0 && rules[at]!.action === "deny" && rules[at]!.pattern === "*"
+  return {
+    ...prompt,
+    diff: {
+      added: [],
+      removed: removed ? [{ name: "webfetch", rule: 4 + at + 1 }] : [],
+      changed: [],
+      before: prompt.sizes.total + (removed ? 120 : 0),
+      after: prompt.sizes.total,
+    },
+  }
+}

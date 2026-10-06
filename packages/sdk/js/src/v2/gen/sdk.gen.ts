@@ -120,6 +120,10 @@ import type {
   OperatorAgentFormat,
   OperatorAgentListErrors,
   OperatorAgentListResponses,
+  OperatorAgentPermissionsGetErrors,
+  OperatorAgentPermissionsGetResponses,
+  OperatorAgentPermissionsSaveErrors,
+  OperatorAgentPermissionsSaveResponses,
   OperatorAgentPromptGetErrors,
   OperatorAgentPromptGetResponses,
   OperatorAgentPromptUpdateErrors,
@@ -3993,6 +3997,91 @@ export class Call extends HeyApiClient {
   }
 }
 
+export class AgentPermissions extends HeyApiClient {
+  /**
+   * An agent's permissions, with where each rule comes from
+   *
+   * The agent's full permission list in evaluation order, each rule with where it comes from (OpenCode's code, a config file, the agent's own rules), which rules are the agent's own, those rules as written, the pattern each permission is asked with, and the file a save writes at each scope.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorAgentPermissionsGetResponses,
+      OperatorAgentPermissionsGetErrors,
+      ThrowOnError
+    >({
+      url: "/operator/agent/{name}/permissions",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Save an agent's own permission rules
+   *
+   * Write the agent's own rules, in order, to its agent file or its `agent.<name>` config entry at the scope (a built-in agent gets an entry). A permission + pattern pair written twice is refused, and so is an order that saving grouped by permission would change the result of, unless confirmed. The project reloads.
+   */
+  public save<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+      scope?: OperatorConfigScope
+      rules?: PermissionRuleset
+      confirmOrder?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "scope" },
+            { in: "body", key: "rules" },
+            { in: "body", key: "confirmOrder" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorAgentPermissionsSaveResponses,
+      OperatorAgentPermissionsSaveErrors,
+      ThrowOnError
+    >({
+      url: "/operator/agent/{name}/permissions",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Operator extends HeyApiClient {
   /**
    * Get server status
@@ -4119,6 +4208,11 @@ export class Operator extends HeyApiClient {
   private _call?: Call
   get call(): Call {
     return (this._call ??= new Call({ client: this.client }))
+  }
+
+  private _agentPermissions?: AgentPermissions
+  get agentPermissions(): AgentPermissions {
+    return (this._agentPermissions ??= new AgentPermissions({ client: this.client }))
   }
 }
 

@@ -110,12 +110,19 @@ export default function AgentsPage() {
   const rows = createMemo(() => agents.rows().filter((agent) => store.showHidden || !agent.hidden))
   // Shown on the toggle, so hidden agents can be told apart from missing ones.
   const hiddenCount = createMemo(() => agents.rows().filter((agent) => agent.hidden).length)
-  // An agent opens in the overlay: `agent` and its project `adir`, and the section `atab`.
-  const [params, setParams] = useSearchParams<{ agent?: string; adir?: string; atab?: string }>()
+  // An agent opens in the overlay: `agent` and its project `adir`, and the section `atab` (`aedit`:
+  // its permissions are being edited; `aperm`: the permission they are filtered to).
+  const [params, setParams] = useSearchParams<{
+    agent?: string
+    adir?: string
+    atab?: string
+    aedit?: string
+    aperm?: string
+  }>()
   useRecordOverlay(
     () => !!params.agent,
     () => <AgentOverlay rows={rows} />,
-    () => setParams({ agent: undefined, adir: undefined, atab: undefined }),
+    () => setParams({ agent: undefined, adir: undefined, atab: undefined, aedit: undefined, aperm: undefined }),
   )
   const sourceLabel = (agent: OperatorAgent) => language.t(`operator.agents.source.${agent.source.kind}`)
   const projectName = (key: string) =>
@@ -298,7 +305,13 @@ function AgentOverlay(props: { rows: () => ReadonlyArray<Row> }) {
   const language = useLanguage()
   const scope = useOperatorScope()
   const projects = useOperatorProjects()
-  const [params, setParams] = useSearchParams<{ agent?: string; adir?: string; atab?: string }>()
+  const [params, setParams] = useSearchParams<{
+    agent?: string
+    adir?: string
+    atab?: string
+    aedit?: string
+    aperm?: string
+  }>()
   const dialog = useDialog()
   const directory = () => params.adir ?? scope.directory() ?? projects()[0]?.directory ?? ""
   const tab = () => (AGENT_TABS.includes(params.atab as (typeof AGENT_TABS)[number]) ? params.atab! : "overview")
@@ -318,10 +331,12 @@ function AgentOverlay(props: { rows: () => ReadonlyArray<Row> }) {
       section={tab()}
       records={props.rows().map((row) => keyOf(row.project, row.name))}
       record={keyOf(directory(), params.agent ?? "")}
-      onSection={(id) => setParams({ atab: id })}
+      // Editing permissions keeps the overlay on this agent and section until saved or cancelled.
+      editing={params.aedit === "1"}
+      onSection={(id) => setParams({ atab: id, aperm: undefined })}
       onRecord={(key) => {
         const at = key.lastIndexOf("|")
-        setParams({ agent: key.slice(at + 1), adir: key.slice(0, at) })
+        setParams({ agent: key.slice(at + 1), adir: key.slice(0, at), aperm: undefined })
       }}
     >
       <AgentDetail

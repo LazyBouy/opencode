@@ -14,8 +14,10 @@ import { useScopedProject } from "../project"
 import { EmptyState } from "../ui/empty-state"
 import { Field } from "../ui/field"
 import { PageHeader } from "../ui/page-header"
-import { type Rule, rulesFromConfig, rulesToConfig } from "../ui/rules"
-import { RulesEditor } from "../ui/rules-editor"
+import { PermissionEditor } from "../ui/permission-editor"
+import { PermissionImpact } from "../ui/permission-impact"
+import { orderCheck, type Rule, rulesFromConfig, rulesToConfig } from "../ui/rules"
+import { useAgentPermissions, useConfirmOrder, useRefreshAgent } from "./agent-permissions"
 import { type Scope, ScopeSwitch } from "../ui/scope-switch"
 import { useAgents } from "./agents"
 import { agentPatch, type AgentForm, formFromSettings } from "./agent-form-state"
@@ -43,6 +45,11 @@ export default function AgentFormPage() {
   const profile = () =>
     !editing() && search.profile ? prompts.query.data?.profiles.find((item) => item.id === search.profile) : undefined
   const existing = createMemo(() => agents.data?.find((agent) => agent.name === decodeURIComponent(params.name ?? "")))
+  // The full list the agent's own rules sit in (a new agent: build's, for the hints and the picker).
+  const permissions = useAgentPermissions(() => existing()?.name ?? "build", directory)
+  const savedRules = () => JSON.stringify(rulesFromConfig(existing()?.settings.permission))
+  const confirmOrder = useConfirmOrder()
+  const refresh = useRefreshAgent()
   const [store, setStore] = createStore({
     scope: "project" as Scope,
     format: "file" as "file" | "config",
@@ -85,10 +92,14 @@ export default function AgentFormPage() {
   const set = <K extends keyof AgentForm>(key: K, value: AgentForm[K]) => setStore("form", key, value)
   const done = (name: string) => {
     void queryClient.invalidateQueries({ queryKey: api.key("agents", directory()) })
+    void refresh(directory() ?? "")
     navigate(`/operator/agents/${encodeURIComponent(name)}?dir=${encodeURIComponent(directory() ?? "")}`)
   }
 
   const save = async () => {
+    if (orderCheck(store.rules).duplicates.length)
+      return setStore("error", language.t("operator.agentPermissions.duplicatesBlock"))
+    if ((await confirmOrder(store.rules)) === undefined) return
     setStore({ saving: true, error: "" })
     const patch = agentPatch(store.form, existing()?.settings ?? {}, rulesToConfig(store.rules))
     const client = api.client()
@@ -307,7 +318,27 @@ export default function AgentFormPage() {
             label={language.t("operator.agent.tab.permissions")}
             hint={language.t("operator.agent.rulesHint")}
           >
-            <RulesEditor rules={store.rules} onChange={(rules) => setStore("rules", rules)} />
+            <div data-slot="operator-permission-layout">
+              <PermissionEditor
+                mode="agent"
+                rows={editing() ? (permissions.data?.rows ?? []) : []}
+                editable={editing() ? (permissions.data?.own ?? { start: 0, end: 0 }) : { start: 0, end: 0 }}
+                value={store.rules}
+                onChange={(rules) => setStore("rules", rules)}
+                forms={permissions.data?.forms ?? {}}
+                known={permissions.data?.known ?? []}
+              />
+              <Show when={editing() && existing()}>
+                {(agent) => (
+                  <PermissionImpact
+                    agent={agent().name}
+                    directory={directory() ?? ""}
+                    agentRules={store.rules}
+                    dirty={JSON.stringify(store.rules) !== savedRules()}
+                  />
+                )}
+              </Show>
+            </div>
           </Field>
         </div>
         <Show when={store.error}>
