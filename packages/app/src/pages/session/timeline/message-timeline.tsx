@@ -78,6 +78,7 @@ import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 import { createTimelineProjection } from "./projection"
 import { MessageComment, SummaryDiff, TimelineRow, TimelineRowMap } from "./rows"
 import { filterVirtualIndexes } from "./virtual-items"
+import { OperatorSessionViews } from "@/operator/session-views"
 
 const emptyMessages: MessageType[] = []
 const emptyParts: PartType[] = []
@@ -1297,7 +1298,8 @@ export function MessageTimeline(props: {
     )
   }
 
-  return (
+  // fork: the session page's views (User, Transcript, Detailed); see operator/session-views
+  return OperatorSessionViews.timeline(() => (
     <div class="relative w-full h-full min-w-0">
       <div
         class="absolute left-1/2 -translate-x-1/2 z-[60] pointer-events-none transition-all duration-200 ease-out"
@@ -1845,5 +1847,5 @@ export function MessageTimeline(props: {
         </div>
       </ScrollView>
     </div>
-  )
+  ))
 }

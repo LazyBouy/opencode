@@ -1,5 +1,6 @@
 import type { Page, Route } from "@playwright/test"
 import { createPromptMock, type PromptMock } from "./mock-namespaces"
+import { callFor, callsFor, rawFor } from "./mock-calls"
 import { draftFor, lastFor, permissionsFor, sessionPermissionsFor, toolPromptFor } from "./mock-tool-prompt"
 
 // Responses for the fork's operator endpoints, layered over mockOpenCodeServer (later routes win).
@@ -374,6 +375,19 @@ export async function mockOperator(page: Page) {
         return json(route, { path: `${directory}/.opencode/opencode.jsonc` })
       }
       return json(route, permissionsFor(directory, name, state.ownRules[name]))
+    }
+    const calls = url.pathname.match(/^\/operator\/session\/([^/]+)\/(calls|calls\/export|call\/([^/]+)(\/raw)?)$/)
+    if (calls && method === "GET") {
+      const id = decodeURIComponent(calls[1]!)
+      if (calls[2] === "calls") return json(route, callsFor(id))
+      if (calls[2] === "calls/export")
+        return json(route, { format: url.searchParams.get("format"), text: "# Transcript\n" })
+      const callID = decodeURIComponent(calls[3]!)
+      if (calls[4]) return json(route, rawFor(id, callID, url.searchParams.get("part") ?? "request"))
+      const found = callFor(id, callID)
+      return found
+        ? json(route, found)
+        : json(route, { name: "OperatorCallNotFoundError", data: { message: "No call" } }, 404)
     }
     const sessionPermissions = url.pathname.match(/^\/operator\/session\/([^/]+)\/permissions$/)
     if (sessionPermissions) {

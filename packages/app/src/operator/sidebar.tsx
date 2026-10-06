@@ -7,6 +7,7 @@ import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
 import { useOperatorCommands } from "./commands"
 import { SessionInspector } from "./inspector/inspector"
+import { SessionViewSwitch } from "./session-views/switch"
 import { ProjectGate } from "./project-gate"
 import { isActivePage, operatorPages } from "./pages"
 import "./operator.css"
@@ -79,6 +80,7 @@ export function OperatorSidebar() {
         </For>
       </div>
 
+      <SessionViewSwitch />
       <SessionInspector />
       <ProjectGate />
       <div data-slot="operator-sidebar-footer">
