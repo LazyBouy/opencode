@@ -30964,6 +30964,9 @@
           "rule": {
             "type": "number"
           },
+          "code": {
+            "type": "string"
+          },
           "detail": {
             "type": "string"
           },

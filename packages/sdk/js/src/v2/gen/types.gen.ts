@@ -3601,6 +3601,7 @@ export type OperatorToolNotSent = {
   permission?: string
   reason: "permission" | "session" | "subagent" | "model" | "flag" | "internal"
   rule?: number
+  code?: string
   detail?: string
   source?: OperatorToolSource
 }

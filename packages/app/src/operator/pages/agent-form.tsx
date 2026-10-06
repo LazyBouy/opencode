@@ -294,7 +294,7 @@ export default function AgentFormPage() {
               onInput={(event) => set("home", event.currentTarget.value)}
             />
           </Field>
-          <Field label={language.t("operator.agent.tab.prompt")} hint={language.t("operator.agentForm.promptHint")}>
+          <Field label={language.t("operator.agentForm.prompt")} hint={language.t("operator.agentForm.promptHint")}>
             <TextareaV2
               class="operator-editor"
               rows={10}

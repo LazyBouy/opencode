@@ -11,6 +11,7 @@ import { useConfirm } from "../ui/confirm"
 import { DataTable } from "../ui/data-table"
 import { RecordView } from "../ui/record-overlay"
 import { AgentPrompt, useAgentPromptSetting } from "./agent-prompt"
+import { AgentToolPrompt } from "./agent-tools"
 import { requestError } from "./config-helpers"
 import { FieldHelp } from "../ui/field-help"
 import { ModelWithSource } from "../ui/prompt-trace"
@@ -28,7 +29,7 @@ export default function AgentPage() {
   return <Navigate href={`/operator/agents?${query.toString()}`} />
 }
 
-export const AGENT_TABS = ["overview", "prompt", "permissions", "sessions"] as const
+export const AGENT_TABS = ["overview", "prompt", "tools", "permissions", "sessions"] as const
 
 // One agent of a project (`directory`): its name, tags and actions, then the section `tab`. The
 // Agents page shows it in its overlay, with the sections as the left menu.
@@ -201,6 +202,14 @@ export function AgentDetail(props: { name: string; directory: string; tab: strin
             </Match>
             <Match when={props.tab === "prompt"}>
               <AgentPrompt agent={current().name} directory={directory()} modelSource={current().modelSource} />
+            </Match>
+            <Match when={props.tab === "tools"}>
+              <AgentToolPrompt
+                agent={current().name}
+                directory={directory()}
+                mode={current().mode}
+                modelSource={current().modelSource}
+              />
             </Match>
             <Match when={props.tab === "permissions"}>
               <p data-slot="operator-note">{language.t("operator.agent.rulesHint")}</p>

@@ -58,7 +58,7 @@ test("the agents table filters, hides hidden agents and opens an agent", async (
   await expect(page).toHaveURL(/agent=reviewer/)
   const overlay = page.getByRole("dialog")
   await expect(overlay.getByRole("heading", { name: /reviewer/ })).toBeVisible()
-  await overlay.getByRole("tab", { name: "Prompt" }).click()
+  await overlay.getByRole("tab", { name: "Sys Prompt" }).click()
   await expect(page).toHaveURL(/atab=prompt/)
   await expect(
     overlay.locator('[data-slot="operator-prompt-section"]').filter({ hasText: "Agent prompt" }),
@@ -93,7 +93,7 @@ test("text can be selected and copied on every page and in overlays; controls st
   // The page behind it, and the controls.
   expect(await userSelect(page.locator('[data-slot="operator-page-description"], header p').first())).toBe("text")
   expect(await userSelect(page.getByRole("button", { name: "Close" }).first())).toBe("none")
-  expect(await userSelect(page.getByRole("tab", { name: "Prompt" }))).toBe("none")
+  expect(await userSelect(page.getByRole("tab", { name: "Sys Prompt" }))).toBe("none")
 })
 
 test("the project chosen on one page stays chosen on every page until it is changed", async ({ page }) => {

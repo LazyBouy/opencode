@@ -109,6 +109,9 @@ export const NotSent = Schema.Struct({
   permission: Schema.optional(Schema.String),
   reason: Schema.Literals(["permission", "session", "subagent", "model", "flag", "internal"]),
   rule: Schema.optional(Schema.Finite).annotate({ description: "The index of the rule that removes it" }),
+  code: Schema.optional(Schema.String).annotate({
+    description: "Which model or flag reason it is (model.apply_patch, model.gpt, flag.<tool>, internal.invalid)",
+  }),
   detail: Schema.optional(Schema.String),
   source: Schema.optional(Source),
 }).annotate({ identifier: "OperatorToolNotSent" })
@@ -540,18 +543,34 @@ const layer = Layer.effect(
         const usePatch =
           model.api.id.includes("gpt-") && !model.api.id.includes("oss") && !model.api.id.includes("gpt-4")
         if (tool.id === "apply_patch")
-          notSent.push({ name: tool.id, reason: "model", detail: "Used instead of edit and write only for GPT models" })
+          notSent.push({
+            name: tool.id,
+            reason: "model",
+            code: "model.apply_patch",
+            detail: "Used instead of edit and write only for GPT models",
+          })
         else if ((tool.id === "edit" || tool.id === "write") && usePatch)
-          notSent.push({ name: tool.id, reason: "model", detail: "GPT models get apply_patch instead" })
+          notSent.push({
+            name: tool.id,
+            reason: "model",
+            code: "model.gpt",
+            detail: "GPT models get apply_patch instead",
+          })
         else if (tool.id === "websearch")
           notSent.push({
             name: tool.id,
             reason: "flag",
+            code: "flag.websearch",
             detail: "Only for the opencode providers, or with Exa or Parallel search turned on",
           })
         else if (tool.id === "execute")
-          notSent.push({ name: tool.id, reason: "flag", detail: "No connected MCP tool can be used by it" })
-        else notSent.push({ name: tool.id, reason: "flag" })
+          notSent.push({
+            name: tool.id,
+            reason: "flag",
+            code: "flag.execute-mcp",
+            detail: "No connected MCP tool can be used by it",
+          })
+        else notSent.push({ name: tool.id, reason: "flag", code: "flag.other" })
       }
       const ids = new Set(all.map((tool) => tool.id))
       const gated: Array<[string, boolean, string]> = [
@@ -568,8 +587,14 @@ const layer = Layer.effect(
           "Only in experimental plan mode, in the CLI (OPENCODE_EXPERIMENTAL_PLAN_MODE)",
         ],
       ]
-      for (const [name, present, detail] of gated) if (!present) notSent.push({ name, reason: "flag", detail })
-      notSent.push({ name: "invalid", reason: "internal", detail: "Never offered; it repairs malformed tool calls" })
+      for (const [name, present, detail] of gated)
+        if (!present) notSent.push({ name, reason: "flag", code: `flag.${name}`, detail })
+      notSent.push({
+        name: "invalid",
+        reason: "internal",
+        code: "internal.invalid",
+        detail: "Never offered; it repairs malformed tool calls",
+      })
 
       // What is sent: `strict: false` for OpenAI-family providers, Copilot's `_noop`, sorted by name.
       const strict = STRICT_NPM.includes(model.api.npm)

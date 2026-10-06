@@ -1,5 +1,6 @@
 import type { Page, Route } from "@playwright/test"
 import { createPromptMock, type PromptMock } from "./mock-namespaces"
+import { lastFor, toolPromptFor } from "./mock-tool-prompt"
 
 // Responses for the fork's operator endpoints, layered over mockOpenCodeServer (later routes win).
 
@@ -224,6 +225,7 @@ export interface OperatorMock {
     project?: string
   }>
   trashWrites: Array<{ method: string; path: string; body: unknown }>
+  toolPromptQueries: URLSearchParams[]
 }
 
 export async function mockOperator(page: Page) {
@@ -247,6 +249,7 @@ export async function mockOperator(page: Page) {
     pending: [pendingRequest],
     trash: [],
     trashWrites: [],
+    toolPromptQueries: [],
   }
   const repositories = new Set([`${workspace}/site`])
   const listing = (path: string) => ({
@@ -351,6 +354,12 @@ export async function mockOperator(page: Page) {
       url.pathname === "/operator/prompt/purpose"
     )
       return prompt.handle(route, url, method)
+    const toolPrompt = url.pathname.match(/^\/operator\/agent\/([^/]+)\/tool-prompt(\/last)?$/)
+    if (toolPrompt && method === "GET") {
+      state.toolPromptQueries.push(url.searchParams)
+      const name = decodeURIComponent(toolPrompt[1]!)
+      return json(route, toolPrompt[2] ? lastFor(name) : toolPromptFor(directory, name, url.searchParams.get("runsAs")))
+    }
     if (url.pathname.startsWith("/operator/agent") && method !== "GET") {
       state.agentWrites.push({ method, url: url.toString(), body: route.request().postDataJSON() })
       return json(route, { path: `${directory}/.opencode/agents/new.md` })

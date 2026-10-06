@@ -3,11 +3,14 @@ import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
 import { ColumnPicker } from "./column-picker"
+import { FieldHelp } from "./field-help"
 import { filterRows, nextSort, type Sort, sortRows } from "./table"
 
 export interface Column<T> {
   readonly id: string
   readonly header: string
+  /** Help about the column, shown by the field helper's (i) beside its header. */
+  readonly help?: string
   readonly cell: (row: T) => JSX.Element
   /** The value used for sorting; columns without one are not sortable. */
   readonly value?: (row: T) => unknown
@@ -83,6 +86,9 @@ export function DataTable<T>(props: DataTableProps<T>) {
                         aria-hidden="true"
                       />
                     </button>
+                  </Show>
+                  <Show when={column.help}>
+                    <FieldHelp field={column.header} text={column.help} />
                   </Show>
                 </th>
               )}

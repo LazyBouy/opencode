@@ -292,8 +292,8 @@ export default function AgentsPage() {
   )
 }
 
-// The overlay an agent opens in: its sections (Overview, Prompt, Permissions, Sessions) on the left;
-// ‹ › move through the agents the page lists.
+// The overlay an agent opens in: its sections (Overview, Sys Prompt, Tool Prompt, Permissions,
+// Sessions) on the left; ‹ › move through the agents the page lists.
 function AgentOverlay(props: { rows: () => ReadonlyArray<Row> }) {
   const language = useLanguage()
   const scope = useOperatorScope()
@@ -307,6 +307,7 @@ function AgentOverlay(props: { rows: () => ReadonlyArray<Row> }) {
     [
       { id: "overview", icon: "eye" as const },
       { id: "prompt", icon: "prompt" as const },
+      { id: "tools", icon: "code" as const },
       { id: "permissions", icon: "shield" as const },
       { id: "sessions", icon: "bubble-5" as const },
     ].map((item) => ({ ...item, label: language.t(`operator.agent.tab.${item.id}` as "operator.agent.tab.overview") }))
