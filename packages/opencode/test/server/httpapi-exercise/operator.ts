@@ -245,6 +245,54 @@ export const operatorScenarios: Scenario[] = [
         "denying webfetch should remove it",
       )
     }),
+  http.protected
+    .get("/operator/agent/{name}/tool-prompt/last", "operator.toolPrompt.last")
+    .at((ctx) => ({
+      path: route("/operator/agent/{name}/tool-prompt/last", { name: "build" }),
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => {
+      object(body)
+      check(typeof body.captured === "boolean", "Last sent should say whether it was captured")
+    }),
+  http.protected
+    .get("/operator/session/{sessionID}/calls", "operator.call.list")
+    .at((ctx) => ({
+      path: route("/operator/session/{sessionID}/calls", { sessionID: "ses_nocalls" }),
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => {
+      object(body)
+      array(body.calls)
+      array(body.exchanges)
+      object(body.totals)
+    }),
+  http.protected
+    .get("/operator/session/{sessionID}/calls/export", "operator.call.export")
+    .at((ctx) => ({
+      path: route("/operator/session/{sessionID}/calls/export", { sessionID: "ses_nocalls" }) + "?format=md",
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => {
+      object(body)
+      check(typeof body.text === "string", "the export should be text")
+    }),
+  http.protected
+    .get("/operator/session/{sessionID}/call/{callID}", "operator.call.get")
+    .at((ctx) => ({
+      path: route("/operator/session/{sessionID}/call/{callID}", { sessionID: "ses_nocalls", callID: "call_none" }),
+      headers: ctx.headers(),
+    }))
+    .status(404),
+  http.protected
+    .get("/operator/session/{sessionID}/call/{callID}/raw", "operator.call.raw")
+    .at((ctx) => ({
+      path:
+        route("/operator/session/{sessionID}/call/{callID}/raw", { sessionID: "ses_nocalls", callID: "call_none" }) +
+        "?part=request",
+      headers: ctx.headers(),
+    }))
+    .status(404),
   http.protected.get("/operator/tool", "operator.tool.list").json(200, (body) => {
     array(body)
     check(

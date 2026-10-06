@@ -111,6 +111,47 @@ unix("every call is recorded exactly: OpenAI chat, with tool steps, a plan → b
     expect(steps[3]!.response?.usage).toMatchObject({ input: 100, output: 7, reasoning: 3 })
     expect(steps[0]!.format).toBe("openai-chat")
 
+    // The API: exchanges, steps, what is the same as an earlier call, and what is new.
+    const api = yield* OperatorCalls.Service
+    const view = yield* api.list(session.id)
+    expect(view.exchanges.map((item) => item.text)).toEqual(["Plan the work", "Now do it"])
+    expect(view.exchanges.every((item) => item.recorded)).toBe(true)
+    const agentSteps = view.calls.filter((call) => call.kind === "agent")
+    expect(agentSteps.map((call) => [call.exchange, call.step])).toEqual([
+      [1, 1],
+      [2, 1],
+      [2, 2],
+      [2, 3],
+    ])
+    expect(agentSteps[2]!.system.sameAs).toBe(agentSteps[1]!.index)
+    expect(agentSteps[2]!.tools.sameAs).toBe(agentSteps[1]!.index)
+    expect(agentSteps[2]!.messages.new).toBe(2)
+    expect(agentSteps[2]!.usage).toMatchObject({ input: 100, output: 7 })
+    expect(view.totals.calls).toBe(calls.length)
+    // One call: the reminder added in memory is marked; earlier messages are marked seen.
+    const first = yield* api.detail(session.id, agentSteps[1]!.callID)
+    const reminded = first.sent.find((message) =>
+      JSON.stringify(message.content).includes("operational mode has changed"),
+    )
+    expect(reminded?.marks).toContain("in-memory")
+    const later = yield* api.detail(session.id, agentSteps[2]!.callID)
+    expect(later.sent.filter((message) => message.seenIn !== undefined).length).toBe(later.sent.length - 2)
+    expect(later.received?.blocks.at(-1)).toMatchObject({ type: "tool-call", name: "glob" })
+    expect(later.warnings).toEqual([])
+    // Raw request byte for byte; exports.
+    const raw = yield* api.raw(session.id, agentSteps[2]!.callID, "request")
+    expect(fake.hits.map((hit) => hit.body)).toContain(raw.text)
+    expect((yield* api.export(session.id, "md")).text).toContain("### Call")
+    expect(JSON.parse((yield* api.export(session.id, "json")).text).calls).toHaveLength(calls.length)
+    // Last sent: the build agent's newest request's tools, byte for byte.
+    const last = yield* api.last("build")
+    expect(last.captured).toBe(true)
+    const newest = fake.hits.findLast(
+      (hit) => hit.body === bodies[calls.findIndex((call) => call.callID === last.callID)],
+    )!
+    expect(last.tools).toBe(JSON.stringify(JSON.parse(newest.body).tools))
+    expect(yield* api.last("explore")).toEqual({ captured: false })
+
     // A session deleted for good takes its calls with it.
     yield* sessions.remove(session.id)
     yield* Effect.promise(() => OperatorCallStore.list(session.id)).pipe(

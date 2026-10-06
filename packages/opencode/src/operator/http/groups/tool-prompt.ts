@@ -1,3 +1,4 @@
+import { OperatorCalls } from "@/operator/calls"
 import { OperatorToolPrompt } from "@/operator/tool-prompt"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Schema } from "effect"
@@ -15,6 +16,7 @@ import { described } from "@/server/routes/instance/httpapi/groups/metadata"
 export const OperatorToolPromptPaths = {
   prompt: "/operator/agent/:name/tool-prompt",
   draft: "/operator/agent/:name/tool-prompt/draft",
+  last: "/operator/agent/:name/tool-prompt/last",
 } as const
 
 export class ApiToolPromptNotFoundError extends Schema.ErrorClass<{
@@ -74,6 +76,18 @@ export const OperatorToolPromptApi = HttpApi.make("operator-tool-prompt")
             summary: "Preview a tool prompt with unsaved rules",
             description:
               "The tool prompt built from unsaved permission rules (the agent's own, or a session's), and what changes against the saved rules: tools added or removed (with the rule that caused it), descriptions changed, and the total size.",
+          }),
+        ),
+        HttpApiEndpoint.get("last", OperatorToolPromptPaths.last, {
+          params: { name: Schema.String },
+          query: WorkspaceRoutingQuery,
+          success: described(OperatorCalls.Last, "The agent's last request's tools"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.toolPrompt.last",
+            summary: "The tools an agent last sent",
+            description:
+              "The `tools` value of this agent's most recent recorded request in this project, byte for byte, with its time, model, format and session; or not captured yet.",
           }),
         ),
       )

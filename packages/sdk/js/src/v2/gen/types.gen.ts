@@ -3698,6 +3698,245 @@ export type OperatorToolPromptDraft = {
   diff: OperatorToolPromptDiff
 }
 
+export type OperatorToolPromptLast = {
+  captured: boolean
+  at?: number
+  sessionID?: string
+  callID?: string
+  model?: string
+  format?: string
+  tools?: string
+  bytes?: number
+  inputTokens?: number
+}
+
+export type OperatorCallUsage = {
+  input?: number
+  output?: number
+  reasoning?: number
+  cacheRead?: number
+  cacheWrite?: number
+  cost?: number
+}
+
+export type OperatorCallSummary = {
+  callID: string
+  /**
+   * 1-based, in the order calls started
+   */
+  index: number
+  kind: "agent" | "title" | "compaction" | "summary" | "other" | "unlinked"
+  agent?: string
+  model?: string
+  userMessageID?: string
+  assistantMessageID?: string
+  exchange?: number
+  step?: number
+  retryOf?: {
+    callID: string
+    index: number
+    attempt: number
+  }
+  format: string
+  endpoint: string
+  startedAt: number
+  firstByteAt?: number
+  finishedAt?: number
+  /**
+   * Sent, and the response is not complete yet
+   */
+  receiving: boolean
+  httpStatus?: number
+  error?: {
+    status?: number
+    message?: string
+    body?: string
+  }
+  usage?: OperatorCallUsage
+  cost?: number
+  bytes: number
+  /**
+   * The body is rebuilt byte for byte (else kept whole)
+   */
+  exact: boolean
+  system: {
+    chars: number
+    sameAs?: number
+    /**
+     * Differs from the previous call of this agent
+     */
+    changed: boolean
+  }
+  tools: {
+    count: number
+    sameAs?: number
+    changed: boolean
+  }
+  messages: {
+    total: number
+    /**
+     * Messages no earlier call sent
+     */
+    new: number
+  }
+}
+
+export type OperatorCallExchange = {
+  userMessageID: string
+  index: number
+  text: string
+  time: number
+  /**
+   * Whether any call of it was recorded
+   */
+  recorded: boolean
+}
+
+export type OperatorCallList = {
+  calls: Array<OperatorCallSummary>
+  exchanges: Array<OperatorCallExchange>
+  totals: {
+    calls: number
+    input: number
+    output: number
+    reasoning: number
+    cacheRead: number
+    cost: number
+  }
+}
+
+export type OperatorCallExport = {
+  format: "md" | "json"
+  text: string
+}
+
+export type OperatorCallPreviousSystem = {
+  index: number
+  text: string
+}
+
+export type OperatorCallToolsDiff = {
+  index: number
+  added: Array<string>
+  removed: Array<string>
+  changed: Array<string>
+}
+
+export type OperatorCallMessage = {
+  index: number
+  role: string
+  seenIn?: number
+  marks: Array<"in-memory" | "cleared" | "compaction" | "cache" | "image" | "file">
+  content: unknown
+}
+
+export type OperatorCallBlock = {
+  type: "reasoning" | "text" | "tool-call"
+  text?: string
+  encrypted?: boolean
+  signature?: string
+  id?: string
+  name?: string
+  arguments?: string
+}
+
+export type OperatorCallReceived = {
+  parsed: boolean
+  blocks: Array<OperatorCallBlock>
+  finish?: string
+  usage?: OperatorCallUsage
+  ids?: Array<string>
+  raw?: string
+}
+
+export type OperatorCallDetail = {
+  callID: string
+  /**
+   * 1-based, in the order calls started
+   */
+  index: number
+  kind: "agent" | "title" | "compaction" | "summary" | "other" | "unlinked"
+  agent?: string
+  model?: string
+  userMessageID?: string
+  assistantMessageID?: string
+  exchange?: number
+  step?: number
+  retryOf?: {
+    callID: string
+    index: number
+    attempt: number
+  }
+  format: string
+  endpoint: string
+  startedAt: number
+  firstByteAt?: number
+  finishedAt?: number
+  /**
+   * Sent, and the response is not complete yet
+   */
+  receiving: boolean
+  httpStatus?: number
+  error?: {
+    status?: number
+    message?: string
+    body?: string
+  }
+  usage?: OperatorCallUsage
+  cost?: number
+  bytes: number
+  /**
+   * The body is rebuilt byte for byte (else kept whole)
+   */
+  exact: boolean
+  system: {
+    chars: number
+    sameAs?: number
+    /**
+     * Differs from the previous call of this agent
+     */
+    changed: boolean
+  }
+  tools: {
+    count: number
+    sameAs?: number
+    changed: boolean
+  }
+  messages: {
+    total: number
+    /**
+     * Messages no earlier call sent
+     */
+    new: number
+  }
+  systemText?: string
+  previousSystem?: OperatorCallPreviousSystem
+  toolsValue?: unknown
+  toolNames: Array<string>
+  toolsDiff?: OperatorCallToolsDiff
+  sent: Array<OperatorCallMessage>
+  parameters: {
+    [key: string]: unknown
+  }
+  received?: OperatorCallReceived
+  warnings: Array<"reasoning-not-stored" | "text-differs" | "tool-calls-differ">
+}
+
+export type OperatorCallNotFoundError = {
+  name: "OperatorCallNotFoundError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorCallRaw = {
+  /**
+   * The exact request body, or the assembled response as JSON
+   */
+  text: string
+  bytes: number
+}
+
 export type UnauthorizedError = {
   _tag: "UnauthorizedError"
   message: string
@@ -14584,6 +14823,171 @@ export type OperatorToolPromptDraftResponses = {
 }
 
 export type OperatorToolPromptDraftResponse = OperatorToolPromptDraftResponses[keyof OperatorToolPromptDraftResponses]
+
+export type OperatorToolPromptLastData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/agent/{name}/tool-prompt/last"
+}
+
+export type OperatorToolPromptLastErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorToolPromptLastError = OperatorToolPromptLastErrors[keyof OperatorToolPromptLastErrors]
+
+export type OperatorToolPromptLastResponses = {
+  /**
+   * The agent's last request's tools
+   */
+  200: OperatorToolPromptLast
+}
+
+export type OperatorToolPromptLastResponse = OperatorToolPromptLastResponses[keyof OperatorToolPromptLastResponses]
+
+export type OperatorCallListData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+    after?: string
+    limit?: string
+    kind?: string
+  }
+  url: "/operator/session/{sessionID}/calls"
+}
+
+export type OperatorCallListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorCallListError = OperatorCallListErrors[keyof OperatorCallListErrors]
+
+export type OperatorCallListResponses = {
+  /**
+   * The session's recorded calls
+   */
+  200: OperatorCallList
+}
+
+export type OperatorCallListResponse = OperatorCallListResponses[keyof OperatorCallListResponses]
+
+export type OperatorCallExportData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query: {
+    directory?: string
+    workspace?: string
+    format: "md" | "json"
+  }
+  url: "/operator/session/{sessionID}/calls/export"
+}
+
+export type OperatorCallExportErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorCallExportError = OperatorCallExportErrors[keyof OperatorCallExportErrors]
+
+export type OperatorCallExportResponses = {
+  /**
+   * The transcript
+   */
+  200: OperatorCallExport
+}
+
+export type OperatorCallExportResponse = OperatorCallExportResponses[keyof OperatorCallExportResponses]
+
+export type OperatorCallGetData = {
+  body?: never
+  path: {
+    sessionID: string
+    callID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/session/{sessionID}/call/{callID}"
+}
+
+export type OperatorCallGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * OperatorCallNotFoundError
+   */
+  404: OperatorCallNotFoundError
+}
+
+export type OperatorCallGetError = OperatorCallGetErrors[keyof OperatorCallGetErrors]
+
+export type OperatorCallGetResponses = {
+  /**
+   * One call
+   */
+  200: OperatorCallDetail
+}
+
+export type OperatorCallGetResponse = OperatorCallGetResponses[keyof OperatorCallGetResponses]
+
+export type OperatorCallRawData = {
+  body?: never
+  path: {
+    sessionID: string
+    callID: string
+  }
+  query: {
+    directory?: string
+    workspace?: string
+    part: "request" | "response"
+  }
+  url: "/operator/session/{sessionID}/call/{callID}/raw"
+}
+
+export type OperatorCallRawErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * OperatorCallNotFoundError
+   */
+  404: OperatorCallNotFoundError
+}
+
+export type OperatorCallRawError = OperatorCallRawErrors[keyof OperatorCallRawErrors]
+
+export type OperatorCallRawResponses = {
+  /**
+   * The exact request body, or the response
+   */
+  200: OperatorCallRaw
+}
+
+export type OperatorCallRawResponse = OperatorCallRawResponses[keyof OperatorCallRawResponses]
 
 export type V2HealthGetData = {
   body?: never

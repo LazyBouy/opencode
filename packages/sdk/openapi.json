@@ -14695,6 +14695,394 @@
         ]
       }
     },
+    "/operator/agent/{name}/tool-prompt/last": {
+      "get": {
+        "tags": ["operator tool prompt"],
+        "operationId": "operator.toolPrompt.last",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The agent's last request's tools",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorToolPromptLast"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The `tools` value of this agent's most recent recorded request in this project, byte for byte, with its time, model, format and session; or not captured yet.",
+        "summary": "The tools an agent last sent",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.toolPrompt.last({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/session/{sessionID}/calls": {
+      "get": {
+        "tags": ["operator calls"],
+        "operationId": "operator.call.list",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The session's recorded calls",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorCallList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Every recorded model call of the session, in order: its kind (agent step, title, compaction, …), exchange and step, timing, usage and cost, whether its system text and tools are the same as an earlier call's, and how many of its messages are new; the session's exchanges (marking those not recorded); and totals.",
+        "summary": "List a session's model calls",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.call.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/session/{sessionID}/calls/export": {
+      "get": {
+        "tags": ["operator calls"],
+        "operationId": "operator.call.export",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["md", "json"]
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The transcript",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorCallExport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The session's model calls as Markdown, or as JSON with each request's exact body.",
+        "summary": "Export a session's transcript",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.call.export({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/session/{sessionID}/call/{callID}": {
+      "get": {
+        "tags": ["operator calls"],
+        "operationId": "operator.call.get",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "callID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One call",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorCallDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorCallNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorCallNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "One call: what it sent (system text and tools against earlier calls, each message marked new or seen and with what the chat does not show), its parameters, and what came back (reasoning, text and tool calls in order).",
+        "summary": "A model call",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.call.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/session/{sessionID}/call/{callID}/raw": {
+      "get": {
+        "tags": ["operator calls"],
+        "operationId": "operator.call.raw",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "callID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "part",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["request", "response"]
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The exact request body, or the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorCallRaw"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorCallNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorCallNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The request body exactly as sent (rebuilt byte for byte), or the assembled response (the raw stream for formats that are not read).",
+        "summary": "A model call's raw request or response",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.call.raw({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "tags": ["opencode HttpApi"],
@@ -30829,6 +31217,669 @@
         "required": ["agent", "model", "runsAs", "rows", "sent", "notSent", "sizes", "list", "diff"],
         "additionalProperties": false
       },
+      "OperatorToolPromptLast": {
+        "type": "object",
+        "properties": {
+          "captured": {
+            "type": "boolean"
+          },
+          "at": {
+            "type": "number"
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "callID": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "format": {
+            "type": "string"
+          },
+          "tools": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "number"
+          },
+          "inputTokens": {
+            "type": "number"
+          }
+        },
+        "required": ["captured"],
+        "additionalProperties": false
+      },
+      "OperatorCallUsage": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "number"
+          },
+          "output": {
+            "type": "number"
+          },
+          "reasoning": {
+            "type": "number"
+          },
+          "cacheRead": {
+            "type": "number"
+          },
+          "cacheWrite": {
+            "type": "number"
+          },
+          "cost": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OperatorCallSummary": {
+        "type": "object",
+        "properties": {
+          "callID": {
+            "type": "string"
+          },
+          "index": {
+            "type": "number",
+            "description": "1-based, in the order calls started"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["agent", "title", "compaction", "summary", "other", "unlinked"]
+          },
+          "agent": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "userMessageID": {
+            "type": "string"
+          },
+          "assistantMessageID": {
+            "type": "string"
+          },
+          "exchange": {
+            "type": "number"
+          },
+          "step": {
+            "type": "number"
+          },
+          "retryOf": {
+            "type": "object",
+            "properties": {
+              "callID": {
+                "type": "string"
+              },
+              "index": {
+                "type": "number"
+              },
+              "attempt": {
+                "type": "number"
+              }
+            },
+            "required": ["callID", "index", "attempt"],
+            "additionalProperties": false
+          },
+          "format": {
+            "type": "string"
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "number"
+          },
+          "firstByteAt": {
+            "type": "number"
+          },
+          "finishedAt": {
+            "type": "number"
+          },
+          "receiving": {
+            "type": "boolean",
+            "description": "Sent, and the response is not complete yet"
+          },
+          "httpStatus": {
+            "type": "number"
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "number"
+              },
+              "message": {
+                "type": "string"
+              },
+              "body": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          "usage": {
+            "$ref": "#/components/schemas/OperatorCallUsage"
+          },
+          "cost": {
+            "type": "number"
+          },
+          "bytes": {
+            "type": "number"
+          },
+          "exact": {
+            "type": "boolean",
+            "description": "The body is rebuilt byte for byte (else kept whole)"
+          },
+          "system": {
+            "type": "object",
+            "properties": {
+              "chars": {
+                "type": "number"
+              },
+              "sameAs": {
+                "type": "number"
+              },
+              "changed": {
+                "type": "boolean",
+                "description": "Differs from the previous call of this agent"
+              }
+            },
+            "required": ["chars", "changed"],
+            "additionalProperties": false
+          },
+          "tools": {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "number"
+              },
+              "sameAs": {
+                "type": "number"
+              },
+              "changed": {
+                "type": "boolean"
+              }
+            },
+            "required": ["count", "changed"],
+            "additionalProperties": false
+          },
+          "messages": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "type": "number"
+              },
+              "new": {
+                "type": "number",
+                "description": "Messages no earlier call sent"
+              }
+            },
+            "required": ["total", "new"],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "callID",
+          "index",
+          "kind",
+          "format",
+          "endpoint",
+          "startedAt",
+          "receiving",
+          "bytes",
+          "exact",
+          "system",
+          "tools",
+          "messages"
+        ],
+        "additionalProperties": false
+      },
+      "OperatorCallExchange": {
+        "type": "object",
+        "properties": {
+          "userMessageID": {
+            "type": "string"
+          },
+          "index": {
+            "type": "number"
+          },
+          "text": {
+            "type": "string"
+          },
+          "time": {
+            "type": "number"
+          },
+          "recorded": {
+            "type": "boolean",
+            "description": "Whether any call of it was recorded"
+          }
+        },
+        "required": ["userMessageID", "index", "text", "time", "recorded"],
+        "additionalProperties": false
+      },
+      "OperatorCallList": {
+        "type": "object",
+        "properties": {
+          "calls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorCallSummary"
+            }
+          },
+          "exchanges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorCallExchange"
+            }
+          },
+          "totals": {
+            "type": "object",
+            "properties": {
+              "calls": {
+                "type": "number"
+              },
+              "input": {
+                "type": "number"
+              },
+              "output": {
+                "type": "number"
+              },
+              "reasoning": {
+                "type": "number"
+              },
+              "cacheRead": {
+                "type": "number"
+              },
+              "cost": {
+                "type": "number"
+              }
+            },
+            "required": ["calls", "input", "output", "reasoning", "cacheRead", "cost"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["calls", "exchanges", "totals"],
+        "additionalProperties": false
+      },
+      "OperatorCallExport": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "type": "string",
+            "enum": ["md", "json"]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": ["format", "text"],
+        "additionalProperties": false
+      },
+      "OperatorCallPreviousSystem": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "number"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": ["index", "text"],
+        "additionalProperties": false
+      },
+      "OperatorCallToolsDiff": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "number"
+          },
+          "added": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "removed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "changed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["index", "added", "removed", "changed"],
+        "additionalProperties": false
+      },
+      "OperatorCallMessage": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "number"
+          },
+          "role": {
+            "type": "string"
+          },
+          "seenIn": {
+            "type": "number"
+          },
+          "marks": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["in-memory", "cleared", "compaction", "cache", "image", "file"],
+              "description": "in-memory: added by OpenCode for this request, not saved; cleared: an old tool output OpenCode replaced; compaction: the summary of earlier history; cache: a prompt-cache marker; image, file: an attachment"
+            }
+          },
+          "content": {}
+        },
+        "required": ["index", "role", "marks", "content"],
+        "additionalProperties": false
+      },
+      "OperatorCallBlock": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["reasoning", "text", "tool-call"]
+          },
+          "text": {
+            "type": "string"
+          },
+          "encrypted": {
+            "type": "boolean"
+          },
+          "signature": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "arguments": {
+            "type": "string"
+          }
+        },
+        "required": ["type"],
+        "additionalProperties": false
+      },
+      "OperatorCallReceived": {
+        "type": "object",
+        "properties": {
+          "parsed": {
+            "type": "boolean"
+          },
+          "blocks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorCallBlock"
+            }
+          },
+          "finish": {
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/OperatorCallUsage"
+          },
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "raw": {
+            "type": "string"
+          }
+        },
+        "required": ["parsed", "blocks"],
+        "additionalProperties": false
+      },
+      "OperatorCallDetail": {
+        "type": "object",
+        "properties": {
+          "callID": {
+            "type": "string"
+          },
+          "index": {
+            "type": "number",
+            "description": "1-based, in the order calls started"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["agent", "title", "compaction", "summary", "other", "unlinked"]
+          },
+          "agent": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "userMessageID": {
+            "type": "string"
+          },
+          "assistantMessageID": {
+            "type": "string"
+          },
+          "exchange": {
+            "type": "number"
+          },
+          "step": {
+            "type": "number"
+          },
+          "retryOf": {
+            "type": "object",
+            "properties": {
+              "callID": {
+                "type": "string"
+              },
+              "index": {
+                "type": "number"
+              },
+              "attempt": {
+                "type": "number"
+              }
+            },
+            "required": ["callID", "index", "attempt"],
+            "additionalProperties": false
+          },
+          "format": {
+            "type": "string"
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "number"
+          },
+          "firstByteAt": {
+            "type": "number"
+          },
+          "finishedAt": {
+            "type": "number"
+          },
+          "receiving": {
+            "type": "boolean",
+            "description": "Sent, and the response is not complete yet"
+          },
+          "httpStatus": {
+            "type": "number"
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "number"
+              },
+              "message": {
+                "type": "string"
+              },
+              "body": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          "usage": {
+            "$ref": "#/components/schemas/OperatorCallUsage"
+          },
+          "cost": {
+            "type": "number"
+          },
+          "bytes": {
+            "type": "number"
+          },
+          "exact": {
+            "type": "boolean",
+            "description": "The body is rebuilt byte for byte (else kept whole)"
+          },
+          "system": {
+            "type": "object",
+            "properties": {
+              "chars": {
+                "type": "number"
+              },
+              "sameAs": {
+                "type": "number"
+              },
+              "changed": {
+                "type": "boolean",
+                "description": "Differs from the previous call of this agent"
+              }
+            },
+            "required": ["chars", "changed"],
+            "additionalProperties": false
+          },
+          "tools": {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "number"
+              },
+              "sameAs": {
+                "type": "number"
+              },
+              "changed": {
+                "type": "boolean"
+              }
+            },
+            "required": ["count", "changed"],
+            "additionalProperties": false
+          },
+          "messages": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "type": "number"
+              },
+              "new": {
+                "type": "number",
+                "description": "Messages no earlier call sent"
+              }
+            },
+            "required": ["total", "new"],
+            "additionalProperties": false
+          },
+          "systemText": {
+            "type": "string"
+          },
+          "previousSystem": {
+            "$ref": "#/components/schemas/OperatorCallPreviousSystem"
+          },
+          "toolsValue": {},
+          "toolNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "toolsDiff": {
+            "$ref": "#/components/schemas/OperatorCallToolsDiff"
+          },
+          "sent": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorCallMessage"
+            }
+          },
+          "parameters": {
+            "type": "object"
+          },
+          "received": {
+            "$ref": "#/components/schemas/OperatorCallReceived"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["reasoning-not-stored", "text-differs", "tool-calls-differ"]
+            }
+          }
+        },
+        "required": [
+          "callID",
+          "index",
+          "kind",
+          "format",
+          "endpoint",
+          "startedAt",
+          "receiving",
+          "bytes",
+          "exact",
+          "system",
+          "tools",
+          "messages",
+          "toolNames",
+          "sent",
+          "parameters",
+          "warnings"
+        ],
+        "additionalProperties": false
+      },
+      "OperatorCallNotFoundError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorCallNotFoundError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorCallRaw": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The exact request body, or the assembled response as JSON"
+          },
+          "bytes": {
+            "type": "number"
+          }
+        },
+        "required": ["text", "bytes"],
+        "additionalProperties": false
+      },
       "UnauthorizedError": {
         "type": "object",
         "properties": {
@@ -44501,6 +45552,10 @@
     {
       "name": "operator tool prompt",
       "description": "Tool prompt routes."
+    },
+    {
+      "name": "operator calls",
+      "description": "Recorded model calls."
     },
     {
       "name": "opencode HttpApi",

@@ -1,3 +1,4 @@
+import { OperatorCalls } from "@/operator/calls"
 import { OperatorToolPrompt } from "@/operator/tool-prompt"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
 import { Effect } from "effect"
@@ -7,10 +8,12 @@ import { ApiToolPromptNotFoundError } from "../groups/tool-prompt"
 export const operatorToolPromptHandlers = HttpApiBuilder.group(InstanceHttpApi, "operatorToolPrompt", (handlers) =>
   Effect.gen(function* () {
     const prompts = yield* OperatorToolPrompt.Service
+    const calls = yield* OperatorCalls.Service
     const notFound = (error: { message: string }) =>
       new ApiToolPromptNotFoundError({ name: "OperatorToolPromptNotFoundError", data: { message: error.message } })
 
     return handlers
+      .handle("last", (ctx) => calls.last(ctx.params.name))
       .handle("prompt", (ctx) =>
         prompts
           .build({

@@ -128,6 +128,14 @@ import type {
   OperatorAgentRemoveResponses,
   OperatorAgentUpdateErrors,
   OperatorAgentUpdateResponses,
+  OperatorCallExportErrors,
+  OperatorCallExportResponses,
+  OperatorCallGetErrors,
+  OperatorCallGetResponses,
+  OperatorCallListErrors,
+  OperatorCallListResponses,
+  OperatorCallRawErrors,
+  OperatorCallRawResponses,
   OperatorConfigLayersErrors,
   OperatorConfigLayersResponses,
   OperatorConfigSchemaErrors,
@@ -237,6 +245,8 @@ import type {
   OperatorToolPromptDraftResponses,
   OperatorToolPromptGetErrors,
   OperatorToolPromptGetResponses,
+  OperatorToolPromptLastErrors,
+  OperatorToolPromptLastResponses,
   OperatorToolRunsAs,
   OperatorTrashEmptyErrors,
   OperatorTrashEmptyResponses,
@@ -3801,6 +3811,186 @@ export class ToolPrompt extends HeyApiClient {
       },
     })
   }
+
+  /**
+   * The tools an agent last sent
+   *
+   * The `tools` value of this agent's most recent recorded request in this project, byte for byte, with its time, model, format and session; or not captured yet.
+   */
+  public last<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorToolPromptLastResponses,
+      OperatorToolPromptLastErrors,
+      ThrowOnError
+    >({
+      url: "/operator/agent/{name}/tool-prompt/last",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Call extends HeyApiClient {
+  /**
+   * List a session's model calls
+   *
+   * Every recorded model call of the session, in order: its kind (agent step, title, compaction, …), exchange and step, timing, usage and cost, whether its system text and tools are the same as an earlier call's, and how many of its messages are new; the session's exchanges (marking those not recorded); and totals.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      after?: string
+      limit?: string
+      kind?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "after" },
+            { in: "query", key: "limit" },
+            { in: "query", key: "kind" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<OperatorCallListResponses, OperatorCallListErrors, ThrowOnError>({
+      url: "/operator/session/{sessionID}/calls",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Export a session's transcript
+   *
+   * The session's model calls as Markdown, or as JSON with each request's exact body.
+   */
+  public export<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      format: "md" | "json"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "format" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<OperatorCallExportResponses, OperatorCallExportErrors, ThrowOnError>({
+      url: "/operator/session/{sessionID}/calls/export",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * A model call
+   *
+   * One call: what it sent (system text and tools against earlier calls, each message marked new or seen and with what the chat does not show), its parameters, and what came back (reasoning, text and tool calls in order).
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      callID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "callID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<OperatorCallGetResponses, OperatorCallGetErrors, ThrowOnError>({
+      url: "/operator/session/{sessionID}/call/{callID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * A model call's raw request or response
+   *
+   * The request body exactly as sent (rebuilt byte for byte), or the assembled response (the raw stream for formats that are not read).
+   */
+  public raw<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      callID: string
+      directory?: string
+      workspace?: string
+      part: "request" | "response"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "callID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "part" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<OperatorCallRawResponses, OperatorCallRawErrors, ThrowOnError>({
+      url: "/operator/session/{sessionID}/call/{callID}/raw",
+      ...options,
+      ...params,
+    })
+  }
 }
 
 export class Operator extends HeyApiClient {
@@ -3924,6 +4114,11 @@ export class Operator extends HeyApiClient {
   private _toolPrompt?: ToolPrompt
   get toolPrompt(): ToolPrompt {
     return (this._toolPrompt ??= new ToolPrompt({ client: this.client }))
+  }
+
+  private _call?: Call
+  get call(): Call {
+    return (this._call ??= new Call({ client: this.client }))
   }
 }
 
