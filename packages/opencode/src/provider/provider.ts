@@ -28,6 +28,7 @@ import { optional } from "@opencode-ai/core/schema"
 import { ProviderTransform } from "./transform"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { OperatorProviderTap } from "@/operator/provider-tap"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
@@ -100,7 +101,7 @@ function timeoutFetch(options: Record<string, any>) {
   const timeout = options["timeout"]
 
   return async (input: any, init?: BunFetchRequestInit) => {
-    const fetchFn = customFetch ?? fetch
+    const fetchFn = OperatorProviderTap.wrap(customFetch ?? fetch)
     const opts = init ?? {}
     const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
     const headerTimeoutMs = headerTimeout === false ? undefined : headerTimeout

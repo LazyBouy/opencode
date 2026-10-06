@@ -2064,6 +2064,7 @@ export type Config = {
       }
     }
   }
+  operatorRecordCalls?: boolean
 }
 
 export type OperatorStatus = {

@@ -26,6 +26,10 @@ export const fields = {
   merge: Schema.optional(ConfigMergeV1.Info).annotate({
     description: "Settings for `/merge`, which attaches external agent sessions such as Claude Code",
   }),
+  operatorRecordCalls: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "Record every model call (the exact request and the response) for the session's Transcript view (default: true). Kept as long as the session.",
+  }),
 }
 
 // Agent keys this fork adds. ConfigAgentV1 spreads these fields into its schema and their names into

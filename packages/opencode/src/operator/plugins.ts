@@ -5,6 +5,7 @@ import { OperatorProfile } from "./profile"
 import { OperatorProfileStore } from "./profile-store"
 import { OperatorProjects } from "./projects"
 import { OperatorPromptText } from "./prompt-text"
+import { OperatorProviderTap } from "./provider-tap"
 import { OperatorRegistry } from "./registry"
 
 // Builds every request's system prompt from the agent's prompt profile (see profile.ts), and picks the
@@ -41,6 +42,27 @@ const PromptPlugin: Plugin = async (input) => {
   }
 
   return {
+    // Registers the model call for recording (provider-tap.ts): its id goes in a header the provider tap
+    // removes before the request leaves. Recording never gets in the way of the request.
+    "chat.headers": async (hook, output) => {
+      try {
+        const fiber = Fiber.getCurrent()
+        const instance = fiber ? Context.getReferenceUnsafe(fiber.context, InstanceRef) : undefined
+        const begin = OperatorRegistry.calls.begin
+        if (!begin) return
+        const callID = await begin({
+          instance,
+          sessionID: hook.sessionID,
+          agent: hook.agent,
+          providerID: hook.model.providerID,
+          modelID: hook.model.id,
+          userMessageID: hook.message?.id,
+        })
+        if (callID) output.headers[OperatorProviderTap.HEADER] = callID
+      } catch {
+        // not recorded
+      }
+    },
     "experimental.chat.system.transform": async (hook, output) => {
       // The request's project instance, taken before anything is awaited (see written()).
       const fiber = Fiber.getCurrent()

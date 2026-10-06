@@ -26582,6 +26582,9 @@
               }
             },
             "additionalProperties": false
+          },
+          "operatorRecordCalls": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
