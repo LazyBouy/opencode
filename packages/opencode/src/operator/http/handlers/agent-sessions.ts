@@ -20,6 +20,9 @@ export const operatorAgentSessionsHandlers = HttpApiBuilder.group(
         .handle("setMain", (ctx) =>
           service.setMain(ctx.params.name, ctx.payload.sessionID || undefined).pipe(Effect.mapError(notFound)),
         )
+        .handle("setTarget", (ctx) =>
+          service.setTarget(ctx.params.name, ctx.payload.target).pipe(Effect.mapError(notFound)),
+        )
         .handle("mainSession", (ctx) =>
           Effect.gen(function* () {
             const agent = ctx.query.agent || (yield* service.defaultAgent())

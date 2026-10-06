@@ -13,6 +13,7 @@ import { RecordView } from "../ui/record-overlay"
 import { AgentPrompt, useAgentPromptSetting } from "./agent-prompt"
 import { AgentToolPrompt } from "./agent-tools"
 import { AgentPermissions } from "./agent-permissions"
+import { AgentQueue } from "./agent-queue"
 import { recordOf, useProjectRecords } from "./project-record"
 import { requestError } from "./config-helpers"
 import { FieldHelp } from "../ui/field-help"
@@ -31,7 +32,7 @@ export default function AgentPage() {
   return <Navigate href={`/operator/agents?${query.toString()}`} />
 }
 
-export const AGENT_TABS = ["overview", "prompt", "tools", "permissions", "sessions"] as const
+export const AGENT_TABS = ["overview", "prompt", "tools", "permissions", "sessions", "queue"] as const
 
 // One agent of a project (`directory`): its name, tags and actions, then the section `tab`. The
 // Agents page shows it in its overlay, with the sections as the left menu.
@@ -320,6 +321,9 @@ export function AgentDetail(props: { name: string; directory: string; tab: strin
                   },
                 ]}
               />
+            </Match>
+            <Match when={props.tab === "queue"}>
+              <AgentQueue agent={current().name} directory={directory()} />
             </Match>
           </Switch>
         </RecordView>

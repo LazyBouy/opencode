@@ -234,6 +234,9 @@ export interface OperatorMock {
   mainSessions: Record<string, string>
   mainWrites: Array<{ agent: string; sessionID: string }>
   mainOpens: Array<{ agent: string; directory: string | null }>
+  targets: Record<string, "main" | "active">
+  queue: Array<Record<string, unknown> & { id: string; agent: string; status: string }>
+  queueSends: Array<Record<string, unknown>>
   projectRecords: Record<string, Record<string, unknown>>
   sessionPermissionWrites: Array<{ sessionID: string; body: { rules: Array<Record<string, string>> } }>
   sessionRules: Record<
@@ -274,6 +277,9 @@ export async function mockOperator(page: Page) {
     mainSessions: {},
     mainWrites: [],
     mainOpens: [],
+    targets: {},
+    queue: [],
+    queueSends: [],
   }
   const repositories = new Set([`${workspace}/site`])
   const listing = (path: string) => ({
@@ -403,10 +409,12 @@ export async function mockOperator(page: Page) {
         : json(route, { name: "OperatorCallNotFoundError", data: { message: "No call" } }, 404)
     }
     // Agents' main and active sessions.
-    const sessionState = url.pathname.match(/^\/operator\/agent\/([^/]+)\/(session-state|main)$/)
+    const sessionState = url.pathname.match(/^\/operator\/agent\/([^/]+)\/(session-state|main|target)$/)
     if (sessionState) {
       const name = decodeURIComponent(sessionState[1]!)
-      if (method === "PUT") {
+      if (method === "PUT" && sessionState[2] === "target")
+        state.targets[name] = (route.request().postDataJSON() as { target: "main" | "active" }).target
+      else if (method === "PUT") {
         const body = route.request().postDataJSON() as { sessionID: string }
         state.mainWrites.push({ agent: name, sessionID: body.sessionID })
         if (body.sessionID) state.mainSessions[name] = body.sessionID
@@ -420,7 +428,52 @@ export async function mockOperator(page: Page) {
       }
       const main = ref(state.mainSessions[name])
       const active = ref(sessions.find((session) => session.agent === name)?.id)
-      return json(route, { agent: name, ...(main ? { main } : {}), ...(active ? { active } : {}) })
+      return json(route, {
+        agent: name,
+        target: state.targets[name] ?? "main",
+        ...(main ? { main } : {}),
+        ...(active ? { active } : {}),
+      })
+    }
+    // Agents' input queues: a message waits, unless it steers (then it is delivered at once).
+    const agentQueue = url.pathname.match(/^\/operator\/agent\/([^/]+)\/queue$/)
+    if (agentQueue) {
+      const name = decodeURIComponent(agentQueue[1]!)
+      if (method === "POST") {
+        const body = route.request().postDataJSON() as {
+          text: string
+          target?: string
+          sessionID?: string
+          priority?: string
+          steer?: boolean
+        }
+        state.queueSends.push({ agent: name, ...body })
+        const target = body.target ?? (body.sessionID ? "session" : (state.targets[name] ?? "main"))
+        const item = {
+          id: `qm_mock_${state.queue.length + 1}`,
+          project: directory,
+          agent: name,
+          target,
+          ...(body.sessionID ? { sessionID: body.sessionID } : {}),
+          text: body.text,
+          priority: body.priority ?? "normal",
+          steer: !!body.steer,
+          sender: { kind: "user" },
+          status: body.steer ? "delivered" : "queued",
+          createdAt: now + state.queue.length,
+          ...(body.steer ? { deliveredAt: now, deliveredTo: body.sessionID ?? "ses_op_1" } : {}),
+        }
+        state.queue.push(item)
+        return json(route, item)
+      }
+      return json(route, state.queue.filter((item) => item.agent === name).toReversed())
+    }
+    const queueItem = url.pathname.match(/^\/operator\/queue\/([^/]+)$/)
+    if (queueItem && method === "DELETE") {
+      const found = state.queue.find((item) => item.id === decodeURIComponent(queueItem[1]!))
+      if (!found) return json(route, { name: "OperatorQueueNotFoundError", data: { message: "No message" } }, 404)
+      found.status = "cancelled"
+      return json(route, found)
     }
     if (url.pathname === "/operator/main-session" && method === "POST") {
       const agent = url.searchParams.get("agent") || "build"

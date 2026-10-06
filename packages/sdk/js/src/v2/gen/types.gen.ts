@@ -4091,6 +4091,8 @@ export type OperatorSessionPermissionsNotFoundError = {
   }
 }
 
+export type OperatorQueueDefaultTarget = "main" | "active"
+
 export type OperatorAgentSessionRef = {
   id: string
   title: string
@@ -4100,6 +4102,7 @@ export type OperatorAgentSessionRef = {
 
 export type OperatorAgentSessionState = {
   agent: string
+  target: OperatorQueueDefaultTarget
   main?: OperatorAgentSessionRef
   active?: OperatorAgentSessionRef
 }
@@ -4118,6 +4121,53 @@ export type OperatorMainSession = {
    * Made just now (the agent had no main session)
    */
   created: boolean
+}
+
+export type OperatorQueueTarget = "session" | "main" | "active"
+
+export type OperatorQueuePriority = "low" | "normal" | "high" | "urgent"
+
+export type OperatorQueueSender = {
+  kind: "user" | "agent" | "system"
+  agent?: string
+  sessionID?: string
+}
+
+export type OperatorQueueStatus = "queued" | "delivered" | "failed" | "cancelled"
+
+export type OperatorQueueItem = {
+  id: string
+  project: string
+  agent: string
+  target: OperatorQueueTarget
+  sessionID?: string
+  text: string
+  priority: OperatorQueuePriority
+  /**
+   * Delivered at once, even into a running session
+   */
+  steer: boolean
+  sender: OperatorQueueSender
+  correlationID?: string
+  status: OperatorQueueStatus
+  createdAt: number
+  deliveredAt?: number
+  deliveredTo?: string
+  error?: string
+}
+
+export type OperatorQueueNotFoundError = {
+  name: "OperatorQueueNotFoundError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorQueueInvalidError = {
+  name: "OperatorQueueInvalidError"
+  data: {
+    message: string
+  }
 }
 
 export type UnauthorizedError = {
@@ -15462,6 +15512,44 @@ export type OperatorAgentSessionsSetMainResponses = {
 export type OperatorAgentSessionsSetMainResponse =
   OperatorAgentSessionsSetMainResponses[keyof OperatorAgentSessionsSetMainResponses]
 
+export type OperatorAgentSessionsSetTargetData = {
+  body?: {
+    target: OperatorQueueDefaultTarget
+  }
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/agent/{name}/target"
+}
+
+export type OperatorAgentSessionsSetTargetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * OperatorAgentSessionsNotFoundError
+   */
+  404: OperatorAgentSessionsNotFoundError
+}
+
+export type OperatorAgentSessionsSetTargetError =
+  OperatorAgentSessionsSetTargetErrors[keyof OperatorAgentSessionsSetTargetErrors]
+
+export type OperatorAgentSessionsSetTargetResponses = {
+  /**
+   * The agent's main and active sessions
+   */
+  200: OperatorAgentSessionState
+}
+
+export type OperatorAgentSessionsSetTargetResponse =
+  OperatorAgentSessionsSetTargetResponses[keyof OperatorAgentSessionsSetTargetResponses]
+
 export type OperatorAgentSessionsMainSessionData = {
   body?: never
   path?: never
@@ -15496,6 +15584,146 @@ export type OperatorAgentSessionsMainSessionResponses = {
 
 export type OperatorAgentSessionsMainSessionResponse =
   OperatorAgentSessionsMainSessionResponses[keyof OperatorAgentSessionsMainSessionResponses]
+
+export type OperatorQueueAgentData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+    status?: OperatorQueueStatus
+    limit?: string
+  }
+  url: "/operator/agent/{name}/queue"
+}
+
+export type OperatorQueueAgentErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorQueueAgentError = OperatorQueueAgentErrors[keyof OperatorQueueAgentErrors]
+
+export type OperatorQueueAgentResponses = {
+  /**
+   * The agent's messages
+   */
+  200: Array<OperatorQueueItem>
+}
+
+export type OperatorQueueAgentResponse = OperatorQueueAgentResponses[keyof OperatorQueueAgentResponses]
+
+export type OperatorQueueSendData = {
+  body?: {
+    /**
+     * The message
+     */
+    text: string
+    target?: OperatorQueueTarget
+    sessionID?: string
+    priority?: OperatorQueuePriority
+    steer?: boolean
+    correlationID?: string
+  }
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/agent/{name}/queue"
+}
+
+export type OperatorQueueSendErrors = {
+  /**
+   * OperatorQueueInvalidError | InvalidRequestError
+   */
+  400: OperatorQueueInvalidError | InvalidRequestError
+  /**
+   * OperatorQueueNotFoundError
+   */
+  404: OperatorQueueNotFoundError
+}
+
+export type OperatorQueueSendError = OperatorQueueSendErrors[keyof OperatorQueueSendErrors]
+
+export type OperatorQueueSendResponses = {
+  /**
+   * The queued message
+   */
+  200: OperatorQueueItem
+}
+
+export type OperatorQueueSendResponse = OperatorQueueSendResponses[keyof OperatorQueueSendResponses]
+
+export type OperatorQueueListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    status?: OperatorQueueStatus
+    limit?: string
+  }
+  url: "/operator/queue"
+}
+
+export type OperatorQueueListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorQueueListError = OperatorQueueListErrors[keyof OperatorQueueListErrors]
+
+export type OperatorQueueListResponses = {
+  /**
+   * The project's messages
+   */
+  200: Array<OperatorQueueItem>
+}
+
+export type OperatorQueueListResponse = OperatorQueueListResponses[keyof OperatorQueueListResponses]
+
+export type OperatorQueueCancelData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/queue/{id}"
+}
+
+export type OperatorQueueCancelErrors = {
+  /**
+   * OperatorQueueInvalidError | InvalidRequestError
+   */
+  400: OperatorQueueInvalidError | InvalidRequestError
+  /**
+   * OperatorQueueNotFoundError
+   */
+  404: OperatorQueueNotFoundError
+}
+
+export type OperatorQueueCancelError = OperatorQueueCancelErrors[keyof OperatorQueueCancelErrors]
+
+export type OperatorQueueCancelResponses = {
+  /**
+   * The cancelled message
+   */
+  200: OperatorQueueItem
+}
+
+export type OperatorQueueCancelResponse = OperatorQueueCancelResponses[keyof OperatorQueueCancelResponses]
 
 export type V2HealthGetData = {
   body?: never

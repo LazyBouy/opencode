@@ -15702,6 +15702,94 @@
         ]
       }
     },
+    "/operator/agent/{name}/target": {
+      "put": {
+        "tags": ["operator agent sessions"],
+        "operationId": "operator.agentSessions.setTarget",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The agent's main and active sessions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAgentSessionState"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorAgentSessionsNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAgentSessionsNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Where messages queued for the agent go when they name no session: its main session or its active session.",
+        "summary": "Set where an agent's messages go",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "$ref": "#/components/schemas/OperatorQueueDefaultTarget"
+                  }
+                },
+                "required": ["target"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.agentSessions.setTarget({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/operator/main-session": {
       "post": {
         "tags": ["operator agent sessions"],
@@ -15770,6 +15858,350 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.agentSessions.mainSession({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/agent/{name}/queue": {
+      "post": {
+        "tags": ["operator queue"],
+        "operationId": "operator.queue.send",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The queued message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorQueueItem"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorQueueInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorQueueInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorQueueNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorQueueNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Queue a message for one of the project's agents. It goes to the session it names, else to the agent's main or active session (the agent's default), when that session is idle; a steering message goes in at once, even into a running session.",
+        "summary": "Queue a message for an agent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "description": "The message"
+                  },
+                  "target": {
+                    "$ref": "#/components/schemas/OperatorQueueTarget"
+                  },
+                  "sessionID": {
+                    "type": "string"
+                  },
+                  "priority": {
+                    "$ref": "#/components/schemas/OperatorQueuePriority"
+                  },
+                  "steer": {
+                    "type": "boolean"
+                  },
+                  "correlationID": {
+                    "type": "string"
+                  }
+                },
+                "required": ["text"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.queue.send({\n  ...\n})"
+          }
+        ]
+      },
+      "get": {
+        "tags": ["operator queue"],
+        "operationId": "operator.queue.agent",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/OperatorQueueStatus"
+            },
+            "required": false
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The agent's messages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorQueueItem"
+                  },
+                  "description": "The agent's messages"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The agent's messages in this project: queued ones in delivery order (priority, then oldest first), the others newest first.",
+        "summary": "An agent's queued messages",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.queue.agent({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/queue": {
+      "get": {
+        "tags": ["operator queue"],
+        "operationId": "operator.queue.list",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/OperatorQueueStatus"
+            },
+            "required": false
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The project's messages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorQueueItem"
+                  },
+                  "description": "The project's messages"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Every agent's messages in this project.",
+        "summary": "The project's queued messages",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.queue.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/queue/{id}": {
+      "delete": {
+        "tags": ["operator queue"],
+        "operationId": "operator.queue.cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The cancelled message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorQueueItem"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorQueueInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorQueueInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorQueueNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorQueueNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Cancel a message that is still queued.",
+        "summary": "Cancel a queued message",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.queue.cancel({\n  ...\n})"
           }
         ]
       }
@@ -32897,6 +33329,10 @@
         "required": ["name", "data"],
         "additionalProperties": false
       },
+      "OperatorQueueDefaultTarget": {
+        "type": "string",
+        "enum": ["main", "active"]
+      },
       "OperatorAgentSessionRef": {
         "type": "object",
         "properties": {
@@ -32922,6 +33358,9 @@
           "agent": {
             "type": "string"
           },
+          "target": {
+            "$ref": "#/components/schemas/OperatorQueueDefaultTarget"
+          },
           "main": {
             "$ref": "#/components/schemas/OperatorAgentSessionRef"
           },
@@ -32929,7 +33368,7 @@
             "$ref": "#/components/schemas/OperatorAgentSessionRef"
           }
         },
-        "required": ["agent"],
+        "required": ["agent", "target"],
         "additionalProperties": false
       },
       "OperatorAgentSessionsNotFoundError": {
@@ -32968,6 +33407,130 @@
           }
         },
         "required": ["agent", "session", "created"],
+        "additionalProperties": false
+      },
+      "OperatorQueueTarget": {
+        "type": "string",
+        "enum": ["session", "main", "active"]
+      },
+      "OperatorQueuePriority": {
+        "type": "string",
+        "enum": ["low", "normal", "high", "urgent"]
+      },
+      "OperatorQueueSender": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["user", "agent", "system"]
+          },
+          "agent": {
+            "type": "string"
+          },
+          "sessionID": {
+            "type": "string"
+          }
+        },
+        "required": ["kind"],
+        "additionalProperties": false
+      },
+      "OperatorQueueStatus": {
+        "type": "string",
+        "enum": ["queued", "delivered", "failed", "cancelled"]
+      },
+      "OperatorQueueItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "target": {
+            "$ref": "#/components/schemas/OperatorQueueTarget"
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "priority": {
+            "$ref": "#/components/schemas/OperatorQueuePriority"
+          },
+          "steer": {
+            "type": "boolean",
+            "description": "Delivered at once, even into a running session"
+          },
+          "sender": {
+            "$ref": "#/components/schemas/OperatorQueueSender"
+          },
+          "correlationID": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OperatorQueueStatus"
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "deliveredAt": {
+            "type": "number"
+          },
+          "deliveredTo": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "project", "agent", "target", "text", "priority", "steer", "sender", "status", "createdAt"],
+        "additionalProperties": false
+      },
+      "OperatorQueueNotFoundError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorQueueNotFoundError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorQueueInvalidError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorQueueInvalidError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
         "additionalProperties": false
       },
       "UnauthorizedError": {
@@ -46662,6 +47225,10 @@
     {
       "name": "operator agent sessions",
       "description": "Agent session routes."
+    },
+    {
+      "name": "operator queue",
+      "description": "Agent input queue routes."
     },
     {
       "name": "opencode HttpApi",

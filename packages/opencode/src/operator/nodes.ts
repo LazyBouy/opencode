@@ -21,6 +21,7 @@ import { OperatorCalls } from "./calls"
 import { OperatorAgentPermissions } from "./agent-permissions"
 import { OperatorSessionPermissions } from "./session-permissions"
 import { OperatorAgentSessions } from "./agent-sessions"
+import { OperatorQueue } from "./queue"
 
 // Services the fork's routes need, added to the server's service graph in one place.
 export const operatorNodes = [
@@ -38,6 +39,7 @@ export const operatorNodes = [
   OperatorAgentPermissions.node,
   OperatorSessionPermissions.node,
   OperatorAgentSessions.node,
+  OperatorQueue.node,
   OperatorPrompts.node,
   OperatorFolders.node,
   OperatorMemory.node,

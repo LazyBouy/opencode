@@ -24,7 +24,7 @@ unix("an agent's active session is its most recently used; its main session is k
     const service = yield* OperatorAgentSessions.Service
     const sessions = yield* Session.Service
 
-    expect(yield* service.state("build")).toEqual({ agent: "build" })
+    expect(yield* service.state("build")).toEqual({ agent: "build", target: "main" })
 
     const first = yield* sessions.create({ agent: "build", title: "First" })
     yield* Effect.sleep("5 millis")

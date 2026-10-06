@@ -12,6 +12,7 @@ import { operatorCallHandlers } from "./handlers/calls"
 import { operatorAgentPermissionsHandlers } from "./handlers/agent-permissions"
 import { operatorSessionPermissionsHandlers } from "./handlers/session-permissions"
 import { operatorAgentSessionsHandlers } from "./handlers/agent-sessions"
+import { operatorQueueHandlers } from "./handlers/queue"
 import { operatorTrashHandlers, operatorTrashItemHandlers } from "./handlers/trash"
 import { operatorProjectRecordHandlers } from "./handlers/project-records"
 
@@ -30,6 +31,7 @@ export const operatorHandlers = [
   operatorAgentPermissionsHandlers,
   operatorSessionPermissionsHandlers,
   operatorAgentSessionsHandlers,
+  operatorQueueHandlers,
 ] as const
 export const operatorRootHandlers = [
   operatorOverviewHandlers,

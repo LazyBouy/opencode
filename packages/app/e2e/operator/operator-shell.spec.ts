@@ -40,8 +40,9 @@ test("the sidebar opens operator pages and marks the current one", async ({ page
   await expect(page).toHaveURL(/\/operator$/)
   await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeVisible()
 
+  // Chat opens the default agent's main session.
   await nav.getByRole("link", { name: "Chat" }).click()
-  await expect(page).toHaveURL(/\/$/)
+  await expect(page).toHaveURL(/\/session\/ses_op_main$/)
 })
 
 test("a page whose data has an unexpected shape still renders", async ({ page }) => {

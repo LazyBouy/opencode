@@ -134,6 +134,8 @@ import type {
   OperatorAgentSessionsMainSessionResponses,
   OperatorAgentSessionsSetMainErrors,
   OperatorAgentSessionsSetMainResponses,
+  OperatorAgentSessionsSetTargetErrors,
+  OperatorAgentSessionsSetTargetResponses,
   OperatorAgentSessionsStateErrors,
   OperatorAgentSessionsStateResponses,
   OperatorAgentUpdateErrors,
@@ -249,6 +251,18 @@ import type {
   OperatorPromptSampleResponses,
   OperatorPromptSection,
   OperatorPromptSlots,
+  OperatorQueueAgentErrors,
+  OperatorQueueAgentResponses,
+  OperatorQueueCancelErrors,
+  OperatorQueueCancelResponses,
+  OperatorQueueDefaultTarget,
+  OperatorQueueListErrors,
+  OperatorQueueListResponses,
+  OperatorQueuePriority,
+  OperatorQueueSendErrors,
+  OperatorQueueSendResponses,
+  OperatorQueueStatus,
+  OperatorQueueTarget,
   OperatorSessionListErrors,
   OperatorSessionListResponses,
   OperatorSessionPermissionsGetErrors,
@@ -4324,6 +4338,49 @@ export class AgentSessions extends HeyApiClient {
   }
 
   /**
+   * Set where an agent's messages go
+   *
+   * Where messages queued for the agent go when they name no session: its main session or its active session.
+   */
+  public setTarget<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+      target?: OperatorQueueDefaultTarget
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "target" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorAgentSessionsSetTargetResponses,
+      OperatorAgentSessionsSetTargetErrors,
+      ThrowOnError
+    >({
+      url: "/operator/agent/{name}/target",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
    * Open an agent's main session
    *
    * The agent's main session in this project (the default agent's when none is named), made in its home folder and kept when it has none.
@@ -4354,6 +4411,163 @@ export class AgentSessions extends HeyApiClient {
       ThrowOnError
     >({
       url: "/operator/main-session",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Queue extends HeyApiClient {
+  /**
+   * An agent's queued messages
+   *
+   * The agent's messages in this project: queued ones in delivery order (priority, then oldest first), the others newest first.
+   */
+  public agent<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+      status?: OperatorQueueStatus
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "status" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<OperatorQueueAgentResponses, OperatorQueueAgentErrors, ThrowOnError>({
+      url: "/operator/agent/{name}/queue",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Queue a message for an agent
+   *
+   * Queue a message for one of the project's agents. It goes to the session it names, else to the agent's main or active session (the agent's default), when that session is idle; a steering message goes in at once, even into a running session.
+   */
+  public send<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+      text?: string
+      target?: OperatorQueueTarget
+      sessionID?: string
+      priority?: OperatorQueuePriority
+      steer?: boolean
+      correlationID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "text" },
+            { in: "body", key: "target" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "priority" },
+            { in: "body", key: "steer" },
+            { in: "body", key: "correlationID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<OperatorQueueSendResponses, OperatorQueueSendErrors, ThrowOnError>({
+      url: "/operator/agent/{name}/queue",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * The project's queued messages
+   *
+   * Every agent's messages in this project.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      status?: OperatorQueueStatus
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "status" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<OperatorQueueListResponses, OperatorQueueListErrors, ThrowOnError>({
+      url: "/operator/queue",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Cancel a queued message
+   *
+   * Cancel a message that is still queued.
+   */
+  public cancel<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      OperatorQueueCancelResponses,
+      OperatorQueueCancelErrors,
+      ThrowOnError
+    >({
+      url: "/operator/queue/{id}",
       ...options,
       ...params,
     })
@@ -4506,6 +4720,11 @@ export class Operator extends HeyApiClient {
   private _agentSessions?: AgentSessions
   get agentSessions(): AgentSessions {
     return (this._agentSessions ??= new AgentSessions({ client: this.client }))
+  }
+
+  private _queue?: Queue
+  get queue(): Queue {
+    return (this._queue ??= new Queue({ client: this.client }))
   }
 }
 

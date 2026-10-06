@@ -23,7 +23,7 @@ import { OperatorProjects } from "./projects"
 // keyed by project and agent; a deleted session stops being main.
 
 const file = () => path.join(Global.Path.data, "operator", "agent-sessions.json")
-type Store = Record<string, { main?: string }>
+type Store = Record<string, { main?: string; target?: "main" | "active" }>
 const keyOf = (project: string, agent: string) => `${project}\n${agent}`
 const read = (): Promise<Store> =>
   Bun.file(file())
@@ -49,8 +49,15 @@ export const SessionRef = Schema.Struct({
 }).annotate({ identifier: "OperatorAgentSessionRef" })
 export type SessionRef = typeof SessionRef.Type
 
+export const DefaultTarget = Schema.Literals(["main", "active"]).annotate({
+  identifier: "OperatorQueueDefaultTarget",
+  description: "Where a message for the agent goes when it names no session",
+})
+export type DefaultTarget = typeof DefaultTarget.Type
+
 export const State = Schema.Struct({
   agent: Schema.String,
+  target: DefaultTarget,
   main: Schema.optional(SessionRef).annotate({ description: "The agent's main session in this project" }),
   active: Schema.optional(SessionRef).annotate({
     description: "The agent's most recently used session in this project (not archived, not a subagent's)",
@@ -69,6 +76,8 @@ export interface Interface {
   readonly setMain: (agent: string, sessionID: string | undefined) => Effect.Effect<State, NotFoundError>
   /** The agent's main session, made (in its home folder) and kept when it has none. */
   readonly ensureMain: (agent: string) => Effect.Effect<{ session: SessionRef; created: boolean }, NotFoundError>
+  /** Where messages for the agent go when they name no session. */
+  readonly setTarget: (agent: string, target: DefaultTarget) => Effect.Effect<State, NotFoundError>
   /** The agent new sessions start with (config `default_agent`, else OpenCode's). */
   readonly defaultAgent: () => Effect.Effect<string>
 }
@@ -90,7 +99,11 @@ const layer = Layer.effect(
       const deleted = payload?.type === "session.deleted" ? payload.properties?.sessionID : undefined
       if (!deleted) return
       void change((store) => {
-        for (const [key, value] of Object.entries(store)) if (value.main === deleted) delete store[key]
+        for (const [key, value] of Object.entries(store))
+          if (value.main === deleted) {
+            const { main: _, ...rest } = value
+            store[key] = rest
+          }
       }).catch(() => undefined)
     }
     yield* Effect.acquireRelease(
@@ -127,7 +140,8 @@ const layer = Layer.effect(
     const state = Effect.fn("OperatorAgentSessions.state")(function* (name: string) {
       yield* known(name)
       const root = yield* project()
-      const kept = (yield* Effect.promise(read))[keyOf(root, name)]?.main
+      const entry = (yield* Effect.promise(read))[keyOf(root, name)]
+      const kept = entry?.main
       const main = kept
         ? yield* db
             .select(select)
@@ -153,6 +167,7 @@ const layer = Layer.effect(
         .pipe(Effect.orElseSucceed(() => undefined))
       return {
         agent: name,
+        target: entry?.target ?? ("main" as const),
         ...(main && !main.time_archived ? { main: refOf(main) } : {}),
         ...(active ? { active: refOf(active) } : {}),
       }
@@ -170,8 +185,9 @@ const layer = Layer.effect(
       }
       yield* Effect.promise(() =>
         change((store) => {
-          if (sessionID) store[keyOf(root, name)] = { main: sessionID }
-          else delete store[keyOf(root, name)]
+          const key = keyOf(root, name)
+          const { main: _, ...rest } = store[key] ?? {}
+          store[key] = sessionID ? { ...rest, main: sessionID } : rest
         }),
       )
       return yield* state(name)
@@ -190,7 +206,7 @@ const layer = Layer.effect(
       )
       yield* Effect.promise(() =>
         change((store) => {
-          store[keyOf(root, name)] = { main: made.id }
+          store[keyOf(root, name)] = { ...store[keyOf(root, name)], main: made.id }
         }),
       )
       return {
@@ -199,7 +215,18 @@ const layer = Layer.effect(
       }
     })
 
-    return Service.of({ state, setMain, ensureMain, defaultAgent: () => agents.defaultAgent() })
+    const setTarget = Effect.fn("OperatorAgentSessions.setTarget")(function* (name: string, target: DefaultTarget) {
+      yield* known(name)
+      const root = yield* project()
+      yield* Effect.promise(() =>
+        change((store) => {
+          store[keyOf(root, name)] = { ...store[keyOf(root, name)], target }
+        }),
+      )
+      return yield* state(name)
+    })
+
+    return Service.of({ state, setMain, setTarget, ensureMain, defaultAgent: () => agents.defaultAgent() })
   }),
 )
 

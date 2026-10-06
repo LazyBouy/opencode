@@ -288,6 +288,62 @@ export const operatorScenarios: Scenario[] = [
       check(typeof body.session.id === "string", "the main session should be made")
     }),
   http.protected
+    .put("/operator/agent/{name}/target", "operator.agentSessions.setTarget")
+    .mutating()
+    .at((ctx) => ({
+      path: route("/operator/agent/{name}/target", { name: "build" }),
+      headers: ctx.headers(),
+      body: { target: "active" },
+    }))
+    .json(200, (body) => {
+      object(body)
+      check(body.target === "active", "the default target should be saved")
+    }),
+  http.protected
+    .post("/operator/agent/{name}/queue", "operator.queue.send")
+    .preserveDatabase()
+    .withLlm()
+    .seeded((ctx) =>
+      Effect.gen(function* () {
+        const session = yield* ctx.session({ title: "Queue session" })
+        yield* ctx.llmText("fake queued assistant")
+        yield* ctx.llmText("fake queued assistant")
+        return session
+      }),
+    )
+    .at((ctx) => ({
+      path: route("/operator/agent/{name}/queue", { name: "build" }),
+      headers: ctx.headers(),
+      body: { text: "hello from the queue", sessionID: ctx.state.id },
+    }))
+    .jsonEffect(200, (body, ctx) =>
+      Effect.gen(function* () {
+        object(body)
+        check(body.target === "session" && body.sessionID === ctx.state.id, "the message should name its session")
+        yield* ctx.llmWait(1)
+      }),
+    ),
+  http.protected
+    .post("/operator/agent/{name}/queue", "operator.queue.send.empty")
+    .at((ctx) => ({
+      path: route("/operator/agent/{name}/queue", { name: "build" }),
+      headers: ctx.headers(),
+      body: { text: " " },
+    }))
+    .status(400),
+  http.protected
+    .get("/operator/agent/{name}/queue", "operator.queue.agent")
+    .at((ctx) => ({ path: route("/operator/agent/{name}/queue", { name: "build" }), headers: ctx.headers() }))
+    .json(200, array),
+  http.protected
+    .get("/operator/queue", "operator.queue.list")
+    .at((ctx) => ({ path: "/operator/queue?status=queued&limit=10", headers: ctx.headers() }))
+    .json(200, array),
+  http.protected
+    .delete("/operator/queue/{id}", "operator.queue.cancel")
+    .at((ctx) => ({ path: route("/operator/queue/{id}", { id: "qm_missing" }), headers: ctx.headers() }))
+    .status(404),
+  http.protected
     .get("/operator/agent/{name}/permissions", "operator.agentPermissions.get")
     .at((ctx) => ({ path: route("/operator/agent/{name}/permissions", { name: "build" }), headers: ctx.headers() }))
     .json(200, (body) => {
