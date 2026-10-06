@@ -12,6 +12,7 @@ import { Config } from "@/config/config"
 import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { OperatorAgentPermissions } from "./agent-permissions"
+import { OperatorPermissionHook } from "./permission-hook"
 import { OperatorPermissionRules } from "./permission-rules"
 
 // A session's own permission rules (session.permission, upstream's field): OpenCode applies them after
@@ -125,6 +126,31 @@ const layer = Layer.effect(
       () => Effect.sync(() => GlobalBus.off("event", onEvent)),
     )
 
+    // "Always" answers are kept with the session (appended to its rules) and a client's tool switches
+    // are recorded, each with where it came from (permission/index.ts and session/prompt.ts call these).
+    const always = (input: { sessionID: string; rules: ReadonlyArray<Rule> }) =>
+      Effect.gen(function* () {
+        if (!input.rules.length) return
+        const id = SessionID.make(input.sessionID)
+        const current = yield* sessions.get(id)
+        yield* sessions.setPermission({ sessionID: id, permission: [...(current.permission ?? []), ...input.rules] })
+        yield* Effect.promise(() => record(input.sessionID, input.rules, "always"))
+      }).pipe(Effect.catchCause(() => Effect.void))
+    const switched = (input: { sessionID: string; rules: ReadonlyArray<Rule> }) =>
+      Effect.promise(() => record(input.sessionID, input.rules, "client")).pipe(Effect.catchCause(() => Effect.void))
+    yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        OperatorPermissionHook.handlers.always = always
+        OperatorPermissionHook.handlers.switched = switched
+      }),
+      () =>
+        Effect.sync(() => {
+          if (OperatorPermissionHook.handlers.always === always) OperatorPermissionHook.handlers.always = undefined
+          if (OperatorPermissionHook.handlers.switched === switched)
+            OperatorPermissionHook.handlers.switched = undefined
+        }),
+    )
+
     const session = (sessionID: string) =>
       sessions
         .get(SessionID.make(sessionID))
@@ -167,6 +193,8 @@ const layer = Layer.effect(
         action: rule.action,
       }))
       yield* Effect.promise(() => replace(sessionID, list, "user"))
+      // Approvals kept in memory for the session stop applying: its rules are what you saved.
+      OperatorPermissionHook.reset(sessionID)
       // Saved with the session; OpenCode publishes the session's update, and applies the rules from the
       // session's next step.
       yield* sessions.setPermission({ sessionID: SessionID.make(sessionID), permission: list })

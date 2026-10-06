@@ -791,8 +791,9 @@ it.instance(
       yield* reply({ requestID: PermissionV1.ID.make("per_test3"), reply: "always" })
       yield* Fiber.join(fiber)
 
+      // fork: an approval applies to its own session ("always keeps other session pending" below)
       const result = yield* ask({
-        sessionID: SessionID.make("session_test2"),
+        sessionID: SessionID.make("session_test"),
         permission: "bash",
         patterns: ["ls"],
         metadata: {},

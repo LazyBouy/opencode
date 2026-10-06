@@ -33,6 +33,7 @@ import { NamedError } from "@opencode-ai/core/util/error"
 import { SessionProcessor } from "./processor"
 import { Tool } from "@/tool/tool"
 import { Permission } from "@/permission"
+import { OperatorPermissionHook } from "@/operator/permission-hook"
 import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { Shell } from "@opencode-ai/core/shell"
@@ -1068,8 +1069,14 @@ const layer = Layer.effect(
         permissions.push({ permission: t, action: enabled ? "allow" : "deny", pattern: "*" })
       }
       if (permissions.length > 0) {
-        session.permission = permissions
-        yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
+        // fork: merged into the session's rules (only earlier switches of the same tools are replaced)
+        const switched = new Set(permissions.map((rule) => rule.permission))
+        const kept = (session.permission ?? []).filter(
+          (rule) => !(switched.has(rule.permission) && rule.pattern === "*" && rule.action !== "ask"),
+        )
+        session.permission = [...kept, ...permissions]
+        yield* sessions.setPermission({ sessionID: session.id, permission: session.permission })
+        yield* OperatorPermissionHook.switched(session.id, permissions)
       }
 
       if (input.noReply === true) return message

@@ -6,6 +6,7 @@ import { Deferred, Effect, Layer, Context } from "effect"
 import os from "os"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { OperatorPermissionHook } from "@/operator/permission-hook"
 
 export const Event = PermissionV1.Event
 
@@ -24,7 +25,8 @@ interface PendingEntry {
 
 interface State {
   pending: Map<PermissionV1.ID, PendingEntry>
-  approved: PermissionV1.Rule[]
+  // fork: "Always" approvals per session (OperatorPermissionHook.key), not one list for the project
+  approved: Map<string, PermissionV1.Rule[]>
 }
 
 export function evaluate(permission: string, pattern: string, ...rulesets: PermissionV1.Ruleset[]): PermissionV1.Rule {
@@ -50,7 +52,7 @@ const layer = Layer.effect(
         void ctx
         const state = {
           pending: new Map<PermissionV1.ID, PendingEntry>(),
-          approved: [],
+          approved: new Map<string, PermissionV1.Rule[]>(),
         }
 
         yield* Effect.addFinalizer(() =>
@@ -72,7 +74,12 @@ const layer = Layer.effect(
       let needsAsk = false
 
       for (const pattern of request.patterns) {
-        const rule = evaluate(request.permission, pattern, ruleset, approved)
+        const rule = evaluate(
+          request.permission,
+          pattern,
+          ruleset,
+          approved.get(OperatorPermissionHook.key(request.sessionID)) ?? [],
+        )
         yield* Effect.logInfo("evaluated", { permission: request.permission, pattern, action: rule })
         if (rule.action === "deny") {
           return yield* new PermissionV1.DeniedError({
@@ -144,18 +151,24 @@ const layer = Layer.effect(
       yield* Deferred.succeed(existing.deferred, undefined)
       if (input.reply === "once") return
 
+      const key = OperatorPermissionHook.key(existing.info.sessionID)
+      const list = approved.get(key) ?? []
+      const added = list.length
+      approved.set(key, list)
       for (const pattern of existing.info.always) {
-        approved.push({
+        list.push({
           permission: existing.info.permission,
           pattern,
           action: "allow",
         })
       }
+      // fork: the approval is kept with the session (its rules), so it survives restarts
+      yield* OperatorPermissionHook.always(existing.info.sessionID, list.slice(added))
 
       for (const [id, item] of pending.entries()) {
         if (item.info.sessionID !== existing.info.sessionID) continue
         const ok = item.info.patterns.every(
-          (pattern) => evaluate(item.info.permission, pattern, approved).action === "allow",
+          (pattern) => evaluate(item.info.permission, pattern, list).action === "allow",
         )
         if (!ok) continue
         pending.delete(id)

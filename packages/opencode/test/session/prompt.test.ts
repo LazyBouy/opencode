@@ -1016,7 +1016,7 @@ it.instance("subtask child inherits parent session external_directory allow", ()
   }),
 )
 
-noLLMServer.instance("prompt tools replace previous prompt tool rules", () =>
+noLLMServer.instance("prompt tools merge into previous prompt tool rules", () =>
   Effect.gen(function* () {
     const prompt = yield* SessionPrompt.Service
     const sessions = yield* Session.Service
@@ -1037,9 +1037,13 @@ noLLMServer.instance("prompt tools replace previous prompt tool rules", () =>
       parts: [{ type: "text", text: "second" }],
     })
 
+    // fork: a message's tool switches merge into the session's rules
     const reloaded = yield* sessions.get(session.id)
-    expect(reloaded.permission).toEqual([{ permission: "read", pattern: "*", action: "allow" }])
-    expect(Permission.evaluate("bash", "anything", reloaded.permission ?? []).action).toBe("ask")
+    expect(reloaded.permission).toEqual([
+      { permission: "bash", pattern: "*", action: "deny" },
+      { permission: "read", pattern: "*", action: "allow" },
+    ])
+    expect(Permission.evaluate("bash", "anything", reloaded.permission ?? []).action).toBe("deny")
   }),
 )
 
