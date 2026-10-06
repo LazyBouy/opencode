@@ -115,6 +115,9 @@ export const SettingsNamespacesV2: Component = () => {
                     title={
                       <span class="flex items-center gap-2">
                         {item.namespace.name}
+                        <Show when={item.namespace.id === OPENCODE}>
+                          <Tag title={language.t("operator.builtin.hint")}>{language.t("operator.builtin.label")}</Tag>
+                        </Show>
                         <Tag>{language.t("settings.namespaces.projects", { count: item.projects.length })}</Tag>
                       </span>
                     }
@@ -131,8 +134,11 @@ export const SettingsNamespacesV2: Component = () => {
         </div>
 
         <div class="settings-v2-section" data-component="settings-namespace-form">
-          <h3 class="settings-v2-tab-title">
+          <h3 class="settings-v2-tab-title flex items-center gap-2">
             {store.selected === "new" ? language.t("settings.namespaces.new") : current()?.namespace.name}
+            <Show when={store.selected === OPENCODE}>
+              <Tag title={language.t("operator.builtin.hint")}>{language.t("operator.builtin.label")}</Tag>
+            </Show>
           </h3>
           <Show when={store.selected === "new"}>
             <p class="text-12-regular text-v2-text-text-muted">{language.t("settings.namespaces.copyNote")}</p>

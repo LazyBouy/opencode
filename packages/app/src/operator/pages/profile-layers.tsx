@@ -4,7 +4,11 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
-import type { OperatorNamespaceSummary } from "@opencode-ai/sdk/v2/client"
+import type {
+  OperatorNamespaceSummary,
+  OperatorPromptSample,
+  OperatorPromptSampleOrigin,
+} from "@opencode-ai/sdk/v2/client"
 import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
@@ -23,7 +27,9 @@ import { usePromptRefresh, useProfileNames, useScopeCatalogs, useToolLayers } fr
 import {
   ALL,
   type Catalog,
+  DEPENDS_ON,
   DYNAMIC,
+  dynamicKey,
   isPerRequest,
   isWrittenDynamic,
   type Layer,
@@ -531,6 +537,7 @@ function LayerRecord(props: {
       <Show when={layer()} fallback={<p data-slot="operator-note">{language.t("operator.profile.noSuchLayer")}</p>}>
         {(found) => (
           <RecordView
+            builtin={found().origin !== "user"}
             title={
               <>
                 {names.layer(found())}
@@ -635,6 +642,38 @@ function LayerRecord(props: {
                   </RecordField>
                 )}
               </Show>
+              <Show when={dynamicKey(found())}>
+                {(key) => (
+                  <>
+                    <RecordField
+                      label={language.t("operator.profile.textSource")}
+                      help={language.t("operator.help.textSource")}
+                    >
+                      <span data-testid="layer-text-source">
+                        {language.t(`operator.layer.source.${key()}` as "operator.layer.source.written")}
+                      </span>
+                    </RecordField>
+                    <RecordField
+                      label={language.t("operator.profile.dependsOn")}
+                      help={language.t("operator.help.dependsOn")}
+                    >
+                      <span class="flex items-center gap-1 flex-wrap" data-testid="layer-depends-on">
+                        <For each={DEPENDS_ON[key()] ?? []}>
+                          {(factor) => (
+                            <Tag
+                              title={language.t(
+                                `operator.profile.factor.${factor}.hint` as "operator.profile.factor.agent.hint",
+                              )}
+                            >
+                              {language.t(`operator.profile.factor.${factor}` as "operator.profile.factor.agent")}
+                            </Tag>
+                          )}
+                        </For>
+                      </span>
+                    </RecordField>
+                  </>
+                )}
+              </Show>
               <Show when={!dynamic()}>
                 <RecordField label={language.t("operator.prompts.text")} help={language.t("operator.help.layerText")}>
                   <Show when={found().text} fallback="—">
@@ -679,7 +718,8 @@ function LayerSample(props: { layer: Layer; catalog: Catalog; onSelect: (id: str
     agent: "build",
     busy: false,
     error: "",
-    sample: undefined as { text: string; source: string; agent: string; project: string } | undefined,
+    sample: undefined as OperatorPromptSample | undefined,
+    sampleProject: "",
   })
   createEffect(
     on(
@@ -688,9 +728,32 @@ function LayerSample(props: { layer: Layer; catalog: Catalog; onSelect: (id: str
       { defer: true },
     ),
   )
-  const project = () =>
-    store.project ?? props.catalog.projects.find((item) => item.registered)?.key ?? projects()[0]?.directory
+  // The namespace's projects (OpenCode's layers are found only in its projects), the ones open in
+  // this browser first.
+  const options = createMemo(() => {
+    const keys = new Set(props.catalog.projects.map((item) => item.key))
+    const own = projects().filter((item) => keys.has(item.directory))
+    return own.length ? own : projects()
+  })
+  const project = () => store.project ?? options()[0]?.directory
   const projectName = (key: string) => projects().find((item) => item.directory === key)?.label ?? shortPath(key)
+  // Each agent with where it is defined, and whether it is hidden.
+  const agentLabel = (name: string) => {
+    const agent = agents.data?.find((item) => item.name === name)
+    if (!agent) return name
+    const details = [language.t(`operator.agents.source.${agent.source.kind}`)]
+    if (agent.hidden) details.push(language.t("operator.agents.hidden"))
+    return language.t("operator.profile.sampleAgentOption", { name, details: details.join(", ") })
+  }
+  // One line of where the sample's text came from.
+  const originText = (item: OperatorPromptSampleOrigin, sample: OperatorPromptSample) =>
+    item.kind === "skill" && item.path === "<built-in>"
+      ? language.t("operator.profile.origin.skillBuiltin")
+      : language.t(`operator.profile.origin.${item.kind}` as "operator.profile.origin.file", {
+          path: item.path ?? "",
+          agent: sample.agent,
+          model: sample.model,
+        })
   const agents = useQuery(() => ({
     queryKey: api.key("agents", project()),
     enabled: !!project(),
@@ -711,12 +774,7 @@ function LayerSample(props: { layer: Layer; catalog: Catalog; onSelect: (id: str
       .operator.prompt.sample({ directory, agent: store.agent, layer: props.layer.id })
       .then((result) => {
         if (!result.data) return
-        setStore("sample", {
-          text: result.data.text,
-          source: result.data.source,
-          agent: result.data.agent,
-          project: directory,
-        })
+        setStore({ sample: result.data, sampleProject: directory })
       })
       .catch((error: unknown) => setStore("error", requestError(error)))
       .finally(() => setStore("busy", false))
@@ -741,7 +799,7 @@ function LayerSample(props: { layer: Layer; catalog: Catalog; onSelect: (id: str
           <SelectV2<string>
             appearance="base"
             aria-label={language.t("operator.profile.sampleProject")}
-            options={projects().map((item) => item.directory)}
+            options={options().map((item) => item.directory)}
             current={project()}
             label={projectName}
             onSelect={(key) => key && setStore({ project: key, sample: undefined })}
@@ -753,7 +811,7 @@ function LayerSample(props: { layer: Layer; catalog: Catalog; onSelect: (id: str
             aria-label={language.t("operator.profile.sampleAgent")}
             options={(agents.data ?? []).map((agent) => agent.name)}
             current={store.agent}
-            label={(name) => name}
+            label={agentLabel}
             onSelect={(name) => name && setStore({ agent: name, sample: undefined })}
           />
         </Field>
@@ -772,7 +830,7 @@ function LayerSample(props: { layer: Layer; catalog: Catalog; onSelect: (id: str
             <h4 data-slot="operator-panel-title">
               {language.t("operator.profile.sampleFor", {
                 agent: sample().agent,
-                project: projectName(sample().project),
+                project: projectName(store.sampleProject),
               })}
             </h4>
             <Show
@@ -780,6 +838,14 @@ function LayerSample(props: { layer: Layer; catalog: Catalog; onSelect: (id: str
               fallback={<p data-slot="operator-note">{language.t("operator.profile.sampleEmpty")}</p>}
             >
               <pre data-component="operator-code">{sample().text}</pre>
+            </Show>
+            <Show when={sample().origin.length}>
+              <div data-slot="operator-sample-origin" data-testid="sample-origin">
+                <strong>{language.t("operator.profile.cameFrom")}</strong>
+                <ul>
+                  <For each={sample().origin}>{(item) => <li>{originText(item, sample())}</li>}</For>
+                </ul>
+              </div>
             </Show>
             <p data-slot="operator-note">
               {language.t(

@@ -44,7 +44,7 @@ test("the agents table filters, hides hidden agents and opens an agent", async (
   await expect(table).toContainText("reviewer")
   await expect(table).not.toContainText("title")
   await page
-    .getByRole("switch", { name: "Show hidden agents" })
+    .getByRole("switch", { name: "Show hidden agents (2)" })
     .locator("..")
     .locator('[data-slot="switch-control"]')
     .click()

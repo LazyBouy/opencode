@@ -387,16 +387,31 @@ export function createPromptMock(
           layer,
           text: `Written from: ${own.prompt}`,
           source: own.name,
+          origin: [],
         })
       const written = generated(url.searchParams.get("directory") ?? "")[layer]
       const base = {
         text: builtinLayers.find((item) => item.id === `${PREFIX}base.default`)!.text,
         source: "base.default",
       }
-      const found =
-        written ??
-        (layer === `${PREFIX}slot.base` || layer === `${PREFIX}slot.agent-or-base` ? base : { text: "", source: "" })
-      return json(route, { agent, model: "opencode/claude-opus-4-6", layer, ...found })
+      const folder = url.searchParams.get("directory") ?? ""
+      // triage is a file agent (.opencode/agent/triage.md); build has no prompt of its own.
+      const triage = agent === "triage" && (layer === `${PREFIX}slot.agent` || layer === `${PREFIX}slot.agent-or-base`)
+      const found = triage
+        ? { text: "Triage issues.", source: "triage" }
+        : (written ??
+          (layer === `${PREFIX}slot.base` || layer === `${PREFIX}slot.agent-or-base` ? base : { text: "", source: "" }))
+      const origins: Record<string, unknown[]> = {
+        [`${PREFIX}generated.environment`]: [{ kind: "written" }],
+        [`${PREFIX}generated.instructions`]: [{ kind: "file", path: `${folder}/AGENTS.md` }],
+        [`${PREFIX}slot.base`]: [{ kind: "base", path: "base.default" }],
+        [`${PREFIX}slot.agent-or-base`]: [{ kind: "base", path: "base.default" }],
+        [`${PREFIX}slot.agent`]: [{ kind: "agent-none" }],
+      }
+      const origin = triage
+        ? [{ kind: "agent-file", path: `${folder}/.opencode/agent/triage.md` }]
+        : (origins[layer] ?? [])
+      return json(route, { agent, model: "opencode/claude-opus-4-6", layer, ...found, origin })
     }
     if (url.pathname === "/operator/project-settings/resolve") {
       const folder = url.searchParams.get("directory") ?? ""

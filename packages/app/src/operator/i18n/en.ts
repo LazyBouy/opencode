@@ -98,7 +98,8 @@ export const dict = {
   "operator.help.scopePicker": "The project this page shows. Agents, config and sessions belong to a project.",
   "operator.help.configScope":
     "Where your edits are saved: the global config applies to every project; the project config only to this one and wins over the global one.",
-  "operator.help.showHidden": "Also list hidden agents: subagents that are kept out of the @ menu.",
+  "operator.help.showHidden":
+    "Also list hidden agents: ones defined with hidden: true (OpenCode's helpers, and agents a config entry or an agent file hides). OpenCode keeps them out of the agent picker and the @ menu. The number counts the project's hidden agents.",
   "operator.help.sessionChildren": "Also list sessions that agents started for subagents.",
   "operator.help.sessionArchived": "Also list sessions that were archived.",
   "operator.help.newFolder": "A new folder inside the folder shown above. It is created on the server.",
@@ -354,6 +355,14 @@ export const dict = {
 
   "operator.agents.search": "Search agents",
   "operator.agents.showHidden": "Show hidden agents",
+  "operator.agentForm.format": "Save as",
+  "operator.agentForm.formatHint":
+    "Agent file: a markdown file in the scope's agents folder (.opencode/agents/ for the project, ~/.config/opencode/agents/ for global), with the settings as frontmatter and the prompt as the body. Config entry: agent.<name> in the scope's config file (opencode.jsonc), with the prompt as a string. OpenCode reads both the same way.",
+  "operator.agentForm.format.file": "Agent file",
+  "operator.agentForm.format.config": "Config entry",
+  "operator.agentForm.writesTo": "Saved to {{path}}",
+  "operator.agentForm.configEntry": "{{file}} → agent.{{name}}",
+  "operator.agents.showHiddenCount": "Show hidden agents ({{count}})",
   "operator.agents.hidden": "Hidden",
   "operator.agents.customized": "Customized",
   "operator.agents.defaultModel": "Session model",
@@ -483,7 +492,8 @@ export const dict = {
 
   "operator.agentForm.newTitle": "New agent",
   "operator.agentForm.editTitle": "Edit {{name}}",
-  "operator.agentForm.description": "Agents are saved as markdown files, so they can be reviewed and shared like code.",
+  "operator.agentForm.description":
+    "Agents are saved as an agent file or a config entry, as OpenCode reads them, so they can be reviewed and shared like code.",
   "operator.agentForm.name": "Name",
   "operator.agentForm.nameHint": "Letters, digits, dots, dashes and underscores. It is also the file name.",
   "operator.agentForm.scope": "Save in",
@@ -962,4 +972,59 @@ export const dict = {
     "AGENTS.md or CLAUDE.md files and config `instructions`, from the session's folder. See them on the Memory page.",
   "operator.layer.about.generated.mcp": "Instructions sent by connected MCP servers.",
   "operator.layer.about.generated.skills": "The skills the agent can load.",
+  "operator.builtin.label": "Built in",
+  "operator.builtin.customized": "Built in · customized",
+  "operator.builtin.hint":
+    "Comes with OpenCode and cannot be deleted. Customized: a config entry or an agent file changes it.",
+  "operator.profile.textSource": "Text source",
+  "operator.help.textSource": "Where this layer's text comes from, each time a request is made.",
+  "operator.profile.dependsOn": "Depends on",
+  "operator.help.dependsOn":
+    "What the text changes with: the same layer gives another text for another agent, model, project, config, date or session. Hover a tag for more.",
+  "operator.profile.factor.agent": "Agent",
+  "operator.profile.factor.agent.hint": "The agent that runs: its prompt, and its tool and skill permissions.",
+  "operator.profile.factor.model": "Model",
+  "operator.profile.factor.model.hint": "The request's model: its family picks the base prompt.",
+  "operator.profile.factor.project": "Project",
+  "operator.profile.factor.project.hint": "The session's project and folder: its files and its .opencode folder.",
+  "operator.profile.factor.config": "Config",
+  "operator.profile.factor.config.hint":
+    "The global and project config files (opencode.json, opencode.jsonc) and agent files.",
+  "operator.profile.factor.date": "Date",
+  "operator.profile.factor.date.hint": "Today's date.",
+  "operator.profile.factor.session": "Session",
+  "operator.profile.factor.session.hint": "Written once per session, from its first message.",
+  "operator.layer.source.slot.base":
+    "OpenCode's base prompt for the request's model: one of the Base Model Group layers. base.anthropic for Claude models; base.beast for GPT-4, o1 and o3; base.gpt-astra for GPT-6; base.codex for GPT Codex models; base.gpt for other GPT models; base.gemini for Gemini; base.kimi for Kimi (and the kimi-for-coding and moonshotai providers); base.trinity for Trinity; base.meta for Muse; base.default for every other model. A copy of one of them in the profile is used instead of it.",
+  "operator.layer.source.slot.agent":
+    "The agent's own prompt. It comes from, the last one winning: OpenCode's own definition of a built-in agent (of build, plan, general and explore, only explore has one); agent.<name>.prompt in a config file (the global ~/.config/opencode/opencode.json(c), the project's opencode.json(c) or .opencode/opencode.json(c)); or the body of an agent file (agent/<name>.md, agents/<name>.md or modes/<name>.md in ~/.config/opencode/ or the project's .opencode/). It is empty for an agent without one: build, plan and general, unless config or an agent file gives them one. Generate sample says where an agent's prompt came from.",
+  "operator.layer.source.slot.agent-or-base":
+    "The agent's own prompt, as in Agent prompt (OpenCode's definition, agent.<name>.prompt in a config file, or an agent file). For an agent without one (build, plan and general, unless config or an agent file gives them one), the base prompt for the model, as in Base prompt (by model). This is OpenCode's own rule.",
+  "operator.layer.source.generated.environment":
+    "Written by OpenCode for each request: the model's name and id, the working folder, the workspace root, whether the folder is a git repository, the platform and today's date. There is no file to edit.",
+  "operator.layer.source.generated.references":
+    "The references key in config (a global or project opencode.json(c)): each reference that has a description, with its name, path and description. Empty when there are none.",
+  "operator.layer.source.generated.instructions":
+    'Instruction files, each sent as "Instructions from: <file>": the first of ~/.config/opencode/AGENTS.md and ~/.claude/CLAUDE.md; the first of AGENTS.md, CLAUDE.md and CONTEXT.md found from the session\'s folder up to the project root (each file of that name on the way); and the files and URLs in the instructions key of config. Edit them on the Memory page.',
+  "operator.layer.source.generated.mcp":
+    "The instructions that MCP servers (the mcp key in config) send when they connect, for servers whose tools the agent may use. Empty when no connected server sends any.",
+  "operator.layer.source.generated.skills":
+    "The skills the agent may load, each with its name, description and file: OpenCode's own; SKILL.md files under skills/ in ~/.config/opencode/ and the project's .opencode/; under .claude/skills/ and .agents/skills/ in the home folder and the project; and the paths and URLs in the skills key of config. Only those the agent's skill permission allows; nothing when it may not use skills.",
+  "operator.layer.source.written":
+    "Written by the dynamic generator (a helper agent) from this layer's prompt, the project (its name, the org and project purposes, README, AGENTS.md and manifest) and the session's first message, once per session. The session's next turns and its subagents reuse it.",
+  "operator.profile.sampleAgentOption": "{{name}} ({{details}})",
+  "operator.profile.cameFrom": "Came from",
+  "operator.profile.origin.agent-file": "{{agent}}'s agent file: {{path}}",
+  "operator.profile.origin.agent-config": "agent.{{agent}}.prompt in {{path}}",
+  "operator.profile.origin.agent-builtin": "OpenCode's own definition of the {{agent}} agent",
+  "operator.profile.origin.agent-none":
+    "{{agent}} has no prompt of its own: none in OpenCode's definition, in config or in an agent file",
+  "operator.profile.origin.base": "The base prompt for {{model}}: {{path}}",
+  "operator.profile.origin.written": "Written by OpenCode for this request; there is no file to edit",
+  "operator.profile.origin.config": "The references in {{path}}",
+  "operator.profile.origin.file": "Instruction file {{path}}",
+  "operator.profile.origin.url": "Instruction URL {{path}}",
+  "operator.profile.origin.mcp": "MCP server {{path}}",
+  "operator.profile.origin.skill": "Skill file {{path}}",
+  "operator.profile.origin.skillBuiltin": "One of OpenCode's own skills",
 }

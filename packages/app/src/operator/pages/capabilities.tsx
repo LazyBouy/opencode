@@ -19,6 +19,11 @@ import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOve
 import { useTrashItem } from "./trash"
 import { ScopePicker } from "../ui/scope-picker"
 
+// Where OpenCode's own skills say they live, and OpenCode's own commands (`Default` in
+// command/index.ts; `merge` is the fork's).
+const BUILTIN_SKILL = "<built-in>"
+const BUILTIN_COMMANDS = ["init", "review", "merge"]
+
 type Server = { name: string; status: McpStatus }
 
 type Kind = "tools" | "skills" | "commands" | "mcp"
@@ -389,6 +394,7 @@ function CapabilityOverlay() {
         {(found) => (
           <RecordView
             title={<code>{found().id}</code>}
+            builtin={found().origin === "builtin"}
             actions={
               found().origin !== "builtin" && found().origin !== "mcp" ? deleteButton("tool", found().id) : undefined
             }
@@ -410,7 +416,11 @@ function CapabilityOverlay() {
       </Show>
       <Show when={skill()}>
         {(found) => (
-          <RecordView title={found().name} actions={deleteButton("skill", found().name)}>
+          <RecordView
+            title={found().name}
+            builtin={found().location === BUILTIN_SKILL}
+            actions={found().location === BUILTIN_SKILL ? undefined : deleteButton("skill", found().name)}
+          >
             <dl data-component="record-fields">
               <RecordField
                 label={language.t("operator.column.description")}
@@ -432,8 +442,11 @@ function CapabilityOverlay() {
         {(found) => (
           <RecordView
             title={<code>/{found().name}</code>}
+            builtin={BUILTIN_COMMANDS.includes(found().name)}
             actions={
-              found().source === "command" ? deleteButton("command", found().name, `/${found().name}`) : undefined
+              found().source === "command" && !BUILTIN_COMMANDS.includes(found().name)
+                ? deleteButton("command", found().name, `/${found().name}`)
+                : undefined
             }
           >
             <dl data-component="record-fields">

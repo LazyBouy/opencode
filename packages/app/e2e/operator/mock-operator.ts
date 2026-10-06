@@ -361,6 +361,7 @@ export async function mockOperator(page: Page) {
           global: "/home/me/.config/opencode/opencode.jsonc",
           project: `${directory}/.opencode/opencode.jsonc`,
         },
+        folders: { global: "/home/me/.config/opencode", project: `${directory}/.opencode` },
       })
     if (url.pathname === "/operator/config/raw" && method === "PUT") {
       state.writes.push({ url: url.toString(), body: route.request().postDataJSON() })

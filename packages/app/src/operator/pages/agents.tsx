@@ -107,6 +107,8 @@ export default function AgentsPage() {
   const [filter, setFilter] = createStore({ text: "" })
 
   const rows = createMemo(() => agents.rows().filter((agent) => store.showHidden || !agent.hidden))
+  // Shown on the toggle, so hidden agents can be told apart from missing ones.
+  const hiddenCount = createMemo(() => agents.rows().filter((agent) => agent.hidden).length)
   // An agent opens in the overlay: `agent` and its project `adir`, and the section `atab`.
   const [params, setParams] = useSearchParams<{ agent?: string; adir?: string; atab?: string }>()
   useRecordOverlay(
@@ -268,7 +270,7 @@ export default function AgentsPage() {
           />
           <span class="inline-flex items-center">
             <Switch checked={store.showHidden} onChange={(checked) => setStore("showHidden", checked)}>
-              {language.t("operator.agents.showHidden")}
+              {language.t("operator.agents.showHiddenCount", { count: hiddenCount() })}
             </Switch>
             <FieldHelp field={language.t("operator.agents.showHidden")} text={language.t("operator.help.showHidden")} />
           </span>

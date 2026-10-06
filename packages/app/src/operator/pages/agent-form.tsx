@@ -4,7 +4,7 @@ import { SegmentedControlItemV2, SegmentedControlV2 } from "@opencode-ai/ui/v2/s
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
-import { useQueryClient } from "@tanstack/solid-query"
+import { useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createEffect, createMemo, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
@@ -24,7 +24,7 @@ import { usePromptCatalog, useProfileNames } from "./profile-data"
 import { OPENCODE } from "./profile-model"
 import { useProjectSettings } from "./project-prompt"
 
-// Create a new agent (a markdown file) or edit an existing one.
+// Create a new agent (an agent file or a config entry) or edit an existing one.
 export default function AgentFormPage() {
   const language = useLanguage()
   const params = useParams<{ name?: string }>()
@@ -45,6 +45,7 @@ export default function AgentFormPage() {
   const existing = createMemo(() => agents.data?.find((agent) => agent.name === decodeURIComponent(params.name ?? "")))
   const [store, setStore] = createStore({
     scope: "project" as Scope,
+    format: "file" as "file" | "config",
     form: formFromSettings("", {}),
     rules: [] as Rule[],
     error: "",
@@ -62,6 +63,25 @@ export default function AgentFormPage() {
     }),
   )
 
+  // The config file and the agents folder at each scope, to say where the agent is saved.
+  const layers = useQuery(() => ({
+    queryKey: api.key("config-layers", directory()),
+    enabled: !!directory(),
+    queryFn: () =>
+      api
+        .client()
+        .operator.config.layers({ directory: directory() })
+        .then((result) => result.data),
+  }))
+  const target = () => {
+    const name = (editing() ? existing()?.name : store.form.name.trim()) || "<name>"
+    if (existing()?.source.kind === "file") return existing()?.source.path
+    const found = layers.data
+    if (!found) return undefined
+    if (!editing() && store.format === "file") return `${found.folders[store.scope]}/agents/${name}.md`
+    return language.t("operator.agentForm.configEntry", { file: found.targets[store.scope], name })
+  }
+
   const set = <K extends keyof AgentForm>(key: K, value: AgentForm[K]) => setStore("form", key, value)
   const done = (name: string) => {
     void queryClient.invalidateQueries({ queryKey: api.key("agents", directory()) })
@@ -78,6 +98,7 @@ export default function AgentFormPage() {
           name: store.form.name.trim(),
           directory: directory(),
           scope: store.scope,
+          format: store.format,
           ...patch,
         })
     const chosen = profile()
@@ -157,6 +178,32 @@ export default function AgentFormPage() {
             >
               <ScopeSwitch value={store.scope} onChange={(scope) => setStore("scope", scope)} />
             </Field>
+          </Show>
+          <Show when={!editing()}>
+            <Field
+              group
+              label={language.t("operator.agentForm.format")}
+              hint={language.t("operator.agentForm.formatHint")}
+            >
+              <SegmentedControlV2
+                value={store.format}
+                onChange={(value) => value && setStore("format", value as "file" | "config")}
+              >
+                <SegmentedControlItemV2 value="file">
+                  {language.t("operator.agentForm.format.file")}
+                </SegmentedControlItemV2>
+                <SegmentedControlItemV2 value="config">
+                  {language.t("operator.agentForm.format.config")}
+                </SegmentedControlItemV2>
+              </SegmentedControlV2>
+            </Field>
+          </Show>
+          <Show when={!fileAgent() && target()}>
+            {(path) => (
+              <p data-slot="operator-note" data-testid="agent-target">
+                {language.t("operator.agentForm.writesTo", { path: path() })}
+              </p>
+            )}
           </Show>
           <Field
             label={language.t("operator.column.description")}

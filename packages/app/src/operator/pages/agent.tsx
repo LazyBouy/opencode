@@ -115,13 +115,16 @@ export function AgentDetail(props: { name: string; directory: string; tab: strin
     >
       {(current) => (
         <RecordView
+          builtin={
+            current().source.kind === "builtin" ? (current().source.customized ? "customized" : true) : undefined
+          }
           title={
             <>
               {current().name}
               <Tag>{language.t(`operator.agents.mode.${current().mode}`)}</Tag>
-              <Tag variant={current().source.kind === "builtin" ? "neutral" : "accent"}>
-                {language.t(`operator.agents.source.${current().source.kind}`)}
-              </Tag>
+              <Show when={current().source.kind !== "builtin"}>
+                <Tag variant="accent">{language.t(`operator.agents.source.${current().source.kind}`)}</Tag>
+              </Show>
               <Show when={current().disabled}>
                 <Tag>{language.t("operator.agent.off")}</Tag>
               </Show>

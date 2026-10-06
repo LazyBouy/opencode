@@ -408,14 +408,8 @@ function TypeRecord(props: {
       <Show when={type()} fallback={<p data-slot="operator-note">{language.t("operator.profile.noSuchType")}</p>}>
         {(found) => (
           <RecordView
-            title={
-              <>
-                {names.type(found())}
-                <Show when={found().builtin}>
-                  <Tag>{language.t("operator.profile.builtin")}</Tag>
-                </Show>
-              </>
-            }
+            title={names.type(found())}
+            builtin={found().builtin}
             actions={
               <Show when={!found().builtin}>
                 <ButtonV2 variant="contrast" onClick={() => setStore("editing", true)}>
@@ -604,14 +598,8 @@ function GroupRecord(props: {
       <Show when={source()} fallback={<p data-slot="operator-note">{language.t("operator.profile.noSuchGroup")}</p>}>
         {(found) => (
           <RecordView
-            title={
-              <>
-                {names.group(found())}
-                <Show when={found().builtin}>
-                  <Tag>{language.t("operator.profile.builtin")}</Tag>
-                </Show>
-              </>
-            }
+            title={names.group(found())}
+            builtin={found().builtin}
             actions={
               <>
                 <Show when={!found().builtin}>

@@ -1,6 +1,7 @@
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Dialog } from "@opencode-ai/ui/v2/dialog-v2"
+import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
 import { createEffect, createMemo, For, Index, type JSX, on, onCleanup, onMount, Show, untrack } from "solid-js"
@@ -220,11 +221,25 @@ function BlockList(props: {
 }
 
 // A record's view: title (with tags), actions, then its content.
-export function RecordView(props: { title: JSX.Element; actions?: JSX.Element; children: JSX.Element }) {
+// `builtin` marks a record that comes with OpenCode ("customized": one config or a file changes).
+export function RecordView(props: {
+  title: JSX.Element
+  builtin?: boolean | "customized"
+  actions?: JSX.Element
+  children: JSX.Element
+}) {
+  const language = useLanguage()
   return (
     <section data-component="record-view">
       <div data-slot="record-view-head">
-        <h3 data-slot="record-view-title">{props.title}</h3>
+        <h3 data-slot="record-view-title">
+          {props.title}
+          <Show when={props.builtin}>
+            <Tag data-slot="record-builtin" title={language.t("operator.builtin.hint")}>
+              {language.t(props.builtin === "customized" ? "operator.builtin.customized" : "operator.builtin.label")}
+            </Tag>
+          </Show>
+        </h3>
         <Show when={props.actions}>
           <div data-slot="record-view-actions">{props.actions}</div>
         </Show>

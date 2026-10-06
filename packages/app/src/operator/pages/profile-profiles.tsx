@@ -402,12 +402,10 @@ function ProfileRecord(props: {
       <Show when={source()} fallback={<p data-slot="operator-note">{language.t("operator.profile.noSuchProfile")}</p>}>
         {(found) => (
           <RecordView
+            builtin={found().builtin}
             title={
               <>
                 {names.profile(found())}
-                <Show when={found().builtin}>
-                  <Tag>{language.t("operator.profile.builtin")}</Tag>
-                </Show>
                 <Show when={props.defaultIn(found().id).length}>
                   <Tag>
                     {props.ns

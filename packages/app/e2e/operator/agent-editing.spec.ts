@@ -38,6 +38,7 @@ test("creating an agent sends its settings and rules, then opens it", async ({ p
   expect(new URL(write.url).searchParams.get("scope")).toBe("project")
   expect(write.body).toEqual({
     name: "docs",
+    format: "file",
     description: "Writes docs",
     mode: "subagent",
     temperature: 0.3,
@@ -47,6 +48,23 @@ test("creating an agent sends its settings and rules, then opens it", async ({ p
   })
   // Saved: the agent opens in the Agents page's overlay.
   await expect(page).toHaveURL(/\/operator\/agents\?.*agent=docs/)
+})
+
+test("a new agent is saved as an agent file or a config entry, and the form says where", async ({ page }) => {
+  const state = await mockOperator(page)
+  await page.goto(`/operator/agents/new${dir}`)
+  await page.getByLabel("Name", { exact: true }).fill("docs")
+  const target = page.getByTestId("agent-target")
+  await expect(target).toHaveText(/^Saved to .*\/\.opencode\/agents\/docs\.md$/)
+  await page.getByRole("button", { name: "Global", exact: true }).click()
+  await expect(target).toHaveText("Saved to /home/me/.config/opencode/agents/docs.md")
+  await page.getByRole("button", { name: "Config entry", exact: true }).click()
+  await expect(target).toHaveText("Saved to /home/me/.config/opencode/opencode.jsonc → agent.docs")
+  await page.getByRole("button", { name: "Create agent" }).click()
+
+  await expect.poll(() => state.agentWrites.length).toBe(1)
+  expect(new URL(state.agentWrites[0].url).searchParams.get("scope")).toBe("global")
+  expect(state.agentWrites[0].body).toMatchObject({ name: "docs", format: "config" })
 })
 
 test("editing a built-in agent sends only what changed and resets cleared settings", async ({ page }) => {

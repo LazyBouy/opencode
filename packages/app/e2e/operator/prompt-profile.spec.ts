@@ -334,9 +334,13 @@ test("Dynamic layers show a sample for an agent of a project, and where to chang
   await expect(page.locator('[data-section="role"]').getByRole("columnheader", { name: "Used in" })).toHaveCount(0)
   await dynamic.getByRole("row", { name: /Instructions/ }).click()
   const overlay = page.getByRole("dialog")
+  await expect(overlay.locator('[data-slot="record-builtin"]')).toHaveText("Built in")
+  await expect(overlay.getByTestId("layer-text-source")).toContainText("Instructions from: <file>")
+  await expect(overlay.getByTestId("layer-depends-on")).toHaveText(/Project\s*Config/)
   await overlay.getByRole("button", { name: "Generate sample" }).click()
   await expect(overlay.getByRole("status")).toContainText("Sample for build in smoke-project")
   await expect(overlay.getByRole("status")).toContainText("Use Bun.")
+  await expect(overlay.getByTestId("sample-origin")).toContainText(/Came from\s*Instruction file .*\/AGENTS\.md/)
   await expect(overlay.getByRole("button", { name: "Open Memory" })).toBeVisible()
 
   // The base prompt by model points at the layer it comes from.
@@ -345,6 +349,29 @@ test("Dynamic layers show a sample for an agent of a project, and where to chang
   await expect(overlay.getByRole("status")).toContainText("You are opencode, an interactive CLI tool.")
   await overlay.getByRole("button", { name: "Open base.default" }).click()
   await expect(overlay.getByRole("button", { name: "Edit a copy" })).toBeVisible()
+})
+
+test("Agent prompt says where an agent's prompt comes from: a file agent's file, or none for build", async ({
+  page,
+}) => {
+  await mockOperator(page)
+  await page.goto("/operator/profile?ns=opencode&tab=layers&layer=opencode:slot.agent")
+  const overlay = page.getByRole("dialog")
+  await expect(overlay.getByTestId("layer-text-source")).toContainText("only explore has one")
+  await expect(overlay.getByTestId("layer-text-source")).toContainText("agents/<name>.md")
+  await expect(overlay.getByTestId("layer-depends-on")).toHaveText(/Agent\s*Project\s*Config/)
+
+  // build has no prompt of its own.
+  await overlay.getByRole("button", { name: "Generate sample" }).click()
+  await expect(overlay.getByTestId("sample-origin")).toContainText("build has no prompt of its own")
+
+  // Hidden and file agents are offered too, with where they are defined.
+  await pick(page, "Agent", "triage (File, Hidden)")
+  await overlay.getByRole("button", { name: "Generate sample" }).click()
+  await expect(overlay.getByRole("status")).toContainText("Triage issues.")
+  await expect(overlay.getByTestId("sample-origin")).toContainText(
+    /triage's agent file: .*\/\.opencode\/agent\/triage\.md/,
+  )
 })
 
 test("a helper profile holds one helper layer, and a helper group no other type", async ({ page }) => {

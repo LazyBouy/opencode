@@ -66,6 +66,28 @@ export function isPerRequest(layer: { origin: string; replaces?: string } | unde
   return !!layer.replaces && /^opencode:(slot|generated)\./.test(layer.replaces)
 }
 
+// What a Dynamic layer's text varies with: OpenCode's per-request layers (by the built-in's id
+// without its prefix), and yours (written).
+export type Factor = "agent" | "model" | "project" | "config" | "date" | "session"
+export const DEPENDS_ON: Record<string, ReadonlyArray<Factor>> = {
+  "slot.base": ["model"],
+  "slot.agent": ["agent", "project", "config"],
+  "slot.agent-or-base": ["agent", "model", "project", "config"],
+  "generated.environment": ["model", "project", "date"],
+  "generated.references": ["project", "config"],
+  "generated.instructions": ["project", "config"],
+  "generated.mcp": ["agent", "project", "config"],
+  "generated.skills": ["agent", "project", "config"],
+  written: ["project", "session"],
+}
+
+// The key a Dynamic layer is described by: the per-request built-in it is or copies, or "written".
+export function dynamicKey(layer: Layer | undefined) {
+  if (!layer) return undefined
+  if (isPerRequest(layer)) return (layer.replaces ?? layer.id).slice(PREFIX.length)
+  return isWrittenDynamic(layer) ? "written" : undefined
+}
+
 // Layer Definition's sections, in order, with the type a new layer in each gets.
 export const SECTIONS: ReadonlyArray<{ id: Section; type?: string }> = [
   { id: "base", type: "identity" },
