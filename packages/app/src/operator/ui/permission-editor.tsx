@@ -11,15 +11,17 @@ import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { FieldHelp } from "./field-help"
 import { useOriginText } from "./permission-origin"
+import { insertAt, type Line, linesOf, samePattern } from "./permission-lines"
 import { type Action, hintOf, orderCheck, type PatternForm, type Rule } from "./rules"
 
 const ACTIONS: Action[] = ["allow", "ask", "deny"]
 
 // The one permission editor, used for an agent (its Permissions tab and its Edit form) and for a
 // session. It shows the full list that applies, in evaluation order, each rule with where it comes
-// from. Only one part is editable: the agent's own rules, or the session's own rules. Other rows offer
-// Override, which adds a rule with the same permission and pattern at the end of the editable part, so
-// it wins. `value` is the editable part, as it will be saved.
+// from. Only one part is editable: the agent's own rules, or the session's own rules. A rule from
+// elsewhere is changed on its own line (its pencil): the change is a rule of the editable part with the
+// same permission and pattern, checked after it, and shown on that line (see permission-lines.ts).
+// `value` is the editable part, as it will be saved.
 export function PermissionEditor(props: {
   mode: "agent" | "session"
   // The saved full list, and where the editable part is in it (rows[start] up to rows[end]).
@@ -36,14 +38,18 @@ export function PermissionEditor(props: {
   const language = useLanguage()
   const navigate = useNavigate()
   const origin = useOriginText()
+  const changedText = useChangedText()
   const list = createUniqueId()
   const [dragging, setDragging] = createSignal<number>()
   const [draft, setDraft] = createStore({ permission: "", pattern: "*", action: "ask" as Action })
+  // Rules from elsewhere opened for a change (by their place in `before`).
+  const [editing, setEditing] = createStore<Record<number, boolean>>({})
   // The new rule is read from its fields when it is added, so what is typed is what is added.
   let permissionField: HTMLInputElement | undefined
   let patternField: HTMLInputElement | undefined
   const before = () => props.rows.slice(0, props.editable.start)
   const after = () => props.rows.slice(props.editable.end)
+  const lines = createMemo(() => linesOf(before(), props.value, after()))
   const check = createMemo(() => (props.mode === "agent" ? orderCheck(props.value) : undefined))
   // Where each editable rule comes from: the saved rule it matches, else it is new (not saved yet).
   const origins = createMemo(() => {
@@ -63,6 +69,7 @@ export function PermissionEditor(props: {
   const set = (rules: Rule[]) => props.onChange(rules)
   const update = (index: number, change: Partial<Rule>) =>
     set(props.value.map((rule, position) => (position === index ? { ...rule, ...change } : rule)))
+  const remove = (index: number) => set(props.value.filter((_, position) => position !== index))
   const move = (from: number, to: number) => {
     const next = [...props.value]
     const [item] = next.splice(from, 1)
@@ -71,49 +78,251 @@ export function PermissionEditor(props: {
   }
   const add = (rule: Rule) => set([...props.value, rule])
 
-  // `number` follows the rows above it (it changes as editable rules are added or removed).
-  const Locked = (row: OperatorPermissionRow, number: () => number) => (
-    <tr data-locked="" data-part={row.part} hidden={!shown(row.permission)}>
-      <td>
-        {/* Override: a rule with the same permission and pattern at the end of the editable part. */}
-        <IconButtonV2
-          variant="ghost-muted"
-          size="small"
-          icon={<Icon name="edit" />}
-          aria-label={language.t("operator.permissionEditor.override")}
-          title={language.t("operator.permissionEditor.overrideHint")}
-          onClick={() => add({ permission: row.permission, pattern: row.pattern, action: row.action })}
-        />
-      </td>
-      <td data-align="end">{number()}</td>
-      <td>
-        <code>{row.permission}</code>
-      </td>
-      <td>
-        <code>{row.pattern}</code>
-      </td>
-      <td>
-        <Tag variant={row.action === "allow" ? "accent" : "neutral"}>
-          {language.t(`operator.permission.action.${row.action}`)}
-        </Tag>
-      </td>
-      <td>
-        <span class="inline-flex items-center gap-1 flex-wrap">
-          {origin(row.from)}
-          <Show when={row.part === "config"}>
-            <button type="button" data-slot="operator-link" onClick={() => navigate("/operator/config")}>
-              {language.t("operator.permissionEditor.openConfig")}
-            </button>
+  // A rule from elsewhere: its pencil opens it on its line, where its action can be changed. A change
+  // back to the rule's own action removes the change.
+  const Locked = (line: () => Line<OperatorPermissionRow>) => {
+    const row = () => line().row!
+    const at = () => before().indexOf(row())
+    const change = () => line().own
+    const open = () => change() !== undefined || !!editing[at()]
+    const choose = (action: Action) => {
+      const index = change()
+      if (index !== undefined) return action === row().action ? remove(index) : update(index, { action })
+      if (action === row().action) return
+      const next = [...props.value]
+      next.splice(insertAt(before(), props.value, at()), 0, {
+        permission: row().permission,
+        pattern: row().pattern,
+        action,
+      })
+      set(next)
+    }
+    return (
+      <tr
+        data-locked=""
+        data-part={row().part}
+        data-open={open() ? "" : undefined}
+        data-replaced={line().replacedBy ? "" : undefined}
+        hidden={!shown(row().permission)}
+      >
+        <td>
+          <Show when={at() >= 0 && !open()}>
+            <IconButtonV2
+              variant="ghost-muted"
+              size="small"
+              icon={<Icon name="edit" />}
+              aria-label={language.t("operator.permissionEditor.changeRule", { number: line().number })}
+              title={language.t(`operator.permissionEditor.changeHint.${props.mode}`)}
+              onClick={(event) => {
+                const tr = event.currentTarget.closest("tr")
+                setEditing(at(), true)
+                tr?.querySelector<HTMLElement>("td[data-slot='operator-rule-action'] button")?.focus()
+              }}
+            />
           </Show>
-        </span>
-      </td>
-      <td />
-    </tr>
-  )
+        </td>
+        <LineNumber line={line()} mode={props.mode} />
+        <td>
+          <code>{row().permission}</code>
+        </td>
+        <td>
+          <code>{row().pattern}</code>
+        </td>
+        <td data-slot="operator-rule-action">
+          <Show when={open()} fallback={<ActionTag action={line().rule.action} />}>
+            <SelectV2<Action>
+              appearance="base"
+              aria-label={language.t("operator.permissionEditor.changeAction", { number: line().number })}
+              options={ACTIONS}
+              current={line().rule.action}
+              label={(action) => language.t(`operator.permission.action.${action}`)}
+              onSelect={(action) => action && choose(action)}
+            />
+          </Show>
+        </td>
+        <td>
+          <span class="inline-flex items-center gap-1 flex-wrap">
+            <Show
+              when={change() !== undefined}
+              fallback={
+                <>
+                  {origin(row().from)}
+                  <Show when={row().part === "config"}>
+                    <button type="button" data-slot="operator-link" onClick={() => navigate("/operator/config")}>
+                      {language.t("operator.permissionEditor.openConfig")}
+                    </button>
+                  </Show>
+                </>
+              }
+            >
+              {changedText(props.mode, row(), origins()[change()!]?.from)}
+              <Show when={!origins()[change()!]}>
+                <Tag>{language.t("operator.permissionEditor.notSaved")}</Tag>
+              </Show>
+            </Show>
+            <LineMarks line={line()} />
+          </span>
+        </td>
+        <td data-align="end">
+          <Show when={change() !== undefined}>
+            <IconButtonV2
+              variant="ghost-muted"
+              size="small"
+              icon={<Icon name="reset" />}
+              aria-label={language.t("operator.permissionEditor.undoChange", { number: line().number })}
+              title={language.t("operator.permissionEditor.undoChange", { number: line().number })}
+              onClick={() => {
+                setEditing(at(), false)
+                remove(change()!)
+              }}
+            />
+          </Show>
+        </td>
+      </tr>
+    )
+  }
+
+  // A rule of the editable part that changes no rule above: every field can be edited, and it can be
+  // moved and removed.
+  const Own = (line: () => Line<OperatorPermissionRow>) => {
+    const index = () => line().own!
+    const rule = () => props.value[index()]!
+    const hint = () => hintOf(rule(), props.forms)
+    return (
+      <>
+        <tr
+          data-editable=""
+          data-duplicate={duplicate(index()) ? "" : undefined}
+          data-changed={changed(index()) ? "" : undefined}
+          data-dragging={dragging() === index() ? "" : undefined}
+          data-replaced={line().replacedBy ? "" : undefined}
+          hidden={!shown(rule().permission)}
+          draggable="true"
+          onDragStart={(event) => {
+            // Inputs keep their own drag (text selection); the row moves from its handle.
+            if ((event.target as HTMLElement).closest("input")) return event.preventDefault()
+            setDragging(index())
+            event.dataTransfer?.setData("text/plain", String(index()))
+          }}
+          onDragOver={(event) => {
+            if (dragging() === undefined) return
+            event.preventDefault()
+          }}
+          onDrop={(event) => {
+            event.preventDefault()
+            const from = dragging()
+            setDragging(undefined)
+            if (from !== undefined && from !== index()) move(from, index())
+          }}
+          onDragEnd={() => setDragging(undefined)}
+        >
+          <td>
+            <IconButtonV2
+              variant="ghost-muted"
+              size="small"
+              icon={<Icon name="edit" />}
+              aria-label={language.t("operator.permissionEditor.editRule", { index: index() + 1 })}
+              onClick={(event) =>
+                (event.currentTarget.closest("tr")?.querySelector("input") as HTMLInputElement | null)?.focus()
+              }
+            />
+          </td>
+          <LineNumber line={line()} mode={props.mode} />
+          <td>
+            <TextInputV2
+              appearance="base"
+              value={rule().permission}
+              list={list}
+              aria-label={language.t("operator.permissionEditor.permissionOf", { index: index() + 1 })}
+              onChange={(event) => update(index(), { permission: event.currentTarget.value.trim() })}
+            />
+          </td>
+          <td>
+            <TextInputV2
+              appearance="base"
+              value={rule().pattern}
+              placeholder="*"
+              aria-label={language.t("operator.permissionEditor.patternOf", { index: index() + 1 })}
+              onChange={(event) => update(index(), { pattern: event.currentTarget.value.trim() || "*" })}
+            />
+          </td>
+          <td data-slot="operator-rule-action">
+            <SelectV2<Action>
+              appearance="base"
+              aria-label={language.t("operator.permissionEditor.actionOf", { index: index() + 1 })}
+              options={ACTIONS}
+              current={rule().action}
+              label={(action) => language.t(`operator.permission.action.${action}`)}
+              onSelect={(action) => action && update(index(), { action })}
+            />
+          </td>
+          <td>
+            <span class="inline-flex items-center gap-1 flex-wrap">
+              <Show when={origins()[index()]} fallback={<Tag>{language.t("operator.permissionEditor.newRule")}</Tag>}>
+                {(row) => (
+                  <span
+                    title={
+                      row().from.kind === "session-task" ? language.t("operator.permissionEditor.taskNote") : undefined
+                    }
+                  >
+                    {origin(row().from)}
+                  </span>
+                )}
+              </Show>
+              <LineMarks line={line()} />
+            </span>
+          </td>
+          <td data-align="end">
+            <span class="inline-flex items-center">
+              <IconButtonV2
+                variant="ghost-muted"
+                size="small"
+                aria-label={language.t("operator.rules.up")}
+                icon={<Icon name="arrow-up" />}
+                disabled={index() === 0}
+                onClick={() => move(index(), index() - 1)}
+              />
+              <IconButtonV2
+                variant="ghost-muted"
+                size="small"
+                aria-label={language.t("operator.permissionEditor.down")}
+                icon={<Icon name="arrow-down-to-line" />}
+                disabled={index() === props.value.length - 1}
+                onClick={() => move(index(), index() + 1)}
+              />
+              <IconButtonV2
+                variant="ghost-muted"
+                size="small"
+                aria-label={language.t("operator.rules.remove")}
+                icon={<Icon name="trash" />}
+                onClick={() => remove(index())}
+              />
+            </span>
+          </td>
+        </tr>
+        <Show when={hint()}>
+          {(kind) => (
+            <tr data-slot="operator-rule-hint" hidden={!shown(rule().permission)}>
+              <td />
+              <td />
+              <td colSpan={5}>
+                <p data-slot="operator-note" data-warning="" data-testid="rule-hint">
+                  {language.t(`operator.permissionEditor.hint.${kind()}`, { permission: rule().permission })}
+                </p>
+              </td>
+            </tr>
+          )}
+        </Show>
+      </>
+    )
+  }
 
   return (
     <div data-component="operator-permission-editor" data-testid="permission-editor">
-      <p data-slot="operator-note">{language.t("operator.permissionEditor.order")}</p>
+      <p data-slot="operator-note">
+        {language.t("operator.permissionEditor.order")}{" "}
+        {language.t(`operator.permissionEditor.changeNote.${props.mode}`)}
+      </p>
       <Show when={props.filter}>
         <p data-slot="operator-note">
           {language.t("operator.permissionEditor.filtered", { permission: props.filter ?? "" })}{" "}
@@ -141,6 +350,7 @@ export function PermissionEditor(props: {
               <th scope="col" aria-label={language.t("operator.permissionEditor.editColumn")} />
               <th scope="col" data-align="end">
                 #
+                <FieldHelp field="#" text={language.t("operator.help.ruleNumber")} />
               </th>
               <th scope="col">{language.t("operator.column.permission")}</th>
               <th scope="col">{language.t("operator.column.pattern")}</th>
@@ -156,151 +366,12 @@ export function PermissionEditor(props: {
             </tr>
           </thead>
           <tbody>
-            <Index each={before()}>{(row, index) => Locked(row(), () => index + 1)}</Index>
-            <Index each={props.value}>
-              {(rule, index) => {
-                const hint = () => hintOf(rule(), props.forms)
-                return (
-                  <>
-                    <tr
-                      data-editable=""
-                      data-duplicate={duplicate(index) ? "" : undefined}
-                      data-changed={changed(index) ? "" : undefined}
-                      data-dragging={dragging() === index ? "" : undefined}
-                      hidden={!shown(rule().permission)}
-                      draggable="true"
-                      onDragStart={(event) => {
-                        // Inputs keep their own drag (text selection); the row moves from its handle.
-                        if ((event.target as HTMLElement).closest("input")) return event.preventDefault()
-                        setDragging(index)
-                        event.dataTransfer?.setData("text/plain", String(index))
-                      }}
-                      onDragOver={(event) => {
-                        if (dragging() === undefined) return
-                        event.preventDefault()
-                      }}
-                      onDrop={(event) => {
-                        event.preventDefault()
-                        const from = dragging()
-                        setDragging(undefined)
-                        if (from !== undefined && from !== index) move(from, index)
-                      }}
-                      onDragEnd={() => setDragging(undefined)}
-                    >
-                      <td>
-                        <IconButtonV2
-                          variant="ghost-muted"
-                          size="small"
-                          icon={<Icon name="edit" />}
-                          aria-label={language.t("operator.permissionEditor.editRule", { index: index + 1 })}
-                          onClick={(event) =>
-                            (
-                              event.currentTarget.closest("tr")?.querySelector("input") as HTMLInputElement | null
-                            )?.focus()
-                          }
-                        />
-                      </td>
-                      <td data-align="end">{before().length + index + 1}</td>
-                      <td>
-                        <TextInputV2
-                          appearance="base"
-                          value={rule().permission}
-                          list={list}
-                          aria-label={language.t("operator.permissionEditor.permissionOf", { index: index + 1 })}
-                          onChange={(event) => update(index, { permission: event.currentTarget.value.trim() })}
-                        />
-                      </td>
-                      <td>
-                        <TextInputV2
-                          appearance="base"
-                          value={rule().pattern}
-                          placeholder="*"
-                          aria-label={language.t("operator.permissionEditor.patternOf", { index: index + 1 })}
-                          onChange={(event) => update(index, { pattern: event.currentTarget.value.trim() || "*" })}
-                        />
-                      </td>
-                      <td>
-                        <SelectV2<Action>
-                          appearance="base"
-                          aria-label={language.t("operator.permissionEditor.actionOf", { index: index + 1 })}
-                          options={ACTIONS}
-                          current={rule().action}
-                          label={(action) => language.t(`operator.permission.action.${action}`)}
-                          onSelect={(action) => action && update(index, { action })}
-                        />
-                      </td>
-                      <td>
-                        <span class="inline-flex items-center gap-1 flex-wrap">
-                          <Show
-                            when={origins()[index]}
-                            fallback={<Tag>{language.t("operator.permissionEditor.newRule")}</Tag>}
-                          >
-                            {(row) => (
-                              <span
-                                title={
-                                  row().from.kind === "session-task"
-                                    ? language.t("operator.permissionEditor.taskNote")
-                                    : undefined
-                                }
-                              >
-                                {origin(row().from)}
-                              </span>
-                            )}
-                          </Show>
-                          <Show when={duplicate(index)}>
-                            <Tag data-warning="">{language.t("operator.permissionEditor.replaced")}</Tag>
-                          </Show>
-                        </span>
-                      </td>
-                      <td data-align="end">
-                        <span class="inline-flex items-center">
-                          <IconButtonV2
-                            variant="ghost-muted"
-                            size="small"
-                            aria-label={language.t("operator.rules.up")}
-                            icon={<Icon name="arrow-up" />}
-                            disabled={index === 0}
-                            onClick={() => move(index, index - 1)}
-                          />
-                          <IconButtonV2
-                            variant="ghost-muted"
-                            size="small"
-                            aria-label={language.t("operator.permissionEditor.down")}
-                            icon={<Icon name="arrow-down-to-line" />}
-                            disabled={index === props.value.length - 1}
-                            onClick={() => move(index, index + 1)}
-                          />
-                          <IconButtonV2
-                            variant="ghost-muted"
-                            size="small"
-                            aria-label={language.t("operator.rules.remove")}
-                            icon={<Icon name="trash" />}
-                            onClick={() => set(props.value.filter((_, position) => position !== index))}
-                          />
-                        </span>
-                      </td>
-                    </tr>
-                    <Show when={hint()}>
-                      {(kind) => (
-                        <tr data-slot="operator-rule-hint" hidden={!shown(rule().permission)}>
-                          <td />
-                          <td />
-                          <td colSpan={5}>
-                            <p data-slot="operator-note" data-warning="" data-testid="rule-hint">
-                              {language.t(`operator.permissionEditor.hint.${kind()}`, {
-                                permission: rule().permission,
-                              })}
-                            </p>
-                          </td>
-                        </tr>
-                      )}
-                    </Show>
-                  </>
-                )
-              }}
-            </Index>
-            <Index each={after()}>
-              {(row, index) => Locked(row(), () => before().length + props.value.length + index + 1)}
+            <Index each={lines()}>
+              {(line) => (
+                <Show when={line().kind === "own"} fallback={Locked(line)}>
+                  {Own(line)}
+                </Show>
+              )}
             </Index>
           </tbody>
         </table>
@@ -421,10 +492,71 @@ export function editableRules(rows: ReadonlyArray<OperatorPermissionRow>, part: 
     .map((row) => ({ permission: row.permission, pattern: row.pattern, action: row.action }))
 }
 
-// A saved rule's pattern (OpenCode expands `~` and `$HOME` to the home folder) and the pattern as
-// written.
-function samePattern(saved: string, written: string) {
-  if (saved === written) return true
-  const home = written.match(/^(~|\$HOME)(\/.*)?$/)
-  return !!home && saved.endsWith(home[2] ?? "") && saved.length > (home[2] ?? "").length
+// A rule's place in evaluation order. A change shown on another rule's line keeps the number of where
+// it is checked.
+function LineNumber(props: { line: Line<OperatorPermissionRow>; mode: "agent" | "session" }) {
+  const language = useLanguage()
+  const moved = () => props.line.kind === "locked" && props.line.own !== undefined
+  return (
+    <td
+      data-align="end"
+      title={
+        moved()
+          ? language.t(`operator.permissionEditor.changedNumber.${props.mode}`, { number: props.line.number })
+          : undefined
+      }
+    >
+      {props.line.number}
+    </td>
+  )
+}
+
+function ActionTag(props: { action: Action }) {
+  const language = useLanguage()
+  return (
+    <Tag variant={props.action === "allow" ? "accent" : "neutral"}>
+      {language.t(`operator.permission.action.${props.action}`)}
+    </Tag>
+  )
+}
+
+// What a line says about rules shown above it that are checked after it (see permission-lines.ts).
+export function LineMarks(props: { line: Line<OperatorPermissionRow> }) {
+  const language = useLanguage()
+  const numbers = () => (props.line.partly ?? []).map((number) => `#${number}`).join(", ")
+  return (
+    <>
+      <Show when={props.line.replacedBy}>
+        {(number) => (
+          <Tag data-warning="" title={language.t("operator.permissionEditor.replacedByHint", { number: number() })}>
+            {language.t("operator.permissionEditor.replacedBy", { number: number() })}
+          </Tag>
+        )}
+      </Show>
+      <Show when={props.line.partly?.length}>
+        <Tag data-warning="" title={language.t("operator.permissionEditor.partlyHint", { numbers: numbers() })}>
+          {language.t("operator.permissionEditor.partly", { numbers: numbers() })}
+        </Tag>
+      </Show>
+    </>
+  )
+}
+
+// Where a changed rule's line comes from: who made the change (`by`, the saved change's origin; none
+// while it is not saved), and the rule it changes.
+export function useChangedText() {
+  const language = useLanguage()
+  const origin = useOriginText()
+  return (mode: "agent" | "session", row: OperatorPermissionRow, by?: OperatorPermissionRow["from"]): string => {
+    const was = { action: language.t(`operator.permission.action.${row.action}`), origin: origin(row.from) }
+    return by
+      ? language.t("operator.permissionEditor.changedBy", { ...was, by: origin(by) })
+      : language.t(`operator.permissionEditor.changedFrom.${mode}`, was)
+  }
+}
+
+// A rule's lines for the read-only list: `rows` is the saved full list with the editable part at
+// `start`..`end` (the agent's own rules).
+export function savedLines(rows: ReadonlyArray<OperatorPermissionRow>, part: { start: number; end: number }) {
+  return linesOf(rows.slice(0, part.start), rows.slice(part.start, part.end), rows.slice(part.end))
 }

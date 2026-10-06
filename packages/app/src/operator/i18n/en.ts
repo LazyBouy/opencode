@@ -728,9 +728,31 @@ export const dict = {
   "operator.permissionEditor.filtered": "Showing the rules for {{permission}} (and rules for every permission).",
   "operator.permissionEditor.showAll": "Show all",
   "operator.permissionEditor.openConfig": "Open in Config",
-  "operator.permissionEditor.override": "Override",
-  "operator.permissionEditor.overrideHint":
-    "Override: adds a rule with the same permission and pattern to the rules you can edit, where it wins",
+  "operator.permissionEditor.changeRule": "Change rule #{{number}}",
+  "operator.permissionEditor.changeHint.agent": "Change this rule for this agent",
+  "operator.permissionEditor.changeHint.session": "Change this rule for this session",
+  "operator.permissionEditor.changeAction": "New action for rule #{{number}}",
+  "operator.permissionEditor.undoChange": "Undo the change to rule #{{number}}",
+  "operator.permissionEditor.notSaved": "Not saved",
+  "operator.permissionEditor.changedBy": "{{by}} · was {{action}} ({{origin}})",
+  "operator.permissionEditor.changedFrom.agent": "Changed for this agent · was {{action}} ({{origin}})",
+  "operator.permissionEditor.changedFrom.session": "Changed for this session · was {{action}} ({{origin}})",
+  "operator.permissionEditor.changedNumber.agent":
+    "Checked as rule {{number}}: a change is kept with this agent's own rules, which are checked after OpenCode's and the config's.",
+  "operator.permissionEditor.changedNumber.session":
+    "Checked as rule {{number}}: a change is kept with this session's own rules, which are checked after the agent's.",
+  "operator.permissionEditor.changeNote.agent":
+    "To change a rule, click its pencil: the change is saved with this agent's own rules and shown on the rule's line.",
+  "operator.permissionEditor.changeNote.session":
+    "To change a rule, click its pencil: the change is saved with this session's own rules and shown on the rule's line.",
+  "operator.permissionEditor.replacedBy": "Replaced by #{{number}}",
+  "operator.permissionEditor.replacedByHint":
+    "Rule #{{number}}, shown above, is checked after this one and matches every call this one does, so this rule no longer decides anything.",
+  "operator.permissionEditor.partly": "Not where {{numbers}} match",
+  "operator.permissionEditor.partlyHint":
+    "{{numbers}}, shown above, are checked after this rule: for the calls they match, they decide instead.",
+  "operator.help.ruleNumber":
+    "Where the rule is checked. Rules are checked in this order and the last one that matches wins. A changed rule stays on its line, and its number says where it is checked.",
   "operator.permissionEditor.editColumn": "Edit",
   "operator.permissionEditor.editRule": "Edit rule {{index}}",
   "operator.permissionEditor.permissionOf": "Permission of rule {{index}}",
@@ -739,13 +761,12 @@ export const dict = {
   "operator.permissionEditor.newRule": "New, not saved",
   "operator.permissionEditor.taskNote":
     "Added by task for this subagent session. Removing it gives the subagent that tool.",
-  "operator.permissionEditor.replaced": "Replaced by a later rule",
   "operator.permissionEditor.down": "Move down",
   "operator.permissionEditor.newPermission": "New rule's permission",
   "operator.permissionEditor.newPattern": "New rule's pattern",
   "operator.permissionEditor.newAction": "New rule's action",
   "operator.permissionEditor.noAgentRules":
-    "The agent has no rules of its own. Add one below, or Override a rule above.",
+    "The agent has no rules of its own. Add one below, or change a rule above with its pencil.",
   "operator.permissionEditor.sameAsAgent": "Same as the agent until you change it here.",
   "operator.permissionEditor.hint.absolute":
     "This pattern is absolute; {{permission}} checks paths relative to the project, so it matches no file in the project.",

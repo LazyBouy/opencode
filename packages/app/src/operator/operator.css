@@ -1096,6 +1096,17 @@ html[data-theme="iphi"] [data-component="operator-inspector"] {
   padding-block: 4px;
 }
 
+/* A rule from elsewhere opened on its line for a change: it reads like an editable rule. */
+[data-component="operator-permission-editor"] tr[data-locked][data-open] td {
+  color: var(--v2-text-text-base);
+  padding-block: 4px;
+}
+
+/* A rule that a rule checked after it (shown above) always decides instead of. */
+:is([data-component="operator-permission-editor"], [data-component="operator-table"]) tr[data-replaced] td code {
+  text-decoration: line-through;
+}
+
 [data-component="operator-permission-editor"] :is(tr[data-duplicate], tr[data-changed]) td {
   background: var(--v2-state-bg-warning);
 }

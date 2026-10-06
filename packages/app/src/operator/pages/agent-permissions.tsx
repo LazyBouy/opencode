@@ -13,7 +13,7 @@ import { shortPath } from "../format"
 import { useConfirm } from "../ui/confirm"
 import { DataTable } from "../ui/data-table"
 import { Field } from "../ui/field"
-import { PermissionEditor } from "../ui/permission-editor"
+import { LineMarks, PermissionEditor, savedLines, useChangedText } from "../ui/permission-editor"
 import { PermissionImpact } from "../ui/permission-impact"
 import { useOriginText } from "../ui/permission-origin"
 import { orderCheck, type Rule } from "../ui/rules"
@@ -74,8 +74,20 @@ export function AgentPermissions(props: { agent: string; directory: string }) {
     () => props.directory,
   )
   const origin = useOriginText()
-  const shown = (row: OperatorPermissionRow) =>
-    !params.aperm || row.permission === params.aperm || row.permission.includes("*")
+  const changedText = useChangedText()
+  const shown = (rule: { permission: string }) =>
+    !params.aperm || rule.permission === params.aperm || rule.permission.includes("*")
+  // A line's origin: the agent's change on a rule from elsewhere, else where its rule comes from.
+  const fromOf = (
+    rows: ReadonlyArray<OperatorPermissionRow>,
+    own: { start: number },
+    line: ReturnType<typeof savedLines>[number],
+  ) =>
+    line.kind === "locked"
+      ? line.own !== undefined
+        ? changedText("agent", line.row!, rows[own.start + line.own]!.from)
+        : origin(line.row!.from)
+      : origin(rows[own.start + line.own!]!.from)
 
   return (
     <Show
@@ -110,38 +122,50 @@ export function AgentPermissions(props: { agent: string; directory: string }) {
               <DataTable
                 columnsKey="agent-permissions"
                 label={language.t("operator.agent.tab.permissions")}
-                rows={data().rows.filter(shown)}
+                rows={savedLines(data().rows, data().own).filter((line) => shown(line.rule))}
                 empty={language.t("operator.agent.noRules")}
                 columns={[
-                  { id: "index", header: "#", width: "48px", cell: (rule) => rule.index, value: (rule) => rule.index },
+                  {
+                    id: "index",
+                    header: "#",
+                    help: language.t("operator.help.ruleNumber"),
+                    width: "48px",
+                    cell: (line) => line.number,
+                    value: (line) => line.number,
+                  },
                   {
                     id: "permission",
                     header: language.t("operator.column.permission"),
-                    cell: (rule) => <code>{rule.permission}</code>,
-                    value: (rule) => rule.permission,
+                    cell: (line) => <code>{line.rule.permission}</code>,
+                    value: (line) => line.rule.permission,
                   },
                   {
                     id: "pattern",
                     header: language.t("operator.column.pattern"),
-                    cell: (rule) => <code>{rule.pattern}</code>,
-                    value: (rule) => rule.pattern,
+                    cell: (line) => <code>{line.rule.pattern}</code>,
+                    value: (line) => line.rule.pattern,
                   },
                   {
                     id: "action",
                     header: language.t("operator.column.action"),
-                    cell: (rule) => (
-                      <Tag variant={rule.action === "allow" ? "accent" : "neutral"}>
-                        {language.t(`operator.permission.action.${rule.action}`)}
+                    cell: (line) => (
+                      <Tag variant={line.rule.action === "allow" ? "accent" : "neutral"}>
+                        {language.t(`operator.permission.action.${line.rule.action}`)}
                       </Tag>
                     ),
-                    value: (rule) => rule.action,
+                    value: (line) => line.rule.action,
                   },
                   {
                     id: "from",
                     header: language.t("operator.toolPrompt.column.from"),
                     help: language.t("operator.help.ruleFrom"),
-                    cell: (rule) => origin(rule.from),
-                    value: (rule) => origin(rule.from),
+                    cell: (line) => (
+                      <span class="inline-flex items-center gap-1 flex-wrap">
+                        {fromOf(data().rows, data().own, line)}
+                        <LineMarks line={line} />
+                      </span>
+                    ),
+                    value: (line) => String(fromOf(data().rows, data().own, line)),
                   },
                 ]}
               />

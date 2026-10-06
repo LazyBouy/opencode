@@ -31,6 +31,15 @@ const addRule = async (page: Page, permission: string, pattern: string, action: 
   await add.getByRole("button", { name: "Add rule" }).click()
 }
 
+// Picks an action in a select named `label`.
+const choose = async (page: Page, label: string, action: string) => {
+  await page.locator(`[data-component="select-v2-root"][aria-label="${label}"] [data-component="select-v2"]`).click()
+  await page
+    .locator('[data-component="menu-v2-item"]')
+    .filter({ hasText: new RegExp(`^${action}$`, "i") })
+    .click()
+}
+
 test("the Permissions tab shows where each rule comes from, and edits the agent's own rules in place", async ({
   page,
 }) => {
@@ -78,25 +87,54 @@ test("the Permissions tab shows where each rule comes from, and edits the agent'
   await expect(table.getByRole("row", { name: /~\/\*/ })).toContainText("Agent")
 })
 
-test("Override adds a rule that wins; a repeated pair and an order that grouping changes are caught", async ({
-  page,
-}) => {
+test("a rule from elsewhere is changed on its own line; a repeated pair is caught", async ({ page }) => {
   const state = await mockOperator(page)
   await page.goto(`/operator/agents/build${dir}&tab=permissions`)
   await page.getByRole("button", { name: "Edit permissions" }).click()
   const editor = page.getByTestId("permission-editor")
-  await editor
-    .getByRole("row", { name: /webfetch/ })
-    .getByRole("button", { name: "Override" })
-    .click()
-  await expect(editor.getByRole("combobox", { name: "Permission of rule 1" })).toHaveValue("webfetch")
+  const webfetch = editor.locator("tr[data-locked]", { hasText: "webfetch" })
 
-  // The same pair again: the later one replaces the earlier one, and Save waits until it is removed.
-  await addRule(page, "webfetch", "*", "Deny")
+  // The pencil opens the same line for a change; no line is added.
+  await webfetch.getByRole("button", { name: "Change rule #4" }).click()
+  await choose(page, "New action for rule #4", "Deny")
+  await expect(webfetch).toContainText("Changed for this agent · was Ask (Config permission")
+  await expect(webfetch).toContainText("Not saved")
+  await expect(editor.locator("tr[data-editable]")).toHaveCount(0)
+  await expect(editor.locator("tr", { hasText: "webfetch" })).toHaveCount(1)
+  // Its number says where it is checked: with the agent's own rules, after the config's.
+  await expect(webfetch.locator("td").nth(1)).toHaveText("5")
+
+  // Undo: the line is the config's rule again.
+  await webfetch.getByRole("button", { name: "Undo the change to rule #5" }).click()
+  await expect(webfetch).toContainText("Config permission")
+  await expect(webfetch.getByRole("button", { name: "Change rule #4" })).toBeVisible()
+
+  // Changed again, then the same pair added below: the later one replaces the earlier one, which
+  // becomes a line of its own, and Save waits until it is removed.
+  await webfetch.getByRole("button", { name: "Change rule #4" }).click()
+  await choose(page, "New action for rule #4", "Deny")
+  await addRule(page, "webfetch", "*", "Allow")
   await expect(page.getByTestId("permission-duplicates")).toContainText("the later one replaces the earlier one")
+  await expect(webfetch).toContainText("Allow")
+  await expect(editor.locator("tr[data-editable]")).toContainText("Replaced by #6")
   await expect(page.getByRole("button", { name: "Save permissions" })).toBeDisabled()
   await page.getByRole("button", { name: "Remove the earlier one" }).click()
   await expect(page.getByTestId("permission-duplicates")).toHaveCount(0)
+  await expect(editor.locator("tr[data-editable]")).toHaveCount(0)
+
+  await page.getByRole("button", { name: "Save permissions" }).click()
+  await expect.poll(() => state.permissionWrites.length).toBe(1)
+  expect(state.permissionWrites[0].body.rules).toEqual([{ permission: "webfetch", pattern: "*", action: "allow" }])
+  // Saved: the list shows the change on the config rule's line.
+  const table = page.getByRole("table", { name: "Permissions" })
+  await expect(table.getByRole("row", { name: /webfetch/ })).toHaveCount(1)
+  await expect(table.getByRole("row", { name: /webfetch/ })).toContainText("was Ask (Config permission")
+})
+
+test("an order that grouping changes is caught", async ({ page }) => {
+  const state = await mockOperator(page)
+  await page.goto(`/operator/agents/build${dir}&tab=permissions`)
+  await page.getByRole("button", { name: "Edit permissions" }).click()
 
   // read *, then * *, then read *.md: saved grouped, read's rules come first, which changes results.
   await addRule(page, "read", "*", "Deny")
