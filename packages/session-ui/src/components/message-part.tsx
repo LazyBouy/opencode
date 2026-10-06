@@ -607,6 +607,11 @@ function taskSession(
 
 const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
 const HIDDEN_TOOLS = new Set(["todowrite"])
+// fork: the session page's Detailed view (app operator/session-views sets these) also shows what the
+// chat hides: reasoning whatever the setting, hidden tools, and after a part, a step's marker
+export const partView: { detailed: () => boolean; after?: (props: MessagePartProps) => JSX.Element } = {
+  detailed: () => false,
+}
 
 function list<T>(value: T[] | undefined | null, fallback: T[]) {
   if (Array.isArray(value)) return value
@@ -710,13 +715,14 @@ function index<T extends { id: string }>(items: readonly T[]) {
 }
 
 export function renderable(part: PartType, showReasoningSummaries = true) {
+  const detailed = partView.detailed()
   if (part.type === "tool") {
-    if (HIDDEN_TOOLS.has(part.tool)) return false
+    if (HIDDEN_TOOLS.has(part.tool) && !detailed) return false
     if (part.tool === "question") return part.state.status !== "pending" && part.state.status !== "running"
     return true
   }
   if (part.type === "text") return !!part.text?.trim()
-  if (part.type === "reasoning") return showReasoningSummaries && !!part.text?.trim()
+  if (part.type === "reasoning") return (showReasoningSummaries || detailed) && !!part.text?.trim()
   return !!PART_MAPPING[part.type]
 }
 
@@ -1436,7 +1442,7 @@ function HighlightedText(props: { text: string; references: FilePart[]; agents: 
 
 export function Part(props: MessagePartProps) {
   const component = createMemo(() => PART_MAPPING[props.part.type])
-  const body = () => (
+  const body = () => [
     <Dynamic
       component={component()}
       part={props.part}
@@ -1451,8 +1457,9 @@ export function Part(props: MessagePartProps) {
       showAssistantCopyPartID={props.showAssistantCopyPartID}
       turnDurationMs={props.turnDurationMs}
       useV2Actions={props.useV2Actions}
-    />
-  )
+    />,
+    partView.after?.(props),
+  ]
   return (
     <Show when={component()}>
       {/* Parts projected from or about a merged external session carry provenance for styling. */}
@@ -1549,7 +1556,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const data = useData()
   const i18n = useI18n()
   const part = () => props.part as ToolPart
-  if (part().tool === "todowrite") return null
+  if (part().tool === "todowrite" && !partView.detailed()) return null
 
   const hideQuestion = createMemo(
     () => part().tool === "question" && (part().state.status === "pending" || part().state.status === "running"),

@@ -5,6 +5,7 @@ import { useTitlebarRightMount } from "@/components/titlebar"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
+import { useDetailedParts } from "./detailed"
 import { type SessionView, useSessionView, VIEWS } from "./view"
 import "./session-views.css"
 
@@ -19,6 +20,7 @@ export function SessionViewSwitch() {
   const command = useCommand()
   const view = useSessionView()
   const onSession = createMemo(() => layout.route().type === "session")
+  useDetailedParts()
 
   command.register("operator-session-views", () =>
     onSession()

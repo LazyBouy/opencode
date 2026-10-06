@@ -199,3 +199,16 @@
 [data-component="operator-call"] details > summary[data-warning] {
   color: var(--v2-state-fg-warning);
 }
+
+/* The Detailed view's marker for each model step. */
+[data-component="operator-step-marker"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+  padding: 4px 8px;
+  border-left: 2px solid var(--v2-border-border-base);
+  font-size: 12px;
+  color: var(--v2-text-text-muted);
+}

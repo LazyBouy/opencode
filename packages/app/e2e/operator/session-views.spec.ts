@@ -97,3 +97,21 @@ test("the filter shows one kind of call", async ({ page }) => {
   await transcript.getByRole("button", { name: "Title", exact: true }).click()
   await expect(transcript.getByTestId("transcript-call")).toHaveCount(1)
 })
+
+test("Detailed shows the chat with reasoning, todo updates and a marker for each model step", async ({ page }) => {
+  await page.goto(`/server/${base64Encode(fixture.serverKey)}/session/${sessionID}`)
+  await expect(page.locator('[data-timeline-row="AssistantPart"]').first()).toBeVisible()
+  await expect(page.getByText("The login form posts to the wrong route.")).toHaveCount(0)
+  await expect(page.getByTestId("step-marker")).toHaveCount(0)
+
+  await page.getByTestId("session-view-switch").getByRole("button", { name: "Detailed" }).click()
+  await expect(page).toHaveURL(/view=detailed/)
+  await expect(page.getByText("The login form posts to the wrong route.")).toBeVisible()
+  // The step's marker, after the last part of the answer, with the message's tokens and cost.
+  const marker = page.getByTestId("step-marker").last()
+  await expect(marker).toContainText("in 100")
+  await expect(marker).toContainText("out 200")
+  await expect(marker).toContainText("$0.0100")
+  // The todo update the chat hides.
+  await expect(page.getByText("Fix the route")).toBeVisible()
+})
