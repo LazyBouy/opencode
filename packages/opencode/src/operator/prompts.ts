@@ -145,9 +145,18 @@ const layer = Layer.effect(
         input.providerID && input.modelID
           ? { providerID: ProviderV2.ID.make(input.providerID), modelID: ModelV2.ID.make(input.modelID) }
           : (agent.model ?? (yield* provider.defaultModel().pipe(Effect.orDie)))
-      const model = yield* provider
-        .getModel(ref.providerID, ref.modelID)
-        .pipe(Effect.mapError(() => new NotFoundError({ message: `No model ${ref.providerID}/${ref.modelID}` })))
+      const missing = () => new NotFoundError({ message: `No model ${ref.providerID}/${ref.modelID}` })
+      const model = yield* provider.getModel(ref.providerID, ref.modelID).pipe(
+        // The agent's own model is not available here: the default model stands in (the result names it).
+        Effect.catch(() =>
+          input.providerID && input.modelID
+            ? Effect.fail(missing())
+            : provider.defaultModel().pipe(
+                Effect.flatMap((fallback) => provider.getModel(fallback.providerID, fallback.modelID)),
+                Effect.mapError(missing),
+              ),
+        ),
+      )
       // OpenCode's title, summary and compaction calls carry no generated sections, only the agent's
       // prompt.
       const helper = OperatorProfile.HELPER_DEFAULTS.has(agent.name)

@@ -280,7 +280,8 @@ unix("a per-request layer's sample says where its text came from", () =>
       const { directory } = yield* configure()
       yield* write(path.join(directory, "AGENTS.md"), "Use Bun for everything.\n")
       const triage = path.join(directory, ".opencode", "agent", "triage.md")
-      yield* write(triage, "---\nmode: primary\n---\nTriage issues.\n")
+      // Its model is not available here; the sample uses the default model.
+      yield* write(triage, "---\nmode: primary\nmodel: nowhere/missing\n---\nTriage issues.\n")
       const prompts = yield* OperatorPrompts.Service
       const base = (yield* prompts.preview({ agent: "build" })).base
 
