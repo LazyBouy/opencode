@@ -404,6 +404,20 @@ export const dict = {
   "operator.agents.mode.subagent": "Subagent",
   "operator.agents.mode.all": "Primary and subagent",
   "operator.agent.notFound": "Agent not found in this project",
+  "operator.chat.failed": "Couldn't open the chat",
+  "operator.nav.chatHint": "Chat: the default agent's main session in your project",
+  "operator.agent.mainSession": "Main session: {{title}}",
+  "operator.agent.noMainSession": "No main session yet. Open it to start one.",
+  "operator.agent.mainLabel": "Main session",
+  "operator.agent.openMain": "Open main session",
+  "operator.agent.sessionRole": "Main / active",
+  "operator.agent.main": "Main",
+  "operator.agent.active": "Active",
+  "operator.agent.makeMain": "Make main",
+  "operator.help.agentMainSession":
+    "The agent's main session in this project: where messages for the agent go unless they name a session. Chat opens the default agent's main session.",
+  "operator.help.agentSessionRole":
+    "Main: the agent's main session. Active: the session it used most recently. They can be the same session.",
   "operator.agent.notMember": "Not a member",
   "operator.agent.notMemberHint":
     "This project names its members and this agent isn't one, so it can't start sessions or get messages here. Change the members on the Projects page.",

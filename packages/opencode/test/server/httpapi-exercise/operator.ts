@@ -256,6 +256,38 @@ export const operatorScenarios: Scenario[] = [
       check(typeof body.captured === "boolean", "Last sent should say whether it was captured")
     }),
   http.protected
+    .get("/operator/agent/{name}/session-state", "operator.agentSessions.state")
+    .at((ctx) => ({ path: route("/operator/agent/{name}/session-state", { name: "build" }), headers: ctx.headers() }))
+    .json(200, (body) => {
+      object(body)
+      check(body.agent === "build", "the state should name the agent")
+    }),
+  http.protected
+    .get("/operator/agent/{name}/session-state", "operator.agentSessions.state.missing")
+    .at((ctx) => ({ path: route("/operator/agent/{name}/session-state", { name: "missing" }), headers: ctx.headers() }))
+    .status(404),
+  http.protected
+    .put("/operator/agent/{name}/main", "operator.agentSessions.setMain")
+    .mutating()
+    .at((ctx) => ({
+      path: route("/operator/agent/{name}/main", { name: "build" }),
+      headers: ctx.headers(),
+      body: { sessionID: "" },
+    }))
+    .json(200, (body) => {
+      object(body)
+      check(body.main === undefined, "an empty session clears the main session")
+    }),
+  http.protected
+    .post("/operator/main-session", "operator.agentSessions.mainSession")
+    .mutating()
+    .at((ctx) => ({ path: "/operator/main-session?agent=build", headers: ctx.headers() }))
+    .json(200, (body) => {
+      object(body)
+      object(body.session)
+      check(typeof body.session.id === "string", "the main session should be made")
+    }),
+  http.protected
     .get("/operator/agent/{name}/permissions", "operator.agentPermissions.get")
     .at((ctx) => ({ path: route("/operator/agent/{name}/permissions", { name: "build" }), headers: ctx.headers() }))
     .json(200, (body) => {

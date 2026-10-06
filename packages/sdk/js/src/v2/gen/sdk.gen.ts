@@ -130,6 +130,12 @@ import type {
   OperatorAgentPromptUpdateResponses,
   OperatorAgentRemoveErrors,
   OperatorAgentRemoveResponses,
+  OperatorAgentSessionsMainSessionErrors,
+  OperatorAgentSessionsMainSessionResponses,
+  OperatorAgentSessionsSetMainErrors,
+  OperatorAgentSessionsSetMainResponses,
+  OperatorAgentSessionsStateErrors,
+  OperatorAgentSessionsStateResponses,
   OperatorAgentUpdateErrors,
   OperatorAgentUpdateResponses,
   OperatorCallExportErrors,
@@ -4237,6 +4243,123 @@ export class SessionPermissions extends HeyApiClient {
   }
 }
 
+export class AgentSessions extends HeyApiClient {
+  /**
+   * An agent's main and active sessions
+   *
+   * The agent's main session in this project (kept), and its active session (the most recently used one that is not archived or a subagent's).
+   */
+  public state<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorAgentSessionsStateResponses,
+      OperatorAgentSessionsStateErrors,
+      ThrowOnError
+    >({
+      url: "/operator/agent/{name}/session-state",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Set an agent's main session
+   *
+   * Make one of the project's sessions the agent's main session, or (empty) clear it.
+   */
+  public setMain<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorAgentSessionsSetMainResponses,
+      OperatorAgentSessionsSetMainErrors,
+      ThrowOnError
+    >({
+      url: "/operator/agent/{name}/main",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Open an agent's main session
+   *
+   * The agent's main session in this project (the default agent's when none is named), made in its home folder and kept when it has none.
+   */
+  public mainSession<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      agent?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "agent" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorAgentSessionsMainSessionResponses,
+      OperatorAgentSessionsMainSessionErrors,
+      ThrowOnError
+    >({
+      url: "/operator/main-session",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Operator extends HeyApiClient {
   /**
    * Get server status
@@ -4378,6 +4501,11 @@ export class Operator extends HeyApiClient {
   private _sessionPermissions?: SessionPermissions
   get sessionPermissions(): SessionPermissions {
     return (this._sessionPermissions ??= new SessionPermissions({ client: this.client }))
+  }
+
+  private _agentSessions?: AgentSessions
+  get agentSessions(): AgentSessions {
+    return (this._agentSessions ??= new AgentSessions({ client: this.client }))
   }
 }
 

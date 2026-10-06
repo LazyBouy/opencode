@@ -7,6 +7,7 @@ import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
 import { useOperatorCommands } from "./commands"
 import { SessionInspector } from "./inspector/inspector"
+import { useOpenDefaultChat } from "./session-views/chat"
 import { SessionViewSwitch } from "./session-views/switch"
 import { ProjectGate } from "./project-gate"
 import { isActivePage, operatorPages } from "./pages"
@@ -25,6 +26,7 @@ export function OperatorSidebar() {
     createStore({ collapsed: { chat: true, operator: false } }),
   )
   useOperatorCommands()
+  const openChat = useOpenDefaultChat()
 
   const area = () => (location.pathname.startsWith("/operator") ? "operator" : "chat")
   const collapsed = () => store.collapsed[area()]
@@ -53,12 +55,17 @@ export function OperatorSidebar() {
       </div>
 
       <div data-slot="operator-sidebar-items">
+        {/* Chat opens the default agent's main session in the default project (session-views/chat.ts). */}
         <A
           href="/"
           data-slot="operator-sidebar-item"
           data-active={location.pathname === "/" ? "" : undefined}
-          title={language.t("operator.nav.chat")}
+          title={language.t("operator.nav.chatHint")}
           end
+          onClick={(event) => {
+            event.preventDefault()
+            void openChat()
+          }}
         >
           <Icon name="speech-bubble" />
           <span data-slot="operator-sidebar-label">{language.t("operator.nav.chat")}</span>

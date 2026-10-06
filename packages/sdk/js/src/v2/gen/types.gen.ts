@@ -4091,6 +4091,35 @@ export type OperatorSessionPermissionsNotFoundError = {
   }
 }
 
+export type OperatorAgentSessionRef = {
+  id: string
+  title: string
+  directory: string
+  updated: number
+}
+
+export type OperatorAgentSessionState = {
+  agent: string
+  main?: OperatorAgentSessionRef
+  active?: OperatorAgentSessionRef
+}
+
+export type OperatorAgentSessionsNotFoundError = {
+  name: "OperatorAgentSessionsNotFoundError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorMainSession = {
+  agent: string
+  session: OperatorAgentSessionRef
+  /**
+   * Made just now (the agent had no main session)
+   */
+  created: boolean
+}
+
 export type UnauthorizedError = {
   _tag: "UnauthorizedError"
   message: string
@@ -15356,6 +15385,117 @@ export type OperatorSessionPermissionsSaveResponses = {
 
 export type OperatorSessionPermissionsSaveResponse =
   OperatorSessionPermissionsSaveResponses[keyof OperatorSessionPermissionsSaveResponses]
+
+export type OperatorAgentSessionsStateData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/agent/{name}/session-state"
+}
+
+export type OperatorAgentSessionsStateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * OperatorAgentSessionsNotFoundError
+   */
+  404: OperatorAgentSessionsNotFoundError
+}
+
+export type OperatorAgentSessionsStateError = OperatorAgentSessionsStateErrors[keyof OperatorAgentSessionsStateErrors]
+
+export type OperatorAgentSessionsStateResponses = {
+  /**
+   * The agent's main and active sessions
+   */
+  200: OperatorAgentSessionState
+}
+
+export type OperatorAgentSessionsStateResponse =
+  OperatorAgentSessionsStateResponses[keyof OperatorAgentSessionsStateResponses]
+
+export type OperatorAgentSessionsSetMainData = {
+  body?: {
+    /**
+     * The session; an empty string: no main session
+     */
+    sessionID: string
+  }
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/agent/{name}/main"
+}
+
+export type OperatorAgentSessionsSetMainErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * OperatorAgentSessionsNotFoundError
+   */
+  404: OperatorAgentSessionsNotFoundError
+}
+
+export type OperatorAgentSessionsSetMainError =
+  OperatorAgentSessionsSetMainErrors[keyof OperatorAgentSessionsSetMainErrors]
+
+export type OperatorAgentSessionsSetMainResponses = {
+  /**
+   * The agent's main and active sessions
+   */
+  200: OperatorAgentSessionState
+}
+
+export type OperatorAgentSessionsSetMainResponse =
+  OperatorAgentSessionsSetMainResponses[keyof OperatorAgentSessionsSetMainResponses]
+
+export type OperatorAgentSessionsMainSessionData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    agent?: string
+  }
+  url: "/operator/main-session"
+}
+
+export type OperatorAgentSessionsMainSessionErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * OperatorAgentSessionsNotFoundError
+   */
+  404: OperatorAgentSessionsNotFoundError
+}
+
+export type OperatorAgentSessionsMainSessionError =
+  OperatorAgentSessionsMainSessionErrors[keyof OperatorAgentSessionsMainSessionErrors]
+
+export type OperatorAgentSessionsMainSessionResponses = {
+  /**
+   * The agent's main session
+   */
+  200: OperatorMainSession
+}
+
+export type OperatorAgentSessionsMainSessionResponse =
+  OperatorAgentSessionsMainSessionResponses[keyof OperatorAgentSessionsMainSessionResponses]
 
 export type V2HealthGetData = {
   body?: never

@@ -15541,6 +15541,239 @@
         ]
       }
     },
+    "/operator/agent/{name}/session-state": {
+      "get": {
+        "tags": ["operator agent sessions"],
+        "operationId": "operator.agentSessions.state",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The agent's main and active sessions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAgentSessionState"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorAgentSessionsNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAgentSessionsNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The agent's main session in this project (kept), and its active session (the most recently used one that is not archived or a subagent's).",
+        "summary": "An agent's main and active sessions",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.agentSessions.state({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/agent/{name}/main": {
+      "put": {
+        "tags": ["operator agent sessions"],
+        "operationId": "operator.agentSessions.setMain",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The agent's main and active sessions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAgentSessionState"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorAgentSessionsNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAgentSessionsNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Make one of the project's sessions the agent's main session, or (empty) clear it.",
+        "summary": "Set an agent's main session",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "description": "The session; an empty string: no main session"
+                  }
+                },
+                "required": ["sessionID"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.agentSessions.setMain({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/main-session": {
+      "post": {
+        "tags": ["operator agent sessions"],
+        "operationId": "operator.agentSessions.mainSession",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The agent's main session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorMainSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorAgentSessionsNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAgentSessionsNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The agent's main session in this project (the default agent's when none is named), made in its home folder and kept when it has none.",
+        "summary": "Open an agent's main session",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.agentSessions.mainSession({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "tags": ["opencode HttpApi"],
@@ -32664,6 +32897,79 @@
         "required": ["name", "data"],
         "additionalProperties": false
       },
+      "OperatorAgentSessionRef": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "directory": {
+            "type": "string"
+          },
+          "updated": {
+            "type": "number"
+          }
+        },
+        "required": ["id", "title", "directory", "updated"],
+        "additionalProperties": false
+      },
+      "OperatorAgentSessionState": {
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "main": {
+            "$ref": "#/components/schemas/OperatorAgentSessionRef"
+          },
+          "active": {
+            "$ref": "#/components/schemas/OperatorAgentSessionRef"
+          }
+        },
+        "required": ["agent"],
+        "additionalProperties": false
+      },
+      "OperatorAgentSessionsNotFoundError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorAgentSessionsNotFoundError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorMainSession": {
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "session": {
+            "$ref": "#/components/schemas/OperatorAgentSessionRef"
+          },
+          "created": {
+            "type": "boolean",
+            "description": "Made just now (the agent had no main session)"
+          }
+        },
+        "required": ["agent", "session", "created"],
+        "additionalProperties": false
+      },
       "UnauthorizedError": {
         "type": "object",
         "properties": {
@@ -46352,6 +46658,10 @@
     {
       "name": "operator session permissions",
       "description": "Session permission routes."
+    },
+    {
+      "name": "operator agent sessions",
+      "description": "Agent session routes."
     },
     {
       "name": "opencode HttpApi",

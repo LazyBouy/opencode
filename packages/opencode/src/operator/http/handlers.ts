@@ -11,6 +11,7 @@ import { operatorToolPromptHandlers } from "./handlers/tool-prompt"
 import { operatorCallHandlers } from "./handlers/calls"
 import { operatorAgentPermissionsHandlers } from "./handlers/agent-permissions"
 import { operatorSessionPermissionsHandlers } from "./handlers/session-permissions"
+import { operatorAgentSessionsHandlers } from "./handlers/agent-sessions"
 import { operatorTrashHandlers, operatorTrashItemHandlers } from "./handlers/trash"
 import { operatorProjectRecordHandlers } from "./handlers/project-records"
 
@@ -28,6 +29,7 @@ export const operatorHandlers = [
   operatorCallHandlers,
   operatorAgentPermissionsHandlers,
   operatorSessionPermissionsHandlers,
+  operatorAgentSessionsHandlers,
 ] as const
 export const operatorRootHandlers = [
   operatorOverviewHandlers,

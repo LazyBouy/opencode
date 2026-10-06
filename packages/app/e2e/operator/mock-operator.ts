@@ -231,6 +231,9 @@ export interface OperatorMock {
   ownRules: Record<string, Array<{ permission: string; pattern: string; action: "allow" | "ask" | "deny" }>>
   drafts: unknown[]
   projectRecordWrites: Array<Record<string, unknown>>
+  mainSessions: Record<string, string>
+  mainWrites: Array<{ agent: string; sessionID: string }>
+  mainOpens: Array<{ agent: string; directory: string | null }>
   projectRecords: Record<string, Record<string, unknown>>
   sessionPermissionWrites: Array<{ sessionID: string; body: { rules: Array<Record<string, string>> } }>
   sessionRules: Record<
@@ -268,6 +271,9 @@ export async function mockOperator(page: Page) {
     sessionRules: {},
     projectRecordWrites: [],
     projectRecords: {},
+    mainSessions: {},
+    mainWrites: [],
+    mainOpens: [],
   }
   const repositories = new Set([`${workspace}/site`])
   const listing = (path: string) => ({
@@ -395,6 +401,38 @@ export async function mockOperator(page: Page) {
       return found
         ? json(route, found)
         : json(route, { name: "OperatorCallNotFoundError", data: { message: "No call" } }, 404)
+    }
+    // Agents' main and active sessions.
+    const sessionState = url.pathname.match(/^\/operator\/agent\/([^/]+)\/(session-state|main)$/)
+    if (sessionState) {
+      const name = decodeURIComponent(sessionState[1]!)
+      if (method === "PUT") {
+        const body = route.request().postDataJSON() as { sessionID: string }
+        state.mainWrites.push({ agent: name, sessionID: body.sessionID })
+        if (body.sessionID) state.mainSessions[name] = body.sessionID
+        else delete state.mainSessions[name]
+      }
+      const ref = (id: string | undefined) => {
+        const found = sessions.find((session) => session.id === id)
+        return found
+          ? { id: found.id, title: found.title, directory: found.directory, updated: found.time.updated }
+          : undefined
+      }
+      const main = ref(state.mainSessions[name])
+      const active = ref(sessions.find((session) => session.agent === name)?.id)
+      return json(route, { agent: name, ...(main ? { main } : {}), ...(active ? { active } : {}) })
+    }
+    if (url.pathname === "/operator/main-session" && method === "POST") {
+      const agent = url.searchParams.get("agent") || "build"
+      state.mainOpens.push({ agent, directory: url.searchParams.get("directory") })
+      const id = state.mainSessions[agent] ?? "ses_op_main"
+      const created = !state.mainSessions[agent]
+      state.mainSessions[agent] = id
+      return json(route, {
+        agent,
+        created,
+        session: { id, title: `${agent} · main session`, directory, updated: now },
+      })
     }
     if (url.pathname === "/operator/project-records") {
       if (method === "PUT") {

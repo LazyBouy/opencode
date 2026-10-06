@@ -61,7 +61,7 @@ test("a folder that is not a project can be made one from its overlay on Project
   await overlay.getByRole("button", { name: "Make it a project" }).click()
   await expect.poll(() => state.prompt.writes.length).toBe(1)
   expect(state.prompt.writes[0]!.body).toEqual({ directory: notes, git: true, namespace: "opencode" })
-  await expect(overlay.getByRole("button", { name: "Edit", exact: true })).toBeVisible()
+  await expect(overlay.getByRole("button", { name: "Edit project", exact: true })).toBeVisible()
   await overlay.getByRole("button", { name: "Close" }).click()
   await expect(row).not.toContainText("Not a project")
 })

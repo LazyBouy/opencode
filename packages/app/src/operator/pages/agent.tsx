@@ -65,6 +65,30 @@ export function AgentDetail(props: { name: string; directory: string; tab: strin
         .operator.session.list({ directory: directory(), agent: props.name, limit: "100" })
         .then((result) => result.data ?? []),
   }))
+  // The agent's main session (kept) and active one (the most recently used) in this project.
+  const sessionState = useQuery(() => ({
+    queryKey: api.key("agent-session-state", directory(), props.name),
+    enabled: props.tab === "sessions",
+    queryFn: () =>
+      api
+        .client()
+        .operator.agentSessions.state({ name: props.name, directory: directory() })
+        .then((result) => result.data!),
+  }))
+  const makeMain = async (name: string, sessionID: string) => {
+    await api
+      .client()
+      .operator.agentSessions.setMain({ name, directory: directory(), sessionID }, { throwOnError: true })
+      .then(() => sessionState.refetch())
+      .catch(fail)
+  }
+  const openMain = async (name: string) => {
+    await api
+      .client()
+      .operator.agentSessions.mainSession({ directory: directory(), agent: name }, { throwOnError: true })
+      .then((result) => openSession(result.data.session.id))
+      .catch(fail)
+  }
   const locale = () => language.intl()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -228,6 +252,20 @@ export function AgentDetail(props: { name: string; directory: string; tab: strin
               <AgentPermissions agent={current().name} directory={directory()} />
             </Match>
             <Match when={props.tab === "sessions"}>
+              <div class="flex items-center justify-between gap-2 flex-wrap" data-testid="agent-main-session">
+                <p data-slot="operator-note">
+                  {sessionState.data?.main
+                    ? language.t("operator.agent.mainSession", { title: sessionState.data.main.title })
+                    : language.t("operator.agent.noMainSession")}
+                  <FieldHelp
+                    field={language.t("operator.agent.mainLabel")}
+                    text={language.t("operator.help.agentMainSession")}
+                  />
+                </p>
+                <ButtonV2 size="small" variant="outline" onClick={() => void openMain(current().name)}>
+                  {language.t("operator.agent.openMain")}
+                </ButtonV2>
+              </div>
               <DataTable
                 columnsKey="agent-sessions"
                 label={language.t("operator.agent.tab.sessions")}
@@ -237,6 +275,33 @@ export function AgentDetail(props: { name: string; directory: string; tab: strin
                 onRowClick={(session) => navigate(`/operator/sessions?session=${encodeURIComponent(session.id)}`)}
                 columns={[
                   { id: "title", header: language.t("operator.column.title"), cell: (session) => session.title },
+                  {
+                    id: "role",
+                    header: language.t("operator.agent.sessionRole"),
+                    help: language.t("operator.help.agentSessionRole"),
+                    cell: (session) => (
+                      <span class="inline-flex items-center gap-1">
+                        <Show when={sessionState.data?.main?.id === session.id}>
+                          <Tag variant="accent">{language.t("operator.agent.main")}</Tag>
+                        </Show>
+                        <Show when={sessionState.data?.active?.id === session.id}>
+                          <Tag>{language.t("operator.agent.active")}</Tag>
+                        </Show>
+                        <Show when={sessionState.data?.main?.id !== session.id && !session.parentID}>
+                          <ButtonV2
+                            size="small"
+                            variant="ghost"
+                            onClick={(event: MouseEvent) => {
+                              event.stopPropagation()
+                              void makeMain(current().name, session.id)
+                            }}
+                          >
+                            {language.t("operator.agent.makeMain")}
+                          </ButtonV2>
+                        </Show>
+                      </span>
+                    ),
+                  },
                   {
                     id: "cost",
                     optional: true,
