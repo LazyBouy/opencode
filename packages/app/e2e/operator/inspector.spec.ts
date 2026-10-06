@@ -44,3 +44,22 @@ test("the session details button only appears on session pages", async ({ page }
   await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeVisible()
   await expect(page.getByRole("button", { name: "Session details" })).toHaveCount(0)
 })
+
+test("the session details panel edits the session's own permissions, widened for the editor", async ({ page }) => {
+  await mockOpenCodeServer(page, {
+    protocol: "v1",
+    sessions: fixture.sessions.map((session) => ({ ...session })),
+    provider: fixture.provider,
+    directory: fixture.directory,
+    project: fixture.project,
+    pageMessages,
+  })
+  await mockOperator(page)
+  await page.goto(`/server/${base64Encode(fixture.serverKey)}/session/${sessionID}`)
+  await page.getByRole("button", { name: "Session details" }).click()
+  const panel = page.getByRole("complementary", { name: "Session details" })
+  const narrow = (await panel.boundingBox())!.width
+  await panel.getByRole("tab", { name: "Permissions" }).click()
+  await expect(panel.getByTestId("session-permissions")).toContainText("Same as the agent until you change it here.")
+  await expect.poll(async () => (await panel.boundingBox())!.width).toBeGreaterThan(narrow + 100)
+})

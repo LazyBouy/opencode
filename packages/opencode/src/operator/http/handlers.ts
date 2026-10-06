@@ -10,6 +10,7 @@ import { operatorPromptHandlers } from "./handlers/prompts"
 import { operatorToolPromptHandlers } from "./handlers/tool-prompt"
 import { operatorCallHandlers } from "./handlers/calls"
 import { operatorAgentPermissionsHandlers } from "./handlers/agent-permissions"
+import { operatorSessionPermissionsHandlers } from "./handlers/session-permissions"
 import { operatorTrashHandlers, operatorTrashItemHandlers } from "./handlers/trash"
 
 // Handler layers for OperatorApi (per project) and OperatorRootApi (server-wide), provided by
@@ -25,6 +26,7 @@ export const operatorHandlers = [
   operatorToolPromptHandlers,
   operatorCallHandlers,
   operatorAgentPermissionsHandlers,
+  operatorSessionPermissionsHandlers,
 ] as const
 export const operatorRootHandlers = [
   operatorOverviewHandlers,

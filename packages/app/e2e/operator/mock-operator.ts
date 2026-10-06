@@ -1,6 +1,6 @@
 import type { Page, Route } from "@playwright/test"
 import { createPromptMock, type PromptMock } from "./mock-namespaces"
-import { draftFor, lastFor, permissionsFor, toolPromptFor } from "./mock-tool-prompt"
+import { draftFor, lastFor, permissionsFor, sessionPermissionsFor, toolPromptFor } from "./mock-tool-prompt"
 
 // Responses for the fork's operator endpoints, layered over mockOpenCodeServer (later routes win).
 
@@ -229,6 +229,8 @@ export interface OperatorMock {
   permissionWrites: Array<{ agent: string; body: { scope: string; rules: Array<Record<string, string>> } }>
   ownRules: Record<string, Array<{ permission: string; pattern: string; action: "allow" | "ask" | "deny" }>>
   drafts: unknown[]
+  sessionPermissionWrites: Array<{ sessionID: string; body: { rules: Array<Record<string, string>> } }>
+  sessionRules: Record<string, Array<{ permission: string; pattern: string; action: "allow" | "ask" | "deny" }>>
 }
 
 export async function mockOperator(page: Page) {
@@ -256,6 +258,8 @@ export async function mockOperator(page: Page) {
     permissionWrites: [],
     ownRules: {},
     drafts: [],
+    sessionPermissionWrites: [],
+    sessionRules: {},
   }
   const repositories = new Set([`${workspace}/site`])
   const listing = (path: string) => ({
@@ -370,6 +374,16 @@ export async function mockOperator(page: Page) {
         return json(route, { path: `${directory}/.opencode/opencode.jsonc` })
       }
       return json(route, permissionsFor(directory, name, state.ownRules[name]))
+    }
+    const sessionPermissions = url.pathname.match(/^\/operator\/session\/([^/]+)\/permissions$/)
+    if (sessionPermissions) {
+      const id = decodeURIComponent(sessionPermissions[1]!)
+      if (method === "PUT") {
+        const body = route.request().postDataJSON() as { rules: Array<Record<string, string>> }
+        state.sessionPermissionWrites.push({ sessionID: id, body })
+        state.sessionRules[id] = body.rules as never
+      }
+      return json(route, sessionPermissionsFor(directory, id, state.sessionRules[id]))
     }
     const draft = url.pathname.match(/^\/operator\/agent\/([^/]+)\/tool-prompt\/draft$/)
     if (draft && method === "POST") {

@@ -15254,6 +15254,164 @@
         ]
       }
     },
+    "/operator/session/{sessionID}/permissions": {
+      "get": {
+        "tags": ["operator session permissions"],
+        "operationId": "operator.sessionPermissions.get",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The session's permissions for the editor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorSessionPermissions"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorSessionPermissionsNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorSessionPermissionsNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The session's agent's full list, then the session's own rules, in evaluation order, each with where it comes from (for session rules: set by you, Always allow, added by task, a client's tool switch, and when).",
+        "summary": "A session's permissions, with where each rule comes from",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.sessionPermissions.get({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "tags": ["operator session permissions"],
+        "operationId": "operator.sessionPermissions.save",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The session's permissions after the save",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorSessionPermissions"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorSessionPermissionsNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorSessionPermissionsNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Replace the session's own rules (applied after its agent's from the session's next step) and record where each came from. An empty list resets the session to its agent.",
+        "summary": "Replace a session's own permission rules",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "rules": {
+                    "$ref": "#/components/schemas/PermissionRuleset"
+                  }
+                },
+                "required": ["rules"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.sessionPermissions.save({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "tags": ["opencode HttpApi"],
@@ -32201,6 +32359,84 @@
         "required": ["name", "data"],
         "additionalProperties": false
       },
+      "OperatorSessionPermissions": {
+        "type": "object",
+        "properties": {
+          "sessionID": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "parent": {
+            "type": "boolean",
+            "description": "A subagent session (started by task)"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPermissionRow"
+            },
+            "description": "The agent's full list, then the session's own rules, in evaluation order, with origins"
+          },
+          "editable": {
+            "type": "object",
+            "properties": {
+              "start": {
+                "type": "number"
+              },
+              "end": {
+                "type": "number"
+              }
+            },
+            "required": ["start", "end"],
+            "additionalProperties": false,
+            "description": "The session's own rules: rows[start] up to (not including) rows[end]"
+          },
+          "written": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PermissionRule"
+            },
+            "description": "The session's own rules"
+          },
+          "forms": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/OperatorPermissionPatternForm"
+            }
+          },
+          "known": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["sessionID", "agent", "parent", "rows", "editable", "written", "forms", "known"],
+        "additionalProperties": false
+      },
+      "OperatorSessionPermissionsNotFoundError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorSessionPermissionsNotFoundError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
       "UnauthorizedError": {
         "type": "object",
         "properties": {
@@ -45881,6 +46117,10 @@
     {
       "name": "operator agent permissions",
       "description": "Agent permission routes."
+    },
+    {
+      "name": "operator session permissions",
+      "description": "Session permission routes."
     },
     {
       "name": "opencode HttpApi",

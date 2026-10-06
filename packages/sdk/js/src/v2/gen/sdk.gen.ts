@@ -239,6 +239,10 @@ import type {
   OperatorPromptSlots,
   OperatorSessionListErrors,
   OperatorSessionListResponses,
+  OperatorSessionPermissionsGetErrors,
+  OperatorSessionPermissionsGetResponses,
+  OperatorSessionPermissionsSaveErrors,
+  OperatorSessionPermissionsSaveResponses,
   OperatorStatsErrors,
   OperatorStatsResponses,
   OperatorStatusErrors,
@@ -4082,6 +4086,87 @@ export class AgentPermissions extends HeyApiClient {
   }
 }
 
+export class SessionPermissions extends HeyApiClient {
+  /**
+   * A session's permissions, with where each rule comes from
+   *
+   * The session's agent's full list, then the session's own rules, in evaluation order, each with where it comes from (for session rules: set by you, Always allow, added by task, a client's tool switch, and when).
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorSessionPermissionsGetResponses,
+      OperatorSessionPermissionsGetErrors,
+      ThrowOnError
+    >({
+      url: "/operator/session/{sessionID}/permissions",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Replace a session's own permission rules
+   *
+   * Replace the session's own rules (applied after its agent's from the session's next step) and record where each came from. An empty list resets the session to its agent.
+   */
+  public save<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      rules?: PermissionRuleset
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "rules" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorSessionPermissionsSaveResponses,
+      OperatorSessionPermissionsSaveErrors,
+      ThrowOnError
+    >({
+      url: "/operator/session/{sessionID}/permissions",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Operator extends HeyApiClient {
   /**
    * Get server status
@@ -4213,6 +4298,11 @@ export class Operator extends HeyApiClient {
   private _agentPermissions?: AgentPermissions
   get agentPermissions(): AgentPermissions {
     return (this._agentPermissions ??= new AgentPermissions({ client: this.client }))
+  }
+
+  private _sessionPermissions?: SessionPermissions
+  get sessionPermissions(): SessionPermissions {
+    return (this._sessionPermissions ??= new SessionPermissions({ client: this.client }))
   }
 }
 

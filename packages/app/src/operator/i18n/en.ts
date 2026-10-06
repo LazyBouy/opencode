@@ -228,6 +228,7 @@ export const dict = {
   "operator.sessionView.conversation": "Conversation",
   "operator.sessionView.details": "Details",
   "operator.sessionView.subagents": "Subagents",
+  "operator.sessionView.permissions": "Permissions",
   "operator.sessionView.maximize": "Maximize",
   "operator.sessionView.archived": "Archived",
   "operator.sessionView.you": "You",
@@ -578,6 +579,15 @@ export const dict = {
   "operator.impact.byRule": "by rule #{{rule}}",
   "operator.impact.descriptionChanged": "{{name}}'s description changes:",
   "operator.impact.size": "{{chars}} characters ({{tokens}} tokens, estimated) · {{total}} characters in all",
+  "operator.sessionPermissions.about":
+    "This session's own rules come after {{agent}}'s rules, so they win. With none, the session is like its agent, and later changes to the agent still reach it. Changes apply from the session's next step.",
+  "operator.sessionPermissions.save": "Save session rules",
+  "operator.sessionPermissions.saved": "Session rules saved",
+  "operator.sessionPermissions.reset": "Reset to agent",
+  "operator.sessionPermissions.resetTitle": "Reset this session to its agent?",
+  "operator.sessionPermissions.resetBody":
+    "Every rule of this session is removed, including Always allow answers and rules added by task. The session then follows its agent's rules.",
+  "operator.inspector.permissions": "Permissions",
   "operator.agentPermissions.edit": "Edit permissions",
   "operator.agentPermissions.save": "Save permissions",
   "operator.agentPermissions.scope": "Save to",

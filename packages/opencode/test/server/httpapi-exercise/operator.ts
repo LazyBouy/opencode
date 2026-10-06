@@ -302,6 +302,40 @@ export const operatorScenarios: Scenario[] = [
     }))
     .status(400),
   http.protected
+    .get("/operator/session/{sessionID}/permissions", "operator.sessionPermissions.get")
+    .seeded((ctx) => ctx.session({ title: "Permission session" }))
+    .at((ctx) => ({
+      path: route("/operator/session/{sessionID}/permissions", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => {
+      object(body)
+      array(body.rows)
+      array(body.written)
+      check(body.written.length === 0, "a new session has no rules of its own")
+    }),
+  http.protected
+    .get("/operator/session/{sessionID}/permissions", "operator.sessionPermissions.get.missing")
+    .at((ctx) => ({
+      path: route("/operator/session/{sessionID}/permissions", { sessionID: "ses_missing" }),
+      headers: ctx.headers(),
+    }))
+    .status(404),
+  http.protected
+    .put("/operator/session/{sessionID}/permissions", "operator.sessionPermissions.save")
+    .mutating()
+    .seeded((ctx) => ctx.session({ title: "Permission session" }))
+    .at((ctx) => ({
+      path: route("/operator/session/{sessionID}/permissions", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+      body: { rules: [{ permission: "webfetch", pattern: "*", action: "deny" }] },
+    }))
+    .json(200, (body) => {
+      object(body)
+      array(body.written)
+      check(body.written.length === 1, "the session's rule should be saved")
+    }),
+  http.protected
     .get("/operator/session/{sessionID}/calls", "operator.call.list")
     .at((ctx) => ({
       path: route("/operator/session/{sessionID}/calls", { sessionID: "ses_nocalls" }),

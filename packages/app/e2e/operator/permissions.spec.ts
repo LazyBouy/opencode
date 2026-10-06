@@ -131,3 +131,29 @@ test("the Edit form shows the agent's full list, not only its own rules", async 
   await expect(editor.getByRole("row", { name: /webfetch/ })).toContainText("Config permission")
   await expect(editor).toContainText("The agent has no rules of its own.")
 })
+
+test("a session's own rules: added on the Sessions page, saved with the session, and reset to its agent", async ({
+  page,
+}) => {
+  const state = await mockOperator(page)
+  await page.goto(`/operator/sessions${dir}&session=ses_op_1&stab=permissions`)
+  const panel = page.getByTestId("session-permissions")
+  await expect(panel).toContainText("Same as the agent until you change it here.")
+  await expect(panel.getByRole("row", { name: /question/ })).toContainText("OpenCode default")
+
+  await addRule(page, "webfetch", "*", "Deny")
+  await expect(panel.getByTestId("impact-tools")).toContainText("webfetch")
+  await panel.getByRole("button", { name: "Save session rules" }).click()
+  await expect.poll(() => state.sessionPermissionWrites.length).toBe(1)
+  expect(state.sessionPermissionWrites[0]).toEqual({
+    sessionID: "ses_op_1",
+    body: { rules: [{ permission: "webfetch", pattern: "*", action: "deny" }] },
+  })
+  await expect(panel.getByRole("row", { name: /webfetch \* /i }).last()).toContainText("Session · set by you")
+
+  await panel.getByRole("button", { name: "Reset to agent" }).click()
+  await page.getByRole("dialog").last().getByRole("button", { name: "Reset to agent" }).click()
+  await expect.poll(() => state.sessionPermissionWrites.length).toBe(2)
+  expect(state.sessionPermissionWrites[1].body).toEqual({ rules: [] })
+  await expect(panel).toContainText("Same as the agent until you change it here.")
+})

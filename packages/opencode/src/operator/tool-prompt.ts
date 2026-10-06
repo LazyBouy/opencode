@@ -25,6 +25,7 @@ import { OperatorPermissionRules } from "./permission-rules"
 import { OperatorProfile } from "./profile"
 import { OperatorProfileStore } from "./profile-store"
 import { OperatorProjects } from "./projects"
+import { OperatorSessionPermissions } from "./session-permissions"
 import { OperatorTools } from "./tools"
 
 // The tool prompt: the tools list a request of an agent sends, with each tool's description and
@@ -344,6 +345,7 @@ const layer = Layer.effect(
               start: labelled.rows.length,
               parent: !!session?.parentID,
               primaryTools,
+              recorded: session ? yield* Effect.promise(() => OperatorSessionPermissions.recorded(session.id)) : [],
             })),
       ]
       const agentList: Rule[] = labelled.rows.map(({ permission, pattern, action }) => ({

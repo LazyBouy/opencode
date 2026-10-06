@@ -15,9 +15,10 @@ import { formatAgo, formatCost, formatCount } from "../format"
 import { useMoveToTrash } from "../ui/confirm"
 import { DetailOverlay } from "../ui/detail-overlay"
 import { RecordField, RecordView, useRecordOverlay } from "../ui/record-overlay"
+import { SessionPermissions } from "../ui/session-permissions"
 import { requestError } from "./config-helpers"
 
-export const SESSION_TABS = ["conversation", "details", "subagents"] as const
+export const SESSION_TABS = ["conversation", "details", "subagents", "permissions"] as const
 
 // Opens a session (`session` in the URL; `stab` its section) in the overlay. `rows` are the page's
 // sessions, in order, for ‹ ›.
@@ -87,6 +88,7 @@ function SessionOverlay(props: { rows: () => ReadonlyArray<Pick<GlobalSession, "
       { id: "conversation", icon: "bubble-5" as const },
       { id: "details", icon: "eye" as const },
       { id: "subagents", icon: "subagent" as const },
+      { id: "permissions", icon: "shield" as const },
     ].map((item) => ({
       ...item,
       label: language.t(`operator.sessionView.${item.id}` as "operator.sessionView.conversation"),
@@ -164,6 +166,9 @@ function SessionOverlay(props: { rows: () => ReadonlyArray<Pick<GlobalSession, "
         }
       >
         <Switch>
+          <Match when={tab() === "permissions"}>
+            <SessionPermissions sessionID={id()} directory={folder()} />
+          </Match>
           <Match when={tab() === "conversation"}>
             <div data-component="operator-conversation">
               <For

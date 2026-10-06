@@ -4017,6 +4017,41 @@ export type OperatorAgentPermissionsInvalidError = {
   }
 }
 
+export type OperatorSessionPermissions = {
+  sessionID: string
+  agent: string
+  /**
+   * A subagent session (started by task)
+   */
+  parent: boolean
+  /**
+   * The agent's full list, then the session's own rules, in evaluation order, with origins
+   */
+  rows: Array<OperatorPermissionRow>
+  /**
+   * The session's own rules: rows[start] up to (not including) rows[end]
+   */
+  editable: {
+    start: number
+    end: number
+  }
+  /**
+   * The session's own rules
+   */
+  written: Array<PermissionRule>
+  forms: {
+    [key: string]: OperatorPermissionPatternForm
+  }
+  known: Array<string>
+}
+
+export type OperatorSessionPermissionsNotFoundError = {
+  name: "OperatorSessionPermissionsNotFoundError"
+  data: {
+    message: string
+  }
+}
+
 export type UnauthorizedError = {
   _tag: "UnauthorizedError"
   message: string
@@ -15144,6 +15179,80 @@ export type OperatorAgentPermissionsSaveResponses = {
 
 export type OperatorAgentPermissionsSaveResponse =
   OperatorAgentPermissionsSaveResponses[keyof OperatorAgentPermissionsSaveResponses]
+
+export type OperatorSessionPermissionsGetData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/session/{sessionID}/permissions"
+}
+
+export type OperatorSessionPermissionsGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * OperatorSessionPermissionsNotFoundError
+   */
+  404: OperatorSessionPermissionsNotFoundError
+}
+
+export type OperatorSessionPermissionsGetError =
+  OperatorSessionPermissionsGetErrors[keyof OperatorSessionPermissionsGetErrors]
+
+export type OperatorSessionPermissionsGetResponses = {
+  /**
+   * The session's permissions for the editor
+   */
+  200: OperatorSessionPermissions
+}
+
+export type OperatorSessionPermissionsGetResponse =
+  OperatorSessionPermissionsGetResponses[keyof OperatorSessionPermissionsGetResponses]
+
+export type OperatorSessionPermissionsSaveData = {
+  body?: {
+    rules: PermissionRuleset
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/session/{sessionID}/permissions"
+}
+
+export type OperatorSessionPermissionsSaveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * OperatorSessionPermissionsNotFoundError
+   */
+  404: OperatorSessionPermissionsNotFoundError
+}
+
+export type OperatorSessionPermissionsSaveError =
+  OperatorSessionPermissionsSaveErrors[keyof OperatorSessionPermissionsSaveErrors]
+
+export type OperatorSessionPermissionsSaveResponses = {
+  /**
+   * The session's permissions after the save
+   */
+  200: OperatorSessionPermissions
+}
+
+export type OperatorSessionPermissionsSaveResponse =
+  OperatorSessionPermissionsSaveResponses[keyof OperatorSessionPermissionsSaveResponses]
 
 export type V2HealthGetData = {
   body?: never

@@ -3,7 +3,7 @@ import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
 import { useQuery } from "@tanstack/solid-query"
-import { createMemo, For, onCleanup, Show } from "solid-js"
+import { createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { useTitlebarRightMount } from "@/components/titlebar"
@@ -12,6 +12,7 @@ import { useLayout } from "@/context/layout"
 import { useServerSDK } from "@/context/server-sdk"
 import { useOpenSession, useOperatorClient, usePendingPermissions } from "../data"
 import { formatAgo, formatCost, formatCount, formatDateTime } from "../format"
+import { SessionPermissions } from "../ui/session-permissions"
 import { eventSession } from "./events"
 import "../operator.css"
 
@@ -88,6 +89,7 @@ function InspectorPanel(props: { sessionID: string; onClose: () => void }) {
     refetchInterval: 10_000,
   }))
   const asks = createMemo(() => (pending.data ?? []).filter((item) => item.request.sessionID === props.sessionID))
+  const [tab, setTab] = createSignal("overview")
 
   // Keep the most recent events of this session, newest first.
   const stop = serverSdk().event.listen((event) => {
@@ -101,7 +103,12 @@ function InspectorPanel(props: { sessionID: string; onClose: () => void }) {
   onCleanup(stop)
 
   return (
-    <aside data-component="operator-inspector" aria-label={language.t("operator.inspector.title")}>
+    // The permission editor is a table: the panel widens while it is shown.
+    <aside
+      data-component="operator-inspector"
+      data-wide={tab() === "permissions" ? "" : undefined}
+      aria-label={language.t("operator.inspector.title")}
+    >
       <header data-slot="operator-inspector-head">
         <h2 class="oc-display">{language.t("operator.inspector.title")}</h2>
         <IconButtonV2
@@ -112,7 +119,7 @@ function InspectorPanel(props: { sessionID: string; onClose: () => void }) {
           onClick={props.onClose}
         />
       </header>
-      <TabsV2 defaultValue="overview">
+      <TabsV2 value={tab()} onChange={(value: string) => setTab(value)}>
         <TabsV2.List>
           <TabsV2.Trigger value="overview">{language.t("operator.inspector.overview")}</TabsV2.Trigger>
           <TabsV2.Trigger value="approvals">
@@ -122,6 +129,7 @@ function InspectorPanel(props: { sessionID: string; onClose: () => void }) {
             {language.t("operator.inspector.subagents", { count: children.data?.length ?? 0 })}
           </TabsV2.Trigger>
           <TabsV2.Trigger value="events">{language.t("operator.inspector.events")}</TabsV2.Trigger>
+          <TabsV2.Trigger value="permissions">{language.t("operator.inspector.permissions")}</TabsV2.Trigger>
         </TabsV2.List>
         <TabsV2.Content value="overview">
           <Show when={session.data} fallback={<p data-slot="operator-note">{language.t("common.loading")}</p>}>
@@ -222,6 +230,11 @@ function InspectorPanel(props: { sessionID: string; onClose: () => void }) {
                 )}
               </For>
             </ul>
+          </Show>
+        </TabsV2.Content>
+        <TabsV2.Content value="permissions">
+          <Show when={tab() === "permissions"}>
+            <SessionPermissions sessionID={props.sessionID} directory={session.data?.directory} />
           </Show>
         </TabsV2.Content>
         <TabsV2.Content value="events">

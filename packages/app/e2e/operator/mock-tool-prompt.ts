@@ -224,3 +224,27 @@ export function draftFor(directory: string, agent: string, body: { agentRules?: 
     },
   }
 }
+
+// A session's permissions: build's list, then the session's own rules.
+export function sessionPermissionsFor(directory: string, sessionID: string, own: Rule[] = []) {
+  const agent = permissionsFor(directory, "build")
+  const start = agent.rows.length
+  return {
+    sessionID,
+    agent: "build",
+    parent: false,
+    rows: [
+      ...agent.rows,
+      ...own.map((rule, index) => ({
+        ...rule,
+        index: start + index + 1,
+        part: "session",
+        from: { kind: "session-user", time: 1_700_000_000_000 },
+      })),
+    ],
+    editable: { start, end: start + own.length },
+    written: own,
+    forms: agent.forms,
+    known: agent.known,
+  }
+}

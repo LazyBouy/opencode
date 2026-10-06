@@ -685,6 +685,10 @@ html[data-theme="iphi"] [data-component="operator-ask-group"] {
   box-shadow: var(--v2-elevation-raised, 0 8px 24px rgba(0, 0, 0, 0.12));
 }
 
+[data-component="operator-inspector"][data-wide] {
+  width: min(860px, calc(100vw - 16px));
+}
+
 html[data-theme="iphi"] [data-component="operator-inspector"] {
   background: var(--iphi-glass-strong);
   border-color: var(--iphi-glass-border);
