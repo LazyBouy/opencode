@@ -1075,6 +1075,25 @@ html[data-theme="iphi"] [data-component="operator-inspector"] {
   min-width: 0;
 }
 
+/* Fixed columns (see the colgroup), long patterns and origins wrap, so every column stays in view. */
+[data-component="operator-permission-editor"] table {
+  table-layout: fixed;
+  min-width: 620px;
+}
+
+[data-component="operator-permission-editor"] td {
+  overflow-wrap: anywhere;
+}
+
+[data-component="operator-permission-editor"] td [data-component="tag"] {
+  white-space: nowrap;
+}
+
+[data-component="operator-permission-editor"] td [data-component="text-input-v2"] {
+  width: 100%;
+  min-width: 0;
+}
+
 [data-component="operator-permission-editor"] tr[data-locked] td {
   color: var(--v2-text-text-muted);
 }

@@ -71,9 +71,10 @@ export function PermissionEditor(props: {
   }
   const add = (rule: Rule) => set([...props.value, rule])
 
-  const Locked = (row: OperatorPermissionRow, number: number) => (
+  // `number` follows the rows above it (it changes as editable rules are added or removed).
+  const Locked = (row: OperatorPermissionRow, number: () => number) => (
     <tr data-locked="" data-part={row.part} hidden={!shown(row.permission)}>
-      <td data-align="end">{number}</td>
+      <td data-align="end">{number()}</td>
       <td>
         <code>{row.permission}</code>
       </td>
@@ -123,16 +124,22 @@ export function PermissionEditor(props: {
       </datalist>
       <div data-component="operator-table">
         <table aria-label={language.t("operator.permissionEditor.label")}>
+          <colgroup>
+            <col style={{ width: "40px" }} />
+            <col style={{ width: "18%" }} />
+            <col style={{ width: "20%" }} />
+            <col style={{ width: "100px" }} />
+            <col />
+            <col style={{ width: "92px" }} />
+          </colgroup>
           <thead>
             <tr>
-              <th scope="col" style={{ width: "40px" }} data-align="end">
+              <th scope="col" data-align="end">
                 #
               </th>
               <th scope="col">{language.t("operator.column.permission")}</th>
               <th scope="col">{language.t("operator.column.pattern")}</th>
-              <th scope="col" style={{ width: "120px" }}>
-                {language.t("operator.column.action")}
-              </th>
+              <th scope="col">{language.t("operator.column.action")}</th>
               <th scope="col">
                 {language.t("operator.toolPrompt.column.from")}
                 <FieldHelp
@@ -144,7 +151,7 @@ export function PermissionEditor(props: {
             </tr>
           </thead>
           <tbody>
-            <Index each={before()}>{(row, index) => Locked(row(), index + 1)}</Index>
+            <Index each={before()}>{(row, index) => Locked(row(), () => index + 1)}</Index>
             <Index each={props.value}>
               {(rule, index) => {
                 const hint = () => hintOf(rule(), props.forms)
@@ -274,7 +281,7 @@ export function PermissionEditor(props: {
               }}
             </Index>
             <Index each={after()}>
-              {(row, index) => Locked(row(), before().length + props.value.length + index + 1)}
+              {(row, index) => Locked(row(), () => before().length + props.value.length + index + 1)}
             </Index>
           </tbody>
         </table>
