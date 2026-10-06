@@ -229,6 +229,7 @@ export const dict = {
   "operator.sessionView.details": "Details",
   "operator.sessionView.subagents": "Subagents",
   "operator.sessionView.permissions": "Permissions",
+  "operator.sessionView.openFullPage": "Open full page:",
   "operator.sessionView.maximize": "Maximize",
   "operator.sessionView.archived": "Archived",
   "operator.sessionView.you": "You",

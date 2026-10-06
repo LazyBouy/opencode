@@ -1157,3 +1157,11 @@ html[data-theme="iphi"] [data-component="operator-inspector"] {
   width: 100%;
   min-width: 96px;
 }
+
+[data-slot="operator-open-views"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}

@@ -16,6 +16,7 @@ import { useMoveToTrash } from "../ui/confirm"
 import { DetailOverlay } from "../ui/detail-overlay"
 import { RecordField, RecordView, useRecordOverlay } from "../ui/record-overlay"
 import { SessionPermissions } from "../ui/session-permissions"
+import { useOpenSessionView, VIEWS } from "../session-views/view"
 import { requestError } from "./config-helpers"
 
 export const SESSION_TABS = ["conversation", "details", "subagents", "permissions"] as const
@@ -40,6 +41,7 @@ function SessionOverlay(props: { rows: () => ReadonlyArray<Pick<GlobalSession, "
   const api = useOperatorClient()
   const queryClient = useQueryClient()
   const openSession = useOpenSession()
+  const openView = useOpenSessionView()
   const dialog = useDialog()
   const moveToTrash = useMoveToTrash()
   const [params, setParams] = useSearchParams<{ session?: string; stab?: string }>()
@@ -170,6 +172,23 @@ function SessionOverlay(props: { rows: () => ReadonlyArray<Pick<GlobalSession, "
             <SessionPermissions sessionID={id()} directory={folder()} />
           </Match>
           <Match when={tab() === "conversation"}>
+            <div data-slot="operator-open-views" data-testid="open-full-page">
+              <span data-slot="operator-note">{language.t("operator.sessionView.openFullPage")}</span>
+              <For each={VIEWS}>
+                {(name) => (
+                  <ButtonV2
+                    size="small"
+                    variant="outline"
+                    onClick={() => {
+                      dialog.close()
+                      openView(id(), name)
+                    }}
+                  >
+                    {language.t(`operator.sessionViews.${name}`)}
+                  </ButtonV2>
+                )}
+              </For>
+            </div>
             <div data-component="operator-conversation">
               <For
                 each={messages.data ?? []}

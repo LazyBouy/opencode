@@ -115,3 +115,11 @@ test("Detailed shows the chat with reasoning, todo updates and a marker for each
   // The todo update the chat hides.
   await expect(page.getByText("Fix the route")).toBeVisible()
 })
+
+test("the session overlay opens the full page in any of the three views", async ({ page }) => {
+  await page.goto(`/operator/sessions?session=ses_op_1`)
+  const buttons = page.getByTestId("open-full-page")
+  await expect(buttons).toContainText("Open full page:")
+  await buttons.getByRole("button", { name: "Transcript" }).click()
+  await expect(page).toHaveURL(/\/session\/ses_op_1\?view=transcript/)
+})
