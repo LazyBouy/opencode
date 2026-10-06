@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, type Page, test } from "@playwright/test"
 import { fixture, pageMessages } from "../smoke/session-timeline.fixture"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { directory, mockOperator } from "./mock-operator"
@@ -76,6 +76,24 @@ test("Agents lists every project's agents with their project, and New agent asks
   await page.getByRole("button", { name: "New agent" }).click()
   await page.getByRole("menuitem", { name: "smoke-project" }).click()
   await expect(page).toHaveURL(/\/operator\/agents\/new\?dir=/)
+})
+
+test("text can be selected and copied on every page and in overlays; controls stay unselectable", async ({ page }) => {
+  await mockOperator(page)
+  await page.goto(`/operator/agents/build${dir}&tab=prompt`)
+  const userSelect = (locator: ReturnType<Page["locator"]>) =>
+    locator.evaluate((element) => getComputedStyle(element).userSelect)
+
+  // A section of the prompt, in the agent's overlay: a triple click selects its text.
+  const text = page.locator('[data-slot="operator-prompt-section"] [data-component="operator-code"]').first()
+  await expect(text).toContainText("You are opencode")
+  await text.click({ clickCount: 3 })
+  expect(await page.evaluate(() => window.getSelection()?.toString() ?? "")).toContain("You are opencode")
+  expect(await userSelect(page.getByTestId("prompt-trace").first())).toBe("text")
+  // The page behind it, and the controls.
+  expect(await userSelect(page.locator('[data-slot="operator-page-description"], header p').first())).toBe("text")
+  expect(await userSelect(page.getByRole("button", { name: "Close" }).first())).toBe("none")
+  expect(await userSelect(page.getByRole("tab", { name: "Prompt" }))).toBe("none")
 })
 
 test("the project chosen on one page stays chosen on every page until it is changed", async ({ page }) => {

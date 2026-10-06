@@ -10,6 +10,7 @@ import { SessionInspector } from "./inspector/inspector"
 import { ProjectGate } from "./project-gate"
 import { isActivePage, operatorPages } from "./pages"
 import "./operator.css"
+import "./ui/selectable.css"
 
 // The iphi-style left navigation: chat, the operator pages and settings. It is an icon rail by
 // default on chat pages, to leave room for the conversation, and expanded on operator pages; each

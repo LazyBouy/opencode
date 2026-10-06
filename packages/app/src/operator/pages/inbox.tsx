@@ -110,6 +110,8 @@ export default function InboxPage() {
                           data-request={item.request.id}
                           onClick={(event) => {
                             if ((event.target as HTMLElement).closest("button")) return
+                            // Dragging across the request selects its text to copy; only a plain click opens it.
+                            if (window.getSelection()?.toString()) return
                             setParams({ ask: item.request.id })
                           }}
                         >

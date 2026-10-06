@@ -1,0 +1,34 @@
+/*
+ * Any text on any page of the web UI can be selected and copied. Upstream makes the app's content area
+ * (`select-none` in pages/layout-new.tsx) and the settings panel unselectable, as a desktop app does;
+ * this turns selection back on for text, while controls (buttons, tabs, menu items, options,
+ * switches), draggable items and the window's drag regions stay unselectable, so clicking or dragging
+ * them does not select text. It is unlayered and more specific than upstream's utility and component
+ * rules, so no upstream file changes. Loaded with the operator sidebar, which every page of the new
+ * layout has.
+ */
+html
+  body
+  *:not(
+    button,
+    button *,
+    [role="button"],
+    [role="button"] *,
+    [role="tab"],
+    [role="tab"] *,
+    [role="menuitem"],
+    [role="menuitem"] *,
+    [role="option"],
+    [role="option"] *,
+    [role="switch"],
+    [role="switch"] *,
+    [draggable="true"],
+    [draggable="true"] *,
+    [data-tauri-drag-region],
+    [data-tauri-drag-region] *,
+    [data-slot="titlebar-tab-item"],
+    [data-slot="titlebar-tab-item"] *
+  ) {
+  -webkit-user-select: text;
+  user-select: text;
+}

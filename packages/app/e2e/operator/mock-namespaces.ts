@@ -74,10 +74,6 @@ export const builtinLayers: Layer[] = [
     ),
     file: "packages/opencode/src/session/prompt/default.txt",
   },
-  {
-    ...builtin("agent.explore", "agent.explore", "identity", "agent", "builtin", "You are a file search specialist."),
-    file: "packages/opencode/src/agent/prompt/explore.txt",
-  },
   builtin("slot.base", "Base prompt (by model)", "dynamic", "dynamic", "slot"),
   builtin("slot.agent-or-base", "Agent prompt, else base prompt", "dynamic", "dynamic", "slot"),
   builtin("slot.agent", "Agent prompt", "dynamic", "dynamic", "slot"),

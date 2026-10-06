@@ -105,7 +105,11 @@ export function DataTable<T>(props: DataTableProps<T>) {
               <tr
                 data-clickable={props.onRowClick ? "" : undefined}
                 tabIndex={props.onRowClick ? 0 : undefined}
-                onClick={() => props.onRowClick?.(row)}
+                onClick={() => {
+                  // Dragging across a row selects its text to copy; only a plain click opens it.
+                  if (window.getSelection()?.toString()) return
+                  props.onRowClick?.(row)
+                }}
                 onKeyDown={(event) => {
                   if (event.key !== "Enter" || !props.onRowClick) return
                   event.preventDefault()

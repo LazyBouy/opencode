@@ -959,10 +959,6 @@ export const dict = {
     "AGENTS.md or CLAUDE.md files and config `instructions`, from the session's folder. See them on the Memory page.",
   "operator.layer.about.generated.mcp": "Instructions sent by connected MCP servers.",
   "operator.layer.about.generated.skills": "The skills the agent can load.",
-  "operator.layerSection.agent": "Agent prompts",
-  "operator.layerSection.about.agent":
-    "The own prompts of OpenCode's built-in agents (only explore has one), from OpenCode's code. The Agent prompt slots use them for that agent; a copy in a profile replaces it. Other agents' prompts are in config or their agent file.",
-  "operator.prompts.id.agent.explore": "The explore agent's own prompt (OpenCode's other agents have none).",
   "operator.profile.sourceFile": "Source file",
   "operator.help.layerSourceFile":
     "The file in OpenCode's code this built-in text comes from. A copy of it keeps its own text in the namespace.",
@@ -972,6 +968,7 @@ export const dict = {
     "{{name}} has no prompt of its own (none in config, in an agent file, or in OpenCode's Agent prompts)",
   "operator.trace.agent-file": "Its agent file: {{path}}",
   "operator.trace.agent-config": "agent.{{name}}.prompt in {{path}}",
+  "operator.trace.agent-builtin": "OpenCode's own definition of the {{name}} agent: {{path}}",
   "operator.trace.model-rule": "The base prompt for {{name}} (rule: {{detail}})",
   "operator.trace.builtin-layer": "OpenCode's built-in layer {{name}}",
   "operator.trace.copy-layer": 'The copy "{{name}}"',
@@ -1077,9 +1074,9 @@ export const dict = {
   "operator.layer.source.slot.base":
     "OpenCode's base prompt for the request's model: one of the Base Model Group layers. base.anthropic for Claude models; base.beast for GPT-4, o1 and o3; base.gpt-astra for GPT-6; base.codex for GPT Codex models; base.gpt for other GPT models; base.gemini for Gemini; base.kimi for Kimi (and the kimi-for-coding and moonshotai providers); base.trinity for Trinity; base.meta for Muse; base.default for every other model. A copy of one of them in the profile is used instead of it.",
   "operator.layer.source.slot.agent":
-    "The agent's own prompt. It comes from, the last one winning: a built-in layer of Agent prompts for OpenCode's own agents (of build, plan, general and explore, only explore has one: agent.explore, from packages/opencode/src/agent/prompt/explore.txt); agent.<name>.prompt in a config file (the global ~/.config/opencode/opencode.json(c), the project's opencode.json(c) or .opencode/opencode.json(c)); or the body of an agent file (agent/<name>.md, agents/<name>.md or modes/<name>.md in ~/.config/opencode/ or the project's .opencode/). It is empty for an agent without one: build, plan and general, unless config or an agent file gives them one. The agent's Prompt tab traces it to its file.",
+    "The agent's own prompt. It comes from, the last one winning: OpenCode's own definition of a built-in agent (in packages/opencode/src/agent/agent.ts; of build, plan, general and explore, only explore has one, from packages/opencode/src/agent/prompt/explore.txt); agent.<name>.prompt in a config file (the global ~/.config/opencode/opencode.json(c), the project's opencode.json(c) or .opencode/opencode.json(c)); or the body of an agent file (agent/<name>.md, agents/<name>.md or modes/<name>.md in ~/.config/opencode/ or the project's .opencode/). It is empty for an agent without one: build, plan and general, unless config or an agent file gives them one. The agent's Prompt tab traces it to its file.",
   "operator.layer.source.slot.agent-or-base":
-    "The agent's own prompt, as in Agent prompt (agent.explore for explore, agent.<name>.prompt in a config file, or an agent file). For an agent without one (build, plan and general, unless config or an agent file gives them one), the base prompt for the model, as in Base prompt (by model). This is OpenCode's own rule. The agent's Prompt tab traces it to its file, and names the model rule for a base prompt.",
+    "The agent's own prompt, as in Agent prompt (OpenCode's definition, as explore's from packages/opencode/src/agent/prompt/explore.txt; agent.<name>.prompt in a config file; or an agent file). For an agent without one (build, plan and general, unless config or an agent file gives them one), the base prompt for the model, as in Base prompt (by model). This is OpenCode's own rule. The agent's Prompt tab traces it to its file, and names the model rule for a base prompt.",
   "operator.layer.source.generated.environment":
     "Written by OpenCode for each request: the model's name and id, the working folder, the workspace root, whether the folder is a git repository, the platform and today's date. There is no file to edit.",
   "operator.layer.source.generated.references":

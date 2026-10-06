@@ -43,7 +43,6 @@ import { PurposeDraft } from "./purpose-draft"
 // Each Layer Definition section's icon in the overlay's menu.
 const ICONS: Record<Section, OverlayBlock["icon"]> = {
   base: "models",
-  agent: "bubble-5",
   purpose: "task",
   role: "subagent",
   identity: "brain",

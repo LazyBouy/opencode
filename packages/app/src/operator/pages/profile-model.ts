@@ -91,8 +91,6 @@ export function dynamicKey(layer: Layer | undefined) {
 // Layer Definition's sections, in order, with the type a new layer in each gets.
 export const SECTIONS: ReadonlyArray<{ id: Section; type?: string }> = [
   { id: "base", type: "identity" },
-  // Built-in agents' own prompts (explore's); a copy is used for that agent.
-  { id: "agent", type: "identity" },
   { id: "purpose", type: "purpose" },
   { id: "role", type: "role" },
   { id: "identity", type: "identity" },

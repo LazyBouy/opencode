@@ -104,7 +104,6 @@ test("the overlay's menu lists a block's records, and ‹ › move through every
   const menu = overlay.getByRole("tablist", { name: "Layer Definition" })
   for (const block of [
     "Base Model Group",
-    "Agent prompts",
     "Project Purpose",
     "Role",
     "Identity Groups",
@@ -115,15 +114,13 @@ test("the overlay's menu lists a block's records, and ‹ › move through every
     await expect(menu.getByRole("tab", { name: block })).toBeVisible()
   await expect(menu.getByRole("tab", { name: "Base Model Group" })).toHaveAttribute("aria-selected", "true")
 
-  // The last Base Model Group layer is followed by explore's prompt in Agent prompts, then the first
-  // Tool Group layer (Project Purpose, Role and Identity Groups are empty), and the menu follows.
-  await overlay.getByRole("button", { name: "Next record" }).click()
-  await expect(overlay.getByRole("heading", { name: "agent.explore" })).toBeVisible()
-  await expect(menu.getByRole("tab", { name: "Agent prompts" })).toHaveAttribute("aria-selected", "true")
+  // The last Base Model Group layer is followed by the first Tool Group layer (Project Purpose, Role
+  // and Identity Groups are empty), and the menu follows. There is no Agent prompts block: an agent's
+  // own prompt is resolved per agent, and its Prompt tab names its file.
+  await expect(menu.getByRole("tab", { name: "Agent prompts" })).toHaveCount(0)
   await overlay.getByRole("button", { name: "Next record" }).click()
   await expect(overlay.getByRole("heading", { name: "tool.read" })).toBeVisible()
   await expect(menu.getByRole("tab", { name: "Tool Group" })).toHaveAttribute("aria-selected", "true")
-  await page.keyboard.press("ArrowLeft")
   await page.keyboard.press("ArrowLeft")
   await expect(overlay.getByRole("heading", { name: "base.default" })).toBeVisible()
 
@@ -377,16 +374,12 @@ test("Agent prompt says where an agent's prompt comes from: a file agent's file,
   await expect(overlay.getByTestId("prompt-trace")).toContainText(/Its agent file: .*\/\.opencode\/agent\/triage\.md/)
 })
 
-test("explore's own prompt is a built-in layer in Agent prompts, with the file it comes from", async ({ page }) => {
+test("a built-in layer names the file in OpenCode's code its text comes from", async ({ page }) => {
   await mockOperator(page)
-  await page.goto("/operator/profile?ns=opencode&tab=layers")
-  const section = page.locator('[data-section="agent"]')
-  await expect(section).toContainText("Agent prompts")
-  await section.getByRole("row", { name: /agent\.explore/ }).click()
+  await page.goto("/operator/profile?ns=opencode&tab=layers&layer=opencode:base.default")
   const overlay = page.getByRole("dialog")
   await expect(overlay.locator('[data-slot="record-builtin"]')).toHaveText("Built in")
-  await expect(overlay.getByTestId("layer-source-file")).toHaveText("packages/opencode/src/agent/prompt/explore.txt")
-  await expect(overlay.getByRole("button", { name: "Edit a copy" })).toBeVisible()
+  await expect(overlay.getByTestId("layer-source-file")).toHaveText("packages/opencode/src/session/prompt/default.txt")
 })
 
 test("Prompt Profile has no Size; a profile's Create agent… starts in the project chosen on the operator pages", async ({
