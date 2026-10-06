@@ -968,3 +968,8 @@ html[data-theme="iphi"] [data-component="operator-inspector"] {
   flex-wrap: wrap;
   font-size: 12px;
 }
+
+/* A segmented control whose labels are longer than the default 232px fits (the agent form's Mode). */
+[data-slot="segmented-control-v2"].operator-segmented-wide {
+  width: 540px;
+}

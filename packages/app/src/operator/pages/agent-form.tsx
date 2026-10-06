@@ -217,6 +217,7 @@ export default function AgentFormPage() {
           </Field>
           <Field group label={language.t("operator.column.mode")} hint={language.t("operator.help.agentMode")}>
             <SegmentedControlV2
+              class="operator-segmented-wide"
               value={store.form.mode}
               onChange={(value) => value && set("mode", value as AgentForm["mode"])}
             >
