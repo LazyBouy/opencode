@@ -155,6 +155,8 @@ import type {
   OperatorMemoryReadResponses,
   OperatorMemoryWriteErrors,
   OperatorMemoryWriteResponses,
+  OperatorModelDefaultsErrors,
+  OperatorModelDefaultsResponses,
   OperatorNamespaceCatalogErrors,
   OperatorNamespaceCatalogResponses,
   OperatorNamespaceCopyErrors,
@@ -213,6 +215,8 @@ import type {
   OperatorPromptCatalogResponses,
   OperatorPromptItemKind,
   OperatorPromptOverride,
+  OperatorPromptPluginsErrors,
+  OperatorPromptPluginsResponses,
   OperatorPromptPreviewErrors,
   OperatorPromptPreviewResponses,
   OperatorPromptPurposeErrors,
@@ -3272,6 +3276,42 @@ export class Tool extends HeyApiClient {
   }
 }
 
+export class Model extends HeyApiClient {
+  /**
+   * Default and small model
+   *
+   * The model this project's agents use when they set none (config `model`, else the TUI's recent models, else OpenCode's own ranking), and the small model the title agent uses (config `small_model`, else OpenCode's search), each with where it is set.
+   */
+  public defaults<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorModelDefaultsResponses,
+      OperatorModelDefaultsErrors,
+      ThrowOnError
+    >({
+      url: "/operator/model",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Prompt extends HeyApiClient {
   /**
    * List tool descriptions
@@ -3310,7 +3350,7 @@ export class Prompt extends HeyApiClient {
   /**
    * Preview a system prompt
    *
-   * The system prompt an agent of this project sends with a model: its namespace, the profile it uses and why, the slots its override changed, and each section's group type and layer, with Purpose marked automatic. The model defaults to the agent's, then the configured default.
+   * The system prompt an agent of this project sends with a model: its namespace, the profile it uses and why, the slots its override changed, and each section's group type, layer and trace (how it was resolved, down to its file), with Purpose marked automatic. The model is the agent's, else the default model (the small model for title), with where it is set.
    */
   public preview<ThrowOnError extends boolean = false>(
     parameters: {
@@ -3320,6 +3360,7 @@ export class Prompt extends HeyApiClient {
       provider?: string
       model?: string
       profile?: string
+      override?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3334,6 +3375,7 @@ export class Prompt extends HeyApiClient {
             { in: "query", key: "provider" },
             { in: "query", key: "model" },
             { in: "query", key: "profile" },
+            { in: "query", key: "override" },
           ],
         },
       ],
@@ -3386,6 +3428,40 @@ export class Prompt extends HeyApiClient {
       ThrowOnError
     >({
       url: "/operator/prompt/sample",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List external plugins
+   *
+   * The plugins this project's config loads (not OpenCode's own). They run after the prompt profile and can change any prompt.
+   */
+  public plugins<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorPromptPluginsResponses,
+      OperatorPromptPluginsErrors,
+      ThrowOnError
+    >({
+      url: "/operator/prompt/plugins",
       ...options,
       ...params,
     })
@@ -3723,6 +3799,11 @@ export class Operator extends HeyApiClient {
   private _tool?: Tool
   get tool(): Tool {
     return (this._tool ??= new Tool({ client: this.client }))
+  }
+
+  private _model?: Model
+  get model(): Model {
+    return (this._model ??= new Model({ client: this.client }))
   }
 
   private _prompt?: Prompt
@@ -8303,7 +8384,7 @@ export class Session4 extends HeyApiClient {
   }
 }
 
-export class Model extends HeyApiClient {
+export class Model2 extends HeyApiClient {
   /**
    * List models
    *
@@ -9438,9 +9519,9 @@ export class V2 extends HeyApiClient {
     return (this._session ??= new Session4({ client: this.client }))
   }
 
-  private _model?: Model
-  get model(): Model {
-    return (this._model ??= new Model({ client: this.client }))
+  private _model?: Model2
+  get model(): Model2 {
+    return (this._model ??= new Model2({ client: this.client }))
   }
 
   private _provider?: Provider2

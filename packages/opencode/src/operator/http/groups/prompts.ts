@@ -15,6 +15,7 @@ export const OperatorPromptPaths = {
   preview: "/operator/prompt/preview",
   sample: "/operator/prompt/sample",
   purpose: "/operator/prompt/purpose",
+  plugins: "/operator/prompt/plugins",
 } as const
 
 export class ApiPromptNotFoundError extends Schema.ErrorClass<{
@@ -57,6 +58,10 @@ export const OperatorPromptApi = HttpApi.make("operator-prompt")
             profile: Schema.optional(Schema.String).annotate({
               description: "Preview this profile on the agent instead of its own (without its override)",
             }),
+            override: Schema.optional(Schema.String).annotate({
+              description:
+                "JSON: an override ({ group?, slots? }) to preview instead of the agent's saved one, such as unsaved edits; null for none",
+            }),
           }),
           success: described(OperatorPrompts.Preview, "The system prompt for an agent and model"),
           error: ApiPromptNotFoundError,
@@ -65,7 +70,7 @@ export const OperatorPromptApi = HttpApi.make("operator-prompt")
             identifier: "operator.prompt.preview",
             summary: "Preview a system prompt",
             description:
-              "The system prompt an agent of this project sends with a model: its namespace, the profile it uses and why, the slots its override changed, and each section's group type and layer, with Purpose marked automatic. The model defaults to the agent's, then the configured default.",
+              "The system prompt an agent of this project sends with a model: its namespace, the profile it uses and why, the slots its override changed, and each section's group type, layer and trace (how it was resolved, down to its file), with Purpose marked automatic. The model is the agent's, else the default model (the small model for title), with where it is set.",
           }),
         ),
         HttpApiEndpoint.get("sample", OperatorPromptPaths.sample, {
@@ -84,6 +89,17 @@ export const OperatorPromptApi = HttpApi.make("operator-prompt")
             summary: "Sample a layer",
             description:
               "What one layer fills in for an agent of this project and a model: a Dynamic layer's text (the agent's prompt, the base prompt for the model, the environment, skills, MCP instructions, instruction files; your Dynamic layers are written by the dynamic generator), or a fixed layer's text.",
+          }),
+        ),
+        HttpApiEndpoint.get("plugins", OperatorPromptPaths.plugins, {
+          query: WorkspaceRoutingQuery,
+          success: described(OperatorPrompts.Plugins, "External plugins config loads"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.prompt.plugins",
+            summary: "List external plugins",
+            description:
+              "The plugins this project's config loads (not OpenCode's own). They run after the prompt profile and can change any prompt.",
           }),
         ),
         HttpApiEndpoint.post("purpose", OperatorPromptPaths.purpose, {

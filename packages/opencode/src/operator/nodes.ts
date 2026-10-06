@@ -5,6 +5,7 @@ import { OperatorConfig } from "./config"
 import { OperatorFolders } from "./folders"
 import { OperatorInbox } from "./inbox"
 import { OperatorMemory } from "./memory"
+import { OperatorModels } from "./models"
 import { OperatorOverview } from "./overview"
 import { OperatorGenerate } from "./generate"
 import { OperatorHelperTexts } from "./helper-texts"
@@ -23,6 +24,7 @@ export const operatorNodes = [
   OperatorOverview.node,
   OperatorInbox.node,
   OperatorAgents.node,
+  OperatorModels.node,
   OperatorTools.node,
   OperatorPrompts.node,
   OperatorFolders.node,

@@ -17,6 +17,7 @@ import { configEntryNameFromPath } from "@/config/entry-name"
 import { InstanceState } from "@/effect/instance-state"
 import { OperatorProjects } from "./projects"
 import { OperatorConfig } from "./config"
+import { OperatorModels } from "./models"
 import { OperatorTrashFiles } from "./trash-files"
 
 export const Source = Schema.Struct({
@@ -35,6 +36,9 @@ export const Info = Schema.Struct({
   }),
   sessions: Schema.Struct({ total: Schema.Finite, lastUsed: Schema.optional(Schema.Finite) }).annotate({
     description: "Sessions in this project that use the agent",
+  }),
+  modelSource: Schema.optional(OperatorModels.Source).annotate({
+    description: "The model the agent's requests use, and where it is set (not for turned-off agents)",
   }),
 }).annotate({ identifier: "OperatorAgent" })
 export type Info = typeof Info.Type
@@ -133,6 +137,7 @@ const layer = Layer.effect(
     const agents = yield* Agent.Service
     const config = yield* Config.Service
     const operatorConfig = yield* OperatorConfig.Service
+    const models = yield* OperatorModels.Service
     const db = (yield* Database.Service).db
 
     // Same discovery as ConfigAgent.load/loadMode; later directories win, as they do when config merges.
@@ -178,20 +183,23 @@ const layer = Layer.effect(
         const used = byAgent.get(name)
         return { total: used?.total ?? 0, lastUsed: used?.lastUsed ?? undefined }
       }
-      const active = (yield* agents.list()).map((agent) => {
+      const active = yield* Effect.forEach(yield* agents.list(), (agent) => {
         const file = paths.get(agent.name)
-        return {
-          ...agent,
-          source: {
-            kind: agent.native ? ("builtin" as const) : file ? ("file" as const) : ("config" as const),
-            path: file,
-            customized: !!agent.native && (!!file || agent.name in configured),
-          },
-          home: configured[agent.name]?.home,
-          disabled: false,
-          settings: configured[agent.name] ?? {},
-          sessions: sessions(agent.name),
-        }
+        return models.resolve(agent, file).pipe(
+          Effect.map((modelSource) => ({
+            ...agent,
+            source: {
+              kind: agent.native ? ("builtin" as const) : file ? ("file" as const) : ("config" as const),
+              path: file,
+              customized: !!agent.native && (!!file || agent.name in configured),
+            },
+            home: configured[agent.name]?.home,
+            disabled: false,
+            settings: configured[agent.name] ?? {},
+            sessions: sessions(agent.name),
+            modelSource,
+          })),
+        )
       })
       // Turned-off agents are dropped by the agent service; list them so they can be turned back on.
       const disabled = Object.entries(configured)
@@ -338,7 +346,7 @@ const layer = Layer.effect(
 export const node = LayerNode.make({
   service: Service,
   layer,
-  deps: [Agent.node, Config.node, OperatorConfig.node, Database.node],
+  deps: [Agent.node, Config.node, OperatorConfig.node, OperatorModels.node, Database.node],
 })
 
 // The patch as config/frontmatter values: reset settings become null, which removes them.

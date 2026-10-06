@@ -1,6 +1,7 @@
 import { Config } from "@/config/config"
 import { EffectBridge } from "@/effect/bridge"
 import { OperatorAgents } from "@/operator/agents"
+import { OperatorModels } from "@/operator/models"
 import { OperatorTools } from "@/operator/tools"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
 import { Effect } from "effect"
@@ -12,6 +13,7 @@ export const operatorProjectHandlers = HttpApiBuilder.group(InstanceHttpApi, "op
   Effect.gen(function* () {
     const agents = yield* OperatorAgents.Service
     const tools = yield* OperatorTools.Service
+    const models = yield* OperatorModels.Service
     const config = yield* Config.Service
     const bridge = yield* EffectBridge.make()
 
@@ -22,6 +24,7 @@ export const operatorProjectHandlers = HttpApiBuilder.group(InstanceHttpApi, "op
     return handlers
       .handle("agents", () => agents.list())
       .handle("tools", () => tools.list())
+      .handle("models", () => models.defaults())
       .handle("agentCreate", (ctx) => {
         const { name, format, ...patch } = ctx.payload
         return agents

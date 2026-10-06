@@ -1147,8 +1147,12 @@ function same(kind: Kind, a: object, b: object) {
 const folders: Record<Kind, string> = { type: "types", layer: "layers", group: "groups", profile: "profiles" }
 const extensions: Record<Kind, string> = { type: ".json", layer: ".md", group: ".json", profile: ".json" }
 
-function itemFile(ns: string, kind: Kind, id: string) {
+// Where a namespace's item and record are kept (the agent page names them, to trace a prompt's text).
+export function itemFile(ns: string, kind: Kind, id: string) {
   return path.join(root(), ns, folders[kind], `${id}${extensions[kind]}`)
+}
+export function namespaceFile(ns: string) {
+  return path.join(root(), ns, "namespace.json")
 }
 
 async function writeItem(

@@ -7,6 +7,8 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { Agent } from "@/agent/agent"
+import { Config } from "@/config/config"
+import { ConfigPlugin } from "@/config/plugin"
 import { InstanceState } from "@/effect/instance-state"
 import { Provider } from "@/provider/provider"
 import { Instruction } from "@/session/instruction"
@@ -16,6 +18,7 @@ import { OperatorAgents } from "./agents"
 import { OperatorConfig } from "./config"
 import { OperatorGenerate } from "./generate"
 import { OperatorHelperTexts } from "./helper-texts"
+import { OperatorModels } from "./models"
 import { OperatorProfile } from "./profile"
 import { OperatorProfileStore } from "./profile-store"
 import { OperatorProjects } from "./projects"
@@ -46,34 +49,11 @@ export const Preview = Schema.Struct({
   }),
   group: Schema.Struct({ id: Schema.String, name: Schema.String }),
   override: Schema.Array(Schema.String).annotate({ description: "The types whose slots the agent's override changed" }),
+  modelSource: OperatorModels.Source,
   sections: Schema.Array(OperatorProfile.AssembledSection),
   system: Schema.Array(Schema.String).annotate({ description: "The system messages exactly as sent" }),
 }).annotate({ identifier: "OperatorPromptPreview" })
 export type Preview = typeof Preview.Type
-
-// Where (part of) a sample's text came from.
-export const Origin = Schema.Struct({
-  kind: Schema.Literals([
-    "agent-file",
-    "agent-config",
-    "agent-builtin",
-    "agent-none",
-    "base",
-    "written",
-    "config",
-    "file",
-    "url",
-    "mcp",
-    "skill",
-  ]).annotate({
-    description:
-      "agent-file / agent-config: the agent's prompt from its agent file or a config file; agent-builtin: OpenCode's own definition of the agent; agent-none: the agent has no prompt; base: a Base Model Group layer; written: OpenCode writes it for each request; config: a config file; file, url: an instruction file or URL; mcp: an MCP server; skill: a skill's file",
-  }),
-  path: Schema.optional(Schema.String).annotate({
-    description: "The file, URL, layer, server or skill file it came from",
-  }),
-}).annotate({ identifier: "OperatorPromptSampleOrigin" })
-export type Origin = typeof Origin.Type
 
 export const Sample = Schema.Struct({
   agent: Schema.String,
@@ -81,10 +61,21 @@ export const Sample = Schema.Struct({
   layer: Schema.String,
   text: Schema.String.annotate({ description: "What the layer fills in; empty when it adds nothing here" }),
   source: Schema.String.annotate({ description: "Where the text comes from: a file, an agent, or what wrote it" }),
-  origin: Schema.Array(Origin).annotate({
-    description: "Where this sample's text came from, for OpenCode's per-request layers",
+  modelSource: OperatorModels.Source,
+  trace: Schema.Array(OperatorProfile.TraceStep).annotate({
+    description: "How the text was resolved, down to the file it is in",
   }),
 }).annotate({ identifier: "OperatorPromptSample" })
+
+// External plugins: they run after the prompt profile's and can change any prompt.
+export const Plugins = Schema.Struct({
+  plugins: Schema.Array(
+    Schema.Struct({
+      spec: Schema.String.annotate({ description: "The plugin as config names it" }),
+      source: Schema.String.annotate({ description: "The config file that loads it" }),
+    }),
+  ),
+}).annotate({ identifier: "OperatorPromptPlugins" })
 export type Sample = typeof Sample.Type
 
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("OperatorPromptNotFound", {
@@ -99,6 +90,8 @@ export interface Interface {
     modelID?: string
     /** Preview this profile on the agent instead of its own (without its override). */
     profile?: string
+    /** An override to preview instead of the agent's saved one (unsaved edits); null for none. */
+    override?: OperatorProfile.Override | null
   }) => Effect.Effect<Preview, NotFoundError>
   /** What one layer fills in for an agent of this project: a Dynamic layer's sample. */
   readonly sample: (input: {
@@ -107,6 +100,8 @@ export interface Interface {
     providerID?: string
     modelID?: string
   }) => Effect.Effect<Sample, NotFoundError | OperatorGenerate.GenerateError>
+  /** External plugins that config loads; they can change prompts after the profile. */
+  readonly plugins: () => Effect.Effect<typeof Plugins.Type>
   /** A draft org or project purpose, written by the purpose generator. */
   readonly purpose: (input: {
     kind: "org" | "project"
@@ -128,6 +123,8 @@ const layer = Layer.effect(
     const helpers = yield* OperatorHelperTexts.Service
     const operatorAgents = yield* OperatorAgents.Service
     const operatorConfig = yield* OperatorConfig.Service
+    const models = yield* OperatorModels.Service
+    const config = yield* Config.Service
 
     // The project's tools with their own descriptions; prompt profiles override them.
     const catalog = Effect.fn("OperatorPrompts.catalog")(function* () {
@@ -141,22 +138,18 @@ const layer = Layer.effect(
       const ctx = yield* InstanceState.context
       const agent = yield* agents.get(input.agent)
       if (!agent) return yield* new NotFoundError({ message: `No agent named "${input.agent}"` })
-      const ref =
+      // The model chosen for the preview, else the one the agent's requests use (the agent's own, else
+      // the default; the small model for title), with where it is set.
+      const file = (yield* operatorAgents.list()).find((item) => item.name === agent.name)?.source.path
+      const modelSource: OperatorModels.Source =
         input.providerID && input.modelID
-          ? { providerID: ProviderV2.ID.make(input.providerID), modelID: ModelV2.ID.make(input.modelID) }
-          : (agent.model ?? (yield* provider.defaultModel().pipe(Effect.orDie)))
-      const missing = () => new NotFoundError({ message: `No model ${ref.providerID}/${ref.modelID}` })
-      const model = yield* provider.getModel(ref.providerID, ref.modelID).pipe(
-        // The agent's own model is not available here: the default model stands in (the result names it).
-        Effect.catch(() =>
-          input.providerID && input.modelID
-            ? Effect.fail(missing())
-            : provider.defaultModel().pipe(
-                Effect.flatMap((fallback) => provider.getModel(fallback.providerID, fallback.modelID)),
-                Effect.mapError(missing),
-              ),
-        ),
-      )
+          ? { model: `${input.providerID}/${input.modelID}`, source: "chosen" }
+          : yield* models.resolve(agent, file)
+      if (!modelSource.model) return yield* new NotFoundError({ message: "No model is available" })
+      const ref = Provider.parseModel(modelSource.model)
+      const model = yield* provider
+        .getModel(ProviderV2.ID.make(ref.providerID), ModelV2.ID.make(ref.modelID))
+        .pipe(Effect.mapError(() => new NotFoundError({ message: `No model ${modelSource.model}` })))
       // OpenCode's title, summary and compaction calls carry no generated sections, only the agent's
       // prompt.
       const helper = OperatorProfile.HELPER_DEFAULTS.has(agent.name)
@@ -171,7 +164,38 @@ const layer = Layer.effect(
       const key = yield* Effect.promise(() => OperatorProjects.keyOf(ctx))
       const loaded = yield* Effect.promise(() => OperatorProfileStore.forProject(key))
       const parts: OperatorProfile.Parts = { environment: env, instructions: files, mcp, skills, extra: [] }
-      return { ctx, agent, model, key, loaded, parts }
+      return { ctx, agent, model, modelSource, key, loaded, parts }
+    })
+
+    // Completes a trace with what needs reading: where an agent's prompt is defined (its agent file or a
+    // config file), the config files with references, and the files of the namespace's layers and purpose.
+    const complete = Effect.fnUntraced(function* (
+      trace: ReadonlyArray<OperatorProfile.TraceStep>,
+      ns: string,
+      agent: string,
+    ) {
+      const layered = trace.some((step) => ["builtin-layer", "copy-layer", "own-layer", "layer"].includes(step.kind))
+      const steps: OperatorProfile.TraceStep[] = []
+      for (const step of trace) {
+        steps.push(step)
+        if (step.kind === "agent-own" && !layered) {
+          const found = yield* operatorAgents.promptOrigin(agent)
+          if (found.kind === "file" && found.path) steps.push({ kind: "agent-file", path: found.path })
+          if (found.kind === "config" && found.path) steps.push({ kind: "agent-config", name: agent, path: found.path })
+          // A built-in agent's prompt that is not one of the built-in layers: its definition.
+          if (found.kind === "builtin") steps.push({ kind: "file", path: "packages/opencode/src/agent/agent.ts" })
+        }
+        if (step.kind === "references")
+          for (const source of (yield* operatorConfig.layers()).sources) {
+            const value = parse(source.text) as { references?: unknown; reference?: unknown } | undefined
+            if (value?.references !== undefined || value?.reference !== undefined)
+              steps.push({ kind: "config", path: source.path })
+          }
+        if ((step.kind === "copy-layer" || step.kind === "own-layer" || step.kind === "layer") && step.detail)
+          steps.push({ kind: "file", path: OperatorProfileStore.itemFile(ns, "layer", step.detail) })
+        if (step.kind === "org-purpose") steps.push({ kind: "file", path: OperatorProfileStore.namespaceFile(ns) })
+      }
+      return steps
     })
 
     const sample = Effect.fn("OperatorPrompts.sample")(function* (input: {
@@ -180,19 +204,22 @@ const layer = Layer.effect(
       providerID?: string
       modelID?: string
     }) {
-      const { agent, model, loaded, parts } = yield* request(input)
+      const { agent, model, modelSource, loaded, parts } = yield* request(input)
+      const ns = loaded.catalog.namespace.id
+      const head = { agent: agent.name, model: `${model.providerID}/${model.id}`, layer: input.layer, modelSource }
       // Your Dynamic layers are written by the dynamic generator, here without a session.
       const own = OperatorProfile.findLayer(loaded.catalog, input.layer)
       if (own && OperatorProfile.isWrittenDynamic(own)) {
         const text = yield* helpers.sample(own)
-        return {
-          agent: agent.name,
-          model: `${model.providerID}/${model.id}`,
-          layer: input.layer,
-          text,
-          source: own.name,
-          origin: [],
-        }
+        const trace = yield* complete(
+          [
+            { kind: "dynamic-written", name: own.name },
+            { kind: "layer", name: own.name, detail: own.id },
+          ],
+          ns,
+          agent.name,
+        )
+        return { ...head, text, source: own.name, trace }
       }
       const found = OperatorProfile.sample(
         {
@@ -206,53 +233,7 @@ const layer = Layer.effect(
         input.layer,
       )
       if (!found) return yield* new NotFoundError({ message: `No layer "${input.layer}"` })
-      const layer = OperatorProfile.findLayer(loaded.catalog, input.layer)
-      const origin =
-        layer && OperatorProfile.isPerRequest(layer)
-          ? yield* originOf((layer.replaces ?? layer.id).slice(OperatorProfile.PREFIX.length), {
-              agent,
-              parts,
-              ...found,
-            })
-          : []
-      return { agent: agent.name, model: `${model.providerID}/${model.id}`, layer: input.layer, ...found, origin }
-    })
-
-    // Where a per-request layer's text came from (`key`: the built-in's id without its prefix).
-    const originOf = Effect.fnUntraced(function* (
-      key: string,
-      input: { agent: Agent.Info; parts: OperatorProfile.Parts; text: string; source: string },
-    ) {
-      const agentPrompt = Effect.gen(function* () {
-        const found = yield* operatorAgents.promptOrigin(input.agent.name)
-        return [{ kind: `agent-${found.kind}` as const, ...(found.path ? { path: found.path } : {}) }]
-      })
-      const base = input.source ? [{ kind: "base" as const, path: input.source }] : []
-      if (key === "slot.agent") return input.text ? yield* agentPrompt : [{ kind: "agent-none" as const }]
-      if (key === "slot.agent-or-base") return input.agent.prompt?.trim() ? yield* agentPrompt : base
-      if (key === "slot.base") return base
-      if (key === "generated.environment") return [{ kind: "written" as const }]
-      if (key === "generated.references")
-        return (yield* operatorConfig.layers()).sources
-          .filter((source) => (parse(source.text) as { references?: unknown } | undefined)?.references !== undefined)
-          .map((source) => ({ kind: "config" as const, path: source.path }))
-      if (key === "generated.instructions")
-        return input.parts.instructions.map((entry) => {
-          const end = entry.indexOf("\n")
-          const from = entry.slice("Instructions from: ".length, end < 0 ? undefined : end).trim()
-          return { kind: /^https?:\/\//.test(from) ? ("url" as const) : ("file" as const), path: from }
-        })
-      if (key === "generated.mcp")
-        return [...input.text.matchAll(/<server name="([^"]+)">/g)].map((match) => ({
-          kind: "mcp" as const,
-          path: match[1]!,
-        }))
-      if (key === "generated.skills")
-        return [...input.text.matchAll(/<location>([^<]+)<\/location>/g)].map((match) => ({
-          kind: "skill" as const,
-          path: unescape(match[1]!),
-        }))
-      return [] as Origin[]
+      return { ...head, text: found.text, source: found.source, trace: yield* complete(found.trace, ns, agent.name) }
     })
 
     const preview = Effect.fn("OperatorPrompts.preview")(function* (input: {
@@ -260,8 +241,9 @@ const layer = Layer.effect(
       providerID?: string
       modelID?: string
       profile?: string
+      override?: OperatorProfile.Override | null
     }) {
-      const { ctx, agent, model, key, loaded, parts } = yield* request(input)
+      const { ctx, agent, model, modelSource, key, loaded, parts } = yield* request(input)
       if (input.profile && !OperatorProfile.profiles(loaded.catalog).some((item) => item.id === input.profile))
         return yield* new NotFoundError({
           message: `No profile "${input.profile}" in ${loaded.catalog.namespace.name}`,
@@ -270,12 +252,20 @@ const layer = Layer.effect(
         catalog: loaded.catalog,
         project: loaded.project,
         agent: { name: agent.name, prompt: agent.prompt },
-        setting: loaded.agents[agent.name],
+        // Unsaved override edits are previewed in place of the saved override.
+        setting:
+          input.override === undefined
+            ? loaded.agents[agent.name]
+            : { ...loaded.agents[agent.name], override: input.override ?? undefined },
         profile: input.profile,
         model,
         parts,
         dynamic: written(loaded.catalog),
       })
+      const ns = loaded.catalog.namespace.id
+      const sections = yield* Effect.forEach(result.sections, (section) =>
+        complete(section.trace, ns, agent.name).pipe(Effect.map((trace) => ({ ...section, trace }))),
+      )
       return {
         agent: agent.name,
         model: `${model.providerID}/${model.id}`,
@@ -285,7 +275,8 @@ const layer = Layer.effect(
         profile: result.profile,
         group: result.group,
         override: result.changed,
-        sections: result.sections,
+        modelSource,
+        sections,
         system: result.system,
       }
     })
@@ -300,7 +291,14 @@ const layer = Layer.effect(
 
     const purpose = (input: { kind: "org" | "project"; ns?: string; brief?: string }) => helpers.purpose(input)
 
-    return Service.of({ catalog, preview, sample, purpose })
+    const plugins = Effect.fn("OperatorPrompts.plugins")(function* () {
+      const origins = (yield* config.get()).plugin_origins ?? []
+      return {
+        plugins: origins.map((origin) => ({ spec: ConfigPlugin.pluginSpecifier(origin.spec), source: origin.source })),
+      }
+    })
+
+    return Service.of({ catalog, preview, sample, purpose, plugins })
   }),
 )
 
@@ -316,15 +314,7 @@ export const node = LayerNode.make({
     OperatorHelperTexts.node,
     OperatorAgents.node,
     OperatorConfig.node,
+    OperatorModels.node,
+    Config.node,
   ],
 })
-
-// Skill locations are HTML-escaped in the skills text.
-function unescape(text: string) {
-  return text
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&quot;", '"')
-    .replaceAll("&#39;", "'")
-    .replaceAll("&amp;", "&")
-}

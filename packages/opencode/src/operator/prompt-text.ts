@@ -4,6 +4,7 @@ import { Effect, Fiber } from "effect"
 import { MAX_STEPS_PROMPT } from "@opencode-ai/core/session/runner/max-steps"
 import PROMPT_GENERATE from "@/agent/generate.txt"
 import PROMPT_COMPACTION from "@/agent/prompt/compaction.txt"
+import PROMPT_EXPLORE from "@/agent/prompt/explore.txt"
 import PROMPT_SUMMARY from "@/agent/prompt/summary.txt"
 import PROMPT_TITLE from "@/agent/prompt/title.txt"
 import DYNAMIC_GENERATOR from "./helper/dynamic-generator.txt"
@@ -32,40 +33,67 @@ import { SystemPrompt } from "@/session/system"
 // Mirrors session/prompt.ts; kept in sync by the end-to-end prompt tests.
 export const STRUCTURED_OUTPUT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
-export type Kind = "base" | "reminder" | "notice" | "helper"
+export type Kind = "base" | "reminder" | "notice" | "helper" | "agent"
 
 interface Builtin {
   readonly id: string
   readonly kind: Kind
   readonly text: string
+  // The file in OpenCode's code the text comes from (repo path), shown so it can be traced.
+  readonly file?: string
 }
+
+const SESSION = "packages/opencode/src/session/prompt"
+const AGENT = "packages/opencode/src/agent"
 
 export const BUILTINS: readonly Builtin[] = [
   { id: "base", kind: "base", text: "" },
-  { id: "base.anthropic", kind: "base", text: PROMPT_ANTHROPIC },
-  { id: "base.gpt", kind: "base", text: PROMPT_GPT },
-  { id: "base.gpt-astra", kind: "base", text: PROMPT_ASTRA },
-  { id: "base.codex", kind: "base", text: PROMPT_CODEX },
-  { id: "base.beast", kind: "base", text: PROMPT_BEAST },
-  { id: "base.gemini", kind: "base", text: PROMPT_GEMINI },
-  { id: "base.kimi", kind: "base", text: PROMPT_KIMI },
-  { id: "base.meta", kind: "base", text: PROMPT_META },
-  { id: "base.trinity", kind: "base", text: PROMPT_TRINITY },
-  { id: "base.default", kind: "base", text: PROMPT_DEFAULT },
-  { id: "reminder.plan", kind: "reminder", text: PROMPT_PLAN },
-  { id: "reminder.plan-mode", kind: "reminder", text: PLAN_MODE },
-  { id: "reminder.build-switch", kind: "reminder", text: BUILD_SWITCH },
-  { id: "notice.structured-output", kind: "notice", text: STRUCTURED_OUTPUT },
-  { id: "notice.max-steps", kind: "notice", text: MAX_STEPS_PROMPT },
+  { id: "base.anthropic", kind: "base", text: PROMPT_ANTHROPIC, file: `${SESSION}/anthropic.txt` },
+  { id: "base.gpt", kind: "base", text: PROMPT_GPT, file: `${SESSION}/gpt.txt` },
+  { id: "base.gpt-astra", kind: "base", text: PROMPT_ASTRA, file: `${SESSION}/gpt-astra.txt` },
+  { id: "base.codex", kind: "base", text: PROMPT_CODEX, file: `${SESSION}/codex.txt` },
+  { id: "base.beast", kind: "base", text: PROMPT_BEAST, file: `${SESSION}/beast.txt` },
+  { id: "base.gemini", kind: "base", text: PROMPT_GEMINI, file: `${SESSION}/gemini.txt` },
+  { id: "base.kimi", kind: "base", text: PROMPT_KIMI, file: `${SESSION}/kimi.txt` },
+  { id: "base.meta", kind: "base", text: PROMPT_META, file: `${SESSION}/meta.txt` },
+  { id: "base.trinity", kind: "base", text: PROMPT_TRINITY, file: `${SESSION}/trinity.txt` },
+  { id: "base.default", kind: "base", text: PROMPT_DEFAULT, file: `${SESSION}/default.txt` },
+  { id: "reminder.plan", kind: "reminder", text: PROMPT_PLAN, file: `${SESSION}/plan.txt` },
+  { id: "reminder.plan-mode", kind: "reminder", text: PLAN_MODE, file: `${SESSION}/plan-mode.txt` },
+  { id: "reminder.build-switch", kind: "reminder", text: BUILD_SWITCH, file: `${SESSION}/build-switch.txt` },
+  {
+    id: "notice.structured-output",
+    kind: "notice",
+    text: STRUCTURED_OUTPUT,
+    file: "packages/opencode/src/session/prompt.ts",
+  },
+  {
+    id: "notice.max-steps",
+    kind: "notice",
+    text: MAX_STEPS_PROMPT,
+    file: "packages/core/src/session/runner/max-steps.ts",
+  },
   // The prompts of the agents OpenCode runs for itself (title, summary, compaction) and of the agent
   // generator's one call.
-  { id: "helper.title", kind: "helper", text: PROMPT_TITLE },
-  { id: "helper.summary", kind: "helper", text: PROMPT_SUMMARY },
-  { id: "helper.compaction", kind: "helper", text: PROMPT_COMPACTION },
-  { id: "helper.agent-generator", kind: "helper", text: PROMPT_GENERATE },
+  { id: "helper.title", kind: "helper", text: PROMPT_TITLE, file: `${AGENT}/prompt/title.txt` },
+  { id: "helper.summary", kind: "helper", text: PROMPT_SUMMARY, file: `${AGENT}/prompt/summary.txt` },
+  { id: "helper.compaction", kind: "helper", text: PROMPT_COMPACTION, file: `${AGENT}/prompt/compaction.txt` },
+  { id: "helper.agent-generator", kind: "helper", text: PROMPT_GENERATE, file: `${AGENT}/generate.txt` },
   // The fork's own helpers: they draft org and project purposes, and write your Dynamic layers.
-  { id: "helper.purpose-generator", kind: "helper", text: PURPOSE_GENERATOR },
-  { id: "helper.dynamic-generator", kind: "helper", text: DYNAMIC_GENERATOR },
+  {
+    id: "helper.purpose-generator",
+    kind: "helper",
+    text: PURPOSE_GENERATOR,
+    file: "packages/opencode/src/operator/helper/purpose-generator.txt",
+  },
+  {
+    id: "helper.dynamic-generator",
+    kind: "helper",
+    text: DYNAMIC_GENERATOR,
+    file: "packages/opencode/src/operator/helper/dynamic-generator.txt",
+  },
+  // Built-in agents' own prompts (of build, plan, general and explore, only explore has one).
+  { id: "agent.explore", kind: "agent", text: PROMPT_EXPLORE, file: `${AGENT}/prompt/explore.txt` },
 ]
 
 // Versions of built-in texts by their id, for rewriteReminder and text().
@@ -86,6 +114,28 @@ export function baseFor(model: ModelRef) {
         (item.text === chosen || (item.id === "base.meta" && chosen === renderMeta(item.text, model))),
     ) ?? BUILTINS.find((item) => item.id === "base.default")!
   )
+}
+
+// The rule SystemPrompt.provider (session/system.ts) chose the model's base prompt by, as a short
+// expression: the same tests in the same order.
+export function baseRule(model: ModelRef) {
+  const id = model.api.id
+  if (id.includes("muse")) return 'id includes "muse"'
+  if (id.includes("gpt-4") || id.includes("o1") || id.includes("o3")) return 'id includes "gpt-4", "o1" or "o3"'
+  if (id.includes("gpt")) {
+    if (id.includes("gpt-6")) return 'id includes "gpt-6"'
+    if (id.includes("codex")) return 'id includes "gpt" and "codex"'
+    return 'id includes "gpt"'
+  }
+  if (id.includes("gemini-")) return 'id includes "gemini-"'
+  if (id.includes("claude")) return 'id includes "claude"'
+  if (id.toLowerCase().includes("trinity")) return 'id includes "trinity"'
+  if (
+    id.toLowerCase().includes("kimi") ||
+    ["kimi-for-coding", "moonshotai", "moonshotai-cn"].includes(model.providerID)
+  )
+    return 'id includes "kimi", or provider kimi-for-coding, moonshotai or moonshotai-cn'
+  return "no other rule matches"
 }
 
 export function renderMeta(text: string, model: ModelRef) {

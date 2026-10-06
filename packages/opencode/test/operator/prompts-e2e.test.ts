@@ -7,6 +7,7 @@ import { Global } from "@opencode-ai/core/global"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { promptAudit } from "@/operator/plugins"
+import { OperatorModels } from "@/operator/models"
 import { OperatorProfile } from "@/operator/profile"
 import { OperatorProfileStore } from "@/operator/profile-store"
 import { OperatorPrompts } from "@/operator/prompts"
@@ -20,7 +21,10 @@ import { TestLLMServer } from "../lib/llm-server"
 import { configure, replacements, root, send, session } from "../merge/harness"
 
 const it = testEffect(
-  LayerNode.compile(LayerNode.group([root, OperatorPrompts.node, OperatorProfileStore.node]), replacements),
+  LayerNode.compile(
+    LayerNode.group([root, OperatorPrompts.node, OperatorProfileStore.node, OperatorModels.node]),
+    replacements,
+  ),
 )
 const unix = process.platform !== "win32" ? it.instance : it.instance.skip
 const P = OperatorProfile.PREFIX
@@ -274,36 +278,129 @@ unix("a Dynamic layer's sample is what it fills in for the agent", () =>
   ),
 )
 
-unix("a per-request layer's sample says where its text came from", () =>
+unix("every section is traced to its source, down to the file", () =>
   withGlobal(() =>
     Effect.gen(function* () {
-      const { directory } = yield* configure()
+      const { directory } = yield* configure({ agent: { reviewer: { mode: "subagent", prompt: "Review the diff." } } })
       yield* write(path.join(directory, "AGENTS.md"), "Use Bun for everything.\n")
       const triage = path.join(directory, ".opencode", "agent", "triage.md")
-      // Its model is not available here; the sample uses the default model.
+      // Its model is not available here; the default model stands in.
       yield* write(triage, "---\nmode: primary\nmodel: nowhere/missing\n---\nTriage issues.\n")
       const prompts = yield* OperatorPrompts.Service
-      const base = (yield* prompts.preview({ agent: "build" })).base
+      const config = path.join(directory, "opencode.json")
+      const traceOf = (agent: string) =>
+        prompts
+          .preview({ agent })
+          .pipe(
+            Effect.map((preview) => preview.sections.find((item) => item.entry === `${P}slot.agent-or-base`)!.trace),
+          )
 
-      expect((yield* prompts.sample({ agent: "triage", layer: `${P}slot.agent` })).origin).toEqual([
+      // explore: its own prompt is OpenCode's built-in layer agent.explore, from explore.txt.
+      const explore: OperatorProfile.TraceStep[] = [
+        { kind: "agent-own", name: "explore" },
+        { kind: "builtin-layer", name: "agent.explore", detail: `${P}agent.explore` },
+        { kind: "file", path: "packages/opencode/src/agent/prompt/explore.txt" },
+      ]
+      expect(yield* traceOf("explore")).toEqual(explore)
+      expect((yield* prompts.sample({ agent: "explore", layer: `${P}slot.agent` })).trace).toEqual(explore)
+      // triage: its agent file; reviewer: its config entry.
+      expect(yield* traceOf("triage")).toEqual([
+        { kind: "agent-own", name: "triage" },
         { kind: "agent-file", path: triage },
       ])
-      expect((yield* prompts.sample({ agent: "explore", layer: `${P}slot.agent` })).origin).toEqual([
-        { kind: "agent-builtin" },
+      expect(yield* traceOf("reviewer")).toEqual([
+        { kind: "agent-own", name: "reviewer" },
+        { kind: "agent-config", name: "reviewer", path: config },
+      ])
+      // build has no prompt of its own: the base prompt for the model, by the rule that chose it.
+      expect(yield* traceOf("build")).toEqual([
+        { kind: "agent-none", name: "build" },
+        { kind: "model-rule", name: "test/test-model", detail: "no other rule matches" },
+        { kind: "builtin-layer", name: "base.default", detail: `${P}base.default` },
+        { kind: "file", path: "packages/opencode/src/session/prompt/default.txt" },
       ])
       const none = yield* prompts.sample({ agent: "build", layer: `${P}slot.agent` })
       expect(none.text).toBe("")
-      expect(none.origin).toEqual([{ kind: "agent-none" }])
-      expect((yield* prompts.sample({ agent: "build", layer: `${P}slot.agent-or-base` })).origin).toEqual([
-        { kind: "base", path: base },
-      ])
-      expect((yield* prompts.sample({ agent: "build", layer: `${P}generated.environment` })).origin).toEqual([
+      expect(none.trace).toEqual([{ kind: "agent-none", name: "build" }])
+      expect((yield* prompts.sample({ agent: "build", layer: `${P}generated.environment` })).trace).toEqual([
         { kind: "written" },
       ])
-      expect((yield* prompts.sample({ agent: "build", layer: `${P}generated.instructions` })).origin).toContainEqual({
-        kind: "file",
+      expect((yield* prompts.sample({ agent: "build", layer: `${P}generated.instructions` })).trace).toContainEqual({
+        kind: "instruction-file",
         path: path.join(directory, "AGENTS.md"),
       })
+      // triage's own model is not available: the default model, set in config, stands in.
+      expect((yield* prompts.preview({ agent: "triage" })).modelSource).toEqual({
+        model: "test/test-model",
+        source: "default",
+        path: config,
+        agent: { model: "nowhere/missing", path: triage },
+      })
+    }),
+  ),
+)
+
+unix("a copy of explore's prompt in its profile replaces it, traced to the copy's file", () =>
+  withGlobal((global) =>
+    Effect.gen(function* () {
+      yield* configure()
+      const store = yield* OperatorProfileStore.Service
+      const prompts = yield* OperatorPrompts.Service
+      const key = (yield* prompts.preview({ agent: "explore" })).project.key
+      const copy = yield* store.copyBuiltin("opencode", `${P}agent.explore`, "Explore differently.")
+      const opencode = OperatorProfile.BUILTIN_PROFILES.find((item) => item.id === OperatorProfile.OPENCODE_PROFILE)!
+      const profile = yield* store.saveProfile("opencode", undefined, {
+        name: "Explore copy",
+        group: opencode.group,
+        slots: { ...opencode.slots, identity: [copy.id] },
+      })
+      yield* store.setAgent(key, "explore", { profile: profile.id })
+      const preview = yield* prompts.preview({ agent: "explore" })
+      const section = preview.sections.find((item) => item.entry === `${P}slot.agent-or-base`)!
+      expect(section.text).toBe("Explore differently.")
+      expect(section.trace).toEqual([
+        { kind: "agent-own", name: "explore" },
+        { kind: "copy-layer", name: copy.name, detail: copy.id },
+        { kind: "file", path: path.join(global, "namespaces", "opencode", "layers", `${copy.id}.md`) },
+      ])
+      // An unsaved override is previewed in place of the saved one; null previews none.
+      const role = yield* store.saveLayer("opencode", undefined, {
+        name: "Scout",
+        type: "role",
+        section: "role",
+        text: "You scout.",
+      })
+      const draft = yield* prompts.preview({ agent: "explore", override: { slots: { role: [role.id] } } })
+      expect(draft.override).toEqual(["role"])
+      expect(String(draft.system[0])).toStartWith("You scout.\n")
+      expect((yield* prompts.preview({ agent: "explore", override: null })).override).toEqual([])
+    }),
+  ),
+)
+
+unix("the default and small model are traced to where they are set; title runs on the small model", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      const { directory } = yield* configure({ model: undefined, small_model: "test/test-model" })
+      const models = yield* OperatorModels.Service
+      const prompts = yield* OperatorPrompts.Service
+      const defaults = yield* models.defaults()
+      // No default model in config: OpenCode's own ranking chooses.
+      expect(defaults.model).toEqual({ model: "test/test-model", source: "ranking" })
+      expect(defaults.small).toEqual({
+        model: "test/test-model",
+        source: "small",
+        path: path.join(directory, "opencode.json"),
+      })
+      expect((yield* prompts.preview({ agent: "title" })).modelSource.source).toBe("small")
+      expect(
+        (yield* prompts.preview({ agent: "build", providerID: "test", modelID: "test-model" })).modelSource,
+      ).toEqual({
+        model: "test/test-model",
+        source: "chosen",
+      })
+      // No external plugins: nothing else can change the prompt.
+      expect(yield* prompts.plugins()).toEqual({ plugins: [] })
     }),
   ),
 )

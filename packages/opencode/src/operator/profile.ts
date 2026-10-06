@@ -40,6 +40,7 @@ export const HELPER = "helper"
 
 export const Section = Schema.Literals([
   "base",
+  "agent",
   "purpose",
   "role",
   "identity",
@@ -89,7 +90,45 @@ export const Layer = Schema.Struct({
   prompt: Schema.optional(Schema.String).annotate({
     description: "Your Dynamic layers: what the dynamic generator writes for each session",
   }),
+  file: Schema.optional(Schema.String).annotate({
+    description: "OpenCode's built-ins: the file in OpenCode's code the text comes from (repo path)",
+  }),
 }).annotate({ identifier: "OperatorPromptLayer" })
+
+// One step of how a section of a prompt was resolved, for the agent page to trace it to its source:
+// what was decided (the agent has its own prompt or none; the model's base prompt rule), the layer the
+// text is in (OpenCode's, a copy, a namespace's own version, yours), and the file it is in. The store's
+// files and the agents' definitions are added by the caller (prompts.ts), which can read them.
+export const TraceStep = Schema.Struct({
+  kind: Schema.Literals([
+    "agent-own",
+    "agent-none",
+    "agent-file",
+    "agent-config",
+    "model-rule",
+    "builtin-layer",
+    "copy-layer",
+    "own-layer",
+    "layer",
+    "file",
+    "org-purpose",
+    "dynamic-written",
+    "written",
+    "references",
+    "config",
+    "instruction-file",
+    "instruction-url",
+    "mcp",
+    "skill",
+  ]).annotate({
+    description:
+      "agent-own / agent-none: the agent has its own prompt, or none; agent-file / agent-config: where it is defined; model-rule: the base prompt's model and the rule that chose it; builtin-layer / copy-layer / own-layer / layer: the layer the text is in; file: the file it is in; org-purpose: the namespace's purpose; dynamic-written: written for each session by the dynamic generator; written: written by OpenCode for each request; references / config: the references in config files; instruction-file / instruction-url, mcp, skill: what a per-request text was made from",
+  }),
+  name: Schema.optional(Schema.String).annotate({ description: "An agent, layer, model, namespace or server" }),
+  path: Schema.optional(Schema.String).annotate({ description: "A file or URL" }),
+  detail: Schema.optional(Schema.String).annotate({ description: "A layer's id, or the model rule" }),
+}).annotate({ identifier: "OperatorPromptTraceStep" })
+export type TraceStep = typeof TraceStep.Type
 export type Layer = typeof Layer.Type
 
 export const Group = Schema.Struct({
@@ -174,10 +213,15 @@ export const builtinTypes: GroupType[] = BUILTIN_TYPES.map((item) => ({
 const base = (id: string) => `${PREFIX}${id}`
 const MESSAGE_TEXTS = ["reminder.plan", "reminder.plan-mode", "reminder.build-switch", "notice.max-steps"]
 const HELPERS = OperatorPromptText.BUILTINS.filter((item) => item.kind === "helper")
+const FILES = new Map(OperatorPromptText.BUILTINS.flatMap((item) => (item.file ? [[base(item.id), item.file]] : [])))
 
 export const BUILTIN_LAYERS: readonly Layer[] = [
   ...OperatorPromptText.BUILTINS.filter((item) => item.kind === "base" && item.id !== "base").map((item) =>
     layer(base(item.id), item.id, "identity", "base", "builtin", item.text),
+  ),
+  // Built-in agents' own prompts: the slots for the agent's prompt use them for that agent.
+  ...OperatorPromptText.BUILTINS.filter((item) => item.kind === "agent").map((item) =>
+    layer(base(item.id), item.id, "identity", "agent", "builtin", item.text),
   ),
   layer(base("slot.base"), "Base prompt (by model)", DYNAMIC, "dynamic", "slot"),
   layer(base("slot.agent-or-base"), "Agent prompt, else base prompt", DYNAMIC, "dynamic", "slot"),
@@ -203,7 +247,7 @@ export const BUILTIN_LAYERS: readonly Layer[] = [
     delivery: "conversation" as const,
   })),
   layer(base("purpose.org"), "Org purpose", "purpose", "purpose", "automatic"),
-]
+].map((item) => (FILES.has(item.id) ? { ...item, file: FILES.get(item.id) } : item))
 
 export const BUILTIN_GROUPS: readonly Group[] = [
   {
@@ -406,6 +450,7 @@ export const AssembledSection = Schema.Struct({
   automatic: Schema.Boolean.annotate({ description: "Purpose, which every agent gets" }),
   changed: Schema.Boolean.annotate({ description: "From a slot the agent's override changed" }),
   source: Schema.String.annotate({ description: "A file path, or what wrote the text" }),
+  trace: Schema.Array(TraceStep).annotate({ description: "How the section was resolved, down to its file" }),
   text: Schema.String,
 }).annotate({ identifier: "OperatorPromptAssembledSection" })
 export type AssembledSection = typeof AssembledSection.Type
@@ -454,6 +499,7 @@ export function assemble(input: AssembleInput) {
         automatic: type === "purpose",
         changed: shape.changed.includes(type),
         source: item.source,
+        trace: item.trace,
         text: item.text,
       }))
   })
@@ -475,11 +521,30 @@ export function sample(input: AssembleInput, id: string) {
   const found = findLayer(input.catalog, id)
   if (!found) return undefined
   if (found.origin === "automatic")
-    return { text: input.catalog.namespace.purpose, source: input.catalog.namespace.name }
-  if ((found.replaces && !isPerRequest(found)) || found.type === HELPER) return { text: found.text, source: found.name }
-  if (isWrittenDynamic(found)) return { text: input.dynamic?.get(found.id) ?? "", source: found.name }
+    return {
+      text: input.catalog.namespace.purpose,
+      source: input.catalog.namespace.name,
+      trace: [{ kind: "org-purpose" as const, name: input.catalog.namespace.name }],
+    }
+  if ((found.replaces && !isPerRequest(found)) || found.type === HELPER)
+    return { text: found.text, source: found.name, trace: layerTrace(input.catalog, found) }
+  if (isWrittenDynamic(found))
+    return {
+      text: input.dynamic?.get(found.id) ?? "",
+      source: found.name,
+      trace: [{ kind: "dynamic-written" as const, name: found.name }, ...layerTrace(input.catalog, found)],
+    }
   const items = resolve(input, new Map(), id)
-  return { text: items.map((item) => item.text).join("\n"), source: items[0]?.source ?? "" }
+  // The agent's prompt slot adds nothing for an agent without one; say so.
+  const none: TraceStep[] =
+    !items.length && (builtinLayer(found)?.id ?? found.id) === base("slot.agent")
+      ? [{ kind: "agent-none", name: input.agent.name }]
+      : []
+  return {
+    text: items.map((item) => item.text).join("\n"),
+    source: items[0]?.source ?? "",
+    trace: [...none, ...items.flatMap((item) => item.trace)],
+  }
 }
 
 // The version of a text an agent uses: the copy of it in the profile's slot of the text's type, else
@@ -519,7 +584,35 @@ function copiesIn(catalog: Catalog, slots: Slots) {
   )
 }
 
-type Found = { layer: Layer; text: string; source: string }
+type Found = { layer: Layer; text: string; source: string; trace: TraceStep[] }
+
+// The layer a text is in: OpenCode's (with its file), a namespace's own version of one, a copy made
+// with Edit a copy, or a layer of yours. The store's file of a namespace's layer is added by the caller.
+function layerTrace(catalog: Catalog, item: Layer): TraceStep[] {
+  if (item.origin !== "user")
+    return [
+      { kind: "builtin-layer", name: own(item.id), detail: item.id },
+      ...(item.file ? [{ kind: "file" as const, path: item.file }] : []),
+    ]
+  const standard = !isOpenCode(catalog) && item.replaces !== undefined && item.id === own(item.replaces)
+  return [{ kind: standard ? "own-layer" : item.replaces ? "copy-layer" : "layer", name: item.name, detail: item.id }]
+}
+
+// What a per-request text was made from, read from the text itself.
+function partTrace(kind: "mcp" | "skill", text: string | undefined): TraceStep[] {
+  if (!text) return []
+  if (kind === "mcp") return [...text.matchAll(/<server name="([^"]+)">/g)].map((match) => ({ kind, name: match[1]! }))
+  return [...text.matchAll(/<location>([^<]+)<\/location>/g)].map((match) => ({ kind, path: unescapeHtml(match[1]!) }))
+}
+
+function unescapeHtml(text: string) {
+  return text
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&#39;", "'")
+    .replaceAll("&amp;", "&")
+}
 
 // Purpose: the namespace's purpose, then the project's Project Purpose layer.
 function purpose(input: AssembleInput): Found[] {
@@ -528,12 +621,19 @@ function purpose(input: AssembleInput): Found[] {
     ? input.catalog.layers.find((item) => item.id === input.project!.purpose)
     : undefined
   return [
-    { layer: org, text: input.catalog.namespace.purpose, source: input.catalog.namespace.name },
-    ...(linked ? [{ layer: linked, text: linked.text, source: linked.name }] : []),
+    {
+      layer: org,
+      text: input.catalog.namespace.purpose,
+      source: input.catalog.namespace.name,
+      trace: [{ kind: "org-purpose", name: input.catalog.namespace.name }],
+    },
+    ...(linked
+      ? [{ layer: linked, text: linked.text, source: linked.name, trace: layerTrace(input.catalog, linked) }]
+      : []),
   ]
 }
 
-// The text a slot entry stands for in this request.
+// The text a slot entry stands for in this request, with how it was resolved.
 function resolve(input: AssembleInput, copies: Map<string, Layer>, entry: string): Found[] {
   const listed = findLayer(input.catalog, entry)
   if (!listed) return []
@@ -541,53 +641,99 @@ function resolve(input: AssembleInput, copies: Map<string, Layer>, entry: string
   const standard = !isOpenCode(input.catalog) && listed.replaces !== undefined && listed.id === own(listed.replaces)
   const builtin = standard || isPerRequest(listed) ? builtinLayer(listed) : undefined
   const found: Layer = builtin ? { ...builtin, name: listed.name, text: listed.text } : listed
-  const one = (text: string | undefined, source: string, layer: Layer = listed): Found[] =>
-    text ? [{ layer, text, source }] : []
-  // A family's base prompt: the copy of it the profile holds, else the namespace's own version, else
-  // OpenCode's.
+  const one = (text: string | undefined, source: string, trace: TraceStep[], layer: Layer = listed): Found[] =>
+    text ? [{ layer, text, source, trace }] : []
+  const traced = (item: Layer) => layerTrace(input.catalog, item)
+  // A built-in text (a family's base prompt, a built-in agent's prompt): the copy of it the profile
+  // holds, else the namespace's own version, else OpenCode's.
   const family = (id: string) => {
     const copy =
       copies.get(id) ??
       (isOpenCode(input.catalog) ? undefined : input.catalog.layers.find((item) => item.id === own(id)))
-    const text = copy?.text ?? BUILTIN_LAYERS.find((item) => item.id === id)?.text ?? ""
-    return { text: id === base("base.meta") ? OperatorPromptText.renderMeta(text, input.model) : text, layer: copy }
+    const original = BUILTIN_LAYERS.find((item) => item.id === id)
+    const text = copy?.text ?? original?.text ?? ""
+    return {
+      text: id === base("base.meta") ? OperatorPromptText.renderMeta(text, input.model) : text,
+      layer: copy,
+      trace: copy ? traced(copy) : original ? traced(original) : [],
+    }
   }
   const model = () => {
     const id = base(OperatorPromptText.baseFor(input.model).id)
     const chosen = family(id)
-    return one(chosen.text, chosen.layer?.name ?? id.slice(PREFIX.length), chosen.layer ?? listed)
+    const rule: TraceStep = {
+      kind: "model-rule",
+      name: `${input.model.providerID}/${input.model.api.id}`,
+      detail: OperatorPromptText.baseRule(input.model),
+    }
+    return one(
+      chosen.text,
+      chosen.layer?.name ?? id.slice(PREFIX.length),
+      [rule, ...chosen.trace],
+      chosen.layer ?? listed,
+    )
+  }
+  // The agent's own prompt. A built-in agent's (explore's) is a built-in layer, so it can be copied; any
+  // other is defined in config or an agent file, which the caller names.
+  const agentPrompt = () => {
+    const prompt = input.agent.prompt
+    const own: TraceStep = { kind: "agent-own", name: input.agent.name }
+    const id = base(`agent.${input.agent.name}`)
+    const original = BUILTIN_LAYERS.find((item) => item.id === id)
+    if (prompt && original && original.text === prompt) {
+      const chosen = family(id)
+      return one(chosen.text, chosen.layer?.name ?? own.name!, [own, ...chosen.trace], chosen.layer ?? original)
+    }
+    return one(prompt, input.agent.name, [own])
   }
   // Copies stand in for their built-in where it is used; on their own they add nothing.
   // A helper agent's prompt is its helper layer, a copy or OpenCode's.
-  if (found.type === HELPER) return one(listed.text, listed.origin === "builtin" ? "OpenCode" : listed.name)
-  if (isWrittenDynamic(found)) return one(input.dynamic?.get(found.id), found.name)
+  if (found.type === HELPER)
+    return one(listed.text, listed.origin === "builtin" ? "OpenCode" : listed.name, traced(listed))
+  if (isWrittenDynamic(found))
+    return one(input.dynamic?.get(found.id), found.name, [
+      { kind: "dynamic-written", name: found.name },
+      ...traced(listed),
+    ])
   if (found.replaces) {
     if (found.replaces !== base("notice.structured-output") || !input.parts.output) return []
-    return one(found.text, found.name)
+    return one(found.text, found.name, traced(listed))
   }
-  if (found.section === "base" && found.origin === "builtin") {
+  if ((found.section === "base" || found.section === "agent") && found.origin === "builtin") {
     const chosen = family(found.id)
-    return one(chosen.text, chosen.layer?.name ?? "OpenCode", chosen.layer ?? listed)
+    return one(chosen.text, chosen.layer?.name ?? "OpenCode", chosen.trace, chosen.layer ?? listed)
   }
   if (found.id === base("slot.base")) return model()
-  if (found.id === base("slot.agent")) return one(input.agent.prompt, input.agent.name)
+  if (found.id === base("slot.agent")) return agentPrompt()
   if (found.id === base("slot.agent-or-base"))
-    return input.agent.prompt ? one(input.agent.prompt, input.agent.name) : model()
-  if (found.id === base("generated.environment")) return one(input.parts.environment[0], "generated")
-  if (found.id === base("generated.references")) return one(input.parts.environment[1], "generated")
-  if (found.id === base("generated.mcp")) return one(input.parts.mcp, "generated")
-  if (found.id === base("generated.skills")) return one(input.parts.skills, "generated")
+    return input.agent.prompt
+      ? agentPrompt()
+      : model().map((item) => ({
+          ...item,
+          trace: [{ kind: "agent-none" as const, name: input.agent.name }, ...item.trace],
+        }))
+  const written: TraceStep[] = [{ kind: "written" }]
+  if (found.id === base("generated.environment")) return one(input.parts.environment[0], "generated", written)
+  if (found.id === base("generated.references"))
+    return one(input.parts.environment[1], "generated", [{ kind: "references" }])
+  if (found.id === base("generated.mcp")) return one(input.parts.mcp, "generated", partTrace("mcp", input.parts.mcp))
+  if (found.id === base("generated.skills"))
+    return one(input.parts.skills, "generated", partTrace("skill", input.parts.skills))
   if (found.id === base("generated.instructions"))
-    return input.parts.instructions.flatMap((text) =>
-      one(text, text.match(/^Instructions from: ([^\n]*)/)?.[1] ?? "generated"),
-    )
+    return input.parts.instructions.flatMap((text) => {
+      const from = text.match(/^Instructions from: ([^\n]*)/)?.[1]
+      const trace: TraceStep[] = from
+        ? [{ kind: /^https?:\/\//.test(from) ? "instruction-url" : "instruction-file", path: from }]
+        : []
+      return one(text, from ?? "generated", trace)
+    })
   if (found.id === base("notice.structured-output")) {
     if (!input.parts.output || (copies.has(found.id) && copies.get(found.id) !== listed)) return []
-    return standard ? one(listed.text, listed.name) : one(input.parts.output, "OpenCode")
+    return standard ? one(listed.text, listed.name, traced(listed)) : one(input.parts.output, "OpenCode", traced(found))
   }
   // Tool descriptions and message texts are sent elsewhere; the org purpose only in Purpose.
   if (found.delivery || found.origin === "automatic") return []
-  return one(found.text, found.name)
+  return one(found.text, found.name, traced(listed))
 }
 
 // Save checks (spec §10). Each returns the reason a save is refused, or undefined.

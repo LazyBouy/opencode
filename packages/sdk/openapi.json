@@ -13585,6 +13585,60 @@
         ]
       }
     },
+    "/operator/model": {
+      "get": {
+        "tags": ["operator project"],
+        "operationId": "operator.model.defaults",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The default and small model",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorModelDefaults"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The model this project's agents use when they set none (config `model`, else the TUI's recent models, else OpenCode's own ranking), and the small model the title agent uses (config `small_model`, else OpenCode's search), each with where it is set.",
+        "summary": "Default and small model",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.model.defaults({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/operator/prompt": {
       "get": {
         "tags": ["operator prompts"],
@@ -13691,6 +13745,14 @@
               "type": "string"
             },
             "required": false
+          },
+          {
+            "name": "override",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -13725,7 +13787,7 @@
             }
           }
         },
-        "description": "The system prompt an agent of this project sends with a model: its namespace, the profile it uses and why, the slots its override changed, and each section's group type and layer, with Purpose marked automatic. The model defaults to the agent's, then the configured default.",
+        "description": "The system prompt an agent of this project sends with a model: its namespace, the profile it uses and why, the slots its override changed, and each section's group type, layer and trace (how it was resolved, down to its file), with Purpose marked automatic. The model is the agent's, else the default model (the small model for title), with where it is set.",
         "summary": "Preview a system prompt",
         "x-codeSamples": [
           {
@@ -13837,6 +13899,60 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.prompt.sample({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/prompt/plugins": {
+      "get": {
+        "tags": ["operator prompts"],
+        "operationId": "operator.prompt.plugins",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "External plugins config loads",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPromptPlugins"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The plugins this project's config loads (not OpenCode's own). They run after the prompt profile and can change any prompt.",
+        "summary": "List external plugins",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.prompt.plugins({\n  ...\n})"
           }
         ]
       }
@@ -26926,7 +27042,19 @@
       },
       "OperatorPromptSection": {
         "type": "string",
-        "enum": ["base", "purpose", "role", "identity", "tool", "dynamic", "helper", "output", "custom", "message"]
+        "enum": [
+          "base",
+          "agent",
+          "purpose",
+          "role",
+          "identity",
+          "tool",
+          "dynamic",
+          "helper",
+          "output",
+          "custom",
+          "message"
+        ]
       },
       "OperatorPromptOrigin": {
         "type": "string",
@@ -26968,6 +27096,9 @@
             "type": "boolean"
           },
           "prompt": {
+            "type": "string"
+          },
+          "file": {
             "type": "string"
           }
         },
@@ -29200,6 +29331,44 @@
         "required": ["kind", "customized"],
         "additionalProperties": false
       },
+      "OperatorAgentModel": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": ["model"],
+        "additionalProperties": false
+      },
+      "OperatorModelSource": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string",
+            "description": "provider/model; empty when no model is available"
+          },
+          "source": {
+            "type": "string",
+            "enum": ["agent", "default", "recent", "ranking", "small", "small-family", "none", "chosen"],
+            "description": "chosen: picked for this preview; agent: the agent's own model; default: config `model`; recent: the TUI's recent models; ranking: OpenCode's own choice (first connected provider, built-in ranking); small: config `small_model`; small-family: OpenCode's small-model search; none: no model available"
+          },
+          "path": {
+            "type": "string"
+          },
+          "unavailable": {
+            "type": "boolean"
+          },
+          "agent": {
+            "$ref": "#/components/schemas/OperatorAgentModel"
+          }
+        },
+        "required": ["model", "source"],
+        "additionalProperties": false
+      },
       "OperatorAgent": {
         "type": "object",
         "properties": {
@@ -29283,6 +29452,9 @@
             "required": ["total"],
             "additionalProperties": false,
             "description": "Sessions in this project that use the agent"
+          },
+          "modelSource": {
+            "$ref": "#/components/schemas/OperatorModelSource"
           }
         },
         "required": ["name", "mode", "permission", "options", "source", "disabled", "settings", "sessions"],
@@ -29385,6 +29557,19 @@
         "required": ["id", "description", "origin"],
         "additionalProperties": false
       },
+      "OperatorModelDefaults": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "$ref": "#/components/schemas/OperatorModelSource"
+          },
+          "small": {
+            "$ref": "#/components/schemas/OperatorModelSource"
+          }
+        },
+        "required": ["model", "small"],
+        "additionalProperties": false
+      },
       "OperatorPromptTool": {
         "type": "object",
         "properties": {
@@ -29410,6 +29595,47 @@
           }
         },
         "required": ["tools"],
+        "additionalProperties": false
+      },
+      "OperatorPromptTraceStep": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "agent-own",
+              "agent-none",
+              "agent-file",
+              "agent-config",
+              "model-rule",
+              "builtin-layer",
+              "copy-layer",
+              "own-layer",
+              "layer",
+              "file",
+              "org-purpose",
+              "dynamic-written",
+              "written",
+              "references",
+              "config",
+              "instruction-file",
+              "instruction-url",
+              "mcp",
+              "skill"
+            ],
+            "description": "agent-own / agent-none: the agent has its own prompt, or none; agent-file / agent-config: where it is defined; model-rule: the base prompt's model and the rule that chose it; builtin-layer / copy-layer / own-layer / layer: the layer the text is in; file: the file it is in; org-purpose: the namespace's purpose; dynamic-written: written for each session by the dynamic generator; written: written by OpenCode for each request; references / config: the references in config files; instruction-file / instruction-url, mcp, skill: what a per-request text was made from"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": ["kind"],
         "additionalProperties": false
       },
       "OperatorPromptAssembledSection": {
@@ -29444,11 +29670,29 @@
             "type": "string",
             "description": "A file path, or what wrote the text"
           },
+          "trace": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPromptTraceStep"
+            },
+            "description": "How the section was resolved, down to its file"
+          },
           "text": {
             "type": "string"
           }
         },
-        "required": ["type", "typeName", "layer", "layerName", "entry", "automatic", "changed", "source", "text"],
+        "required": [
+          "type",
+          "typeName",
+          "layer",
+          "layerName",
+          "entry",
+          "automatic",
+          "changed",
+          "source",
+          "trace",
+          "text"
+        ],
         "additionalProperties": false
       },
       "OperatorPromptPreview": {
@@ -29529,6 +29773,9 @@
             },
             "description": "The types whose slots the agent's override changed"
           },
+          "modelSource": {
+            "$ref": "#/components/schemas/OperatorModelSource"
+          },
           "sections": {
             "type": "array",
             "items": {
@@ -29552,6 +29799,7 @@
           "profile",
           "group",
           "override",
+          "modelSource",
           "sections",
           "system"
         ],
@@ -29578,33 +29826,6 @@
         "required": ["name", "data"],
         "additionalProperties": false
       },
-      "OperatorPromptSampleOrigin": {
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": [
-              "agent-file",
-              "agent-config",
-              "agent-builtin",
-              "agent-none",
-              "base",
-              "written",
-              "config",
-              "file",
-              "url",
-              "mcp",
-              "skill"
-            ],
-            "description": "agent-file / agent-config: the agent's prompt from its agent file or a config file; agent-builtin: OpenCode's own definition of the agent; agent-none: the agent has no prompt; base: a Base Model Group layer; written: OpenCode writes it for each request; config: a config file; file, url: an instruction file or URL; mcp: an MCP server; skill: a skill's file"
-          },
-          "path": {
-            "type": "string"
-          }
-        },
-        "required": ["kind"],
-        "additionalProperties": false
-      },
       "OperatorPromptSample": {
         "type": "object",
         "properties": {
@@ -29626,15 +29847,18 @@
             "type": "string",
             "description": "Where the text comes from: a file, an agent, or what wrote it"
           },
-          "origin": {
+          "modelSource": {
+            "$ref": "#/components/schemas/OperatorModelSource"
+          },
+          "trace": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/OperatorPromptSampleOrigin"
+              "$ref": "#/components/schemas/OperatorPromptTraceStep"
             },
-            "description": "Where this sample's text came from, for OpenCode's per-request layers"
+            "description": "How the text was resolved, down to the file it is in"
           }
         },
-        "required": ["agent", "model", "layer", "text", "source", "origin"],
+        "required": ["agent", "model", "layer", "text", "source", "modelSource", "trace"],
         "additionalProperties": false
       },
       "OperatorPromptGenerateError": {
@@ -29656,6 +29880,31 @@
           }
         },
         "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorPromptPlugins": {
+        "type": "object",
+        "properties": {
+          "plugins": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "spec": {
+                  "type": "string",
+                  "description": "The plugin as config names it"
+                },
+                "source": {
+                  "type": "string",
+                  "description": "The config file that loads it"
+                }
+              },
+              "required": ["spec", "source"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["plugins"],
         "additionalProperties": false
       },
       "OperatorPurposeDraft": {

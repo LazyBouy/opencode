@@ -195,6 +195,16 @@ export const operatorScenarios: Scenario[] = [
       headers: ctx.headers(),
     }))
     .status(404),
+  http.protected.get("/operator/prompt/plugins", "operator.prompt.plugins").json(200, (body) => {
+    object(body)
+    array(body.plugins)
+  }),
+  http.protected.get("/operator/model", "operator.model.defaults").json(200, (body) => {
+    object(body)
+    object(body.model)
+    object(body.small)
+    check(typeof body.model.source === "string", "the default model should say where it comes from")
+  }),
   http.protected.get("/operator/tool", "operator.tool.list").json(200, (body) => {
     array(body)
     check(

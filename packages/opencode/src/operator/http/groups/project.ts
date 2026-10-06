@@ -1,4 +1,5 @@
 import { OperatorAgents } from "@/operator/agents"
+import { OperatorModels } from "@/operator/models"
 import { OperatorConfig } from "@/operator/config"
 import { OperatorTools } from "@/operator/tools"
 import { Schema } from "effect"
@@ -16,6 +17,7 @@ export const OperatorProjectPaths = {
   agents: "/operator/agent",
   agent: "/operator/agent/:name",
   tools: "/operator/tool",
+  models: "/operator/model",
 } as const
 
 const ScopeQuery = Schema.Struct({ ...WorkspaceRoutingQueryFields, scope: OperatorConfig.Scope })
@@ -100,6 +102,17 @@ export const OperatorProjectApi = HttpApi.make("operator-project")
             summary: "List tools with their origin",
             description:
               "Every tool available in this project: built-in, custom tool files, plugin tools and tools from connected MCP servers.",
+          }),
+        ),
+        HttpApiEndpoint.get("models", OperatorProjectPaths.models, {
+          query: WorkspaceRoutingQuery,
+          success: described(OperatorModels.Defaults, "The default and small model"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.model.defaults",
+            summary: "Default and small model",
+            description:
+              "The model this project's agents use when they set none (config `model`, else the TUI's recent models, else OpenCode's own ranking), and the small model the title agent uses (config `small_model`, else OpenCode's search), each with where it is set.",
           }),
         ),
       )

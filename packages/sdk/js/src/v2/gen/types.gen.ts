@@ -2309,6 +2309,7 @@ export type OperatorPromptGroupType = {
 
 export type OperatorPromptSection =
   | "base"
+  | "agent"
   | "purpose"
   | "role"
   | "identity"
@@ -2336,6 +2337,7 @@ export type OperatorPromptLayer = {
   basedOn?: string
   outdated?: boolean
   prompt?: string
+  file?: string
 }
 
 export type OperatorPromptGroup = {
@@ -3133,6 +3135,25 @@ export type OperatorAgentSource = {
   customized: boolean
 }
 
+export type OperatorAgentModel = {
+  model: string
+  path?: string
+}
+
+export type OperatorModelSource = {
+  /**
+   * provider/model; empty when no model is available
+   */
+  model: string
+  /**
+   * chosen: picked for this preview; agent: the agent's own model; default: config `model`; recent: the TUI's recent models; ranking: OpenCode's own choice (first connected provider, built-in ranking); small: config `small_model`; small-family: OpenCode's small-model search; none: no model available
+   */
+  source: "agent" | "default" | "recent" | "ranking" | "small" | "small-family" | "none" | "chosen"
+  path?: string
+  unavailable?: boolean
+  agent?: OperatorAgentModel
+}
+
 export type OperatorAgent = {
   name: string
   description?: string
@@ -3172,6 +3193,7 @@ export type OperatorAgent = {
     total: number
     lastUsed?: number
   }
+  modelSource?: OperatorModelSource
 }
 
 export type OperatorAgentFormat = "file" | "config"
@@ -3208,6 +3230,11 @@ export type OperatorTool = {
   source?: string
 }
 
+export type OperatorModelDefaults = {
+  model: OperatorModelSource
+  small: OperatorModelSource
+}
+
 export type OperatorPromptTool = {
   id: string
   /**
@@ -3218,6 +3245,35 @@ export type OperatorPromptTool = {
 
 export type OperatorPromptCatalog1 = {
   tools: Array<OperatorPromptTool>
+}
+
+export type OperatorPromptTraceStep = {
+  /**
+   * agent-own / agent-none: the agent has its own prompt, or none; agent-file / agent-config: where it is defined; model-rule: the base prompt's model and the rule that chose it; builtin-layer / copy-layer / own-layer / layer: the layer the text is in; file: the file it is in; org-purpose: the namespace's purpose; dynamic-written: written for each session by the dynamic generator; written: written by OpenCode for each request; references / config: the references in config files; instruction-file / instruction-url, mcp, skill: what a per-request text was made from
+   */
+  kind:
+    | "agent-own"
+    | "agent-none"
+    | "agent-file"
+    | "agent-config"
+    | "model-rule"
+    | "builtin-layer"
+    | "copy-layer"
+    | "own-layer"
+    | "layer"
+    | "file"
+    | "org-purpose"
+    | "dynamic-written"
+    | "written"
+    | "references"
+    | "config"
+    | "instruction-file"
+    | "instruction-url"
+    | "mcp"
+    | "skill"
+  name?: string
+  path?: string
+  detail?: string
 }
 
 export type OperatorPromptAssembledSection = {
@@ -3244,6 +3300,10 @@ export type OperatorPromptAssembledSection = {
    * A file path, or what wrote the text
    */
   source: string
+  /**
+   * How the section was resolved, down to its file
+   */
+  trace: Array<OperatorPromptTraceStep>
   text: string
 }
 
@@ -3281,6 +3341,7 @@ export type OperatorPromptPreview = {
    * The types whose slots the agent's override changed
    */
   override: Array<string>
+  modelSource: OperatorModelSource
   sections: Array<OperatorPromptAssembledSection>
   /**
    * The system messages exactly as sent
@@ -3293,25 +3354,6 @@ export type OperatorPromptNotFoundError = {
   data: {
     message: string
   }
-}
-
-export type OperatorPromptSampleOrigin = {
-  /**
-   * agent-file / agent-config: the agent's prompt from its agent file or a config file; agent-builtin: OpenCode's own definition of the agent; agent-none: the agent has no prompt; base: a Base Model Group layer; written: OpenCode writes it for each request; config: a config file; file, url: an instruction file or URL; mcp: an MCP server; skill: a skill's file
-   */
-  kind:
-    | "agent-file"
-    | "agent-config"
-    | "agent-builtin"
-    | "agent-none"
-    | "base"
-    | "written"
-    | "config"
-    | "file"
-    | "url"
-    | "mcp"
-    | "skill"
-  path?: string
 }
 
 export type OperatorPromptSample = {
@@ -3329,10 +3371,11 @@ export type OperatorPromptSample = {
    * Where the text comes from: a file, an agent, or what wrote it
    */
   source: string
+  modelSource: OperatorModelSource
   /**
-   * Where this sample's text came from, for OpenCode's per-request layers
+   * How the text was resolved, down to the file it is in
    */
-  origin: Array<OperatorPromptSampleOrigin>
+  trace: Array<OperatorPromptTraceStep>
 }
 
 export type OperatorPromptGenerateError = {
@@ -3340,6 +3383,19 @@ export type OperatorPromptGenerateError = {
   data: {
     message: string
   }
+}
+
+export type OperatorPromptPlugins = {
+  plugins: Array<{
+    /**
+     * The plugin as config names it
+     */
+    spec: string
+    /**
+     * The config file that loads it
+     */
+    source: string
+  }>
 }
 
 export type OperatorPurposeDraft = {
@@ -13843,6 +13899,34 @@ export type OperatorToolListResponses = {
 
 export type OperatorToolListResponse = OperatorToolListResponses[keyof OperatorToolListResponses]
 
+export type OperatorModelDefaultsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/model"
+}
+
+export type OperatorModelDefaultsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorModelDefaultsError = OperatorModelDefaultsErrors[keyof OperatorModelDefaultsErrors]
+
+export type OperatorModelDefaultsResponses = {
+  /**
+   * The default and small model
+   */
+  200: OperatorModelDefaults
+}
+
+export type OperatorModelDefaultsResponse = OperatorModelDefaultsResponses[keyof OperatorModelDefaultsResponses]
+
 export type OperatorPromptCatalogData = {
   body?: never
   path?: never
@@ -13881,6 +13965,7 @@ export type OperatorPromptPreviewData = {
     provider?: string
     model?: string
     profile?: string
+    override?: string
   }
   url: "/operator/prompt/preview"
 }
@@ -13946,6 +14031,34 @@ export type OperatorPromptSampleResponses = {
 }
 
 export type OperatorPromptSampleResponse = OperatorPromptSampleResponses[keyof OperatorPromptSampleResponses]
+
+export type OperatorPromptPluginsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/prompt/plugins"
+}
+
+export type OperatorPromptPluginsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorPromptPluginsError = OperatorPromptPluginsErrors[keyof OperatorPromptPluginsErrors]
+
+export type OperatorPromptPluginsResponses = {
+  /**
+   * External plugins config loads
+   */
+  200: OperatorPromptPlugins
+}
+
+export type OperatorPromptPluginsResponse = OperatorPromptPluginsResponses[keyof OperatorPromptPluginsResponses]
 
 export type OperatorPromptPurposeData = {
   body?: {

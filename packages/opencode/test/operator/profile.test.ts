@@ -369,3 +369,66 @@ describe("save checks", () => {
     expect(OperatorProfile.checkLayer(loaded, { name: "x", type: "rules" })).toBeUndefined()
   })
 })
+
+describe("tracing a prompt to its source", () => {
+  test("every built-in text names a file of OpenCode's code that exists", async () => {
+    const root = new URL("../../../../", import.meta.url).pathname
+    const files = OperatorPromptText.BUILTINS.flatMap((item) => (item.file ? [item.file] : []))
+    expect(files.length).toBeGreaterThan(20)
+    for (const file of files) expect(await Bun.file(root + file).exists()).toBe(true)
+    expect(OperatorProfile.BUILTIN_LAYERS.find((item) => item.id === `${P}agent.explore`)).toMatchObject({
+      section: "agent",
+      type: "identity",
+      file: "packages/opencode/src/agent/prompt/explore.txt",
+    })
+  })
+
+  test("the base prompt's rule is the one that chose its family", () => {
+    const cases = [
+      ["claude-sonnet-4", "base.anthropic", 'id includes "claude"'],
+      ["gpt-5", "base.gpt", 'id includes "gpt"'],
+      ["gpt-6-luna", "base.gpt-astra", 'id includes "gpt-6"'],
+      ["gpt-5-codex", "base.codex", 'id includes "gpt" and "codex"'],
+      ["o3-mini", "base.beast", 'id includes "gpt-4", "o1" or "o3"'],
+      ["gemini-3-pro", "base.gemini", 'id includes "gemini-"'],
+      ["kimi-k2", "base.kimi", 'id includes "kimi", or provider kimi-for-coding, moonshotai or moonshotai-cn'],
+      ["trinity-large", "base.trinity", 'id includes "trinity"'],
+      ["muse-spark", "base.meta", 'id includes "muse"'],
+      ["llama-4", "base.default", "no other rule matches"],
+    ] as const
+    for (const [id, family, rule] of cases) {
+      const model = { providerID: "any", api: { id } }
+      expect(OperatorPromptText.baseFor(model).id).toBe(family)
+      expect(OperatorPromptText.baseRule(model)).toBe(rule)
+    }
+  })
+
+  test("a slot traces its decision, its layer and its file", () => {
+    const input = (agent: { name: string; prompt?: string }) => ({
+      catalog: catalog(),
+      agent,
+      model: gemini,
+      parts,
+    })
+    const section = (agent: { name: string; prompt?: string }) =>
+      OperatorProfile.assemble(input(agent)).sections.find((item) => item.entry === `${P}slot.agent-or-base`)!
+    expect(section({ name: "build" }).trace).toEqual([
+      { kind: "agent-none", name: "build" },
+      { kind: "model-rule", name: "google/gemini-3-pro", detail: 'id includes "gemini-"' },
+      { kind: "builtin-layer", name: "base.gemini", detail: `${P}base.gemini` },
+      { kind: "file", path: "packages/opencode/src/session/prompt/gemini.txt" },
+    ])
+    const explore = OperatorPromptText.BUILTINS.find((item) => item.id === "agent.explore")!.text
+    expect(section({ name: "explore", prompt: explore }).trace).toEqual([
+      { kind: "agent-own", name: "explore" },
+      { kind: "builtin-layer", name: "agent.explore", detail: `${P}agent.explore` },
+      { kind: "file", path: "packages/opencode/src/agent/prompt/explore.txt" },
+    ])
+    // Another agent's prompt is defined in config or its agent file, which the caller names.
+    expect(section({ name: "triage", prompt: "Triage." }).trace).toEqual([{ kind: "agent-own", name: "triage" }])
+    const instructions = OperatorProfile.assemble(input({ name: "build" })).sections.find(
+      (item) => item.entry === `${P}generated.instructions`,
+    )!
+    expect(instructions.trace).toEqual([{ kind: "instruction-file", path: "/work/AGENTS.md" }])
+  })
+})
