@@ -1035,3 +1035,23 @@ html[data-theme="iphi"] [data-component="operator-inspector"] {
   color: var(--v2-text-text-muted);
   text-decoration: line-through;
 }
+
+/* A segmented control as wide as its labels. */
+[data-slot="segmented-control-v2"].operator-segmented-fit {
+  width: auto;
+}
+
+[data-slot="segmented-control-v2"].operator-segmented-fit [data-slot="segmented-control-v2-item"] {
+  flex: none;
+  padding-inline: 12px;
+}
+
+/* Numbers (end-aligned) stay on one line. */
+[data-component="operator-table"] td[data-align="end"] {
+  white-space: nowrap;
+}
+
+[data-slot="operator-tool-overlay"] [data-component="operator-code"] {
+  max-height: 320px;
+  overflow: auto;
+}

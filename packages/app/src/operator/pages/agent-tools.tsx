@@ -155,6 +155,7 @@ export function AgentToolPrompt(props: {
           >
             <SegmentedControlV2
               value={store.runsAs}
+              class="operator-segmented-fit"
               onChange={(value) => value && setStore("runsAs", value as RunsAs)}
               data-testid="tool-prompt-runs-as"
             >
@@ -172,6 +173,7 @@ export function AgentToolPrompt(props: {
           <Field group label={language.t("operator.toolPrompt.view")} hint={language.t("operator.toolPrompt.viewHint")}>
             <SegmentedControlV2
               value={view()}
+              class="operator-segmented-fit"
               onChange={(value) => value && setStore("view", value as View)}
               data-testid="tool-prompt-view"
             >
@@ -316,6 +318,7 @@ function WouldBeSent(props: { data: OperatorToolPrompt; agent: string; onOpen: (
             {
               id: "source",
               optional: true,
+              hidden: true,
               header: language.t("operator.column.source"),
               help: language.t("operator.help.toolPromptSource"),
               cell: (tool) => sourceText(tool.source),
