@@ -43,6 +43,9 @@ export const OperatorCallApi = HttpApi.make("operator-calls")
             kind: Schema.optional(Schema.String).annotate({
               description: "Comma-separated: agent, title, compaction, summary, other, unlinked, errors",
             }),
+            search: Schema.optional(Schema.String).annotate({
+              description: "Only calls whose request body or response contains this text (case does not matter)",
+            }),
           }),
           success: described(OperatorCallView.List, "The session's recorded calls"),
         }).annotateMerge(

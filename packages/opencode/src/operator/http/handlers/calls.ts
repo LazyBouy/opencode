@@ -11,7 +11,12 @@ export const operatorCallHandlers = HttpApiBuilder.group(InstanceHttpApi, "opera
       new ApiCallNotFoundError({ name: "OperatorCallNotFoundError", data: { message: error.message } })
     return handlers
       .handle("list", (ctx) =>
-        calls.list(ctx.params.sessionID, { after: ctx.query.after, limit: ctx.query.limit, kind: ctx.query.kind }),
+        calls.list(ctx.params.sessionID, {
+          after: ctx.query.after,
+          limit: ctx.query.limit,
+          kind: ctx.query.kind,
+          search: ctx.query.search,
+        }),
       )
       .handle("export", (ctx) => calls.export(ctx.params.sessionID, ctx.query.format))
       .handle("get", (ctx) => calls.detail(ctx.params.sessionID, ctx.params.callID).pipe(Effect.mapError(notFound)))

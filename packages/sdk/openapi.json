@@ -14809,6 +14809,14 @@
               "type": "string"
             },
             "required": false
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -31751,6 +31759,14 @@
             },
             "required": ["total", "new"],
             "additionalProperties": false
+          },
+          "added": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["reminder.plan", "reminder.plan-mode", "reminder.build-switch", "notice.max-steps"]
+            },
+            "description": "Texts OpenCode added to this request in memory (not saved): the plan reminders, the switch back to building, the step-limit notice"
           }
         },
         "required": [
@@ -31765,7 +31781,8 @@
           "exact",
           "system",
           "tools",
-          "messages"
+          "messages",
+          "added"
         ],
         "additionalProperties": false
       },
@@ -32121,6 +32138,14 @@
             "required": ["total", "new"],
             "additionalProperties": false
           },
+          "added": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["reminder.plan", "reminder.plan-mode", "reminder.build-switch", "notice.max-steps"]
+            },
+            "description": "Texts OpenCode added to this request in memory (not saved): the plan reminders, the switch back to building, the step-limit notice"
+          },
           "systemText": {
             "type": "string"
           },
@@ -32170,6 +32195,7 @@
           "system",
           "tools",
           "messages",
+          "added",
           "toolNames",
           "sent",
           "parameters",

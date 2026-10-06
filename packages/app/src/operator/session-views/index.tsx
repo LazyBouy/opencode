@@ -1,6 +1,7 @@
 import { useParams } from "@solidjs/router"
 import { type JSX, Show } from "solid-js"
 import { TranscriptView } from "./transcript"
+import { UserExtras } from "./user-extras"
 import { useSessionView } from "./view"
 
 export * as OperatorSessionViews from "./index"
@@ -22,4 +23,13 @@ export function timeline(render: () => JSX.Element): JSX.Element {
 export function useDetailed() {
   const view = useSessionView()
   return () => view.view() === "detailed"
+}
+
+// Under a user message (the fork line in message-timeline.tsx's user message row): in the Detailed
+// view, what the chat hides about that exchange.
+export function afterUser(
+  message: { id: string; sessionID: string },
+  parts: () => ReadonlyArray<{ id: string; type: string; text?: string; synthetic?: boolean }>,
+): JSX.Element {
+  return <UserExtras message={message} parts={parts} />
 }

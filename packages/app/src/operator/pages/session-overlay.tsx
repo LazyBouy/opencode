@@ -24,11 +24,11 @@ export const SESSION_TABS = ["conversation", "details", "subagents", "permission
 // Opens a session (`session` in the URL; `stab` its section) in the overlay. `rows` are the page's
 // sessions, in order, for ‹ ›.
 export function useSessionOverlay(rows: () => ReadonlyArray<Pick<GlobalSession, "id" | "directory">>) {
-  const [params, setParams] = useSearchParams<{ session?: string; stab?: string }>()
+  const [params, setParams] = useSearchParams<{ session?: string; stab?: string; sperm?: string }>()
   useRecordOverlay(
     () => !!params.session,
     () => <SessionOverlay rows={rows} />,
-    () => setParams({ session: undefined, stab: undefined }),
+    () => setParams({ session: undefined, stab: undefined, sperm: undefined }),
   )
   return (id: string) => setParams({ session: id })
 }
@@ -44,7 +44,7 @@ function SessionOverlay(props: { rows: () => ReadonlyArray<Pick<GlobalSession, "
   const openView = useOpenSessionView()
   const dialog = useDialog()
   const moveToTrash = useMoveToTrash()
-  const [params, setParams] = useSearchParams<{ session?: string; stab?: string }>()
+  const [params, setParams] = useSearchParams<{ session?: string; stab?: string; sperm?: string }>()
   const id = () => params.session ?? ""
   const tab = () =>
     SESSION_TABS.includes(params.stab as (typeof SESSION_TABS)[number]) ? params.stab! : "conversation"
@@ -148,7 +148,7 @@ function SessionOverlay(props: { rows: () => ReadonlyArray<Pick<GlobalSession, "
           {language.t("operator.sessionView.maximize")}
         </ButtonV2>
       }
-      onSection={(section) => setParams({ stab: section })}
+      onSection={(section) => setParams({ stab: section, sperm: undefined })}
       onRecord={(next) => setParams({ session: next })}
     >
       <RecordView
@@ -169,7 +169,12 @@ function SessionOverlay(props: { rows: () => ReadonlyArray<Pick<GlobalSession, "
       >
         <Switch>
           <Match when={tab() === "permissions"}>
-            <SessionPermissions sessionID={id()} directory={folder()} />
+            <SessionPermissions
+              sessionID={id()}
+              directory={folder()}
+              filter={params.sperm}
+              onClearFilter={() => setParams({ sperm: undefined })}
+            />
           </Match>
           <Match when={tab() === "conversation"}>
             <div data-slot="operator-open-views" data-testid="open-full-page">

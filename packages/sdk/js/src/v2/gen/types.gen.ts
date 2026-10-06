@@ -3780,6 +3780,10 @@ export type OperatorCallSummary = {
      */
     new: number
   }
+  /**
+   * Texts OpenCode added to this request in memory (not saved): the plan reminders, the switch back to building, the step-limit notice
+   */
+  added: Array<"reminder.plan" | "reminder.plan-mode" | "reminder.build-switch" | "notice.max-steps">
 }
 
 export type OperatorCallExchange = {
@@ -3910,6 +3914,10 @@ export type OperatorCallDetail = {
      */
     new: number
   }
+  /**
+   * Texts OpenCode added to this request in memory (not saved): the plan reminders, the switch back to building, the step-limit notice
+   */
+  added: Array<"reminder.plan" | "reminder.plan-mode" | "reminder.build-switch" | "notice.max-steps">
   systemText?: string
   previousSystem?: OperatorCallPreviousSystem
   toolsValue?: unknown
@@ -14980,6 +14988,7 @@ export type OperatorCallListData = {
     after?: string
     limit?: string
     kind?: string
+    search?: string
   }
   url: "/operator/session/{sessionID}/calls"
 }

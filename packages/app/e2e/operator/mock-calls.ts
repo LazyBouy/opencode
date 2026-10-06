@@ -11,7 +11,8 @@ const summary = (index: number, extra: Record<string, unknown>) => ({
   kind: "agent",
   agent: "build",
   model: "opencode/claude-opus-4-6",
-  userMessageID: "msg_user_1",
+  // The fixture session's last exchange.
+  userMessageID: "msg_user_smoke_0071",
   exchange: 1,
   format: "anthropic",
   endpoint: "api.example.com/v1/messages",
@@ -27,10 +28,12 @@ const summary = (index: number, extra: Record<string, unknown>) => ({
   system: { chars: 12340, changed: false },
   tools: { count: 11, changed: false },
   messages: { total: 1, new: 1 },
+  added: [],
   ...extra,
 })
 
-export function callsFor(sessionID: string) {
+// With `search`, only the calls whose content has it (as the server searches bodies and responses).
+export function callsFor(sessionID: string, search?: string | null) {
   const calls = [
     summary(1, {
       kind: "title",
@@ -44,12 +47,22 @@ export function callsFor(sessionID: string) {
       system: { chars: 12340, sameAs: 2, changed: false },
       tools: { count: 11, sameAs: 2, changed: false },
       messages: { total: 3, new: 2 },
+      added: ["reminder.build-switch"],
     }),
   ]
+  const query = search?.trim().toLowerCase()
   return {
     sessionID,
-    calls,
-    exchanges: [{ userMessageID: "msg_user_1", index: 1, text: "fix the login bug", time: t0, recorded: true }],
+    calls: query
+      ? calls.filter((call) =>
+          JSON.stringify(callFor(sessionID, call.callID) ?? {})
+            .toLowerCase()
+            .includes(query),
+        )
+      : calls,
+    exchanges: [
+      { userMessageID: "msg_user_smoke_0071", index: 1, text: "fix the login bug", time: t0, recorded: true },
+    ],
     totals: { calls: 3, input: 21312, output: 366, reasoning: 240, cacheRead: 20736, cost: 0.0207 },
   }
 }

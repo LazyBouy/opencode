@@ -157,3 +157,22 @@ test("a session's own rules: added on the Sessions page, saved with the session,
   expect(state.sessionPermissionWrites[1].body).toEqual({ rules: [] })
   await expect(panel).toContainText("Same as the agent until you change it here.")
 })
+
+test("Change access on a session's tool prompt opens that session's rules", async ({ page }) => {
+  await mockOperator(page)
+  await page.goto(`/operator/agents/build${dir}&tab=tools`)
+  await page.getByTestId("tool-prompt-runs-as").getByRole("button", { name: "In a session…" }).click()
+  await page.getByRole("table", { name: "Tools sent" }).getByRole("row", { name: /^read/ }).click()
+  await page.getByTestId("tool-overlay").getByRole("button", { name: "Change access" }).click()
+  await expect(page).toHaveURL(/\/operator\/sessions\?session=ses_op_1&stab=permissions&sperm=read/)
+  await expect(page.getByTestId("session-permissions")).toContainText("Showing the rules for read")
+})
+
+test("Always in the inbox adds the rule to that session's own rules", async ({ page }) => {
+  await mockOperator(page)
+  await page.goto("/operator/inbox")
+  await page.getByRole("button", { name: "Always" }).first().click()
+  await page.goto(`/operator/sessions${dir}&session=ses_op_1&stab=permissions`)
+  const panel = page.getByTestId("session-permissions")
+  await expect(panel.getByRole("row", { name: /git push \*/ })).toContainText("Session · Always allow")
+})

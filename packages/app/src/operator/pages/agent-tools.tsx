@@ -787,6 +787,12 @@ function ToolOverlay(props: {
               variant="outline"
               onClick={() => {
                 dialog.close()
+                // Built for one of the agent's sessions: that session's own rules, else the agent's.
+                const session = props.prompt.runsAs === "session" ? props.prompt.sessionID : undefined
+                if (session)
+                  return navigate(
+                    `/operator/sessions?session=${encodeURIComponent(session)}&stab=permissions&sperm=${encodeURIComponent(props.tool.permission)}`,
+                  )
                 setParams({ atab: "permissions", aperm: props.tool.permission, aedit: "1" })
               }}
             >

@@ -134,6 +134,14 @@ unix("every call is recorded exactly: OpenAI chat, with tool steps, a plan → b
       JSON.stringify(message.content).includes("operational mode has changed"),
     )
     expect(reminded?.marks).toContain("in-memory")
+    // The list names what OpenCode added in memory, per call (for the Detailed view).
+    expect(agentSteps[1]!.added).toEqual(["reminder.build-switch"])
+    expect(agentSteps[0]!.added).toContain("reminder.plan")
+    // Search looks in what each call sent and received.
+    const searched = yield* api.list(session.id, { search: "NOW DO IT" })
+    expect(searched.calls.length).toBeGreaterThan(0)
+    expect(searched.calls.every((call) => call.exchange === 2 || call.kind !== "agent")).toBe(true)
+    expect((yield* api.list(session.id, { search: "no such text anywhere" })).calls).toEqual([])
     const later = yield* api.detail(session.id, agentSteps[2]!.callID)
     expect(later.sent.filter((message) => message.seenIn !== undefined).length).toBe(later.sent.length - 2)
     expect(later.received?.blocks.at(-1)).toMatchObject({ type: "tool-call", name: "glob" })

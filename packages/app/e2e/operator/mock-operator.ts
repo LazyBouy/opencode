@@ -231,7 +231,10 @@ export interface OperatorMock {
   ownRules: Record<string, Array<{ permission: string; pattern: string; action: "allow" | "ask" | "deny" }>>
   drafts: unknown[]
   sessionPermissionWrites: Array<{ sessionID: string; body: { rules: Array<Record<string, string>> } }>
-  sessionRules: Record<string, Array<{ permission: string; pattern: string; action: "allow" | "ask" | "deny" }>>
+  sessionRules: Record<
+    string,
+    Array<{ permission: string; pattern: string; action: "allow" | "ask" | "deny"; origin?: string; time?: number }>
+  >
 }
 
 export async function mockOperator(page: Page) {
@@ -379,7 +382,7 @@ export async function mockOperator(page: Page) {
     const calls = url.pathname.match(/^\/operator\/session\/([^/]+)\/(calls|calls\/export|call\/([^/]+)(\/raw)?)$/)
     if (calls && method === "GET") {
       const id = decodeURIComponent(calls[1]!)
-      if (calls[2] === "calls") return json(route, callsFor(id))
+      if (calls[2] === "calls") return json(route, callsFor(id, url.searchParams.get("search")))
       if (calls[2] === "calls/export")
         return json(route, { format: url.searchParams.get("format"), text: "# Transcript\n" })
       const callID = decodeURIComponent(calls[3]!)
@@ -409,7 +412,12 @@ export async function mockOperator(page: Page) {
     if (toolPrompt && method === "GET") {
       state.toolPromptQueries.push(url.searchParams)
       const name = decodeURIComponent(toolPrompt[1]!)
-      return json(route, toolPrompt[2] ? lastFor(name) : toolPromptFor(directory, name, url.searchParams.get("runsAs")))
+      return json(
+        route,
+        toolPrompt[2]
+          ? lastFor(name)
+          : toolPromptFor(directory, name, url.searchParams.get("runsAs"), url.searchParams.get("session")),
+      )
     }
     if (url.pathname.startsWith("/operator/agent") && method !== "GET") {
       state.agentWrites.push({ method, url: url.toString(), body: route.request().postDataJSON() })
@@ -525,7 +533,22 @@ export async function mockOperator(page: Page) {
     },
   )
   await page.route("**/permission/*/reply*", (route) => {
-    state.replies.push({ url: route.request().url(), body: route.request().postDataJSON() })
+    const body = route.request().postDataJSON() as { reply?: string }
+    state.replies.push({ url: route.request().url(), body })
+    // Always: the request's always patterns become rules of that session (as the server keeps them).
+    const id = new URL(route.request().url()).pathname.split("/")[2]
+    const answered = state.pending.find((item) => item.request.id === id)
+    if (answered && body.reply === "always")
+      state.sessionRules[answered.request.sessionID] = [
+        ...(state.sessionRules[answered.request.sessionID] ?? []),
+        ...answered.request.always.map((pattern) => ({
+          permission: answered.request.permission,
+          pattern,
+          action: "allow" as const,
+          origin: "always",
+          time: now,
+        })),
+      ]
     state.pending = []
     return json(route, true)
   })

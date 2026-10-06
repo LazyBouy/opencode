@@ -83,6 +83,12 @@ export const Summary = Schema.Struct({
     total: Schema.Finite,
     new: Schema.Finite.annotate({ description: "Messages no earlier call sent" }),
   }),
+  added: Schema.Array(
+    Schema.Literals(["reminder.plan", "reminder.plan-mode", "reminder.build-switch", "notice.max-steps"]),
+  ).annotate({
+    description:
+      "Texts OpenCode added to this request in memory (not saved): the plan reminders, the switch back to building, the step-limit notice",
+  }),
 }).annotate({ identifier: "OperatorCallSummary" })
 export type Summary = typeof Summary.Type
 
@@ -207,16 +213,17 @@ const roleOf = (item: unknown) => {
 }
 
 // Texts OpenCode adds to a request in memory: the plan reminders, the switch to build, the step limit.
-const IN_MEMORY = ["reminder.plan", "reminder.plan-mode", "reminder.build-switch", "notice.max-steps"]
-  .map((id) => OperatorPromptText.BUILTINS.find((item) => item.id === id)?.text ?? "")
-  .map(
-    (text) =>
-      text
-        .split("\n")
-        .find((line) => line.trim() && !line.startsWith("<"))
-        ?.trim() ?? "",
-  )
-  .filter(Boolean)
+const IN_MEMORY_IDS = ["reminder.plan", "reminder.plan-mode", "reminder.build-switch", "notice.max-steps"] as const
+// Each in-memory text by its first plain line, which is how it is found in a body.
+const IN_MEMORY_LINES = IN_MEMORY_IDS.map((id) => ({
+  id,
+  line:
+    (OperatorPromptText.BUILTINS.find((item) => item.id === id)?.text ?? "")
+      .split("\n")
+      .find((line) => line.trim() && !line.startsWith("<"))
+      ?.trim() ?? "",
+})).filter((item) => item.line)
+const IN_MEMORY = IN_MEMORY_LINES.map((item) => item.line)
 const CLEARED = "[Old tool result content cleared]"
 
 function marksOf(item: unknown, saved: (text: string) => boolean, summaries: ReadonlyArray<string>) {
@@ -234,6 +241,16 @@ function marksOf(item: unknown, saved: (text: string) => boolean, summaries: Rea
   if (/"type":"(image|image_url|input_image)"/.test(json) || json.includes('"inlineData"')) marks.add("image")
   if (/"type":"(file|input_file|document)"/.test(json) || json.includes('"fileData"')) marks.add("file")
   return [...marks]
+}
+
+// The in-memory texts a body carries that no stored message holds.
+function addedTo(body: Record<string, unknown> | undefined, savedTexts: ReadonlyArray<string>) {
+  if (!body) return []
+  const json = JSON.stringify(body)
+  return IN_MEMORY_LINES.filter(
+    (item) =>
+      json.includes(JSON.stringify(item.line).slice(1, -1)) && !savedTexts.some((text) => text.includes(item.line)),
+  ).map((item) => item.id)
 }
 
 // ---- Summaries ----
@@ -256,6 +273,9 @@ function build(input: Input): Built[] {
     const parts = message?.parts.filter((part) => part.type === "step-finish") ?? []
     return parts.length ? { cost: parts.reduce((sum, part) => sum + (Number(part.cost) || 0), 0) } : undefined
   }
+  const savedTexts = input.messages.flatMap((message) =>
+    message.parts.filter((part) => part.type === "text").map((part) => String(part.text ?? "")),
+  )
   const built: Built[] = []
   const seen = new Map<string, number>()
   const steps = new Map<number, number>()
@@ -322,6 +342,7 @@ function build(input: Input): Built[] {
           changed: !!previous && JSON.stringify(previous.tools) !== JSON.stringify(tools),
         },
         messages: { total: keys.length, new: fresh },
+        added: addedTo(body, savedTexts),
       },
     })
   })

@@ -16,6 +16,7 @@ import {
   For,
   type JSX,
   Match,
+  on,
   onCleanup,
   onMount,
   Show,
@@ -76,11 +77,33 @@ export function TranscriptView(props: { sessionID: string }) {
   })
   onCleanup(stop)
 
+  // Search: the server looks through what each call sent and received (after a pause in typing); the
+  // exchange's own text, the model and the agent are matched here.
+  const [settled, setSettled] = createSignal("")
+  createEffect(
+    on(
+      () => store.search.trim(),
+      (value) => {
+        const timer = setTimeout(() => setSettled(value), 300)
+        onCleanup(() => clearTimeout(timer))
+      },
+    ),
+  )
+  const searched = useQuery(() => ({
+    queryKey: api.key("calls-search", props.sessionID, settled()),
+    enabled: !!directory() && !!settled(),
+    queryFn: () =>
+      api
+        .client()
+        .operator.call.list({ sessionID: props.sessionID, directory: directory(), search: settled() })
+        .then((result) => new Set(result.data!.calls.map((call) => call.callID))),
+  }))
   const matches = (call: OperatorCallSummary) => {
     if (store.filter === "errors") return !!call.error || !!call.retryOf
     if (store.filter !== "all" && call.kind !== store.filter) return false
     const search = store.search.trim().toLowerCase()
     if (!search) return true
+    if (searched.data?.has(call.callID)) return true
     const exchange = list.data?.exchanges.find((item) => item.index === call.exchange)
     return [call.model, call.agent, call.kind, exchange?.text]
       .filter(Boolean)
@@ -798,15 +821,13 @@ function RawPart(props: {
                 size="small"
                 variant="outline"
                 onClick={() =>
-                  void navigator.clipboard
-                    .writeText(data().text)
-                    .then(() =>
-                      showToast({
-                        variant: "success",
-                        icon: "circle-check",
-                        title: language.t("operator.toolPrompt.copied"),
-                      }),
-                    )
+                  void navigator.clipboard.writeText(data().text).then(() =>
+                    showToast({
+                      variant: "success",
+                      icon: "circle-check",
+                      title: language.t("operator.toolPrompt.copied"),
+                    }),
+                  )
                 }
               >
                 {language.t("operator.toolPrompt.copy")}

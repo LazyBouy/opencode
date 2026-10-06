@@ -16,7 +16,13 @@ import type { Rule } from "./rules"
 // which come after the agent's and are edited here. With none, the session is like its agent. Saving
 // replaces the session's own rules; they apply from the session's next step. Used in the session
 // inspector and on the Sessions page.
-export function SessionPermissions(props: { sessionID: string; directory: string | undefined }) {
+export function SessionPermissions(props: {
+  sessionID: string
+  directory: string | undefined
+  // Show only the rules for this permission (Tool Prompt's "Change access").
+  filter?: string
+  onClearFilter?: () => void
+}) {
   const language = useLanguage()
   const api = useOperatorClient()
   const queryClient = useQueryClient()
@@ -92,6 +98,8 @@ export function SessionPermissions(props: { sessionID: string; directory: string
                 onChange={(rules) => setStore("rules", rules)}
                 forms={data().forms}
                 known={data().known}
+                filter={props.filter}
+                onClearFilter={props.onClearFilter}
               />
               <PermissionImpact
                 agent={data().agent}

@@ -1143,6 +1143,8 @@ export function MessageTimeline(props: {
                       comments={messageComments()}
                     />
                   </div>
+                  {/* fork: the Detailed view's notes on this exchange (operator/session-views) */}
+                  {OperatorSessionViews.afterUser(message(), () => getMsgParts(userMessageRow().userMessageID))}
                 </div>
               )}
             </Show>

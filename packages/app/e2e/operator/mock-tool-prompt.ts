@@ -30,7 +30,7 @@ const tool = (name: string, description: string, extra: Record<string, unknown> 
   }
 }
 
-export function toolPromptFor(directory: string, agent: string, runsAs: string | null) {
+export function toolPromptFor(directory: string, agent: string, runsAs: string | null, session?: string | null) {
   const rows: Row[] = [
     { index: 1, permission: "*", pattern: "*", action: "allow", part: "opencode", from: { kind: "opencode-default" } },
     {
@@ -111,7 +111,8 @@ export function toolPromptFor(directory: string, agent: string, runsAs: string |
     agent,
     model: "opencode/claude-opus-4-6",
     modelSource: { model: "opencode/claude-opus-4-6", source: "ranking" },
-    runsAs: subagent ? "subagent" : "primary",
+    runsAs: session ? "session" : subagent ? "subagent" : "primary",
+    ...(session ? { sessionID: session } : {}),
     rows,
     sent,
     notSent,
@@ -142,7 +143,7 @@ export function lastFor(agent: string) {
   }
 }
 
-type Rule = { permission: string; pattern: string; action: "allow" | "ask" | "deny" }
+type Rule = { permission: string; pattern: string; action: "allow" | "ask" | "deny"; origin?: string; time?: number }
 
 // An agent's permissions for the editor: OpenCode's defaults, the agent's definition, a config rule,
 // the agent's own rules (from its settings), and the truncation folder.
@@ -235,15 +236,15 @@ export function sessionPermissionsFor(directory: string, sessionID: string, own:
     parent: false,
     rows: [
       ...agent.rows,
-      ...own.map((rule, index) => ({
+      ...own.map(({ origin, time, ...rule }, index) => ({
         ...rule,
         index: start + index + 1,
         part: "session",
-        from: { kind: "session-user", time: 1_700_000_000_000 },
+        from: { kind: `session-${origin ?? "user"}`, time: time ?? 1_700_000_000_000 },
       })),
     ],
     editable: { start, end: start + own.length },
-    written: own,
+    written: own.map(({ permission, pattern, action }) => ({ permission, pattern, action })),
     forms: agent.forms,
     known: agent.known,
   }

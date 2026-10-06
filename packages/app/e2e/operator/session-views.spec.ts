@@ -11,6 +11,15 @@ function withStep(sessionID: string, limit: number, before?: string) {
   const page = pageMessages(sessionID, limit, before) as { items: Array<{ info: { role: string }; parts: unknown[] }> }
   if (sessionID !== "ses_smoke_target" || before) return page
   const items = structuredClone(page.items)
+  // OpenCode's own text saved with the last user message (hidden in the chat).
+  items
+    .findLast((message) => message.info.role === "user")
+    ?.parts.push({
+      id: "prt_zz_0_synthetic",
+      type: "text",
+      synthetic: true,
+      text: "Called the Read tool with login.ts",
+    })
   const last = items.findLast((message) => message.info.role === "assistant")
   last?.parts.push(
     {
@@ -122,4 +131,26 @@ test("the session overlay opens the full page in any of the three views", async 
   await expect(buttons).toContainText("Open full page:")
   await buttons.getByRole("button", { name: "Transcript" }).click()
   await expect(page).toHaveURL(/\/session\/ses_op_1\?view=transcript/)
+})
+
+test("Detailed shows, under the message, OpenCode's saved and in-memory texts and its side calls", async ({ page }) => {
+  await page.goto(`/server/${base64Encode(fixture.serverKey)}/session/${sessionID}?view=detailed`)
+  const extras = page.getByTestId("detailed-extras").last()
+  await expect(extras).toContainText("OpenCode's text, saved with the message")
+  await expect(extras.getByTestId("detailed-added")).toContainText("The switch back to building")
+  await expect(extras.getByTestId("detailed-side")).toContainText("Title")
+  await extras.getByTestId("detailed-side").getByRole("button", { name: "Open in Transcript" }).click()
+  await expect(page).toHaveURL(/view=transcript&call=call_1|call=call_1&view=transcript|view=transcript.*call=call_1/)
+  // Nothing of it in the User view.
+  await page.getByTestId("session-view-switch").getByRole("button", { name: "User" }).click()
+  await expect(page.getByTestId("detailed-extras")).toHaveCount(0)
+})
+
+test("Transcript search looks through what calls sent and received", async ({ page }) => {
+  await page.goto(`/server/${base64Encode(fixture.serverKey)}/session/${sessionID}?view=transcript`)
+  const transcript = page.getByTestId("transcript")
+  await expect(transcript.getByTestId("transcript-call")).toHaveCount(3)
+  await transcript.getByRole("textbox", { name: "Search the transcript" }).fill("Plan mode is off")
+  await expect(transcript.getByTestId("transcript-call")).toHaveCount(1)
+  await expect(transcript.getByTestId("transcript-call").first().getByTestId("call-header")).toContainText("Call 3")
 })

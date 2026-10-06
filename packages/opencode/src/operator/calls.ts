@@ -52,7 +52,7 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Ope
 export interface Interface {
   readonly list: (
     sessionID: string,
-    filter?: { after?: string; limit?: number; kind?: string },
+    filter?: { after?: string; limit?: number; kind?: string; search?: string },
   ) => Effect.Effect<OperatorCallView.List>
   readonly detail: (sessionID: string, callID: string) => Effect.Effect<OperatorCallView.Detail, NotFoundError>
   readonly raw: (
@@ -188,10 +188,23 @@ const layer = Layer.effect(
 
     const list = Effect.fn("OperatorCalls.list")(function* (
       sessionID: string,
-      filter?: { after?: string; limit?: number; kind?: string },
+      filter?: { after?: string; limit?: number; kind?: string; search?: string },
     ) {
-      const { input } = yield* load(sessionID)
+      const { input, loaded } = yield* load(sessionID)
       const all = OperatorCallView.list(input)
+      // Search: what a call sent (its whole body) and what came back.
+      const query = filter?.search?.trim().toLowerCase()
+      const found = query
+        ? new Set(
+            loaded
+              .filter((item) =>
+                [JSON.stringify(item.body ?? {}), JSON.stringify(item.call.response ?? {}), item.call.model ?? ""].some(
+                  (text) => text.toLowerCase().includes(query),
+                ),
+              )
+              .map((item) => item.call.callID),
+          )
+        : undefined
       const start = filter?.after ? all.calls.findIndex((call) => call.callID === filter.after) + 1 : 0
       const kinds = filter?.kind ? filter.kind.split(",") : undefined
       const picked = all.calls
@@ -201,6 +214,7 @@ const layer = Layer.effect(
             ? true
             : kinds.some((kind) => (kind === "errors" ? !!call.error || !!call.retryOf : call.kind === kind)),
         )
+        .filter((call) => !found || found.has(call.callID))
       return { ...all, calls: filter?.limit ? picked.slice(0, filter.limit) : picked }
     })
 

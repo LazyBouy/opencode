@@ -3871,6 +3871,7 @@ export class Call extends HeyApiClient {
       after?: string
       limit?: string
       kind?: string
+      search?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3885,6 +3886,7 @@ export class Call extends HeyApiClient {
             { in: "query", key: "after" },
             { in: "query", key: "limit" },
             { in: "query", key: "kind" },
+            { in: "query", key: "search" },
           ],
         },
       ],
