@@ -117,6 +117,7 @@ import type {
   MoveSessionDestination,
   OperatorAgentCreateErrors,
   OperatorAgentCreateResponses,
+  OperatorAgentFormat,
   OperatorAgentListErrors,
   OperatorAgentListResponses,
   OperatorAgentPromptGetErrors,
@@ -3033,7 +3034,7 @@ export class Agent extends HeyApiClient {
   /**
    * Create an agent
    *
-   * Write a new markdown agent in the global or project `agents` folder. The project reloads so the agent can be used.
+   * Write a new agent at the global or project scope: a markdown file in the `agents` folder, or `agent.<name>` in the config file. The project reloads so the agent can be used.
    */
   public create<ThrowOnError extends boolean = false>(
     parameters: {
@@ -3041,6 +3042,7 @@ export class Agent extends HeyApiClient {
       workspace?: string
       scope: OperatorConfigScope
       name?: string
+      format?: OperatorAgentFormat
       description?: string
       mode?: "subagent" | "primary" | "all"
       model?: string
@@ -3081,6 +3083,7 @@ export class Agent extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "query", key: "scope" },
             { in: "body", key: "name" },
+            { in: "body", key: "format" },
             { in: "body", key: "description" },
             { in: "body", key: "mode" },
             { in: "body", key: "model" },

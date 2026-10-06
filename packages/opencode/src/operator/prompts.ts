@@ -1,6 +1,7 @@
 export * as OperatorPrompts from "./prompts"
 
 import path from "path"
+import { parse } from "jsonc-parser"
 import { Context, Effect, Layer, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -11,6 +12,8 @@ import { Provider } from "@/provider/provider"
 import { Instruction } from "@/session/instruction"
 import { SystemPrompt } from "@/session/system"
 import { ToolRegistry } from "@/tool/registry"
+import { OperatorAgents } from "./agents"
+import { OperatorConfig } from "./config"
 import { OperatorGenerate } from "./generate"
 import { OperatorHelperTexts } from "./helper-texts"
 import { OperatorProfile } from "./profile"
@@ -48,12 +51,39 @@ export const Preview = Schema.Struct({
 }).annotate({ identifier: "OperatorPromptPreview" })
 export type Preview = typeof Preview.Type
 
+// Where (part of) a sample's text came from.
+export const Origin = Schema.Struct({
+  kind: Schema.Literals([
+    "agent-file",
+    "agent-config",
+    "agent-builtin",
+    "agent-none",
+    "base",
+    "written",
+    "config",
+    "file",
+    "url",
+    "mcp",
+    "skill",
+  ]).annotate({
+    description:
+      "agent-file / agent-config: the agent's prompt from its agent file or a config file; agent-builtin: OpenCode's own definition of the agent; agent-none: the agent has no prompt; base: a Base Model Group layer; written: OpenCode writes it for each request; config: a config file; file, url: an instruction file or URL; mcp: an MCP server; skill: a skill's file",
+  }),
+  path: Schema.optional(Schema.String).annotate({
+    description: "The file, URL, layer, server or skill file it came from",
+  }),
+}).annotate({ identifier: "OperatorPromptSampleOrigin" })
+export type Origin = typeof Origin.Type
+
 export const Sample = Schema.Struct({
   agent: Schema.String,
   model: Schema.String.annotate({ description: "provider/model the sample was made for" }),
   layer: Schema.String,
   text: Schema.String.annotate({ description: "What the layer fills in; empty when it adds nothing here" }),
   source: Schema.String.annotate({ description: "Where the text comes from: a file, an agent, or what wrote it" }),
+  origin: Schema.Array(Origin).annotate({
+    description: "Where this sample's text came from, for OpenCode's per-request layers",
+  }),
 }).annotate({ identifier: "OperatorPromptSample" })
 export type Sample = typeof Sample.Type
 
@@ -96,6 +126,8 @@ const layer = Layer.effect(
     const instruction = yield* Instruction.Service
     const registry = yield* ToolRegistry.Service
     const helpers = yield* OperatorHelperTexts.Service
+    const operatorAgents = yield* OperatorAgents.Service
+    const operatorConfig = yield* OperatorConfig.Service
 
     // The project's tools with their own descriptions; prompt profiles override them.
     const catalog = Effect.fn("OperatorPrompts.catalog")(function* () {
@@ -150,6 +182,7 @@ const layer = Layer.effect(
           layer: input.layer,
           text,
           source: own.name,
+          origin: [],
         }
       }
       const found = OperatorProfile.sample(
@@ -164,7 +197,53 @@ const layer = Layer.effect(
         input.layer,
       )
       if (!found) return yield* new NotFoundError({ message: `No layer "${input.layer}"` })
-      return { agent: agent.name, model: `${model.providerID}/${model.id}`, layer: input.layer, ...found }
+      const layer = OperatorProfile.findLayer(loaded.catalog, input.layer)
+      const origin =
+        layer && OperatorProfile.isPerRequest(layer)
+          ? yield* originOf((layer.replaces ?? layer.id).slice(OperatorProfile.PREFIX.length), {
+              agent,
+              parts,
+              ...found,
+            })
+          : []
+      return { agent: agent.name, model: `${model.providerID}/${model.id}`, layer: input.layer, ...found, origin }
+    })
+
+    // Where a per-request layer's text came from (`key`: the built-in's id without its prefix).
+    const originOf = Effect.fnUntraced(function* (
+      key: string,
+      input: { agent: Agent.Info; parts: OperatorProfile.Parts; text: string; source: string },
+    ) {
+      const agentPrompt = Effect.gen(function* () {
+        const found = yield* operatorAgents.promptOrigin(input.agent.name)
+        return [{ kind: `agent-${found.kind}` as const, ...(found.path ? { path: found.path } : {}) }]
+      })
+      const base = input.source ? [{ kind: "base" as const, path: input.source }] : []
+      if (key === "slot.agent") return input.text ? yield* agentPrompt : [{ kind: "agent-none" as const }]
+      if (key === "slot.agent-or-base") return input.agent.prompt?.trim() ? yield* agentPrompt : base
+      if (key === "slot.base") return base
+      if (key === "generated.environment") return [{ kind: "written" as const }]
+      if (key === "generated.references")
+        return (yield* operatorConfig.layers()).sources
+          .filter((source) => (parse(source.text) as { references?: unknown } | undefined)?.references !== undefined)
+          .map((source) => ({ kind: "config" as const, path: source.path }))
+      if (key === "generated.instructions")
+        return input.parts.instructions.map((entry) => {
+          const end = entry.indexOf("\n")
+          const from = entry.slice("Instructions from: ".length, end < 0 ? undefined : end).trim()
+          return { kind: /^https?:\/\//.test(from) ? ("url" as const) : ("file" as const), path: from }
+        })
+      if (key === "generated.mcp")
+        return [...input.text.matchAll(/<server name="([^"]+)">/g)].map((match) => ({
+          kind: "mcp" as const,
+          path: match[1]!,
+        }))
+      if (key === "generated.skills")
+        return [...input.text.matchAll(/<location>([^<]+)<\/location>/g)].map((match) => ({
+          kind: "skill" as const,
+          path: unescape(match[1]!),
+        }))
+      return [] as Origin[]
     })
 
     const preview = Effect.fn("OperatorPrompts.preview")(function* (input: {
@@ -219,5 +298,24 @@ const layer = Layer.effect(
 export const node = LayerNode.make({
   service: Service,
   layer,
-  deps: [Agent.node, Provider.node, SystemPrompt.node, Instruction.node, ToolRegistry.node, OperatorHelperTexts.node],
+  deps: [
+    Agent.node,
+    Provider.node,
+    SystemPrompt.node,
+    Instruction.node,
+    ToolRegistry.node,
+    OperatorHelperTexts.node,
+    OperatorAgents.node,
+    OperatorConfig.node,
+  ],
 })
+
+// Skill locations are HTML-escaped in the skills text.
+function unescape(text: string) {
+  return text
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&#39;", "'")
+    .replaceAll("&amp;", "&")
+}

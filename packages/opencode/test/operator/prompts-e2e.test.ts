@@ -274,6 +274,39 @@ unix("a Dynamic layer's sample is what it fills in for the agent", () =>
   ),
 )
 
+unix("a per-request layer's sample says where its text came from", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      const { directory } = yield* configure()
+      yield* write(path.join(directory, "AGENTS.md"), "Use Bun for everything.\n")
+      const triage = path.join(directory, ".opencode", "agent", "triage.md")
+      yield* write(triage, "---\nmode: primary\n---\nTriage issues.\n")
+      const prompts = yield* OperatorPrompts.Service
+      const base = (yield* prompts.preview({ agent: "build" })).base
+
+      expect((yield* prompts.sample({ agent: "triage", layer: `${P}slot.agent` })).origin).toEqual([
+        { kind: "agent-file", path: triage },
+      ])
+      expect((yield* prompts.sample({ agent: "explore", layer: `${P}slot.agent` })).origin).toEqual([
+        { kind: "agent-builtin" },
+      ])
+      const none = yield* prompts.sample({ agent: "build", layer: `${P}slot.agent` })
+      expect(none.text).toBe("")
+      expect(none.origin).toEqual([{ kind: "agent-none" }])
+      expect((yield* prompts.sample({ agent: "build", layer: `${P}slot.agent-or-base` })).origin).toEqual([
+        { kind: "base", path: base },
+      ])
+      expect((yield* prompts.sample({ agent: "build", layer: `${P}generated.environment` })).origin).toEqual([
+        { kind: "written" },
+      ])
+      expect((yield* prompts.sample({ agent: "build", layer: `${P}generated.instructions` })).origin).toContainEqual({
+        kind: "file",
+        path: path.join(directory, "AGENTS.md"),
+      })
+    }),
+  ),
+)
+
 unix("your Dynamic layer is written once per session by the dynamic generator, then reused", () =>
   withGlobal(() =>
     Effect.gen(function* () {

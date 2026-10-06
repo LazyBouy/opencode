@@ -75,6 +75,62 @@ it.instance("creating an agent writes a markdown file the agent loader reads", (
   }),
 )
 
+it.instance("creating an agent as a config entry writes agent.<name> into the scope's config", () =>
+  Effect.gen(function* () {
+    const { directory } = yield* TestInstance
+    const agents = yield* OperatorAgents.Service
+
+    const file = yield* agents.create(
+      "project",
+      "reviewer",
+      { description: "Reviews diffs", mode: "subagent", prompt: "Review the diff." },
+      "config",
+    )
+
+    expect(file).toBe(path.join(directory, ".opencode", "opencode.jsonc"))
+    expect(JSON.parse(yield* Effect.promise(() => fs.readFile(file, "utf8")))).toEqual({
+      agent: { reviewer: { description: "Reviews diffs", mode: "subagent", prompt: "Review the diff." } },
+    })
+    expect(
+      yield* Effect.promise(() => Bun.file(path.join(directory, ".opencode", "agents", "reviewer.md")).exists()),
+    ).toBe(false)
+  }),
+)
+
+it.instance(
+  "an agent's prompt comes from its agent file, a config file, OpenCode's definition, or nowhere",
+  () =>
+    Effect.gen(function* () {
+      const { directory } = yield* TestInstance
+      const agents = yield* OperatorAgents.Service
+
+      expect(yield* agents.promptOrigin("reviewer")).toEqual({
+        kind: "file",
+        path: path.join(directory, ".opencode", "agents", "reviewer.md"),
+      })
+      expect(yield* agents.promptOrigin("helper")).toEqual({
+        kind: "config",
+        path: path.join(directory, ".opencode", "opencode.jsonc"),
+      })
+      expect(yield* agents.promptOrigin("explore")).toEqual({ kind: "builtin" })
+      expect(yield* agents.promptOrigin("build")).toEqual({ kind: "none" })
+    }),
+  {
+    init: (directory) =>
+      Effect.promise(async () => {
+        await fs.mkdir(path.join(directory, ".opencode", "agents"), { recursive: true })
+        await fs.writeFile(
+          path.join(directory, ".opencode", "agents", "reviewer.md"),
+          "---\nmode: subagent\n---\nReview the diff.\n",
+        )
+        await fs.writeFile(
+          path.join(directory, ".opencode", "opencode.jsonc"),
+          JSON.stringify({ agent: { helper: { mode: "subagent", prompt: "Help out." } } }),
+        )
+      }),
+  },
+)
+
 it.instance("names must be file-safe and unique", () =>
   Effect.gen(function* () {
     const agents = yield* OperatorAgents.Service

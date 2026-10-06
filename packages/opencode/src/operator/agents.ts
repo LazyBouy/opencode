@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import path from "path"
 import matter from "gray-matter"
 import { count, eq, max } from "drizzle-orm"
+import { parse } from "jsonc-parser"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -77,6 +78,15 @@ export const Patch = Schema.Struct({
 })
 type Fields = typeof Patch.Type
 
+// How a new agent is saved: an agent file (`agents/<name>.md`, its prompt as the body) or an entry in
+// the config file (`agent.<name>`).
+export const Format = Schema.Literals(["file", "config"]).annotate({ identifier: "OperatorAgentFormat" })
+export type Format = typeof Format.Type
+
+// Where an agent's prompt comes from: its agent file, `agent.<name>.prompt` in a config file,
+// OpenCode's own definition of a built-in agent, or nowhere (the agent has no prompt).
+export type PromptOrigin = { kind: "file" | "config" | "builtin" | "none"; path?: string }
+
 export const Name = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/)).annotate({
   description: "Letters, digits, dots, dashes and underscores; used as the file name",
 })
@@ -93,12 +103,15 @@ export class InvalidError extends Schema.TaggedErrorClass<InvalidError>()("Opera
 
 export interface Interface {
   readonly list: () => Effect.Effect<Info[]>
-  /** Writes a new agent file at the scope; returns its path. */
+  /** Writes a new agent at the scope, as an agent file or a config entry; returns the file written. */
   readonly create: (
     scope: OperatorConfig.Scope,
     name: string,
     patch: Fields,
+    format?: Format,
   ) => Effect.Effect<string, ConflictError | InvalidError | OperatorConfig.InvalidError>
+  /** Where the agent's prompt comes from. */
+  readonly promptOrigin: (name: string) => Effect.Effect<PromptOrigin>
   /** Edits the agent's file, or for built-in and config agents, its `agent.<name>` config at the scope. */
   readonly update: (
     scope: OperatorConfig.Scope,
@@ -225,15 +238,49 @@ const layer = Layer.effect(
       scope: OperatorConfig.Scope,
       name: string,
       patch: Fields,
+      format: Format = "file",
     ) {
       if (!Schema.is(Name)(name)) return yield* new InvalidError({ message: `"${name}" is not a valid agent name` })
       if ((yield* list()).some((agent) => agent.name === name))
         return yield* new ConflictError({ message: `An agent named "${name}" already exists` })
-      const file = path.join(OperatorConfig.scopeDirectory(scope, yield* InstanceState.context), "agents", `${name}.md`)
       const values = present(settings(patch))
+      if (format === "config") {
+        yield* ensureHome(patch.home)
+        return (yield* operatorConfig.update(scope, { agent: { [name]: values } })).path
+      }
+      const file = path.join(OperatorConfig.scopeDirectory(scope, yield* InstanceState.context), "agents", `${name}.md`)
       yield* write(file, omitPrompt(values), String(values.prompt ?? ""))
       yield* ensureHome(patch.home)
       return file
+    })
+
+    // The agent's prompt is matched against its agent file's body and each config file's
+    // `agent.<name>.prompt`; the one that holds the same text is where it comes from. A file or config
+    // prompt that is written differently (a `{file:…}` reference) still counts, the file first.
+    const promptOrigin = Effect.fn("OperatorAgents.promptOrigin")(function* (name: string) {
+      const agent: Info | undefined = (yield* list()).find((item) => item.name === name)
+      const prompt = agent?.prompt?.trim()
+      if (!agent || !prompt) return { kind: "none" as const }
+      const file = agent.source.path
+      const body = file
+        ? yield* Effect.promise(() =>
+            fs
+              .readFile(file, "utf8")
+              .then((text) => matter(text).content.trim())
+              .catch(() => ""),
+          )
+        : ""
+      const configs = (yield* operatorConfig.layers()).sources.flatMap((source) => {
+        const value = (parse(source.text) as { agent?: Record<string, { prompt?: unknown } | undefined> } | undefined)
+          ?.agent?.[name]?.prompt
+        return typeof value === "string" ? [{ path: source.path, text: value.trim() }] : []
+      })
+      if (file && body === prompt) return { kind: "file" as const, path: file }
+      const config = configs.findLast((item) => item.text === prompt)
+      if (config) return { kind: "config" as const, path: config.path }
+      if (file && body) return { kind: "file" as const, path: file }
+      if (configs.length) return { kind: "config" as const, path: configs.at(-1)!.path }
+      return agent.native ? { kind: "builtin" as const } : { kind: "none" as const }
     })
 
     const update = Effect.fn("OperatorAgents.update")(function* (
@@ -284,7 +331,7 @@ const layer = Layer.effect(
       return result.path
     })
 
-    return Service.of({ list, create, update, remove })
+    return Service.of({ list, create, promptOrigin, update, remove })
   }),
 )
 

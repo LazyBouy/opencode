@@ -47,15 +47,22 @@ export const OperatorProjectApi = HttpApi.make("operator-project")
         ),
         HttpApiEndpoint.post("agentCreate", OperatorProjectPaths.agents, {
           query: ScopeQuery,
-          payload: Schema.Struct({ name: Schema.String, ...OperatorAgents.Patch.fields }),
-          success: described(AgentWritten, "The agent file that was written"),
+          payload: Schema.Struct({
+            name: Schema.String,
+            format: Schema.optional(OperatorAgents.Format).annotate({
+              description:
+                "file (default): an agent file, `agents/<name>.md`; config: `agent.<name>` in the config file",
+            }),
+            ...OperatorAgents.Patch.fields,
+          }),
+          success: described(AgentWritten, "The agent file or config file that was written"),
           error: [ApiAgentNotFoundError, ApiAgentConflictError, ApiAgentInvalidError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "operator.agent.create",
             summary: "Create an agent",
             description:
-              "Write a new markdown agent in the global or project `agents` folder. The project reloads so the agent can be used.",
+              "Write a new agent at the global or project scope: a markdown file in the `agents` folder, or `agent.<name>` in the config file. The project reloads so the agent can be used.",
           }),
         ),
         HttpApiEndpoint.patch("agentUpdate", OperatorProjectPaths.agent, {

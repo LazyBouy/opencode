@@ -13123,7 +13123,7 @@
         ],
         "responses": {
           "200": {
-            "description": "The agent file that was written",
+            "description": "The agent file or config file that was written",
             "content": {
               "application/json": {
                 "schema": {
@@ -13170,7 +13170,7 @@
             }
           }
         },
-        "description": "Write a new markdown agent in the global or project `agents` folder. The project reloads so the agent can be used.",
+        "description": "Write a new agent at the global or project scope: a markdown file in the `agents` folder, or `agent.<name>` in the config file. The project reloads so the agent can be used.",
         "summary": "Create an agent",
         "requestBody": {
           "content": {
@@ -13180,6 +13180,9 @@
                 "properties": {
                   "name": {
                     "type": "string"
+                  },
+                  "format": {
+                    "$ref": "#/components/schemas/OperatorAgentFormat"
                   },
                   "description": {
                     "type": "string"
@@ -29119,9 +29122,23 @@
             "required": ["global", "project"],
             "additionalProperties": false,
             "description": "The file a write at each scope goes to. It is created if missing."
+          },
+          "folders": {
+            "type": "object",
+            "properties": {
+              "global": {
+                "type": "string"
+              },
+              "project": {
+                "type": "string"
+              }
+            },
+            "required": ["global", "project"],
+            "additionalProperties": false,
+            "description": "The folder that holds agent, command and skill files at each scope"
           }
         },
-        "required": ["sources", "targets"],
+        "required": ["sources", "targets", "folders"],
         "additionalProperties": false
       },
       "OperatorConfigScope": {
@@ -29270,6 +29287,10 @@
         },
         "required": ["name", "mode", "permission", "options", "source", "disabled", "settings", "sessions"],
         "additionalProperties": false
+      },
+      "OperatorAgentFormat": {
+        "type": "string",
+        "enum": ["file", "config"]
       },
       "OperatorAgentWritten": {
         "type": "object",
@@ -29557,6 +29578,33 @@
         "required": ["name", "data"],
         "additionalProperties": false
       },
+      "OperatorPromptSampleOrigin": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "agent-file",
+              "agent-config",
+              "agent-builtin",
+              "agent-none",
+              "base",
+              "written",
+              "config",
+              "file",
+              "url",
+              "mcp",
+              "skill"
+            ],
+            "description": "agent-file / agent-config: the agent's prompt from its agent file or a config file; agent-builtin: OpenCode's own definition of the agent; agent-none: the agent has no prompt; base: a Base Model Group layer; written: OpenCode writes it for each request; config: a config file; file, url: an instruction file or URL; mcp: an MCP server; skill: a skill's file"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": ["kind"],
+        "additionalProperties": false
+      },
       "OperatorPromptSample": {
         "type": "object",
         "properties": {
@@ -29577,9 +29625,16 @@
           "source": {
             "type": "string",
             "description": "Where the text comes from: a file, an agent, or what wrote it"
+          },
+          "origin": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPromptSampleOrigin"
+            },
+            "description": "Where this sample's text came from, for OpenCode's per-request layers"
           }
         },
-        "required": ["agent", "model", "layer", "text", "source"],
+        "required": ["agent", "model", "layer", "text", "source", "origin"],
         "additionalProperties": false
       },
       "OperatorPromptGenerateError": {

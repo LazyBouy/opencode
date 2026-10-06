@@ -23,9 +23,9 @@ export const operatorProjectHandlers = HttpApiBuilder.group(InstanceHttpApi, "op
       .handle("agents", () => agents.list())
       .handle("tools", () => tools.list())
       .handle("agentCreate", (ctx) => {
-        const { name, ...patch } = ctx.payload
+        const { name, format, ...patch } = ctx.payload
         return agents
-          .create(ctx.query.scope, name, patch)
+          .create(ctx.query.scope, name, patch, format)
           .pipe(Effect.flatMap(written(ctx.query.scope)), Effect.mapError(apiError))
       })
       .handle("agentUpdate", (ctx) =>

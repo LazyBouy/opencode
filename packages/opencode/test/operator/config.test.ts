@@ -43,6 +43,7 @@ it.instance("a project write creates .opencode/opencode.jsonc and lists it as a 
     expect(JSON.parse(yield* readText(result.path))).toEqual({ username: "operator" })
     expect(layers.targets.project).toBe(result.path)
     expect(layers.sources.findLast((source) => source.kind === "directory")?.path).toBe(result.path)
+    expect(layers.folders.project).toBe(path.join(directory, ".opencode"))
   }),
 )
 

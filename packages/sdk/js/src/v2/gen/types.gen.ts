@@ -3100,6 +3100,13 @@ export type OperatorConfigLayers = {
     global: string
     project: string
   }
+  /**
+   * The folder that holds agent, command and skill files at each scope
+   */
+  folders: {
+    global: string
+    project: string
+  }
 }
 
 export type OperatorConfigScope = "global" | "project"
@@ -3166,6 +3173,8 @@ export type OperatorAgent = {
     lastUsed?: number
   }
 }
+
+export type OperatorAgentFormat = "file" | "config"
 
 export type OperatorAgentWritten = {
   path: string
@@ -3286,6 +3295,25 @@ export type OperatorPromptNotFoundError = {
   }
 }
 
+export type OperatorPromptSampleOrigin = {
+  /**
+   * agent-file / agent-config: the agent's prompt from its agent file or a config file; agent-builtin: OpenCode's own definition of the agent; agent-none: the agent has no prompt; base: a Base Model Group layer; written: OpenCode writes it for each request; config: a config file; file, url: an instruction file or URL; mcp: an MCP server; skill: a skill's file
+   */
+  kind:
+    | "agent-file"
+    | "agent-config"
+    | "agent-builtin"
+    | "agent-none"
+    | "base"
+    | "written"
+    | "config"
+    | "file"
+    | "url"
+    | "mcp"
+    | "skill"
+  path?: string
+}
+
 export type OperatorPromptSample = {
   agent: string
   /**
@@ -3301,6 +3329,10 @@ export type OperatorPromptSample = {
    * Where the text comes from: a file, an agent, or what wrote it
    */
   source: string
+  /**
+   * Where this sample's text came from, for OpenCode's per-request layers
+   */
+  origin: Array<OperatorPromptSampleOrigin>
 }
 
 export type OperatorPromptGenerateError = {
@@ -13611,6 +13643,7 @@ export type OperatorAgentListResponse = OperatorAgentListResponses[keyof Operato
 export type OperatorAgentCreateData = {
   body?: {
     name: string
+    format?: OperatorAgentFormat
     description?: string
     mode?: "subagent" | "primary" | "all"
     model?: string
@@ -13668,7 +13701,7 @@ export type OperatorAgentCreateError = OperatorAgentCreateErrors[keyof OperatorA
 
 export type OperatorAgentCreateResponses = {
   /**
-   * The agent file that was written
+   * The agent file or config file that was written
    */
   200: OperatorAgentWritten
 }

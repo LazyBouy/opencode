@@ -32,6 +32,10 @@ export const Layers = Schema.Struct({
     global: Schema.String,
     project: Schema.String,
   }).annotate({ description: "The file a write at each scope goes to. It is created if missing." }),
+  folders: Schema.Struct({
+    global: Schema.String,
+    project: Schema.String,
+  }).annotate({ description: "The folder that holds agent, command and skill files at each scope" }),
 }).annotate({ identifier: "OperatorConfigLayers" })
 export type Layers = typeof Layers.Type
 
@@ -112,7 +116,12 @@ const layer = Layer.effect(
 
     const layers = Effect.fn("OperatorConfig.layers")(function* () {
       const list = yield* sources()
-      return { sources: list, targets: yield* targets(list) }
+      const ctx = yield* InstanceState.context
+      return {
+        sources: list,
+        targets: yield* targets(list),
+        folders: { global: scopeDirectory("global", ctx), project: scopeDirectory("project", ctx) },
+      }
     })
 
     const save = Effect.fnUntraced(function* (file: string, before: string, after: string) {
