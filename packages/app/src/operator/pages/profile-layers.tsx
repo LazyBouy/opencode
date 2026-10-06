@@ -4,11 +4,7 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
-import type {
-  OperatorNamespaceSummary,
-  OperatorPromptSample,
-  OperatorPromptSampleOrigin,
-} from "@opencode-ai/sdk/v2/client"
+import type { OperatorNamespaceSummary, OperatorPromptSample } from "@opencode-ai/sdk/v2/client"
 import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
@@ -16,11 +12,13 @@ import { useQuery } from "@tanstack/solid-query"
 import { useOperatorClient } from "../data"
 import { shortPath } from "../format"
 import { useOperatorProjects } from "../project"
+import { useRememberedProject } from "../scope"
 import { CopyToNamespace } from "../ui/copy-to"
 import { useConfirm } from "../ui/confirm"
 import { DataTable } from "../ui/data-table"
 import { Field } from "../ui/field"
 import { NamespaceAction } from "../ui/namespace-picker"
+import { TraceList } from "../ui/prompt-trace"
 import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOverlay } from "../ui/record-overlay"
 import { requestError } from "./config-helpers"
 import { usePromptRefresh, useProfileNames, useScopeCatalogs, useToolLayers } from "./profile-data"
@@ -45,6 +43,7 @@ import { PurposeDraft } from "./purpose-draft"
 // Each Layer Definition section's icon in the overlay's menu.
 const ICONS: Record<Section, OverlayBlock["icon"]> = {
   base: "models",
+  agent: "bubble-5",
   purpose: "task",
   role: "subagent",
   identity: "brain",
@@ -642,6 +641,16 @@ function LayerRecord(props: {
                   </RecordField>
                 )}
               </Show>
+              <Show when={found().file}>
+                {(file) => (
+                  <RecordField
+                    label={language.t("operator.profile.sourceFile")}
+                    help={language.t("operator.help.layerSourceFile")}
+                  >
+                    <code data-testid="layer-source-file">{file()}</code>
+                  </RecordField>
+                )}
+              </Show>
               <Show when={dynamicKey(found())}>
                 {(key) => (
                   <>
@@ -735,7 +744,10 @@ function LayerSample(props: { layer: Layer; catalog: Catalog; onSelect: (id: str
     const own = projects().filter((item) => keys.has(item.directory))
     return own.length ? own : projects()
   })
-  const project = () => store.project ?? options()[0]?.directory
+  // The project chosen here, else the one chosen on the operator pages (when it is offered), else the first.
+  const remembered = useRememberedProject()
+  const project = () =>
+    store.project ?? options().find((item) => item.directory === remembered())?.directory ?? options()[0]?.directory
   const projectName = (key: string) => projects().find((item) => item.directory === key)?.label ?? shortPath(key)
   // Each agent with where it is defined, and whether it is hidden.
   const agentLabel = (name: string) => {
@@ -745,15 +757,6 @@ function LayerSample(props: { layer: Layer; catalog: Catalog; onSelect: (id: str
     if (agent.hidden) details.push(language.t("operator.agents.hidden"))
     return language.t("operator.profile.sampleAgentOption", { name, details: details.join(", ") })
   }
-  // One line of where the sample's text came from.
-  const originText = (item: OperatorPromptSampleOrigin, sample: OperatorPromptSample) =>
-    item.kind === "skill" && item.path === "<built-in>"
-      ? language.t("operator.profile.origin.skillBuiltin")
-      : language.t(`operator.profile.origin.${item.kind}` as "operator.profile.origin.file", {
-          path: item.path ?? "",
-          agent: sample.agent,
-          model: sample.model,
-        })
   const agents = useQuery(() => ({
     queryKey: api.key("agents", project()),
     enabled: !!project(),
@@ -839,14 +842,7 @@ function LayerSample(props: { layer: Layer; catalog: Catalog; onSelect: (id: str
             >
               <pre data-component="operator-code">{sample().text}</pre>
             </Show>
-            <Show when={sample().origin.length}>
-              <div data-slot="operator-sample-origin" data-testid="sample-origin">
-                <strong>{language.t("operator.profile.cameFrom")}</strong>
-                <ul>
-                  <For each={sample().origin}>{(item) => <li>{originText(item, sample())}</li>}</For>
-                </ul>
-              </div>
-            </Show>
+            <TraceList trace={sample().trace} label={language.t("operator.profile.cameFrom")} />
             <p data-slot="operator-note">
               {language.t(
                 isWrittenDynamic(props.layer) ? "operator.profile.sampleNoteWritten" : "operator.profile.sampleNote",

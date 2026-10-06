@@ -104,6 +104,7 @@ test("the overlay's menu lists a block's records, and ‹ › move through every
   const menu = overlay.getByRole("tablist", { name: "Layer Definition" })
   for (const block of [
     "Base Model Group",
+    "Agent prompts",
     "Project Purpose",
     "Role",
     "Identity Groups",
@@ -114,11 +115,15 @@ test("the overlay's menu lists a block's records, and ‹ › move through every
     await expect(menu.getByRole("tab", { name: block })).toBeVisible()
   await expect(menu.getByRole("tab", { name: "Base Model Group" })).toHaveAttribute("aria-selected", "true")
 
-  // The last Base Model Group layer is followed by the first Tool Group layer (Project Purpose, Role
-  // and Identity Groups are empty), and the menu follows.
+  // The last Base Model Group layer is followed by explore's prompt in Agent prompts, then the first
+  // Tool Group layer (Project Purpose, Role and Identity Groups are empty), and the menu follows.
+  await overlay.getByRole("button", { name: "Next record" }).click()
+  await expect(overlay.getByRole("heading", { name: "agent.explore" })).toBeVisible()
+  await expect(menu.getByRole("tab", { name: "Agent prompts" })).toHaveAttribute("aria-selected", "true")
   await overlay.getByRole("button", { name: "Next record" }).click()
   await expect(overlay.getByRole("heading", { name: "tool.read" })).toBeVisible()
   await expect(menu.getByRole("tab", { name: "Tool Group" })).toHaveAttribute("aria-selected", "true")
+  await page.keyboard.press("ArrowLeft")
   await page.keyboard.press("ArrowLeft")
   await expect(overlay.getByRole("heading", { name: "base.default" })).toBeVisible()
 
@@ -340,7 +345,7 @@ test("Dynamic layers show a sample for an agent of a project, and where to chang
   await overlay.getByRole("button", { name: "Generate sample" }).click()
   await expect(overlay.getByRole("status")).toContainText("Sample for build in smoke-project")
   await expect(overlay.getByRole("status")).toContainText("Use Bun.")
-  await expect(overlay.getByTestId("sample-origin")).toContainText(/Came from\s*Instruction file .*\/AGENTS\.md/)
+  await expect(overlay.getByTestId("prompt-trace")).toContainText(/Came from\s*Instruction file: .*\/AGENTS\.md/)
   await expect(overlay.getByRole("button", { name: "Open Memory" })).toBeVisible()
 
   // The base prompt by model points at the layer it comes from.
@@ -363,15 +368,36 @@ test("Agent prompt says where an agent's prompt comes from: a file agent's file,
 
   // build has no prompt of its own.
   await overlay.getByRole("button", { name: "Generate sample" }).click()
-  await expect(overlay.getByTestId("sample-origin")).toContainText("build has no prompt of its own")
+  await expect(overlay.getByTestId("prompt-trace")).toContainText("build has no prompt of its own")
 
   // Hidden and file agents are offered too, with where they are defined.
   await pick(page, "Agent", "triage (File, Hidden)")
   await overlay.getByRole("button", { name: "Generate sample" }).click()
   await expect(overlay.getByRole("status")).toContainText("Triage issues.")
-  await expect(overlay.getByTestId("sample-origin")).toContainText(
-    /triage's agent file: .*\/\.opencode\/agent\/triage\.md/,
-  )
+  await expect(overlay.getByTestId("prompt-trace")).toContainText(/Its agent file: .*\/\.opencode\/agent\/triage\.md/)
+})
+
+test("explore's own prompt is a built-in layer in Agent prompts, with the file it comes from", async ({ page }) => {
+  await mockOperator(page)
+  await page.goto("/operator/profile?ns=opencode&tab=layers")
+  const section = page.locator('[data-section="agent"]')
+  await expect(section).toContainText("Agent prompts")
+  await section.getByRole("row", { name: /agent\.explore/ }).click()
+  const overlay = page.getByRole("dialog")
+  await expect(overlay.locator('[data-slot="record-builtin"]')).toHaveText("Built in")
+  await expect(overlay.getByTestId("layer-source-file")).toHaveText("packages/opencode/src/agent/prompt/explore.txt")
+  await expect(overlay.getByRole("button", { name: "Edit a copy" })).toBeVisible()
+})
+
+test("Prompt Profile has no Size; a profile's Create agent… starts in the project chosen on the operator pages", async ({
+  page,
+}) => {
+  await mockOperator(page)
+  await page.goto("/operator/profile?ns=opencode&tab=profiles&profile=opencode:profile.opencode")
+  const overlay = page.getByRole("dialog")
+  await expect(overlay.getByRole("button", { name: "Create agent…" })).toBeVisible()
+  await expect(overlay).not.toContainText("Fixed texts")
+  await expect(overlay).not.toContainText("As sent for build")
 })
 
 test("a helper profile holds one helper layer, and a helper group no other type", async ({ page }) => {
@@ -416,9 +442,7 @@ test("the purpose generator drafts a Project Purpose into the editor", async ({ 
   await expect(overlay.getByLabel("Text", { exact: true })).toHaveValue("A drafted project purpose (short).")
 })
 
-test("a profile's slots change in its view, it shows its size, and Create agent… makes an agent that uses it", async ({
-  page,
-}) => {
+test("a profile's slots change in its view, and Create agent… makes an agent that uses it", async ({ page }) => {
   const state = await mockOperator(page)
   state.prompt.items.opencode!.layers.push(user("reviewer", "Reviewer", "role", "role", "You review release notes."))
   state.prompt.items.opencode!.profiles.push({
@@ -430,8 +454,6 @@ test("a profile's slots change in its view, it shows its size, and Create agent�
   })
   await page.goto("/operator/profile?ns=opencode&tab=profiles&profile=release")
   const overlay = page.getByRole("dialog")
-  await expect(overlay).toContainText("Fixed texts: 0 words")
-  await expect(overlay).toContainText("As sent for build in smoke-project:")
   await expect(overlay).toContainText("each change is saved at once")
 
   // A layer added straight from the view is saved.
@@ -448,7 +470,6 @@ test("a profile's slots change in its view, it shows its size, and Create agent�
     path: "/operator/namespaces/opencode/profiles/release",
     body: { name: "Release", slots: { role: ["reviewer"], dynamic: ["opencode:slot.agent"] } },
   })
-  await expect(overlay).toContainText("Fixed texts: 4 words")
 
   await overlay.getByRole("button", { name: "Create agent…" }).click()
   await expect(page).toHaveURL(/\/operator\/agents\/new\?dir=.*&profile=release/)

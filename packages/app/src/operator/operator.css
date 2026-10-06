@@ -563,7 +563,27 @@ html[data-theme="iphi"]
 }
 
 [data-component="operator-facts"] dt {
+  display: flex;
+  align-items: center;
   color: var(--v2-text-text-muted);
+}
+
+/* Facts as fields: each label with its (i) on one line, the value below (the agent's Overview). */
+[data-component="operator-facts"][data-layout="stacked"] {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px 24px;
+}
+
+[data-component="operator-facts"] [data-slot="operator-fact"] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* The field helper's (i) sits beside its label: the tooltip trigger is a block otherwise. */
+[data-component="tooltip-v2-trigger"].operator-field-help {
+  display: inline-flex;
 }
 
 [data-component="operator-facts"] dd {

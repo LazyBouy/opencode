@@ -1,23 +1,33 @@
-import { useNavigate, useSearchParams } from "@solidjs/router"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { CheckboxV2 } from "@opencode-ai/ui/v2/checkbox-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
-import type { OperatorPromptAssembledSection, OperatorPromptOverride } from "@opencode-ai/sdk/v2/client"
+import type { OperatorModelSource, OperatorPromptOverride } from "@opencode-ai/sdk/v2/client"
 import { useQuery } from "@tanstack/solid-query"
-import { createEffect, createMemo, For, on, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
-import { useSettingsDialog } from "@/components/settings-dialog"
 import { useLanguage } from "@/context/language"
 import { useOperatorClient } from "../data"
 import { formatCount, shortPath } from "../format"
 import { useConfirm } from "../ui/confirm"
 import { Field } from "../ui/field"
+import { FieldHelp } from "../ui/field-help"
+import { TraceList, useModelSourceText } from "../ui/prompt-trace"
 import { requestError } from "./config-helpers"
 import { useAllLayers, usePromptCatalog, useProfileNames } from "./profile-data"
 import { SlotEditor, type SlotValue } from "./profile-editor"
-import { type Catalog, copySlots, isHelper, PREFIX, type Profile, slotProblem, type Slots } from "./profile-model"
-import { FieldHelp } from "../ui/field-help"
+import {
+  type Catalog,
+  copySlots,
+  DYNAMIC,
+  isHelper,
+  PREFIX,
+  type Profile,
+  slotProblem,
+  type Slots,
+  textSize,
+} from "./profile-model"
+import { exceptionsFor } from "./prompt-exceptions"
 
 // The model option that means "whatever the agent uses".
 const AGENT_MODEL = "agent"
@@ -39,12 +49,15 @@ export function useAgentPromptSetting(agent: () => string, directory: () => stri
 }
 
 // The agent's prompt: which profile it uses, its override of that profile, and the whole system
-// prompt it sends, section by section. The agent belongs to the project of `directory`.
-export function AgentPrompt(props: { agent: string; directory: string }) {
+// prompt it sends, section by section, each traced to where its text comes from. The agent belongs to
+// the project of `directory`. The agent only chooses a profile and overrides it: profiles are shared by
+// many agents, so they are changed on the Prompt Profile page, not here.
+export function AgentPrompt(props: { agent: string; directory: string; modelSource?: OperatorModelSource }) {
   const language = useLanguage()
   const api = useOperatorClient()
   const names = useProfileNames()
-  const [params, setParams] = useSearchParams<{ previewProfile?: string }>()
+  // The override being edited and not saved yet, previewed live (undefined: the saved one).
+  const [draft, setDraft] = createSignal<OperatorPromptOverride>()
 
   const setting = useAgentPromptSetting(
     () => props.agent,
@@ -53,7 +66,6 @@ export function AgentPrompt(props: { agent: string; directory: string }) {
   const ns = () => setting.data?.namespace.id
   const data = usePromptCatalog(() => ns() ?? "")
   const catalog = () => (ns() ? data.query.data : undefined)
-  const previewed = () => catalog()?.profiles.find((item) => item.id === params.previewProfile)
 
   const save = (next: { profile?: string; override?: OperatorPromptOverride }) =>
     api
@@ -134,37 +146,10 @@ export function AgentPrompt(props: { agent: string; directory: string }) {
               profile={loaded().catalog.profiles.find((item) => item.id === loaded().view.profile.id)}
               setting={loaded().view.setting}
               onSave={save}
+              onDraft={setDraft}
             />
           </Show>
-          <Show when={previewed()}>
-            {(profile) => (
-              <section data-component="operator-panel" data-slot="operator-previewing" role="status">
-                <span>{language.t("operator.prompts.previewing", { name: names.profile(profile()) })}</span>
-                <span class="flex gap-2">
-                  <ButtonV2 size="small" variant="neutral" onClick={() => setParams({ previewProfile: undefined })}>
-                    {language.t("operator.prompts.stopPreview")}
-                  </ButtonV2>
-                  <ButtonV2
-                    size="small"
-                    variant="contrast"
-                    onClick={() =>
-                      void save({ profile: profile().id, override: loaded().view.setting.override })
-                        .then(() => setParams({ previewProfile: undefined }))
-                        .catch(data.fail)
-                    }
-                  >
-                    {language.t("operator.prompts.usePreviewed")}
-                  </ButtonV2>
-                </span>
-              </section>
-            )}
-          </Show>
-          <Preview
-            agent={props.agent}
-            directory={props.directory}
-            ns={loaded().view.namespace.id}
-            profile={previewed()?.id}
-          />
+          <Preview agent={props.agent} directory={props.directory} override={draft()} modelSource={props.modelSource} />
         </>
       )}
     </Show>
@@ -189,6 +174,8 @@ function Override(props: {
   profile: Profile | undefined
   setting: { profile?: string; override?: OperatorPromptOverride }
   onSave: (next: { profile?: string; override?: OperatorPromptOverride }) => Promise<unknown>
+  // The override being edited and not saved yet, for the preview; undefined when there is none.
+  onDraft: (override: OperatorPromptOverride | undefined) => void
 }) {
   const language = useLanguage()
   const confirm = useConfirm()
@@ -234,6 +221,7 @@ function Override(props: {
   }
   const dirty = () => JSON.stringify(override()) !== JSON.stringify(props.setting.override ?? {})
   const problem = () => slotProblem(props.catalog, value().slots)
+  createEffect(() => props.onDraft(store.open && props.profile && dirty() ? override() : undefined))
 
   const toggle = async (checked: boolean) => {
     if (checked) return setStore("open", true)
@@ -301,14 +289,19 @@ function Override(props: {
   )
 }
 
-// The system prompt the agent sends with a model, section by section, with where each part comes
-// from and where to change it. `profile` previews another profile than the agent's own.
-function Preview(props: { agent: string; directory: string; ns: string; profile?: string }) {
+// The system prompt the agent sends with a model, section by section, each with how it was resolved,
+// down to the file its text is in; the texts OpenCode adds that are not in the profile; and its size.
+// `override` previews unsaved override edits.
+function Preview(props: {
+  agent: string
+  directory: string
+  override?: OperatorPromptOverride
+  modelSource?: OperatorModelSource
+}) {
   const language = useLanguage()
-  const navigate = useNavigate()
   const api = useOperatorClient()
   const names = useProfileNames()
-  const openSettings = useSettingsDialog("namespaces")
+  const modelText = useModelSourceText()
   const [store, setStore] = createStore({ model: AGENT_MODEL })
 
   const providers = useQuery(() => ({
@@ -325,9 +318,10 @@ function Preview(props: { agent: string; directory: string; ns: string; profile?
       Object.values(provider.models).map((model) => `${provider.id}/${model.id}`),
     ),
   ])
+  const draft = () => (props.override ? JSON.stringify(props.override) : undefined)
 
   const preview = useQuery(() => ({
-    queryKey: api.key("prompt-preview", props.directory, props.agent, store.model, props.profile),
+    queryKey: api.key("prompt-preview", props.directory, props.agent, store.model, draft()),
     queryFn: () => {
       const [provider, ...rest] = store.model.split("/")
       return api
@@ -336,46 +330,21 @@ function Preview(props: { agent: string; directory: string; ns: string; profile?
           directory: props.directory,
           agent: props.agent,
           ...(store.model === AGENT_MODEL ? {} : { provider, model: rest.join("/") }),
-          ...(props.profile ? { profile: props.profile } : {}),
+          ...(draft() ? { override: draft() } : {}),
         })
         .then((result) => result.data!)
     },
   }))
-
-  // A layer on the Prompt Profile page.
-  const open = (layer: string) =>
-    navigate(`/operator/profile?ns=${encodeURIComponent(props.ns)}&tab=layers&layer=${encodeURIComponent(layer)}`)
-
-  const source = (section: OperatorPromptAssembledSection) =>
-    section.source.startsWith("/") ? shortPath(section.source) : section.source
-
-  // Where to change a section's text.
-  const action = (section: OperatorPromptAssembledSection) => {
-    if (section.layer === `${PREFIX}purpose.org`)
-      return { label: language.t("operator.profile.editInSettings"), run: openSettings }
-    const agentText =
-      section.entry === `${PREFIX}slot.agent` ||
-      (section.entry === `${PREFIX}slot.agent-or-base` && section.source === props.agent)
-    if (agentText)
-      return {
-        label: language.t("operator.prompts.editAgent"),
-        run: () =>
-          navigate(
-            `/operator/agents/${encodeURIComponent(props.agent)}/edit?dir=${encodeURIComponent(props.directory)}`,
-          ),
-      }
-    if (section.layer === `${PREFIX}generated.instructions`)
-      return {
-        label: language.t("operator.prompts.openMemory"),
-        run: () => navigate(`/operator/memory?dir=${encodeURIComponent(props.directory)}`),
-      }
-    // A slot that resolved to a model family's base prompt opens that text.
-    const layer =
-      section.layer.startsWith(`${PREFIX}slot.`) && section.source.startsWith("base.")
-        ? `${PREFIX}${section.source}`
-        : section.layer
-    return { label: language.t("operator.prompts.edit"), run: () => open(layer) }
-  }
+  // External plugins can change the prompt after the profile.
+  const plugins = useQuery(() => ({
+    queryKey: api.key("prompt-plugins", props.directory),
+    queryFn: () =>
+      api
+        .client()
+        .operator.prompt.plugins({ directory: props.directory })
+        .then((result) => result.data?.plugins ?? []),
+  }))
+  const number = (value: number) => new Intl.NumberFormat(language.intl()).format(value)
 
   return (
     <>
@@ -386,10 +355,21 @@ function Preview(props: { agent: string; directory: string; ns: string; profile?
             aria-label={language.t("operator.column.model")}
             options={models()}
             current={store.model}
-            label={(value) => (value === AGENT_MODEL ? language.t("operator.prompts.agentModel") : value)}
+            label={(value) =>
+              value === AGENT_MODEL
+                ? language.t("operator.prompts.agentModel", { model: props.modelSource?.model ?? "" })
+                : value
+            }
             onSelect={(value) => value && setStore("model", value)}
           />
         </Field>
+        <Show when={preview.data?.modelSource}>
+          {(source) => (
+            <p data-slot="operator-note" data-testid="preview-model-source">
+              {language.t("operator.prompts.modelFrom", { model: source().model, source: modelText(source()) })}
+            </p>
+          )}
+        </Show>
       </section>
 
       <Show when={preview.error}>
@@ -399,70 +379,105 @@ function Preview(props: { agent: string; directory: string; ns: string; profile?
         <p data-slot="operator-note">{language.t("operator.prompts.previewFailed")}</p>
       </Show>
       <Show when={preview.data}>
-        {(data) => (
-          <>
-            <p data-slot="operator-note">
-              {language.t("operator.prompts.summary", {
-                model: data().model,
-                count: data().sections.length,
-                chars: formatCount(
-                  data().system.reduce((total, item) => total + item.length, 0),
-                  language.intl(),
-                ),
-              })}
-              {" · "}
-              {language.t("operator.prompts.groupOf", {
-                group: names.group({ ...data().group, builtin: data().group.id.startsWith(PREFIX) }),
-              })}
-            </p>
-            <For each={data().sections}>
-              {(section) => (
-                <section
-                  data-component="operator-panel"
-                  data-slot="operator-prompt-section"
-                  data-type={section.type}
-                  data-changed={section.changed ? "" : undefined}
-                >
-                  <div data-slot="operator-panel-head">
-                    <span class="flex items-center gap-2 min-w-0 flex-wrap">
-                      <Tag variant={section.automatic ? "accent" : "neutral"}>{section.typeName}</Tag>
-                      <span data-slot="operator-layer-name">{section.layerName}</span>
-                      <Show when={section.automatic}>
-                        <Tag>{language.t("operator.prompts.automatic")}</Tag>
-                      </Show>
-                      <Show when={section.changed}>
-                        <Tag>{language.t("operator.profile.changed")}</Tag>
-                      </Show>
-                      <span data-slot="operator-cell-clamp" title={section.source}>
-                        {source(section)}
+        {(data) => {
+          const sent = () => textSize(data().system.join("\n"))
+          const perRequest = () =>
+            textSize(
+              data()
+                .sections.filter((item) => item.type === DYNAMIC)
+                .map((item) => item.text)
+                .join("\n"),
+            )
+          return (
+            <>
+              <p data-slot="operator-note">
+                {language.t("operator.prompts.summary", {
+                  model: data().model,
+                  count: data().sections.length,
+                  chars: formatCount(sent().chars, language.intl()),
+                })}
+                {" · "}
+                {language.t("operator.prompts.groupOf", {
+                  group: names.group({ ...data().group, builtin: data().group.id.startsWith(PREFIX) }),
+                })}
+              </p>
+              <For each={data().sections}>
+                {(section) => (
+                  <section
+                    data-component="operator-panel"
+                    data-slot="operator-prompt-section"
+                    data-type={section.type}
+                    data-changed={section.changed ? "" : undefined}
+                  >
+                    <div data-slot="operator-panel-head">
+                      <span class="flex items-center gap-2 min-w-0 flex-wrap">
+                        <Tag variant={section.automatic ? "accent" : "neutral"}>{section.typeName}</Tag>
+                        <span data-slot="operator-layer-name">{section.layerName}</span>
+                        <Show when={section.automatic}>
+                          <Tag>{language.t("operator.prompts.automatic")}</Tag>
+                        </Show>
+                        <Show when={section.changed}>
+                          <Tag>{language.t("operator.profile.changed")}</Tag>
+                        </Show>
+                        <span data-slot="operator-note">
+                          {language.t("operator.prompts.chars", {
+                            count: formatCount(section.text.length, language.intl()),
+                          })}
+                        </span>
                       </span>
+                    </div>
+                    <TraceList trace={section.trace} />
+                    <pre data-component="operator-code">{section.text}</pre>
+                  </section>
+                )}
+              </For>
+              <section data-component="operator-panel">
+                <h2 data-slot="operator-panel-title">{language.t("operator.prompts.perTurn")}</h2>
+                <p data-slot="operator-note">{language.t("operator.prompts.perTurnHint")}</p>
+              </section>
+              <section data-component="operator-panel" data-testid="prompt-exceptions">
+                <h2 data-slot="operator-panel-title">{language.t("operator.prompts.exceptions")}</h2>
+                <p data-slot="operator-note">{language.t("operator.prompts.exceptionsHint")}</p>
+                <ul data-slot="operator-exceptions">
+                  <For each={exceptionsFor(props.agent)}>
+                    {(item) => (
+                      <li data-exception={item.id}>
+                        <span>{language.t(`operator.exception.${item.id}`)}</span>
+                        <span data-slot="operator-note">{item.files.join(", ")}</span>
+                      </li>
+                    )}
+                  </For>
+                  <Show when={plugins.data?.length}>
+                    <li data-exception="plugins">
+                      <span>{language.t("operator.prompts.plugins")}</span>
                       <span data-slot="operator-note">
-                        {language.t("operator.prompts.chars", {
-                          count: formatCount(section.text.length, language.intl()),
-                        })}
+                        {(plugins.data ?? []).map((item) => `${item.spec} (${shortPath(item.source)})`).join(", ")}
                       </span>
-                    </span>
-                    <ButtonV2 size="small" variant="outline" onClick={() => action(section).run()}>
-                      {action(section).label}
-                    </ButtonV2>
-                  </div>
-                  <pre data-component="operator-code">{section.text}</pre>
-                </section>
-              )}
-            </For>
-            <section data-component="operator-panel">
-              <h2 data-slot="operator-panel-title">{language.t("operator.prompts.perTurn")}</h2>
-              <p data-slot="operator-note">{language.t("operator.prompts.perTurnHint")}</p>
-              <ButtonV2 size="small" variant="outline" onClick={() => open(`${PREFIX}reminder.plan`)}>
-                {language.t("operator.prompts.perTurnOpen")}
-              </ButtonV2>
-            </section>
-            <details data-slot="operator-details">
-              <summary>{language.t("operator.prompts.raw", { count: data().system.length })}</summary>
-              <For each={data().system}>{(message) => <pre data-component="operator-code">{message}</pre>}</For>
-            </details>
-          </>
-        )}
+                    </li>
+                  </Show>
+                </ul>
+              </section>
+              <details data-slot="operator-details">
+                <summary>{language.t("operator.prompts.raw", { count: data().system.length })}</summary>
+                <For each={data().system}>{(message) => <pre data-component="operator-code">{message}</pre>}</For>
+              </details>
+              <p data-slot="operator-note" data-testid="prompt-size">
+                <span class="inline-flex items-center">
+                  {language.t("operator.prompts.size", {
+                    words: number(sent().words),
+                    tokens: number(sent().tokens),
+                    chars: number(sent().chars),
+                    dynamic: number(perRequest().words),
+                  })}
+                  <FieldHelp
+                    field={language.t("operator.prompts.sizeLabel")}
+                    text={language.t("operator.help.promptSize")}
+                  />
+                </span>
+              </p>
+            </>
+          )
+        }}
       </Show>
     </>
   )

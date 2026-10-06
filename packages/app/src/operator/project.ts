@@ -53,9 +53,15 @@ export function useOperatorProjects() {
   })
 }
 
-// The project a per-project operator page shows: the one in `?dir=`, or else the first project.
+// The project a per-project operator page shows: the one in `?dir=`, else the one chosen last on any
+// operator page (while it is still a project), else the first project.
 export function useScopedProject() {
   const scope = useOperatorScope()
   const projects = useOperatorProjects()
-  return createMemo(() => scope.directory() ?? projects()[0]?.directory)
+  return createMemo(() => {
+    const chosen = scope.directory()
+    const list = projects()
+    if (chosen && (!list.length || list.some((item) => item.directory === chosen))) return chosen
+    return list[0]?.directory
+  })
 }

@@ -11,20 +11,19 @@ import { useConfirm } from "../ui/confirm"
 import { DataTable } from "../ui/data-table"
 import { RecordView } from "../ui/record-overlay"
 import { AgentPrompt, useAgentPromptSetting } from "./agent-prompt"
-import { agentModel } from "./agents"
 import { requestError } from "./config-helpers"
 import { FieldHelp } from "../ui/field-help"
+import { ModelWithSource } from "../ui/prompt-trace"
 
 // Agents open in an overlay on the Agents page; this route (links to /operator/agents/<name>) opens it
 // there, keeping the tab and the folder.
 export default function AgentPage() {
   const params = useParams<{ name: string }>()
-  const [search] = useSearchParams<{ tab?: string; dir?: string; previewProfile?: string }>()
+  const [search] = useSearchParams<{ tab?: string; dir?: string }>()
   const query = new URLSearchParams({
     ...(search.dir ? { dir: search.dir, adir: search.dir } : {}),
     agent: decodeURIComponent(params.name),
     ...(search.tab ? { atab: search.tab } : {}),
-    ...(search.previewProfile ? { previewProfile: search.previewProfile } : {}),
   })
   return <Navigate href={`/operator/agents?${query.toString()}`} />
 }
@@ -160,9 +159,9 @@ export function AgentDetail(props: { name: string; directory: string; tab: strin
           </Show>
           <Switch>
             <Match when={props.tab === "overview"}>
-              <dl data-component="operator-facts">
+              <dl data-component="operator-facts" data-layout="stacked">
                 <Fact label={language.t("operator.column.model")} help={language.t("operator.help.agentModelFact")}>
-                  {agentModel(current()) || language.t("operator.agents.defaultModel")}
+                  <ModelWithSource source={current().modelSource} />
                 </Fact>
                 <Fact label={language.t("operator.prompts.profile")} help={language.t("operator.help.agentProfile")}>
                   <Show when={prompt.data} fallback="—">
@@ -201,7 +200,7 @@ export function AgentDetail(props: { name: string; directory: string; tab: strin
               </dl>
             </Match>
             <Match when={props.tab === "prompt"}>
-              <AgentPrompt agent={current().name} directory={directory()} />
+              <AgentPrompt agent={current().name} directory={directory()} modelSource={current().modelSource} />
             </Match>
             <Match when={props.tab === "permissions"}>
               <p data-slot="operator-note">{language.t("operator.agent.rulesHint")}</p>
@@ -273,15 +272,15 @@ export function AgentDetail(props: { name: string; directory: string; tab: strin
   )
 }
 
-// A fact about the agent, with the field helper's (i) explaining it.
+// A fact about the agent: its label with the field helper's (i) beside it, and its value below.
 function Fact(props: { label: string; help: string; children: JSX.Element }) {
   return (
-    <>
+    <div data-slot="operator-fact">
       <dt>
         {props.label}
         <FieldHelp field={props.label} text={props.help} />
       </dt>
       <dd>{props.children}</dd>
-    </>
+    </div>
   )
 }

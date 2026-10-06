@@ -116,7 +116,8 @@ export const dict = {
   "operator.help.hidden": "A hidden subagent is not offered in the @ menu; other agents can still call it.",
   "operator.help.agentProfile":
     "The prompt profile this agent's system prompt is built from, and where that choice comes from. Change it on the Prompt tab.",
-  "operator.help.agentModelFact": "The model this agent runs on. Without one, it uses the session's model.",
+  "operator.help.agentModelFact":
+    "The model this agent's requests use, and where it is set: the agent's own model (its config entry or agent file), else the default model (config model, set on Providers & Models), else OpenCode's own choice. The title agent uses the small model. In chat, a session can pick another model in the composer; a new session starts with this one.",
   "operator.help.agentSource": "Where the agent is defined: built in, in a config file, or in its own markdown file.",
   "operator.help.agentSessions": "Sessions started as this agent in this project.",
   "operator.help.agentLastUsed": "When a session of this agent last changed.",
@@ -365,7 +366,6 @@ export const dict = {
   "operator.agents.showHiddenCount": "Show hidden agents ({{count}})",
   "operator.agents.hidden": "Hidden",
   "operator.agents.customized": "Customized",
-  "operator.agents.defaultModel": "Session model",
   "operator.agents.source.builtin": "Built in",
   "operator.agents.source.config": "Config",
   "operator.agents.source.file": "File",
@@ -397,7 +397,7 @@ export const dict = {
 
   "operator.models.connect": "Connect a provider",
   "operator.models.choose": "Choose models",
-  "operator.models.default": "Default",
+  "operator.models.default": "Default model",
   "operator.models.context": "Context",
   "operator.models.output": "Max output",
   "operator.models.inputPrice": "Input",
@@ -613,7 +613,8 @@ export const dict = {
   "operator.projects.kind.group": "group",
   "operator.projects.kind.profile": "profile",
 
-  "operator.prompts.modelHint": "Base prompts and the environment block depend on the model.",
+  "operator.prompts.modelHint":
+    "The model the preview is made for. Base prompts and the environment depend on it. The agent's model is the one its requests use; another model shows what that model would get.",
   "operator.prompts.previewFailed":
     "The preview needs a model this server can use. If the agent's model is not offered by a connected provider, pick another model above.",
   "operator.prompts.project": "Project",
@@ -632,21 +633,15 @@ export const dict = {
   "operator.prompts.removeOverrideTitle": "Remove this agent's override?",
   "operator.prompts.removeOverrideBody":
     "The agent goes back to its profile as it is. The profile itself is not changed.",
-  "operator.prompts.previewing": "Previewing the profile {{name}}. It is not saved.",
-  "operator.prompts.stopPreview": "Stop previewing",
-  "operator.prompts.usePreviewed": "Use this profile",
   "operator.prompts.automatic": "Automatic",
   "operator.prompts.groupOf": "Group: {{group}}",
-  "operator.prompts.agentModel": "The agent's model",
+  "operator.prompts.agentModel": "The agent's model: {{model}}",
   "operator.prompts.summary": "{{model}} · {{count}} sections · {{chars}} characters",
   "operator.prompts.chars": "{{count}} characters",
-  "operator.prompts.edit": "Edit",
-  "operator.prompts.editAgent": "Edit agent",
   "operator.prompts.openMemory": "Open in Memory",
   "operator.prompts.perTurn": "Added to messages",
   "operator.prompts.perTurnHint":
-    "Some texts are added to the conversation rather than the system prompt: plan-mode reminders, the switch back to building, the structured-output notice and the step-limit notice.",
-  "operator.prompts.perTurnOpen": "Edit these texts",
+    "Some texts are added to the conversation rather than the system prompt: plan-mode reminders, the switch back to building and the step-limit notice. They are layers of the profile (Message texts on the Prompt Profile page); a copy of one in the profile replaces OpenCode's.",
   "operator.prompts.raw": "Exactly as sent ({{count}} system messages)",
   "operator.prompts.text": "Text",
   "operator.prompts.id.base.anthropic": "Base prompt for Claude models.",
@@ -767,17 +762,11 @@ export const dict = {
   "operator.profile.new.role": "New Role",
   "operator.profile.new.identity": "New Identity",
   "operator.profile.new.helper": "New Helper",
-  "operator.profile.size": "Size",
-  "operator.help.profileSize":
-    "The words of the profile's fixed texts, and of the whole system prompt it gives the project's build agent today, with the texts filled in per request. Tokens are estimated at about four characters each; each model counts its own way.",
-  "operator.profile.sizeFixed": "Fixed texts: {{words}} words · ≈ {{tokens}} tokens",
-  "operator.profile.sizeSent": "As sent for build in {{project}}: {{words}} words · ≈ {{tokens}} tokens",
-  "operator.profile.sizeNoProject": "The namespace has no project to count the texts filled in per request in.",
   "operator.profile.liveSlots":
     "Add layers to a slot, drag them into another order, or remove them: each change is saved at once.",
   "operator.profile.inProject": "Project",
   "operator.help.profileProject":
-    "The project the size is counted in, and where Create agent… makes the agent. Only the namespace's projects can use its profiles.",
+    "The project Create agent\u2026 makes the agent in: the one chosen on the operator pages when it is in this namespace, else the namespace's first.",
   "operator.profile.createAgent": "Create agent…",
   "operator.agentForm.profile": "The new agent will use the profile {{name}}.",
   "operator.profile.new.dynamic": "New Dynamic layer",
@@ -834,7 +823,6 @@ export const dict = {
     "A copy is used instead of OpenCode's text only in the profiles that hold it. A profile holds at most one copy of each text.",
   "operator.profile.copyOf": "Editable copy of",
   "operator.profile.chars": "{{count}} characters",
-  "operator.profile.editInSettings": "Edit in Settings → Namespaces",
   "operator.profile.deleteLayerBody":
     "The layer goes to Trash, from where you can restore it. A layer that a profile, an agent or a project uses cannot be deleted.",
 
@@ -885,7 +873,6 @@ export const dict = {
   "operator.profile.twoCopies": "A profile can hold one copy of {{layer}}.",
   "operator.profile.namespaceDefault": "Namespace default",
   "operator.profile.makeDefault": "Use as namespace default",
-  "operator.profile.previewOn": "Preview on an agent",
   "operator.profile.previewProject": "Project",
   "operator.profile.previewAgent": "Agent",
   "operator.profile.previewNoProject": "Move a project to this namespace to preview the profile on its agents.",
@@ -972,6 +959,99 @@ export const dict = {
     "AGENTS.md or CLAUDE.md files and config `instructions`, from the session's folder. See them on the Memory page.",
   "operator.layer.about.generated.mcp": "Instructions sent by connected MCP servers.",
   "operator.layer.about.generated.skills": "The skills the agent can load.",
+  "operator.layerSection.agent": "Agent prompts",
+  "operator.layerSection.about.agent":
+    "The own prompts of OpenCode's built-in agents (only explore has one), from OpenCode's code. The Agent prompt slots use them for that agent; a copy in a profile replaces it. Other agents' prompts are in config or their agent file.",
+  "operator.prompts.id.agent.explore": "The explore agent's own prompt (OpenCode's other agents have none).",
+  "operator.profile.sourceFile": "Source file",
+  "operator.help.layerSourceFile":
+    "The file in OpenCode's code this built-in text comes from. A copy of it keeps its own text in the namespace.",
+  "operator.trace.resolvedFrom": "Resolved from",
+  "operator.trace.agent-own": "{{name}} has its own prompt",
+  "operator.trace.agent-none":
+    "{{name}} has no prompt of its own (none in config, in an agent file, or in OpenCode's Agent prompts)",
+  "operator.trace.agent-file": "Its agent file: {{path}}",
+  "operator.trace.agent-config": "agent.{{name}}.prompt in {{path}}",
+  "operator.trace.model-rule": "The base prompt for {{name}} (rule: {{detail}})",
+  "operator.trace.builtin-layer": "OpenCode's built-in layer {{name}}",
+  "operator.trace.copy-layer": 'The copy "{{name}}"',
+  "operator.trace.own-layer": 'This namespace\'s own copy "{{name}}"',
+  "operator.trace.layer": 'The layer "{{name}}"',
+  "operator.trace.file": "File: {{path}}",
+  "operator.trace.org-purpose": "The org purpose of {{name}} (Settings \u2192 Namespaces)",
+  "operator.trace.dynamic-written": 'Written for each session by the dynamic generator, from the prompt of "{{name}}"',
+  "operator.trace.written": "Written by OpenCode for each request (there is no file)",
+  "operator.trace.references": "The references in config",
+  "operator.trace.config": "Config file: {{path}}",
+  "operator.trace.instruction-file": "Instruction file: {{path}}",
+  "operator.trace.instruction-url": "Instruction URL: {{path}}",
+  "operator.trace.mcp": "The instructions of the MCP server {{name}}",
+  "operator.trace.skill": "Skill file: {{path}}",
+  "operator.trace.skillBuiltin": "One of OpenCode's own skills (packages/opencode/src/skill/index.ts)",
+  "operator.modelSource.agent": "The agent's own model",
+  "operator.modelSource.agentIn": "The agent's own model, set in {{path}}",
+  "operator.modelSource.default": "The default model",
+  "operator.modelSource.defaultIn": "The default model, set in {{path}}",
+  "operator.modelSource.recent": "The TUI's most recent model",
+  "operator.modelSource.recentIn": "The TUI's most recent model ({{path}})",
+  "operator.modelSource.ranking":
+    "Not set: OpenCode's own choice (the first connected provider's best model, by its built-in ranking). Set a default model on Providers & Models.",
+  "operator.modelSource.rankingIn": "Not set: OpenCode's own choice",
+  "operator.modelSource.small": "The small model",
+  "operator.modelSource.smallIn": "The small model, set in {{path}}",
+  "operator.modelSource.small-family":
+    "Not set: OpenCode's own small model for the default model's provider. Set a small model on Providers & Models.",
+  "operator.modelSource.small-familyIn": "Not set: OpenCode's own small model",
+  "operator.modelSource.none": "No model is available",
+  "operator.modelSource.noneIn": "No model is available",
+  "operator.modelSource.chosen": "Chosen here for the preview",
+  "operator.modelSource.chosenIn": "Chosen here for the preview",
+  "operator.modelSource.unavailable": "not offered by the connected providers",
+  "operator.modelSource.agentUnavailable": "the agent's own model {{model}} is not offered here, so this one stands in",
+  "operator.modelSource.agentUnavailableIn":
+    "the agent's own model {{model}} (set in {{path}}) is not offered here, so this one stands in",
+  "operator.modelSource.short.agent": "agent's own",
+  "operator.modelSource.short.default": "default model",
+  "operator.modelSource.short.recent": "TUI's recent",
+  "operator.modelSource.short.ranking": "not set: OpenCode's choice",
+  "operator.modelSource.short.small": "small model",
+  "operator.modelSource.short.small-family": "not set: OpenCode's small model",
+  "operator.modelSource.short.none": "none",
+  "operator.modelSource.short.chosen": "chosen",
+  "operator.prompts.modelFrom": "Model {{model}}: {{source}}",
+  "operator.prompts.sizeLabel": "Size",
+  "operator.prompts.size":
+    "Size: {{words}} words \u00b7 \u2248 {{tokens}} tokens \u00b7 {{chars}} characters, as sent; {{dynamic}} words of it filled in per request",
+  "operator.help.promptSize":
+    "The size of the system prompt above, exactly as sent with this model, including the texts filled in per request. Tokens are estimated at about four characters each; each model counts its own way. It changes with the profile, and with the override while you edit it.",
+  "operator.prompts.exceptions": "Not from the Prompt Profile",
+  "operator.prompts.exceptionsHint":
+    "OpenCode also adds these texts from its own code. They are not layers: routing them through the Prompt Profile would need changes to OpenCode's core. Each names the files it comes from.",
+  "operator.exception.title-request":
+    'The title request\'s message: "Generate a title for this conversation:" and the conversation',
+  "operator.exception.compaction-request":
+    "The compaction request's message: the summary template, and the instructions to update an earlier summary",
+  "operator.exception.read-reminder":
+    "When the agent reads a file, the AGENTS.md files in the folders around it are added as a reminder",
+  "operator.exception.tool-texts":
+    "Texts around tool calls and results: notes for files read on request, cleared or interrupted results, truncation hints, a loaded skill's wrapper",
+  "operator.exception.tool-descriptions":
+    "The descriptions of MCP tools (sent by their servers) and of the StructuredOutput tool",
+  "operator.exception.message-system":
+    "A message's own system text, which a client can send with a message, added at the end as sent",
+  "operator.prompts.plugins": "Plugins that config loads: they run after the Prompt Profile and can change this prompt",
+  "operator.models.small": "Small model",
+  "operator.models.defaultModel": "Default model",
+  "operator.models.smallModel": "Small model",
+  "operator.help.defaultModel":
+    "The model agents use when they set none of their own: config model (set with Use as default model on a model), else the TUI's recent model, else OpenCode's own choice. In chat, a session can pick another model.",
+  "operator.help.smallModel":
+    "The model the title agent uses: config small_model (set with Use as small model on a model), else OpenCode's own small model for the default model's provider.",
+  "operator.models.useDefault": "Use as default model",
+  "operator.models.useSmall": "Use as small model",
+  "operator.models.defaultSet": "{{model}} is the default model",
+  "operator.models.smallSet": "{{model}} is the small model",
+  "operator.models.setFailed": "The model could not be set",
   "operator.builtin.label": "Built in",
   "operator.builtin.customized": "Built in · customized",
   "operator.builtin.hint":
@@ -997,9 +1077,9 @@ export const dict = {
   "operator.layer.source.slot.base":
     "OpenCode's base prompt for the request's model: one of the Base Model Group layers. base.anthropic for Claude models; base.beast for GPT-4, o1 and o3; base.gpt-astra for GPT-6; base.codex for GPT Codex models; base.gpt for other GPT models; base.gemini for Gemini; base.kimi for Kimi (and the kimi-for-coding and moonshotai providers); base.trinity for Trinity; base.meta for Muse; base.default for every other model. A copy of one of them in the profile is used instead of it.",
   "operator.layer.source.slot.agent":
-    "The agent's own prompt. It comes from, the last one winning: OpenCode's own definition of a built-in agent (of build, plan, general and explore, only explore has one); agent.<name>.prompt in a config file (the global ~/.config/opencode/opencode.json(c), the project's opencode.json(c) or .opencode/opencode.json(c)); or the body of an agent file (agent/<name>.md, agents/<name>.md or modes/<name>.md in ~/.config/opencode/ or the project's .opencode/). It is empty for an agent without one: build, plan and general, unless config or an agent file gives them one. Generate sample says where an agent's prompt came from.",
+    "The agent's own prompt. It comes from, the last one winning: a built-in layer of Agent prompts for OpenCode's own agents (of build, plan, general and explore, only explore has one: agent.explore, from packages/opencode/src/agent/prompt/explore.txt); agent.<name>.prompt in a config file (the global ~/.config/opencode/opencode.json(c), the project's opencode.json(c) or .opencode/opencode.json(c)); or the body of an agent file (agent/<name>.md, agents/<name>.md or modes/<name>.md in ~/.config/opencode/ or the project's .opencode/). It is empty for an agent without one: build, plan and general, unless config or an agent file gives them one. The agent's Prompt tab traces it to its file.",
   "operator.layer.source.slot.agent-or-base":
-    "The agent's own prompt, as in Agent prompt (OpenCode's definition, agent.<name>.prompt in a config file, or an agent file). For an agent without one (build, plan and general, unless config or an agent file gives them one), the base prompt for the model, as in Base prompt (by model). This is OpenCode's own rule.",
+    "The agent's own prompt, as in Agent prompt (agent.explore for explore, agent.<name>.prompt in a config file, or an agent file). For an agent without one (build, plan and general, unless config or an agent file gives them one), the base prompt for the model, as in Base prompt (by model). This is OpenCode's own rule. The agent's Prompt tab traces it to its file, and names the model rule for a base prompt.",
   "operator.layer.source.generated.environment":
     "Written by OpenCode for each request: the model's name and id, the working folder, the workspace root, whether the folder is a git repository, the platform and today's date. There is no file to edit.",
   "operator.layer.source.generated.references":
@@ -1014,17 +1094,4 @@ export const dict = {
     "Written by the dynamic generator (a helper agent) from this layer's prompt, the project (its name, the org and project purposes, README, AGENTS.md and manifest) and the session's first message, once per session. The session's next turns and its subagents reuse it.",
   "operator.profile.sampleAgentOption": "{{name}} ({{details}})",
   "operator.profile.cameFrom": "Came from",
-  "operator.profile.origin.agent-file": "{{agent}}'s agent file: {{path}}",
-  "operator.profile.origin.agent-config": "agent.{{agent}}.prompt in {{path}}",
-  "operator.profile.origin.agent-builtin": "OpenCode's own definition of the {{agent}} agent",
-  "operator.profile.origin.agent-none":
-    "{{agent}} has no prompt of its own: none in OpenCode's definition, in config or in an agent file",
-  "operator.profile.origin.base": "The base prompt for {{model}}: {{path}}",
-  "operator.profile.origin.written": "Written by OpenCode for this request; there is no file to edit",
-  "operator.profile.origin.config": "The references in {{path}}",
-  "operator.profile.origin.file": "Instruction file {{path}}",
-  "operator.profile.origin.url": "Instruction URL {{path}}",
-  "operator.profile.origin.mcp": "MCP server {{path}}",
-  "operator.profile.origin.skill": "Skill file {{path}}",
-  "operator.profile.origin.skillBuiltin": "One of OpenCode's own skills",
 }

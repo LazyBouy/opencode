@@ -4,7 +4,6 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import type { OperatorNamespaceSummary } from "@opencode-ai/sdk/v2/client"
-import { useQuery } from "@tanstack/solid-query"
 import { createEffect, createMemo, createSignal, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
@@ -14,6 +13,7 @@ import { CopyToNamespace } from "../ui/copy-to"
 import { useConfirm } from "../ui/confirm"
 import { DataTable } from "../ui/data-table"
 import { Field } from "../ui/field"
+import { useRememberedProject } from "../scope"
 import { NamespaceAction } from "../ui/namespace-picker"
 import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOverlay } from "../ui/record-overlay"
 import { useAllLayers, usePromptRefresh, useProfileNames, useScopeCatalogs } from "./profile-data"
@@ -23,7 +23,6 @@ import {
   type Catalog,
   copyName,
   copySlots,
-  DYNAMIC,
   isHelper,
   type Layer,
   namespaceDefault,
@@ -286,10 +285,14 @@ function ProfileRecord(props: {
       store.value.slots,
       props.catalog.groups.find((item) => item.id === store.value.group)?.types,
     )
-  // The project the profile's size is counted in, and where Create agent… makes the agent.
+  // Where Create agent… makes the agent: the project chosen here, else the one chosen on the operator
+  // pages (when it is in this namespace), else the namespace's first.
+  const remembered = useRememberedProject()
   const [chosen, setProject] = createSignal<string>()
   const project = () =>
-    props.catalog.projects.find((item) => item.key === chosen())?.key ?? props.catalog.projects[0]?.key
+    props.catalog.projects.find((item) => item.key === chosen())?.key ??
+    props.catalog.projects.find((item) => item.key === remembered())?.key ??
+    props.catalog.projects[0]?.key
   const groupName = (id: string) => {
     const found = props.catalog.groups.find((group) => group.id === id)
     return found ? names.group(found) : id
@@ -456,15 +459,6 @@ function ProfileRecord(props: {
               <RecordField label={language.t("operator.profile.group")} help={language.t("operator.profile.groupHint")}>
                 {groupName(found().group)}
               </RecordField>
-              <RecordField label={language.t("operator.profile.size")} help={language.t("operator.help.profileSize")}>
-                <ProfileSize
-                  catalog={props.catalog}
-                  layers={props.layers}
-                  profile={found().id}
-                  slots={store.live?.slots ?? found().slots}
-                  project={project()}
-                />
-              </RecordField>
             </dl>
             <SlotEditor
               ns={props.ns ?? props.catalog.namespace.id}
@@ -489,75 +483,8 @@ function ProfileRecord(props: {
   )
 }
 
-// How much a profile sends: the words of its fixed texts, and of the whole system prompt it gives the
-// project's build agent today (with the texts filled in per request). Tokens are estimated at about
-// four characters each.
-function ProfileSize(props: {
-  catalog: Catalog
-  layers: ReadonlyArray<Layer>
-  profile: string
-  slots: Record<string, ReadonlyArray<string>>
-  project: string | undefined
-}) {
-  const language = useLanguage()
-  const api = useOperatorClient()
-  const locale = () => language.intl()
-  const count = (text: string) => ({
-    words: text.split(/\s+/).filter(Boolean).length,
-    tokens: Math.ceil(text.length / 4),
-  })
-  const number = (value: number) => new Intl.NumberFormat(locale()).format(value)
-  // Texts sent as they are: no Dynamic texts, tool descriptions or message texts.
-  const fixed = createMemo(() =>
-    count(
-      Object.values(props.slots)
-        .flat()
-        .map((id) => props.layers.find((layer) => layer.id === id))
-        .filter((layer) => layer && layer.type !== DYNAMIC && !layer.delivery && !layer.replaces)
-        .map((layer) => layer!.text)
-        .join("\n"),
-    ),
-  )
-  const sent = useQuery(() => ({
-    queryKey: api.key("profile-size", props.profile, JSON.stringify(props.slots), props.project),
-    enabled: !!props.project,
-    queryFn: () =>
-      api
-        .client()
-        .operator.prompt.preview({ directory: props.project, agent: "build", profile: props.profile })
-        .then((result) => result.data?.system.join("\n") ?? ""),
-  }))
-  const projectName = () =>
-    props.catalog.projects.find((item) => item.key === props.project)?.name ?? shortPath(props.project ?? "")
-
-  return (
-    <span class="flex flex-col gap-1">
-      <span>
-        {language.t("operator.profile.sizeFixed", {
-          words: number(fixed().words),
-          tokens: number(fixed().tokens),
-        })}
-      </span>
-      <Show
-        when={props.project}
-        fallback={<span data-slot="operator-note">{language.t("operator.profile.sizeNoProject")}</span>}
-      >
-        <Show when={sent.data !== undefined}>
-          <span>
-            {language.t("operator.profile.sizeSent", {
-              project: projectName(),
-              words: number(count(sent.data ?? "").words),
-              tokens: number(count(sent.data ?? "").tokens),
-            })}
-          </span>
-        </Show>
-      </Show>
-    </span>
-  )
-}
-
-// The project the profile is looked at in, and Create agent…: a new agent of that project that uses
-// this profile (a helper agent, for a helper profile).
+// Create agent…: a new agent of the chosen project that uses this profile (a helper agent, for a
+// helper profile).
 function ProfileProject(props: {
   catalog: Catalog
   profile: string

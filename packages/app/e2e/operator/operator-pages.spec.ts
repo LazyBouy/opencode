@@ -78,6 +78,39 @@ test("Agents lists every project's agents with their project, and New agent asks
   await expect(page).toHaveURL(/\/operator\/agents\/new\?dir=/)
 })
 
+test("the project chosen on one page stays chosen on every page until it is changed", async ({ page }) => {
+  await mockOperator(page)
+  await page.goto("/operator/agents")
+  const picker = page.locator('[data-component="select-v2-root"][aria-label="Project"]')
+  await expect(picker).toContainText("All projects")
+  await picker.locator('[data-component="select-v2"]').click()
+  await page
+    .locator('[data-component="menu-v2-item"]')
+    .filter({ hasText: /^smoke-project/ })
+    .click()
+  await expect(picker).toContainText("smoke-project")
+
+  // The sidebar's links carry no project; the choice stands anyway, on every page.
+  await page.getByRole("link", { name: "Dashboard", exact: true }).click()
+  await page.getByRole("link", { name: "Agents", exact: true }).click()
+  await expect(page).toHaveURL(/\/operator\/agents/)
+  await expect(picker).toContainText("smoke-project")
+  await page.getByRole("link", { name: "Sessions", exact: true }).click()
+  await expect(picker).toContainText("smoke-project")
+  // And after a reload.
+  await page.goto("/operator/agents")
+  await expect(picker).toContainText("smoke-project")
+
+  // All projects is a choice too.
+  await picker.locator('[data-component="select-v2"]').click()
+  await page
+    .locator('[data-component="menu-v2-item"]')
+    .filter({ hasText: /^All projects/ })
+    .click()
+  await page.getByRole("link", { name: "Sessions", exact: true }).click()
+  await expect(picker).toContainText("All projects")
+})
+
 test("per-project pages use a project the server knows when none is open in the browser", async ({ page }) => {
   await mockOperator(page)
   await page.goto("/operator/config")
@@ -190,6 +223,24 @@ test("the models page lists the catalog with limits and prices", async ({ page }
   await expect(row).toContainText("200K")
   await expect(row).toContainText("$15.00")
   await expect(row).toContainText("Default")
+})
+
+test("Providers & Models shows the default and small model with where they come from, and sets them", async ({
+  page,
+}) => {
+  const state = await mockOperator(page)
+  await page.goto(`/operator/models${dir}`)
+  const defaults = page.getByTestId("model-defaults")
+  await expect(defaults).toContainText("opencode/claude-opus-4-6")
+  await expect(defaults).toContainText("Not set: OpenCode's own choice")
+  await expect(defaults).toContainText("opencode/claude-haiku-4-5")
+  await page.getByRole("row", { name: /Claude Opus 4.6/ }).click()
+  const overlay = page.getByRole("dialog")
+  await expect(overlay.getByRole("button", { name: "Use as default model" })).toBeDisabled()
+  await overlay.getByRole("button", { name: "Use as small model" }).click()
+  await expect.poll(() => state.writes.length).toBe(1)
+  expect(new URL(state.writes[0]!.url).searchParams.get("scope")).toBe("global")
+  expect(state.writes[0]!.body).toEqual({ small_model: "opencode/claude-opus-4-6" })
 })
 
 test("capabilities and inbox requests open in the overlay, with ‹ › through the list", async ({ page }) => {

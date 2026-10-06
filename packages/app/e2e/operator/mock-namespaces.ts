@@ -63,7 +63,21 @@ export const builtinLayers: Layer[] = [
     "builtin",
     "You are OpenCode, the best coding agent.",
   ),
-  builtin("base.default", "base.default", "identity", "base", "builtin", "You are opencode, an interactive CLI tool."),
+  {
+    ...builtin(
+      "base.default",
+      "base.default",
+      "identity",
+      "base",
+      "builtin",
+      "You are opencode, an interactive CLI tool.",
+    ),
+    file: "packages/opencode/src/session/prompt/default.txt",
+  },
+  {
+    ...builtin("agent.explore", "agent.explore", "identity", "agent", "builtin", "You are a file search specialist."),
+    file: "packages/opencode/src/agent/prompt/explore.txt",
+  },
   builtin("slot.base", "Base prompt (by model)", "dynamic", "dynamic", "slot"),
   builtin("slot.agent-or-base", "Agent prompt, else base prompt", "dynamic", "dynamic", "slot"),
   builtin("slot.agent", "Agent prompt", "dynamic", "dynamic", "slot"),
@@ -298,12 +312,41 @@ export function createPromptMock(
     const loaded = catalog(link.namespace)
     const asked = url.searchParams.get("profile")
     const profile = loaded.profiles.find((item) => item.id === (asked ?? chosen.profile.id))!
-    const override = asked ? undefined : chosen.setting.override
+    // Unsaved override edits are previewed in place of the saved override.
+    const draft = url.searchParams.get("override")
+    const override = asked
+      ? undefined
+      : draft
+        ? ((JSON.parse(draft) as { group?: string; slots?: Record<string, string[]> } | null) ?? undefined)
+        : chosen.setting.override
     const group = loaded.groups.find((item) => item.id === (override?.group ?? profile.group))!
     const typeName = (id: string) => loaded.types.find((item) => item.id === id)?.name ?? id
     const own = ownPrompt(name)
     const base = builtinLayers.find((layer) => layer.id === `${PREFIX}base.default`)!
     const extra = generated(project)
+    // How each section resolved, down to its file (as the server traces it).
+    const traceOf = (entry: string, layer: Layer, source: string): unknown[] => {
+      if (source === "base.default")
+        return [
+          ...(entry === `${PREFIX}slot.agent-or-base` ? [{ kind: "agent-none", name }] : []),
+          { kind: "model-rule", name: "opencode/claude-opus-4-6", detail: "no other rule matches" },
+          { kind: "builtin-layer", name: "base.default", detail: `${PREFIX}base.default` },
+          { kind: "file", path: "packages/opencode/src/session/prompt/default.txt" },
+        ]
+      if (source === name)
+        return [
+          { kind: "agent-own", name },
+          { kind: "agent-file", path: `${project}/.opencode/agents/${name}.md` },
+        ]
+      if (entry === `${PREFIX}generated.environment`) return [{ kind: "written" }]
+      if (entry === `${PREFIX}generated.instructions`) return [{ kind: "instruction-file", path: source }]
+      if (entry === `${PREFIX}purpose.org`) return [{ kind: "org-purpose", name: source }]
+      if (layer.origin !== "user") return [{ kind: "builtin-layer", name: layer.name, detail: layer.id }]
+      return [
+        { kind: "layer", name: layer.name, detail: layer.id },
+        { kind: "file", path: `/home/me/.config/opencode/namespaces/${link.namespace}/layers/${layer.id}.md` },
+      ]
+    }
     const section = (type: string, entry: string, layer: Layer, text: string, source: string, automatic = false) => ({
       type,
       typeName: typeName(type),
@@ -313,6 +356,7 @@ export function createPromptMock(
       automatic,
       changed: !!override?.slots?.[type],
       source,
+      trace: traceOf(entry, layer, source),
       text,
     })
     const purpose = loaded.layers.find((layer) => layer.id === link.purpose)
@@ -354,6 +398,9 @@ export function createPromptMock(
       profile: asked ? { id: profile.id, name: profile.name, source: chosen.profile.source } : chosen.profile,
       group: { id: group.id, name: group.name },
       override: Object.keys(override?.slots ?? {}),
+      modelSource: url.searchParams.get("provider")
+        ? { model: `${url.searchParams.get("provider")}/${url.searchParams.get("model")}`, source: "chosen" }
+        : { model: "opencode/claude-opus-4-6", source: "ranking" },
       sections,
       system: [sections.map((item) => item.text).join("\n")],
     }
@@ -387,7 +434,11 @@ export function createPromptMock(
           layer,
           text: `Written from: ${own.prompt}`,
           source: own.name,
-          origin: [],
+          modelSource: { model: "opencode/claude-opus-4-6", source: "ranking" },
+          trace: [
+            { kind: "dynamic-written", name: own.name },
+            { kind: "layer", name: own.name, detail: own.id },
+          ],
         })
       const written = generated(url.searchParams.get("directory") ?? "")[layer]
       const base = {
@@ -401,17 +452,32 @@ export function createPromptMock(
         ? { text: "Triage issues.", source: "triage" }
         : (written ??
           (layer === `${PREFIX}slot.base` || layer === `${PREFIX}slot.agent-or-base` ? base : { text: "", source: "" }))
-      const origins: Record<string, unknown[]> = {
+      const base_ = [
+        { kind: "model-rule", name: "opencode/claude-opus-4-6", detail: "no other rule matches" },
+        { kind: "builtin-layer", name: "base.default", detail: `${PREFIX}base.default` },
+        { kind: "file", path: "packages/opencode/src/session/prompt/default.txt" },
+      ]
+      const traces: Record<string, unknown[]> = {
         [`${PREFIX}generated.environment`]: [{ kind: "written" }],
-        [`${PREFIX}generated.instructions`]: [{ kind: "file", path: `${folder}/AGENTS.md` }],
-        [`${PREFIX}slot.base`]: [{ kind: "base", path: "base.default" }],
-        [`${PREFIX}slot.agent-or-base`]: [{ kind: "base", path: "base.default" }],
-        [`${PREFIX}slot.agent`]: [{ kind: "agent-none" }],
+        [`${PREFIX}generated.instructions`]: [{ kind: "instruction-file", path: `${folder}/AGENTS.md` }],
+        [`${PREFIX}slot.base`]: base_,
+        [`${PREFIX}slot.agent-or-base`]: [{ kind: "agent-none", name: agent }, ...base_],
+        [`${PREFIX}slot.agent`]: [{ kind: "agent-none", name: agent }],
       }
-      const origin = triage
-        ? [{ kind: "agent-file", path: `${folder}/.opencode/agent/triage.md` }]
-        : (origins[layer] ?? [])
-      return json(route, { agent, model: "opencode/claude-opus-4-6", layer, ...found, origin })
+      const trace = triage
+        ? [
+            { kind: "agent-own", name: "triage" },
+            { kind: "agent-file", path: `${folder}/.opencode/agent/triage.md` },
+          ]
+        : (traces[layer] ?? [])
+      return json(route, {
+        agent,
+        model: "opencode/claude-opus-4-6",
+        layer,
+        ...found,
+        modelSource: { model: "opencode/claude-opus-4-6", source: "ranking" },
+        trace,
+      })
     }
     if (url.pathname === "/operator/project-settings/resolve") {
       const folder = url.searchParams.get("directory") ?? ""

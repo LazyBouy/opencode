@@ -25,6 +25,7 @@ import { useRecordOverlay } from "../ui/record-overlay"
 import { AGENT_TABS, AgentDetail } from "./agent"
 import { ScopePicker } from "../ui/scope-picker"
 import { FieldHelp } from "../ui/field-help"
+import { ModelWithSource } from "../ui/prompt-trace"
 
 export function useAgents() {
   const api = useOperatorClient()
@@ -114,7 +115,7 @@ export default function AgentsPage() {
   useRecordOverlay(
     () => !!params.agent,
     () => <AgentOverlay rows={rows} />,
-    () => setParams({ agent: undefined, adir: undefined, atab: undefined, previewProfile: undefined }),
+    () => setParams({ agent: undefined, adir: undefined, atab: undefined }),
   )
   const sourceLabel = (agent: OperatorAgent) => language.t(`operator.agents.source.${agent.source.kind}`)
   const projectName = (key: string) =>
@@ -169,8 +170,8 @@ export default function AgentsPage() {
       id: "model",
       optional: true,
       header: language.t("operator.column.model"),
-      value: agentModel,
-      cell: (agent) => agentModel(agent) || language.t("operator.agents.defaultModel"),
+      value: (agent) => agent.modelSource?.model ?? agentModel(agent),
+      cell: (agent) => <ModelWithSource source={agent.modelSource} compact />,
     },
     {
       id: "source",

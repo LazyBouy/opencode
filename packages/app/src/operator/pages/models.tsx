@@ -4,7 +4,7 @@ import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import type { Model } from "@opencode-ai/sdk/v2/client"
-import { useQuery } from "@tanstack/solid-query"
+import { useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSettingsDialog } from "@/components/settings-dialog"
@@ -13,16 +13,30 @@ import { useOperatorClient } from "../data"
 import { formatCost, formatCount } from "../format"
 import { useScopedProject } from "../project"
 import { type Column, DataTable } from "../ui/data-table"
+import { FieldHelp } from "../ui/field-help"
 import { PageHeader } from "../ui/page-header"
 import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOverlay } from "../ui/record-overlay"
 import { ScopePicker } from "../ui/scope-picker"
+import { type Scope, ScopeSwitch } from "../ui/scope-switch"
+import { ModelWithSource } from "../ui/prompt-trace"
+import { showToast } from "@/utils/toast"
+import { requestError } from "./config-helpers"
 
-type Row = Model & { providerName: string; isDefault: boolean }
+type Row = Model & { providerName: string; isDefault: boolean; isSmall: boolean }
 
-// The project's providers and their models.
+// The project's providers and their models, and its default and small model with where they are set.
 function useModels() {
   const api = useOperatorClient()
   const directory = useScopedProject()
+  const defaults = useQuery(() => ({
+    queryKey: api.key("model-defaults", directory()),
+    enabled: !!directory(),
+    queryFn: () =>
+      api
+        .client()
+        .operator.model.defaults({ directory: directory() })
+        .then((result) => result.data!),
+  }))
   const providers = useQuery(() => ({
     queryKey: api.key("providers", directory()),
     queryFn: () =>
@@ -36,11 +50,32 @@ function useModels() {
       Object.values(provider.models).map((model) => ({
         ...model,
         providerName: provider.name,
-        isDefault: providers.data?.default[provider.id] === model.id,
+        isDefault: defaults.data?.model.model === `${provider.id}/${model.id}`,
+        isSmall: defaults.data?.small.model === `${provider.id}/${model.id}`,
       })),
     ),
   )
-  return { providers, rows }
+  return { providers, rows, defaults, directory }
+}
+
+// Makes a model the default or the small model: config `model` / `small_model` at a scope.
+function useSetModel() {
+  const language = useLanguage()
+  const api = useOperatorClient()
+  const queryClient = useQueryClient()
+  return async (directory: string | undefined, scope: Scope, key: "model" | "small_model", model: string) =>
+    api
+      .client()
+      .operator.config.update({ directory, scope, body: { [key]: model } }, { throwOnError: true })
+      .then(async () => {
+        showToast({
+          title: language.t(key === "model" ? "operator.models.defaultSet" : "operator.models.smallSet", { model }),
+        })
+        await queryClient.invalidateQueries({ queryKey: api.key() })
+      })
+      .catch((error: unknown) =>
+        showToast({ title: language.t("operator.models.setFailed"), description: requestError(error) }),
+      )
 }
 
 // A model opens in the overlay (`model`, as provider/model): the providers on the left.
@@ -49,7 +84,7 @@ export default function ModelsPage() {
   const connect = useSettingsDialog("providers")
   const choose = useSettingsDialog("models")
   const [filter, setFilter] = createStore({ text: "" })
-  const { providers, rows } = useModels()
+  const { providers, rows, defaults } = useModels()
   const [params, setParams] = useSearchParams<{ model?: string }>()
   useRecordOverlay(
     () => !!params.model,
@@ -70,6 +105,9 @@ export default function ModelsPage() {
           {model.name}
           <Show when={model.isDefault}>
             <Tag variant="accent">{language.t("operator.models.default")}</Tag>
+          </Show>
+          <Show when={model.isSmall}>
+            <Tag>{language.t("operator.models.small")}</Tag>
           </Show>
         </span>
       ),
@@ -166,6 +204,34 @@ export default function ModelsPage() {
           </>
         }
       />
+      <section data-component="operator-panel" data-testid="model-defaults">
+        <dl data-component="operator-facts" data-layout="stacked">
+          <div data-slot="operator-fact">
+            <dt>
+              {language.t("operator.models.defaultModel")}
+              <FieldHelp
+                field={language.t("operator.models.defaultModel")}
+                text={language.t("operator.help.defaultModel")}
+              />
+            </dt>
+            <dd>
+              <ModelWithSource source={defaults.data?.model} />
+            </dd>
+          </div>
+          <div data-slot="operator-fact">
+            <dt>
+              {language.t("operator.models.smallModel")}
+              <FieldHelp
+                field={language.t("operator.models.smallModel")}
+                text={language.t("operator.help.smallModel")}
+              />
+            </dt>
+            <dd>
+              <ModelWithSource source={defaults.data?.small} />
+            </dd>
+          </div>
+        </dl>
+      </section>
       <div data-slot="operator-tiles">
         <For each={providers.data?.providers ?? []}>
           {(provider) => (
@@ -214,7 +280,13 @@ export default function ModelsPage() {
 // The overlay a model opens in: the providers on the left, a model's limits, prices and capabilities.
 function ModelOverlay() {
   const language = useLanguage()
-  const { providers, rows } = useModels()
+  const { providers, rows, directory } = useModels()
+  const setModel = useSetModel()
+  const [scope, setScope] = createStore({ value: "global" as Scope, busy: false })
+  const use = async (key: "model" | "small_model", model: string) => {
+    setScope("busy", true)
+    await setModel(directory(), scope.value, key, model).finally(() => setScope("busy", false))
+  }
   const [params, setParams] = useSearchParams<{ model?: string }>()
   const locale = () => language.intl()
   const perMillion = (value: number) => (value ? formatCost(value, locale()) : "—")
@@ -252,6 +324,28 @@ function ModelOverlay() {
                 <Show when={found().isDefault}>
                   <Tag variant="accent">{language.t("operator.models.default")}</Tag>
                 </Show>
+                <Show when={found().isSmall}>
+                  <Tag>{language.t("operator.models.small")}</Tag>
+                </Show>
+              </>
+            }
+            actions={
+              <>
+                <ScopeSwitch value={scope.value} onChange={(value) => setScope("value", value)} />
+                <ButtonV2
+                  variant="outline"
+                  disabled={scope.busy || found().isDefault}
+                  onClick={() => void use("model", keyOf(found()))}
+                >
+                  {language.t("operator.models.useDefault")}
+                </ButtonV2>
+                <ButtonV2
+                  variant="outline"
+                  disabled={scope.busy || found().isSmall}
+                  onClick={() => void use("small_model", keyOf(found()))}
+                >
+                  {language.t("operator.models.useSmall")}
+                </ButtonV2>
               </>
             }
           >

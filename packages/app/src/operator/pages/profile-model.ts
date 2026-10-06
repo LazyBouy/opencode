@@ -91,6 +91,8 @@ export function dynamicKey(layer: Layer | undefined) {
 // Layer Definition's sections, in order, with the type a new layer in each gets.
 export const SECTIONS: ReadonlyArray<{ id: Section; type?: string }> = [
   { id: "base", type: "identity" },
+  // Built-in agents' own prompts (explore's); a copy is used for that agent.
+  { id: "agent", type: "identity" },
   { id: "purpose", type: "purpose" },
   { id: "role", type: "role" },
   { id: "identity", type: "identity" },
@@ -221,4 +223,10 @@ export function copyName(name: string, taken: ReadonlyArray<string>) {
     return taken.includes(candidate) ? free(index + 1) : candidate
   }
   return free(1)
+}
+
+// How long a text is: its words, its characters, and its tokens, estimated at about four characters
+// each (each model counts its own way).
+export function textSize(text: string) {
+  return { words: text.split(/\s+/).filter(Boolean).length, tokens: Math.ceil(text.length / 4), chars: text.length }
 }

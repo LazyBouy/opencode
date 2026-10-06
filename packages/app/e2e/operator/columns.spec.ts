@@ -51,10 +51,34 @@ test("a list's optional columns can be removed and added back; required ones can
   await expect(table.getByRole("columnheader", { name: "Profile" })).toBeVisible()
 })
 
-test("the agent's Overview shows its profile and where it comes from", async ({ page }) => {
+test("the agent's Overview shows its profile and its model with where each comes from; each (i) is beside its label", async ({
+  page,
+}) => {
   await mockOperator(page)
   await page.goto(`/operator/agents/build${dir}`)
-  await expect(page.locator('[data-component="operator-facts"]')).toContainText("OpenCode (from: namespace default)")
+  const facts = page.locator('[data-component="operator-facts"]')
+  await expect(facts).toContainText("OpenCode (from: namespace default)")
+  await expect(facts.getByTestId("model-source")).toContainText("opencode/claude-opus-4-6")
+  await expect(facts.getByTestId("model-source")).toContainText("Not set: OpenCode's own choice")
+  // The label and its (i) share a line; the value is below.
+  const label = facts.locator("dt").first()
+  const help = label.getByRole("button", { name: /^About / })
+  const value = facts.locator("dd").first()
+  const [labelBox, helpBox, valueBox] = await Promise.all([
+    label.boundingBox(),
+    help.boundingBox(),
+    value.boundingBox(),
+  ])
+  expect(Math.abs(helpBox!.y + helpBox!.height / 2 - (labelBox!.y + labelBox!.height / 2))).toBeLessThan(4)
+  expect(valueBox!.y).toBeGreaterThan(labelBox!.y + labelBox!.height - 1)
+})
+
+test("an agent whose own model is not available says so, and which model stands in", async ({ page }) => {
+  await mockOperator(page)
+  await page.goto(`/operator/agents/triage${dir}`)
+  await expect(page.getByRole("dialog").getByTestId("model-source")).toContainText(
+    "the agent's own model opencode/gpt-6-luna",
+  )
 })
 
 test("a helper agent's Overview shows the helper profile", async ({ page }) => {

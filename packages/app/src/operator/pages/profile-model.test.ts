@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  textSize,
   type Catalog,
   copyName,
   copySlots,
@@ -110,5 +111,12 @@ describe("profile model", () => {
     const copy = copySlots(slots)
     copy.identity!.push("rules")
     expect(slots.identity).toEqual(["voice"])
+  })
+})
+
+describe("text size", () => {
+  test("counts words, characters and estimated tokens", () => {
+    expect(textSize("")).toEqual({ words: 0, tokens: 0, chars: 0 })
+    expect(textSize("You are opencode.\n  An agent.")).toEqual({ words: 5, tokens: 8, chars: 29 })
   })
 })

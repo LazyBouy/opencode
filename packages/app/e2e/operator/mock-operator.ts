@@ -74,6 +74,7 @@ export const agents = [
     disabled: false,
     settings: { temperature: 0.1 },
     sessions: { total: 9, lastUsed: now - 600_000 },
+    modelSource: { model: "opencode/claude-opus-4-6", source: "ranking" },
   },
   {
     name: "reviewer",
@@ -88,6 +89,11 @@ export const agents = [
     disabled: false,
     settings: { description: "Reviews diffs", mode: "subagent", prompt: "Review the diff carefully." },
     sessions: { total: 0 },
+    modelSource: {
+      model: "opencode/claude-opus-4-6",
+      source: "agent",
+      path: `${directory}/.opencode/agents/reviewer.md`,
+    },
   },
   {
     name: "title",
@@ -112,6 +118,11 @@ export const agents = [
     disabled: false,
     settings: { mode: "primary", hidden: true, prompt: "Triage issues." },
     sessions: { total: 0 },
+    modelSource: {
+      model: "opencode/claude-opus-4-6",
+      source: "ranking",
+      agent: { model: "opencode/gpt-6-luna", path: `${directory}/.opencode/agent/triage.md` },
+    },
   },
 ]
 
@@ -381,6 +392,13 @@ export async function mockOperator(page: Page) {
       return json(route, { path: `${directory}/.opencode/opencode.jsonc`, changed: true })
     }
     if (url.pathname === "/operator/prompt") return json(route, promptCatalog)
+    if (url.pathname === "/operator/prompt/plugins")
+      return json(route, { plugins: [{ spec: "opencode-wakatime", source: `${directory}/opencode.json` }] })
+    if (url.pathname === "/operator/model")
+      return json(route, {
+        model: { model: "opencode/claude-opus-4-6", source: "ranking" },
+        small: { model: "opencode/claude-haiku-4-5", source: "small-family" },
+      })
     if (url.pathname === "/operator/folder/roots") return json(route, [workspace])
     if (url.pathname === "/operator/folder" && method === "GET")
       return json(route, listing(url.searchParams.get("path") ?? workspace))

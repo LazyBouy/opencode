@@ -34,7 +34,9 @@ const user = (id: string, name: string, type: string, text: string) => ({
   origin: "user",
 })
 
-test("the Prompt tab shows the profile, where it comes from, and every section with its source", async ({ page }) => {
+test("the Prompt tab shows the profile, and every section traced to its file, with no edits to shared profiles", async ({
+  page,
+}) => {
   await mockOperator(page)
   await page.goto(`/operator/agents/build${dir}&tab=prompt`)
 
@@ -59,9 +61,33 @@ test("the Prompt tab shows the profile, where it comes from, and every section w
     "You are opencode, an interactive CLI tool.\nYou are powered by",
   )
 
-  await sections.nth(0).getByRole("button", { name: "Edit" }).click()
-  await expect(page).toHaveURL(/\/operator\/profile\?ns=opencode&tab=layers&layer=opencode(:|%3A)base\.default/)
-  await expect(page.getByRole("button", { name: "Edit a copy" })).toBeVisible()
+  // build has no prompt of its own: the base prompt for the model, by its rule, from its file.
+  const trace = sections.nth(0).getByTestId("prompt-trace")
+  await expect(trace).toContainText("Resolved from")
+  await expect(trace).toContainText("build has no prompt of its own")
+  await expect(trace).toContainText("The base prompt for opencode/claude-opus-4-6 (rule: no other rule matches)")
+  await expect(trace).toContainText("OpenCode's built-in layer base.default")
+  await expect(trace).toContainText("File: packages/opencode/src/session/prompt/default.txt")
+  await expect(sections.nth(2).getByTestId("prompt-trace")).toContainText("Instruction file:")
+  // Profiles are shared: the agent page has no Edit for their layers.
+  await expect(sections.getByRole("button")).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "Edit these texts" })).toHaveCount(0)
+
+  // The model and where it comes from; the texts OpenCode adds from its code; the prompt's size.
+  await expect(page.getByTestId("preview-model-source")).toContainText("Not set: OpenCode's own choice")
+  const exceptions = page.getByTestId("prompt-exceptions")
+  await expect(exceptions).toContainText("Not from the Prompt Profile")
+  await expect(exceptions).toContainText("packages/opencode/src/tool/read.ts")
+  await expect(exceptions).toContainText("opencode-wakatime")
+  await expect(exceptions).not.toContainText("Generate a title")
+  await expect(page.getByTestId("prompt-size")).toContainText(/Size: \d+ words · ≈ \d+ tokens · [\d,]+ characters/)
+})
+
+test("the title agent's Prompt tab declares the title request's text from OpenCode's code", async ({ page }) => {
+  await mockOperator(page)
+  await page.goto(`/operator/agents/title${dir}&tab=prompt`)
+  await expect(page.getByTestId("prompt-exceptions")).toContainText("Generate a title for this conversation:")
+  await expect(page.getByTestId("prompt-exceptions")).toContainText("packages/opencode/src/session/prompt.ts")
 })
 
 test("an agent picks a profile, overrides one slot, and the preview shows purpose, the override and the rest", async ({
@@ -93,11 +119,18 @@ test("an agent picks a profile, overrides one slot, and the preview shows purpos
   await page.getByText("Override", { exact: true }).click()
   const identity = page.getByRole("list", { name: "Agent identity" })
   await expect(identity).toContainText("Voice")
+  const size = page.getByTestId("prompt-size")
+  await expect(size).toContainText("words")
+  const before = await size.textContent()
   await pick(page, "Add a layer to Agent identity", "Strict")
   await identity.getByRole("button", { name: "Move Strict up" }).click()
   const slot = page.locator('[data-slot="operator-slot"][data-type="identity"]')
   await expect(slot).toContainText("Changed")
   await expect(page.locator('[data-slot="operator-slot"][data-type="role"]')).not.toContainText("Changed")
+  // Before saving, the preview and its size already show the edit.
+  await expect(page.locator('[data-slot="operator-prompt-section"]').nth(3)).toContainText("Be strict.")
+  await expect(size).not.toHaveText(before ?? "")
+  expect(state.prompt.writes.length).toBe(1)
   await page.getByRole("button", { name: "Save override" }).click()
   await expect.poll(() => state.prompt.writes.length).toBe(2)
   expect(state.prompt.writes[1]!.body).toEqual({
@@ -124,18 +157,13 @@ test("an agent picks a profile, overrides one slot, and the preview shows purpos
   expect(state.prompt.writes[2]!.body).toEqual({ profile: "release", override: {} })
 })
 
-test("unticking Override asks first, and Preview on an agent previews another profile", async ({ page }) => {
+test("unticking Override asks first", async ({ page }) => {
   const state = await mockOperator(page)
   state.prompt.items.opencode!.layers.push(user("strict", "Strict", "identity", "Be strict."))
   state.prompt.agents[`${directory}\nbuild`] = { override: { slots: { identity: ["strict"] } } }
-  await page.goto(`/operator/agents/build${dir}&tab=prompt&previewProfile=opencode:profile.spec`)
+  await page.goto(`/operator/agents/build${dir}&tab=prompt`)
 
-  await expect(page.getByText("Previewing the profile Spec. It is not saved.")).toBeVisible()
   const sections = page.locator('[data-slot="operator-prompt-section"]')
-  await expect(sections.first()).toContainText("You are opencode, an interactive CLI tool.")
-  await expect(page.locator('[data-slot="operator-prompt-section"][data-changed]')).toHaveCount(0)
-  await page.getByRole("button", { name: "Stop previewing" }).click()
-  await expect(page).not.toHaveURL(/previewProfile/)
   await expect(sections.first()).toContainText("Be strict.")
   await expect(sections.first()).toContainText("Changed")
 

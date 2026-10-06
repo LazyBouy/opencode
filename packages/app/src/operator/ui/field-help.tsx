@@ -35,7 +35,7 @@ export function FieldHelp(props: { field: string; text: JSX.Element | undefined 
   return (
     <Show when={fieldHelp.enabled() && props.text}>
       <TooltipV2
-        class="inline-flex"
+        class="inline-flex operator-field-help"
         placement="top"
         openDelay={150}
         ignoreSafeArea={false}
