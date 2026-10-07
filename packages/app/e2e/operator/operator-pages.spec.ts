@@ -202,10 +202,11 @@ test("the inbox answers a pending request in its project", async ({ page }) => {
   await expect(ask).toContainText("git push origin main")
   await expect(page.locator('[data-component="operator-ask-group"]')).toContainText("Fix the parser")
 
-  await ask.getByRole("button", { name: "Allow once" }).click()
-  await expect.poll(() => state.replies.length).toBe(1)
-  expect(new URL(state.replies[0].url).searchParams.get("directory")).toBe(directory)
-  expect(state.replies[0].body).toEqual({ reply: "once" })
+  // It opens its reply card: Allow answers this request only.
+  await ask.click()
+  await page.getByRole("dialog").getByTestId("reply-card").getByRole("button", { name: "Allow", exact: true }).click()
+  await expect.poll(() => state.decides.length).toBe(1)
+  expect(state.decides[0]).toEqual({ id: "per_op_1", body: { decision: "allow", via: "inbox" } })
   await expect(page.getByText("Nothing is waiting for approval")).toBeVisible()
 })
 
@@ -280,7 +281,7 @@ test("capabilities and inbox requests open in the overlay, with ‹ › through 
   await page.goto("/operator/inbox")
   await page.locator('[data-component="operator-ask"]').first().locator('[data-slot="operator-ask-patterns"]').click()
   await expect(page).toHaveURL(/ask=/)
-  await overlay.getByRole("button", { name: "Allow once" }).click()
+  await overlay.getByRole("button", { name: "Allow", exact: true }).click()
   // The last request answered: the overlay closes.
   await expect(overlay).toBeHidden()
   expect(state.pending).toHaveLength(0)

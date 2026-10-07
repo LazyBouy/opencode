@@ -323,6 +323,7 @@ function AgentOverlay(props: { rows: () => ReadonlyArray<Row> }) {
       { id: "prompt", icon: "prompt" as const },
       { id: "tools", icon: "code" as const },
       { id: "permissions", icon: "shield" as const },
+      { id: "requests", icon: "warning" as const },
       { id: "sessions", icon: "bubble-5" as const },
       { id: "queue", icon: "enter" as const },
     ].map((item) => ({ ...item, label: language.t(`operator.agent.tab.${item.id}` as "operator.agent.tab.overview") }))

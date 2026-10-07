@@ -1,17 +1,15 @@
-import { Config } from "@/config/config"
-import { EffectBridge } from "@/effect/bridge"
+import { InstanceState } from "@/effect/instance-state"
 import { OperatorConfig } from "@/operator/config"
+import { OperatorReloadWhenIdle } from "@/operator/reload-when-idle"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { ApiOperatorConfigInvalidError } from "../groups/config"
-import { reloadAfterWrite } from "../reload"
 
 export const operatorConfigHandlers = HttpApiBuilder.group(InstanceHttpApi, "operatorConfig", (handlers) =>
   Effect.gen(function* () {
     const operatorConfig = yield* OperatorConfig.Service
-    const config = yield* Config.Service
-    const bridge = yield* EffectBridge.make()
+    const reloads = yield* OperatorReloadWhenIdle.Service
 
     const apply = Effect.fnUntraced(function* (
       scope: OperatorConfig.Scope,
@@ -26,8 +24,12 @@ export const operatorConfigHandlers = HttpApiBuilder.group(InstanceHttpApi, "ope
             }),
         ),
       )
-      if (result.changed) yield* reloadAfterWrite(scope, config, bridge)
-      return result
+      // The project (every project, for global config) reloads to read it when none of its sessions is
+      // running.
+      if (!result.changed) return result
+      const directory = (yield* InstanceState.context).directory
+      const reload = yield* reloads.want(scope === "global" ? "global" : { directory })
+      return { ...result, reload }
     })
 
     return handlers

@@ -4,6 +4,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { DockPrompt } from "@opencode-ai/session-ui/dock-prompt"
 import { Icon } from "@opencode-ai/ui/icon"
 import { useLanguage } from "@/context/language"
+import { OperatorReplyCard } from "@/operator/ui/reply-card"
 
 export function SessionPermissionDock(props: {
   request: PermissionRequest
@@ -30,7 +31,7 @@ export function SessionPermissionDock(props: {
           <div data-slot="permission-header-title">{language.t("notification.permission.title")}</div>
         </div>
       }
-      footer={
+      footer={OperatorReplyCard.dockFooter(props.request, () => (
         <>
           <div />
           <div data-slot="permission-footer-actions">
@@ -50,7 +51,7 @@ export function SessionPermissionDock(props: {
             </Button>
           </div>
         </>
-      }
+      ))}
     >
       <Show when={toolDescription()}>
         <div data-slot="permission-row">

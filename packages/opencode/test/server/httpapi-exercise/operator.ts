@@ -105,6 +105,21 @@ export const operatorScenarios: Scenario[] = [
       )
     }),
   http.protected.get("/operator/permission", "operator.permission.pending").global().json(200, array),
+  http.protected
+    .post("/operator/permission/{requestID}/decide", "operator.permission.decide")
+    .global()
+    .at((ctx) => ({
+      path: route("/operator/permission/{requestID}/decide", { requestID: "per_missing" }),
+      headers: ctx.headers(),
+      body: { decision: "allow", via: "inbox" },
+    }))
+    // Answered already, or never asked: no longer waiting (permission-decide.test.ts covers the choices).
+    .status(409),
+  http.protected
+    .get("/operator/permission/decision", "operator.permission.decisions")
+    .global()
+    .at((ctx) => ({ path: "/operator/permission/decision?limit=20", headers: ctx.headers() }))
+    .json(200, array),
   http.protected.get("/operator/agent", "operator.agent.list").json(200, (body) => {
     array(body)
     const build = body.find((agent) => isRecord(agent) && agent.name === "build")

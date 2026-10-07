@@ -223,6 +223,11 @@ import type {
   OperatorNamespaceTypeUpdateResponses,
   OperatorNamespaceUpdateErrors,
   OperatorNamespaceUpdateResponses,
+  OperatorPermissionDecideErrors,
+  OperatorPermissionDecideInput,
+  OperatorPermissionDecideResponses,
+  OperatorPermissionDecisionsErrors,
+  OperatorPermissionDecisionsResponses,
   OperatorPermissionPendingErrors,
   OperatorPermissionPendingResponses,
   OperatorProjectGroup,
@@ -1635,7 +1640,7 @@ export class Permission extends HeyApiClient {
   /**
    * List pending permission requests
    *
-   * Permission requests waiting for a reply in every project, oldest first. Reply with POST /permission/{requestID}/reply and the request's directory.
+   * Permission requests waiting for a reply in every project, oldest first, each with its session, project, the rule that made it ask and where Allow for agent would write. Decide with POST /operator/permission/{requestID}/decide.
    */
   public pending<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).get<
@@ -1643,6 +1648,83 @@ export class Permission extends HeyApiClient {
       OperatorPermissionPendingErrors,
       ThrowOnError
     >({ url: "/operator/permission", ...options })
+  }
+
+  /**
+   * Decide a permission request
+   *
+   * Allow it once, allow it for the session (a session rule) or for the agent (the agent's own rule, applied at once; its project reloads when none of its sessions is running), or deny it with an optional note to the agent. A rule also answers the other waiting requests it covers. The decision is recorded with where it was made.
+   */
+  public decide<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: string
+      operatorPermissionDecideInput?: OperatorPermissionDecideInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { key: "operatorPermissionDecideInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorPermissionDecideResponses,
+      OperatorPermissionDecideErrors,
+      ThrowOnError
+    >({
+      url: "/operator/permission/{requestID}/decide",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * List permission decisions
+   *
+   * Every decision on a permission request (from the web UI, the TUI or an API client) and the requests that ended without one, newest first; for one session, agent or project.
+   */
+  public decisions<ThrowOnError extends boolean = false>(
+    parameters?: {
+      sessionID?: string
+      agent?: string
+      project?: string
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "sessionID" },
+            { in: "query", key: "agent" },
+            { in: "query", key: "project" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorPermissionDecisionsResponses,
+      OperatorPermissionDecisionsErrors,
+      ThrowOnError
+    >({
+      url: "/operator/permission/decision",
+      ...options,
+      ...params,
+    })
   }
 }
 

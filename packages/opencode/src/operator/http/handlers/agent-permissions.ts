@@ -1,12 +1,12 @@
 import { Global } from "@opencode-ai/core/global"
-import { Config } from "@/config/config"
-import { EffectBridge } from "@/effect/bridge"
+import { InstanceState } from "@/effect/instance-state"
 import { OperatorAgentPermissions } from "@/operator/agent-permissions"
+import { OperatorPermissionLive } from "@/operator/permission-live"
+import { OperatorReloadWhenIdle } from "@/operator/reload-when-idle"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { ApiAgentPermissionsInvalidError, ApiAgentPermissionsNotFoundError } from "../groups/agent-permissions"
-import { reloadAfterWrite } from "../reload"
 
 export const operatorAgentPermissionsHandlers = HttpApiBuilder.group(
   InstanceHttpApi,
@@ -14,8 +14,8 @@ export const operatorAgentPermissionsHandlers = HttpApiBuilder.group(
   (handlers) =>
     Effect.gen(function* () {
       const permissions = yield* OperatorAgentPermissions.Service
-      const config = yield* Config.Service
-      const bridge = yield* EffectBridge.make()
+      const live = yield* OperatorPermissionLive.Service
+      const reloads = yield* OperatorReloadWhenIdle.Service
       const apiError = (error: OperatorAgentPermissions.NotFoundError | OperatorAgentPermissions.InvalidError) =>
         error._tag === "OperatorAgentPermissionsNotFound"
           ? new ApiAgentPermissionsNotFoundError({
@@ -48,14 +48,20 @@ export const operatorAgentPermissionsHandlers = HttpApiBuilder.group(
               confirmOrder: ctx.payload.confirmOrder,
             })
             .pipe(
-              // The agent loads with the project: reload what reads the written file (an agent file in
-              // the global config folder feeds every project).
-              Effect.tap((written) =>
-                reloadAfterWrite(
-                  written.path.startsWith(Global.Path.config) ? "global" : ctx.payload.scope,
-                  config,
-                  bridge,
-                ),
+              // The agent's rules apply at once (permission-live.ts); the agent loads with the project,
+              // which reloads to read the written file (an agent file in the global config folder feeds
+              // every project) when none of its sessions is running.
+              Effect.flatMap((written) =>
+                Effect.gen(function* () {
+                  const ctx2 = yield* InstanceState.context
+                  yield* live.written({ directory: ctx2.directory, agent: ctx.params.name, rules: ctx.payload.rules })
+                  const reload = yield* reloads.want(
+                    written.path.startsWith(Global.Path.config) || ctx.payload.scope === "global"
+                      ? "global"
+                      : { directory: ctx2.directory },
+                  )
+                  return { ...written, reload }
+                }),
               ),
               Effect.mapError(apiError),
             ),

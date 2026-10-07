@@ -136,9 +136,20 @@ export const pendingRequest = {
     sessionID: "ses_op_1",
     permission: "bash",
     patterns: ["git push origin main"],
-    metadata: {},
+    metadata: { command: "git push origin main" },
     always: ["git push *"],
   },
+  session: { title: "Fix the parser", agent: "build" },
+  project: { key: directory, namespace: "opencode" },
+  askedBy: {
+    permission: "*",
+    pattern: "*",
+    action: "ask",
+    index: 1,
+    part: "opencode",
+    from: { kind: "opencode-default" },
+  },
+  agentTarget: { builtin: true },
 }
 
 export const workspace = "/workspace"
@@ -215,6 +226,9 @@ export interface OperatorMock {
   readonly folders: Set<string>
   readonly prompt: PromptMock
   pending: (typeof pendingRequest)[]
+  // The reply card's decisions, and the decisions recorded.
+  decides: Array<{ id: string; body: Record<string, unknown> }>
+  decisions: Array<Record<string, unknown>>
   rejectWrite?: string
   // Trash: what is in it, and every call to it.
   trash: Array<{
@@ -264,6 +278,8 @@ export async function mockOperator(page: Page) {
     folders: new Set([`${workspace}/apps`, `${workspace}/site`]),
     prompt: prompt.state,
     pending: [pendingRequest],
+    decides: [],
+    decisions: [],
     trash: [],
     trashWrites: [],
     toolPromptQueries: [],
@@ -302,6 +318,47 @@ export async function mockOperator(page: Page) {
       return json(route, { version: "1.18.34-fork", startedAt: now - 7_200_000, platform: "linux", arch: "x64" })
     if (url.pathname === "/operator/stats") return json(route, stats)
     if (url.pathname === "/operator/permission") return json(route, state.pending)
+    if (url.pathname === "/operator/permission/decision") return json(route, state.decisions)
+    const decide = url.pathname.match(/^\/operator\/permission\/([^/]+)\/decide$/)
+    if (decide && method === "POST") {
+      const id = decide[1]!
+      const body = route.request().postDataJSON() as Record<string, unknown>
+      state.decides.push({ id, body })
+      const asked = state.pending.find((item) => item.request.id === id)
+      state.pending = state.pending.filter((item) => item.request.id !== id)
+      // Allow for session: the patterns become rules of that session (as the server keeps them).
+      if (asked && body.decision === "allow-session")
+        state.sessionRules[asked.request.sessionID] = [
+          ...(state.sessionRules[asked.request.sessionID] ?? []),
+          ...((body.patterns as string[] | undefined) ?? asked.request.always).map((pattern) => ({
+            permission: asked.request.permission,
+            pattern,
+            action: "allow" as const,
+            origin: "allow",
+            time: now,
+          })),
+        ]
+      if (asked)
+        state.decisions.unshift({
+          requestID: id,
+          sessionID: asked.request.sessionID,
+          sessionTitle: asked.session.title,
+          agent: asked.session.agent,
+          directory,
+          project: directory,
+          namespace: "opencode",
+          permission: asked.request.permission,
+          patterns: asked.request.patterns,
+          metadata: asked.request.metadata,
+          askedAt: asked.time,
+          decidedAt: now,
+          decision: body.decision,
+          ...(body.note ? { note: body.note } : {}),
+          who: "me",
+          via: body.via,
+        })
+      return json(route, { rules: [], covered: [] })
+    }
     if (url.pathname === "/operator/project")
       return json(route, [
         {

@@ -29,6 +29,10 @@ export function useOriginText() {
         return time
           ? language.t("operator.origin.sessionAlwaysAt", { time })
           : language.t("operator.origin.sessionAlways")
+      case "session-allow":
+        return time
+          ? language.t("operator.origin.sessionAllowAt", { time })
+          : language.t("operator.origin.sessionAllow")
       case "session-task":
         return language.t("operator.origin.sessionTask")
       case "session-client":

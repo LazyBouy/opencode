@@ -18,11 +18,11 @@ import { OperatorPermissionRules } from "./permission-rules"
 // A session's own permission rules (session.permission, upstream's field): OpenCode applies them after
 // the agent's list, in the tool filter and in every ask. With none, the session is like its agent;
 // later edits to the agent still reach it. The fork keeps where each session rule came from (set by
-// you, Always allow, added by `task`, a client's tool switch, and when) in
+// you, Always allow, Allow for session, added by `task`, a client's tool switch, and when) in
 // `<data>/operator/session-permissions.json`, keyed by session, and drops a session's record when the
 // session is deleted.
 
-export type Origin = "user" | "always" | "task" | "client"
+export type Origin = "user" | "always" | "allow" | "task" | "client"
 type Rule = PermissionV1.Rule
 export type Recorded = Rule & { origin: Origin; time?: number }
 
@@ -102,6 +102,8 @@ export interface Interface {
   readonly get: (sessionID: string) => Effect.Effect<Info, NotFoundError>
   /** Replaces the session's own rules (Reset to agent: none). */
   readonly save: (sessionID: string, rules: ReadonlyArray<Rule>) => Effect.Effect<Info, NotFoundError>
+  /** Adds rules after the session's own (Allow for session), with where they came from. */
+  readonly add: (sessionID: string, rules: ReadonlyArray<Rule>, origin: Origin) => Effect.Effect<void, NotFoundError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorSessionPermissions") {}
@@ -201,7 +203,20 @@ const layer = Layer.effect(
       return yield* get(sessionID)
     })
 
-    return Service.of({ get, save })
+    const add = Effect.fn("OperatorSessionPermissions.add")(function* (
+      sessionID: string,
+      next: ReadonlyArray<Rule>,
+      origin: Origin,
+    ) {
+      const info = yield* session(sessionID)
+      yield* sessions.setPermission({
+        sessionID: SessionID.make(sessionID),
+        permission: [...(info.permission ?? []), ...next],
+      })
+      yield* Effect.promise(() => record(sessionID, next, origin))
+    })
+
+    return Service.of({ get, save, add })
   }),
 )
 

@@ -72,6 +72,7 @@ const layer = Layer.effect(
       const { approved, pending } = yield* InstanceState.get(state)
       const { ruleset, ...request } = input
       let needsAsk = false
+      const live = yield* OperatorPermissionHook.rules(request.sessionID, request.permission) // fork: checked last
 
       for (const pattern of request.patterns) {
         const rule = evaluate(
@@ -79,6 +80,7 @@ const layer = Layer.effect(
           pattern,
           ruleset,
           approved.get(OperatorPermissionHook.key(request.sessionID)) ?? [],
+          live,
         )
         yield* Effect.logInfo("evaluated", { permission: request.permission, pattern, action: rule })
         if (rule.action === "deny") {

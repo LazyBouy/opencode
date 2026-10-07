@@ -26,6 +26,7 @@ import { MergeBinding } from "./binding"
 import { MergeModel } from "./model"
 import { MergeStream } from "./stream"
 import { MergeSummary } from "./summary"
+import { OperatorPermissionDecisions } from "@/operator/permission-decisions"
 
 export type Outcome = "continue" | "break" | "detached"
 
@@ -191,9 +192,13 @@ const layer = Layer.effect(
             env: environment,
           })
           yield* bindings.setProcess(binding.id, harness.pid)
-          yield* Effect.addFinalizer(() =>
-            Effect.forEach([...pending.values()].flat(), (id) => permission.dismiss(id), { discard: true }),
-          )
+          // A request the harness withdrew ended without a decision (recorded as dismissed).
+          const dismissed = (id: PermissionV1.ID) =>
+            Effect.suspend(() => {
+              OperatorPermissionDecisions.expect(id, { decision: "cancelled", cause: "dismissed", via: "client" })
+              return permission.dismiss(id)
+            })
+          yield* Effect.addFinalizer(() => Effect.forEach([...pending.values()].flat(), dismissed, { discard: true }))
           const fibers = yield* FiberSet.make()
 
           const bridge = Effect.fnUntraced(function* (
@@ -265,7 +270,7 @@ const layer = Layer.effect(
                 }
                 if (event.type === "permission-request") yield* FiberSet.run(fibers, bridge(event))
                 if (event.type === "permission-cancel")
-                  yield* Effect.forEach(pending.get(event.id) ?? [], (id) => permission.dismiss(id), { discard: true })
+                  yield* Effect.forEach(pending.get(event.id) ?? [], dismissed, { discard: true })
               }),
             ),
             Stream.map(translate),

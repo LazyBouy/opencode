@@ -28,6 +28,7 @@ import { useMoveToTrash } from "../ui/confirm"
 import { ProjectRecordFields, ProjectRecordForm } from "./project-record"
 import { useProjectSettings } from "./project-prompt"
 import { ConfigEditor } from "./config-editor"
+import { PermissionRequests } from "../ui/permission-requests"
 import {
   PROJECT_SECTIONS,
   ProjectAgents,
@@ -459,6 +460,9 @@ function ProjectOverlay() {
                     onEditing={onEditing}
                   />
                 </Match>
+                <Match when={section() === "requests"}>
+                  <PermissionRequests filter={{ project: found().key }} via="project" />
+                </Match>
                 <Match when={section() === "members"}>
                   <ProjectMembers
                     setting={data.settingOf(found().key)}
@@ -483,6 +487,7 @@ const SECTION_ICONS: Record<ProjectSection, DetailSection["icon"]> = {
   config: "sliders",
   prompt: "prompt",
   members: "subagent",
+  requests: "warning",
 }
 
 // One project: its details, Edit for its prompt settings (Cancel or Save then), and what can be done

@@ -10,6 +10,7 @@ import { SchemaErrorMiddleware } from "@/server/routes/instance/httpapi/middlewa
 import { OperatorFolderGroup } from "./folders"
 import { OperatorProjectRecordGroup } from "./project-records"
 import { OperatorNamespaceGroup } from "./namespaces"
+import { OperatorPermissionDecisionGroup } from "./permission-decisions"
 import { OperatorTrashGroup } from "./trash"
 
 export const OperatorOverviewPaths = {
@@ -92,7 +93,7 @@ export const OperatorRootApi = HttpApi.make("operator-root")
             identifier: "operator.permission.pending",
             summary: "List pending permission requests",
             description:
-              "Permission requests waiting for a reply in every project, oldest first. Reply with POST /permission/{requestID}/reply and the request's directory.",
+              "Permission requests waiting for a reply in every project, oldest first, each with its session, project, the rule that made it ask and where Allow for agent would write. Decide with POST /operator/permission/{requestID}/decide.",
           }),
         ),
       )
@@ -102,6 +103,7 @@ export const OperatorRootApi = HttpApi.make("operator-root")
   .add(OperatorNamespaceGroup)
   .add(OperatorTrashGroup)
   .add(OperatorProjectRecordGroup)
+  .add(OperatorPermissionDecisionGroup)
   .middleware(SchemaErrorMiddleware)
   .middleware(Authorization)
   .annotateMerge(

@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test"
+import { expect, type Locator, type Page, test } from "@playwright/test"
 import { fixture, pageMessages } from "../smoke/session-timeline.fixture"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { directory, mockOperator } from "./mock-operator"
@@ -16,35 +16,37 @@ test.beforeEach(async ({ page }) => {
   })
 })
 
+// Opens a select and picks an option from its own list (another one may still be closing).
+const pick = async (page: Page, trigger: Locator, action: string) => {
+  await trigger.click()
+  await expect(trigger).toHaveAttribute("aria-expanded", "true")
+  const list = await trigger.getAttribute("aria-controls")
+  await page
+    .locator(list ? `[id="${list}"] [data-component="menu-v2-item"]` : '[data-component="menu-v2-item"]')
+    .filter({ hasText: new RegExp(`^${action}$`, "i") })
+    .click()
+}
+
 const addRule = async (page: Page, permission: string, pattern: string, action: string) => {
   const add = page.getByTestId("permission-add")
   // A permission field suggests known permissions (a list), so it is a combobox.
   await add.getByRole("combobox", { name: "New rule's permission" }).fill(permission)
   await add.getByRole("textbox", { name: "New rule's pattern" }).fill(pattern)
-  await add
-    .locator('[data-component="select-v2-root"][aria-label="New rule\'s action"] [data-component="select-v2"]')
-    .click()
-  // The list just opened is the last one (one that is still closing may be there too).
-  await page
-    .locator('[data-component="menu-v2-item"]')
-    .filter({ hasText: new RegExp(`^${action}$`, "i") })
-    .last()
-    .click()
-  await expect(page.getByRole("listbox")).toHaveCount(0)
+  await pick(
+    page,
+    add.locator('[data-component="select-v2-root"][aria-label="New rule\'s action"] [data-component="select-v2"]'),
+    action,
+  )
   await add.getByRole("button", { name: "Add rule" }).click()
 }
 
 // Picks an action in a select named `label`.
-const choose = async (page: Page, label: string, action: string) => {
-  await page.locator(`[data-component="select-v2-root"][aria-label="${label}"] [data-component="select-v2"]`).click()
-  await page
-    .locator('[data-component="menu-v2-item"]')
-    .filter({ hasText: new RegExp(`^${action}$`, "i") })
-    .last()
-    .click()
-  // The list closes before anything else opens.
-  await expect(page.getByRole("listbox")).toHaveCount(0)
-}
+const choose = (page: Page, label: string, action: string) =>
+  pick(
+    page,
+    page.locator(`[data-component="select-v2-root"][aria-label="${label}"] [data-component="select-v2"]`),
+    action,
+  )
 
 test("the Permissions tab shows where each rule comes from, and edits the agent's own rules in place", async ({
   page,
@@ -212,11 +214,12 @@ test("Change access on a session's tool prompt opens that session's rules", asyn
   await expect(page.getByTestId("session-permissions")).toContainText("Showing the rules for read")
 })
 
-test("Always in the inbox adds the rule to that session's own rules", async ({ page }) => {
+test("Allow for session in the inbox adds the rule to that session's own rules", async ({ page }) => {
   await mockOperator(page)
-  await page.goto("/operator/inbox")
-  await page.getByRole("button", { name: "Always" }).first().click()
+  await page.goto("/operator/inbox?ask=per_op_1")
+  await page.getByTestId("reply-card").getByRole("button", { name: "Allow for session" }).click()
+  await expect(page.getByRole("dialog")).toBeHidden()
   await page.goto(`/operator/sessions${dir}&session=ses_op_1&stab=permissions`)
   const panel = page.getByTestId("session-permissions")
-  await expect(panel.getByRole("row", { name: /git push \*/ })).toContainText("Session · Always allow")
+  await expect(panel.getByRole("row", { name: /git push \*/ })).toContainText("Session · Allow for session")
 })

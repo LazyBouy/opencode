@@ -42,6 +42,10 @@ export type Layers = typeof Layers.Type
 export const UpdateResult = Schema.Struct({
   path: Schema.String,
   changed: Schema.Boolean,
+  reload: Schema.optional(Schema.Literals(["now", "when-idle"])).annotate({
+    description:
+      "When the project (or, for a global file, every project) reloads to read it: now, or once none of its sessions is running",
+  }),
 }).annotate({ identifier: "OperatorConfigUpdateResult" })
 
 export class InvalidError extends Schema.TaggedErrorClass<InvalidError>()("OperatorConfigInvalid", {

@@ -19,8 +19,9 @@ import { SessionPermissions } from "../ui/session-permissions"
 import { useOpenSessionView, VIEWS } from "../session-views/view"
 import { requestError } from "./config-helpers"
 import { useOverlayParams } from "../ui/overlay-nav"
+import { PermissionRequests } from "../ui/permission-requests"
 
-export const SESSION_TABS = ["conversation", "details", "subagents", "permissions"] as const
+export const SESSION_TABS = ["conversation", "details", "subagents", "permissions", "requests"] as const
 
 // Opens a session (`session` in the URL; `stab` its section) in the overlay. `rows` are the page's
 // sessions, in order, for ‹ ›.
@@ -92,6 +93,7 @@ function SessionOverlay(props: { rows: () => ReadonlyArray<Pick<GlobalSession, "
       { id: "details", icon: "eye" as const },
       { id: "subagents", icon: "subagent" as const },
       { id: "permissions", icon: "shield" as const },
+      { id: "requests", icon: "warning" as const },
     ].map((item) => ({
       ...item,
       label: language.t(`operator.sessionView.${item.id}` as "operator.sessionView.conversation"),
@@ -176,6 +178,9 @@ function SessionOverlay(props: { rows: () => ReadonlyArray<Pick<GlobalSession, "
               filter={params.sperm}
               onClearFilter={() => setParams({ sperm: undefined })}
             />
+          </Match>
+          <Match when={tab() === "requests"}>
+            <PermissionRequests filter={{ sessionID: id() }} via="session" />
           </Match>
           <Match when={tab() === "conversation"}>
             <div data-slot="operator-open-views" data-testid="open-full-page">

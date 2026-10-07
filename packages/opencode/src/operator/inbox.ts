@@ -2,55 +2,128 @@ export * as OperatorInbox from "./inbox"
 
 import { Context, Effect, Layer, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Wildcard } from "@opencode-ai/core/util/wildcard"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
-import { GlobalBus, type GlobalEvent } from "@/bus/global"
+import { InstanceStore } from "@/project/instance-store"
+import { OperatorAgentPermissions } from "./agent-permissions"
+import { OperatorAgents } from "./agents"
+import { OperatorPermissionDecisions } from "./permission-decisions"
+import { OperatorPermissionRules } from "./permission-rules"
+import { OperatorSessionPermissions } from "./session-permissions"
 
 export const Pending = Schema.Struct({
   directory: Schema.String,
   time: Schema.Finite.annotate({ description: "When the request was raised" }),
   request: PermissionV1.Request,
+  session: Schema.optional(
+    Schema.Struct({
+      title: Schema.String,
+      agent: Schema.optional(Schema.String),
+      parentID: Schema.optional(Schema.String),
+    }),
+  ),
+  project: Schema.optional(Schema.Struct({ key: Schema.String, namespace: Schema.String })),
+  askedBy: Schema.optional(OperatorPermissionRules.Row).annotate({
+    description: "The rule that made it ask (none: no rule matched, and OpenCode asks)",
+  }),
+  agentTarget: Schema.optional(
+    Schema.Struct({
+      builtin: Schema.Boolean.annotate({ description: "OpenCode's built-in agent: Allow for agent is not offered" }),
+      path: Schema.optional(Schema.String).annotate({ description: "Where Allow for agent writes the rule" }),
+    }),
+  ),
 }).annotate({ identifier: "OperatorPendingPermission" })
 export type Pending = typeof Pending.Type
 
 export interface Interface {
-  /** Permission requests waiting for a reply in any project, oldest first. */
-  readonly pending: () => ReadonlyArray<Pending>
+  /** Permission requests waiting for a reply in any project, oldest first, with where they come from. */
+  readonly pending: () => Effect.Effect<ReadonlyArray<Pending>>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorInbox") {}
 
-// Permission state lives in each project instance, and the server cannot list its instances. Every
-// instance publishes on the global bus, so following asked/replied/disposed events there gives one
-// cross-project view without touching the permission service.
+// Permission state lives in each project instance, and the server cannot list its instances; the
+// decision records follow every project's asked and replied events on the global bus (and drop
+// requests whose session stopped or whose project reloaded), which gives one cross-project view.
+// Each request is described in its project: the rule that made it ask (the session's full list, with
+// origins) and where Allow for agent would write.
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const requests = new Map<string, Pending>()
+    const decisions = yield* OperatorPermissionDecisions.Service
+    const instances = yield* InstanceStore.Service
+    const sessionPermissions = yield* OperatorSessionPermissions.Service
+    const agentPermissions = yield* OperatorAgentPermissions.Service
+    const agents = yield* OperatorAgents.Service
 
-    const handle = (event: GlobalEvent) => {
-      const payload = event.payload as { type?: string; properties?: Record<string, unknown> } | undefined
-      if (payload?.type === "permission.asked" && event.directory) {
-        const request = payload.properties as PermissionV1.Request
-        requests.set(request.id, { directory: event.directory, time: Date.now(), request })
-        return
-      }
-      if (payload?.type === "permission.replied") {
-        requests.delete(String(payload.properties?.requestID))
-        return
-      }
-      if (payload?.type === "server.instance.disposed")
-        for (const [id, pending] of requests) if (pending.directory === event.directory) requests.delete(id)
-    }
-
-    yield* Effect.acquireRelease(
-      Effect.sync(() => GlobalBus.on("event", handle)),
-      () => Effect.sync(() => GlobalBus.off("event", handle)),
-    )
+    const describe = (entry: OperatorPermissionDecisions.Asked) =>
+      instances
+        .provide(
+          { directory: entry.directory },
+          Effect.gen(function* () {
+            const request = entry.request
+            const list = yield* sessionPermissions.get(request.sessionID).pipe(Effect.option)
+            const rows = list._tag === "Some" ? list.value.rows : []
+            // The last rule that matches a pattern it asks for.
+            const asking = request.patterns
+              .map((pattern) =>
+                rows.findLast(
+                  (row) => Wildcard.match(request.permission, row.permission) && Wildcard.match(pattern, row.pattern),
+                ),
+              )
+              .find((row) => !row || row.action === "ask")
+            const agent = entry.agent ?? (list._tag === "Some" ? list.value.agent : undefined)
+            const found = agent
+              ? (yield* agents.list().pipe(Effect.orElseSucceed(() => []))).find((item) => item.name === agent)
+              : undefined
+            const target =
+              agent && found && found.source.kind !== "builtin"
+                ? yield* agentPermissions.get(agent).pipe(
+                    Effect.map((info) => info.targets.project.path),
+                    Effect.orElseSucceed(() => undefined),
+                  )
+                : undefined
+            return {
+              directory: entry.directory,
+              time: entry.time,
+              request,
+              ...(entry.sessionTitle !== undefined
+                ? {
+                    session: {
+                      title: entry.sessionTitle,
+                      ...(agent ? { agent } : {}),
+                      ...(entry.parentID ? { parentID: entry.parentID } : {}),
+                    },
+                  }
+                : {}),
+              ...(entry.project ? { project: { key: entry.project, namespace: entry.namespace ?? "opencode" } } : {}),
+              ...(asking ? { askedBy: asking } : {}),
+              ...(found
+                ? { agentTarget: { builtin: found.source.kind === "builtin", ...(target ? { path: target } : {}) } }
+                : {}),
+            } satisfies Pending
+          }),
+        )
+        .pipe(
+          Effect.orElseSucceed(
+            (): Pending => ({ directory: entry.directory, time: entry.time, request: entry.request }),
+          ),
+        )
 
     return Service.of({
-      pending: () => [...requests.values()].sort((a, b) => a.time - b.time),
+      pending: () => Effect.forEach(decisions.asked(), describe, { concurrency: 4 }),
     })
   }),
 )
 
-export const node = LayerNode.make({ service: Service, layer, deps: [] })
+export const node = LayerNode.make({
+  service: Service,
+  layer,
+  deps: [
+    OperatorPermissionDecisions.node,
+    InstanceStore.node,
+    OperatorSessionPermissions.node,
+    OperatorAgentPermissions.node,
+    OperatorAgents.node,
+  ],
+})

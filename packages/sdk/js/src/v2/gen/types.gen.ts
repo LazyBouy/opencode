@@ -2220,6 +2220,40 @@ export type PermissionRequest = {
   }
 }
 
+export type OperatorPermissionOrigin = {
+  /**
+   * opencode-default / opencode-agent: OpenCode's code (its defaults, its definition of the agent); config-permission / config-tools: a config file's `permission` or legacy `tools` key; agent: the agent's own `permission` (its agent file or config entry); truncation: OpenCode's truncation folder allow; session-*: the session's own rules, set by you, by Always allow (a client's Always), by Allow for session (the fork's reply card), added by `task` for a subagent, by a client's tool switch, or by OpenCode
+   */
+  kind:
+    | "opencode-default"
+    | "opencode-agent"
+    | "config-permission"
+    | "config-tools"
+    | "agent"
+    | "truncation"
+    | "session-user"
+    | "session-always"
+    | "session-allow"
+    | "session-task"
+    | "session-client"
+    | "session-opencode"
+  path?: string
+  agent?: string
+  time?: number
+}
+
+export type OperatorPermissionRow = {
+  /**
+   * 1-based, in evaluation order
+   */
+  index: number
+  permission: string
+  pattern: string
+  action: "allow" | "ask" | "deny"
+  part: "opencode" | "config" | "agent" | "truncation" | "session"
+  from: OperatorPermissionOrigin
+}
+
 export type OperatorPendingPermission = {
   directory: string
   /**
@@ -2227,6 +2261,23 @@ export type OperatorPendingPermission = {
    */
   time: number
   request: PermissionRequest
+  session?: {
+    title: string
+    agent?: string
+    parentID?: string
+  }
+  project?: {
+    key: string
+    namespace: string
+  }
+  askedBy?: OperatorPermissionRow
+  agentTarget?: {
+    /**
+     * OpenCode's built-in agent: Allow for agent is not offered
+     */
+    builtin: boolean
+    path?: string
+  }
 }
 
 export type OperatorFolderEntry = {
@@ -2540,6 +2591,88 @@ export type OperatorProjectRecordInvalidError = {
   data: {
     message: string
   }
+}
+
+export type OperatorPermissionDecideInput = {
+  decision: "allow" | "allow-session" | "allow-agent" | "deny"
+  patterns?: Array<string>
+  note?: string
+  /**
+   * Where it was decided: a place in the web UI, or client (the TUI or an API client)
+   */
+  via: "inbox" | "agent" | "session" | "details" | "project" | "chat" | "client"
+}
+
+export type OperatorPermissionDecisionRule = {
+  permission: string
+  pattern: string
+  action: "allow" | "ask" | "deny"
+  /**
+   * session, or the file the agent's rule was written to
+   */
+  where: string
+}
+
+export type OperatorPermissionDecideResult = {
+  /**
+   * The rules written
+   */
+  rules: Array<OperatorPermissionDecisionRule>
+  /**
+   * Other waiting requests the rules answered
+   */
+  covered: Array<string>
+  reload?: "now" | "when-idle"
+}
+
+export type OperatorPermissionGoneError = {
+  name: "OperatorPermissionGoneError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorPermissionRefusedError = {
+  name: "OperatorPermissionRefusedError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorPermissionDecision = {
+  requestID: string
+  sessionID: string
+  sessionTitle?: string
+  agent?: string
+  directory: string
+  project?: string
+  namespace?: string
+  permission: string
+  patterns: Array<string>
+  metadata: {
+    [key: string]: unknown
+  }
+  askedAt: number
+  decidedAt: number
+  /**
+   * allow: this request only; allow-session / allow-agent: a rule was added to the session or the agent; deny: rejected (with a note when there is one); cancelled: no decision
+   */
+  decision: "allow" | "allow-session" | "allow-agent" | "deny" | "cancelled"
+  /**
+   * stopped / reloaded / dismissed: why a request ended without a decision; cascade: denied with the request in `by`; covered: allowed by the rule another decision (`by`) added
+   */
+  cause?: "stopped" | "reloaded" | "dismissed" | "cascade" | "covered"
+  by?: string
+  rule?: OperatorPermissionDecisionRule
+  note?: string
+  /**
+   * The config `username` (one shared server password: no logins)
+   */
+  who: string
+  /**
+   * Where it was decided: a place in the web UI, or client (the TUI or an API client)
+   */
+  via: "inbox" | "agent" | "session" | "details" | "project" | "chat" | "client"
 }
 
 export type Model = {
@@ -3147,6 +3280,7 @@ export type OperatorConfigScope = "global" | "project"
 export type OperatorConfigUpdateResult = {
   path: string
   changed: boolean
+  reload?: "now" | "when-idle"
 }
 
 export type OperatorConfigInvalidError = {
@@ -3517,39 +3651,6 @@ export type OperatorAgentPromptView = {
 export type OperatorTrashItemKind = "skill" | "command" | "tool" | "mcp" | "memory"
 
 export type OperatorToolRunsAs = "primary" | "subagent" | "session"
-
-export type OperatorPermissionOrigin = {
-  /**
-   * opencode-default / opencode-agent: OpenCode's code (its defaults, its definition of the agent); config-permission / config-tools: a config file's `permission` or legacy `tools` key; agent: the agent's own `permission` (its agent file or config entry); truncation: OpenCode's truncation folder allow; session-*: the session's own rules, set by you, by Always allow, added by `task` for a subagent, by a client's tool switch, or by OpenCode
-   */
-  kind:
-    | "opencode-default"
-    | "opencode-agent"
-    | "config-permission"
-    | "config-tools"
-    | "agent"
-    | "truncation"
-    | "session-user"
-    | "session-always"
-    | "session-task"
-    | "session-client"
-    | "session-opencode"
-  path?: string
-  agent?: string
-  time?: number
-}
-
-export type OperatorPermissionRow = {
-  /**
-   * 1-based, in evaluation order
-   */
-  index: number
-  permission: string
-  pattern: string
-  action: "allow" | "ask" | "deny"
-  part: "opencode" | "config" | "agent" | "truncation" | "session"
-  from: OperatorPermissionOrigin
-}
 
 export type OperatorToolSource = {
   kind: "builtin" | "file" | "plugin" | "mcp" | "mcp-resources" | "noop"
@@ -4410,6 +4511,7 @@ export type OperatorAgentPermissionsNotFoundError = {
 
 export type OperatorAgentPermissionsWritten = {
   path: string
+  reload?: "now" | "when-idle"
 }
 
 export type OperatorAgentPermissionsInvalidError = {
@@ -10757,6 +10859,70 @@ export type OperatorProjectRecordUpdateResponses = {
 
 export type OperatorProjectRecordUpdateResponse =
   OperatorProjectRecordUpdateResponses[keyof OperatorProjectRecordUpdateResponses]
+
+export type OperatorPermissionDecideData = {
+  body?: OperatorPermissionDecideInput
+  path: {
+    requestID: string
+  }
+  query?: never
+  url: "/operator/permission/{requestID}/decide"
+}
+
+export type OperatorPermissionDecideErrors = {
+  /**
+   * OperatorPermissionRefusedError | InvalidRequestError
+   */
+  400: OperatorPermissionRefusedError | InvalidRequestError
+  /**
+   * OperatorPermissionGoneError
+   */
+  409: OperatorPermissionGoneError
+}
+
+export type OperatorPermissionDecideError = OperatorPermissionDecideErrors[keyof OperatorPermissionDecideErrors]
+
+export type OperatorPermissionDecideResponses = {
+  /**
+   * What was written and answered
+   */
+  200: OperatorPermissionDecideResult
+}
+
+export type OperatorPermissionDecideResponse =
+  OperatorPermissionDecideResponses[keyof OperatorPermissionDecideResponses]
+
+export type OperatorPermissionDecisionsData = {
+  body?: never
+  path?: never
+  query?: {
+    sessionID?: string
+    agent?: string
+    project?: string
+    limit?: string
+  }
+  url: "/operator/permission/decision"
+}
+
+export type OperatorPermissionDecisionsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorPermissionDecisionsError =
+  OperatorPermissionDecisionsErrors[keyof OperatorPermissionDecisionsErrors]
+
+export type OperatorPermissionDecisionsResponses = {
+  /**
+   * Decisions, newest first
+   */
+  200: Array<OperatorPermissionDecision>
+}
+
+export type OperatorPermissionDecisionsResponse =
+  OperatorPermissionDecisionsResponses[keyof OperatorPermissionDecisionsResponses]
 
 export type EventSubscribeData = {
   body?: never

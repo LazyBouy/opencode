@@ -265,15 +265,27 @@ export function useRecordOverlay(wanted: () => boolean, render: () => JSX.Elemen
   let shown = false
   let leaving = false
   let gone = false
+  // Each opening, so a retry of an earlier close never closes a later one.
+  let opened = 0
   createEffect(() => {
     if (!wanted()) {
       if (!shown) return
       gone = true
-      untrack(() => dialog.close())
+      // The dialog closes the one on top, and not while another is still closing: try again until this
+      // overlay has closed, while it is the one on top.
+      const open = opened
+      const close = (tries = 0) => {
+        if (!shown || open !== opened || tries > 20) return
+        const layers = document.querySelectorAll("[data-dialog-layer]")
+        if (layers[layers.length - 1]?.querySelector('[data-component="operator-overlay-frame"]')) dialog.close()
+        setTimeout(() => close(tries + 1), 150)
+      }
+      untrack(() => close())
       return
     }
     if (shown) return
     shown = true
+    opened++
     untrack(() =>
       dialog.show(render, () => {
         shown = false

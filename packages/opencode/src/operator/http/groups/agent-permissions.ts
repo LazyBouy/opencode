@@ -24,7 +24,13 @@ const permissionError = <Name extends string, Status extends number>(name: Name,
 export class ApiAgentPermissionsNotFoundError extends permissionError("OperatorAgentPermissionsNotFoundError", 404) {}
 export class ApiAgentPermissionsInvalidError extends permissionError("OperatorAgentPermissionsInvalidError", 400) {}
 
-export const AgentPermissionsWritten = Schema.Struct({ path: Schema.String }).annotate({
+export const AgentPermissionsWritten = Schema.Struct({
+  path: Schema.String,
+  reload: Schema.optional(Schema.Literals(["now", "when-idle"])).annotate({
+    description:
+      "When the project (or, for a global file, every project) reloads to read it: now, or once none of its sessions is running",
+  }),
+}).annotate({
   identifier: "OperatorAgentPermissionsWritten",
 })
 

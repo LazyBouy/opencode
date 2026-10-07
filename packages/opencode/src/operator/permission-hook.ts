@@ -2,17 +2,19 @@ export * as OperatorPermissionHook from "./permission-hook"
 
 import { Effect } from "effect"
 
-// Where upstream's permission code hands rules to the fork (the two fork lines in permission/index.ts
-// and session/prompt.ts): rules "Always allow" added to a session, and a client's tool switches merged
-// into a session's rules. The fork's session permissions service registers the handlers: it saves Always
-// allow rules with the session and records where each rule came from. Without a handler (or if it fails)
-// nothing happens; the request goes on either way.
+// Where upstream's permission code hands rules to the fork (the fork lines in permission/index.ts and
+// session/prompt.ts): rules "Always allow" added to a session, a client's tool switches merged into a
+// session's rules, and the rules every ask also checks, last (permission-live.ts: an agent's rules
+// allowed since its project last loaded, the session's own rules as they are now, and locked agent
+// rules). The fork's services register the handlers. Without a handler (or if it fails) nothing
+// happens; the request goes on either way.
 
 type Rule = { permission: string; pattern: string; action: "allow" | "ask" | "deny" }
 
 export const handlers: {
   always?: (input: { sessionID: string; rules: ReadonlyArray<Rule> }) => Effect.Effect<void>
   switched?: (input: { sessionID: string; rules: ReadonlyArray<Rule> }) => Effect.Effect<void>
+  rules?: (input: { sessionID: string; permission: string }) => Effect.Effect<ReadonlyArray<Rule>>
 } = {}
 
 // The list an "Always" approval is kept in: the session's own (upstream kept one list for every session
@@ -34,4 +36,10 @@ export const always = (sessionID: string, rules: ReadonlyArray<Rule>) =>
 export const switched = (sessionID: string, rules: ReadonlyArray<Rule>) =>
   Effect.suspend(() => handlers.switched?.({ sessionID, rules }) ?? Effect.void).pipe(
     Effect.catchCause(() => Effect.void),
+  )
+
+// The rules an ask checks after its own and the session's approvals (none without a handler).
+export const rules = (sessionID: string, permission: string) =>
+  Effect.suspend(() => handlers.rules?.({ sessionID, permission }) ?? Effect.succeed<ReadonlyArray<Rule>>([])).pipe(
+    Effect.catchCause(() => Effect.succeed<ReadonlyArray<Rule>>([])),
   )

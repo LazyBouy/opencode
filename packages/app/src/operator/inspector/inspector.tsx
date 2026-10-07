@@ -9,8 +9,9 @@ import { Portal } from "solid-js/web"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useServerSDK } from "@/context/server-sdk"
-import { useOpenSession, useOperatorClient, usePendingPermissions } from "../data"
+import { asList, ready, useOpenSession, useOperatorClient, usePendingPermissions } from "../data"
 import { formatAgo, formatCost, formatCount, formatDateTime } from "../format"
+import { PermissionRequests } from "../ui/permission-requests"
 import { SessionPermissions } from "../ui/session-permissions"
 import { eventSession } from "./events"
 import "../operator.css"
@@ -80,7 +81,7 @@ function InspectorPanel(props: { sessionID: string; onClose: () => void }) {
         .then((result) => result.data ?? []),
     refetchInterval: 10_000,
   }))
-  const asks = createMemo(() => (pending.data ?? []).filter((item) => item.request.sessionID === props.sessionID))
+  const asks = createMemo(() => asList(ready(pending)).filter((item) => item.request.sessionID === props.sessionID))
   const [tab, setTab] = createSignal("overview")
 
   // Keep the most recent events of this session, newest first.
@@ -165,43 +166,7 @@ function InspectorPanel(props: { sessionID: string; onClose: () => void }) {
           </Show>
         </TabsV2.Content>
         <TabsV2.Content value="approvals">
-          <Show
-            when={asks().length > 0}
-            fallback={<p data-slot="operator-note">{language.t("operator.inspector.noApprovals")}</p>}
-          >
-            <For each={asks()}>
-              {(item) => (
-                <article data-component="operator-ask" data-request={item.request.id}>
-                  <div data-slot="operator-ask-head">
-                    <Tag variant="accent">{item.request.permission}</Tag>
-                    <span data-slot="operator-ask-age">{formatAgo(item.time, locale())}</span>
-                  </div>
-                  <ul data-slot="operator-ask-patterns">
-                    <For each={item.request.patterns}>
-                      {(pattern) => (
-                        <li>
-                          <code>{pattern}</code>
-                        </li>
-                      )}
-                    </For>
-                  </ul>
-                </article>
-              )}
-            </For>
-          </Show>
-          <Show when={(session.data?.permission ?? []).length > 0}>
-            <h3 data-slot="operator-panel-title">{language.t("operator.inspector.sessionRules")}</h3>
-            <ul data-slot="operator-ask-patterns">
-              <For each={session.data?.permission ?? []}>
-                {(rule) => (
-                  <li>
-                    <code>{`${rule.permission} ${rule.pattern}`}</code> →{" "}
-                    {language.t(`operator.permission.action.${rule.action}`)}
-                  </li>
-                )}
-              </For>
-            </ul>
-          </Show>
+          <PermissionRequests filter={{ sessionID: props.sessionID }} via="details" />
         </TabsV2.Content>
         <TabsV2.Content value="subagents">
           <Show

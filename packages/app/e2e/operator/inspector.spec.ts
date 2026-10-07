@@ -6,7 +6,7 @@ import { mockOperator, pendingRequest } from "./mock-operator"
 
 const sessionID = "ses_smoke_target"
 
-test("the session details panel shows the open session's approvals and subagents", async ({ page }) => {
+test("the session details panel shows the open session's permission requests and subagents", async ({ page }) => {
   await mockOpenCodeServer(page, {
     protocol: "v1",
     sessions: fixture.sessions.map((session) => ({ ...session })),
@@ -23,8 +23,11 @@ test("the session details panel shows the open session's approvals and subagents
   const panel = page.getByRole("complementary", { name: "Session details" })
   await expect(panel).toBeVisible()
 
-  await panel.getByRole("tab", { name: "Approvals (1)" }).click()
-  await expect(panel.locator('[data-component="operator-ask"]')).toContainText("git push origin main")
+  // Permission requests: the waiting one as a reply card, with the four choices.
+  await panel.getByRole("tab", { name: "Permission requests (1)" }).click()
+  const card = panel.getByTestId("reply-card")
+  await expect(card).toContainText("git push origin main")
+  await expect(card.getByRole("button", { name: "Allow for session" })).toBeVisible()
   await panel.getByRole("tab", { name: "Subagents (1)" }).click()
   await panel.getByRole("button", { name: "Explore the codebase" }).click()
   await expect(page).toHaveURL(/\/session\/ses_op_child$/)

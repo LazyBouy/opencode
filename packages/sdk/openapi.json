@@ -845,7 +845,7 @@
             }
           }
         },
-        "description": "Permission requests waiting for a reply in every project, oldest first. Reply with POST /permission/{requestID}/reply and the request's directory.",
+        "description": "Permission requests waiting for a reply in every project, oldest first, each with its session, project, the rule that made it ask and where Allow for agent would write. Decide with POST /operator/permission/{requestID}/decide.",
         "summary": "List pending permission requests",
         "x-codeSamples": [
           {
@@ -3546,6 +3546,152 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.projectRecord.update({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/permission/{requestID}/decide": {
+      "post": {
+        "tags": ["operator permission decisions"],
+        "operationId": "operator.permission.decide",
+        "parameters": [
+          {
+            "name": "requestID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "What was written and answered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPermissionDecideResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorPermissionRefusedError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorPermissionRefusedError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "OperatorPermissionGoneError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPermissionGoneError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Allow it once, allow it for the session (a session rule) or for the agent (the agent's own rule, applied at once; its project reloads when none of its sessions is running), or deny it with an optional note to the agent. A rule also answers the other waiting requests it covers. The decision is recorded with where it was made.",
+        "summary": "Decide a permission request",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperatorPermissionDecideInput"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.permission.decide({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/permission/decision": {
+      "get": {
+        "tags": ["operator permission decisions"],
+        "operationId": "operator.permission.decisions",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Decisions, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorPermissionDecision"
+                  },
+                  "description": "Decisions, newest first"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Every decision on a permission request (from the web UI, the TUI or an API client) and the requests that ended without one, newest first; for one session, agent or project.",
+        "summary": "List permission decisions",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.permission.decisions({\n  ...\n})"
           }
         ]
       }
@@ -28665,6 +28811,68 @@
         "required": ["id", "sessionID", "permission", "patterns", "metadata", "always"],
         "additionalProperties": false
       },
+      "OperatorPermissionOrigin": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "opencode-default",
+              "opencode-agent",
+              "config-permission",
+              "config-tools",
+              "agent",
+              "truncation",
+              "session-user",
+              "session-always",
+              "session-allow",
+              "session-task",
+              "session-client",
+              "session-opencode"
+            ],
+            "description": "opencode-default / opencode-agent: OpenCode's code (its defaults, its definition of the agent); config-permission / config-tools: a config file's `permission` or legacy `tools` key; agent: the agent's own `permission` (its agent file or config entry); truncation: OpenCode's truncation folder allow; session-*: the session's own rules, set by you, by Always allow (a client's Always), by Allow for session (the fork's reply card), added by `task` for a subagent, by a client's tool switch, or by OpenCode"
+          },
+          "path": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "time": {
+            "type": "number"
+          }
+        },
+        "required": ["kind"],
+        "additionalProperties": false
+      },
+      "OperatorPermissionRow": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "number",
+            "description": "1-based, in evaluation order"
+          },
+          "permission": {
+            "type": "string"
+          },
+          "pattern": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": ["allow", "ask", "deny"]
+          },
+          "part": {
+            "type": "string",
+            "enum": ["opencode", "config", "agent", "truncation", "session"]
+          },
+          "from": {
+            "$ref": "#/components/schemas/OperatorPermissionOrigin"
+          }
+        },
+        "required": ["index", "permission", "pattern", "action", "part", "from"],
+        "additionalProperties": false
+      },
       "OperatorPendingPermission": {
         "type": "object",
         "properties": {
@@ -28677,6 +28885,52 @@
           },
           "request": {
             "$ref": "#/components/schemas/PermissionRequest"
+          },
+          "session": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "agent": {
+                "type": "string"
+              },
+              "parentID": {
+                "type": "string"
+              }
+            },
+            "required": ["title"],
+            "additionalProperties": false
+          },
+          "project": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "namespace": {
+                "type": "string"
+              }
+            },
+            "required": ["key", "namespace"],
+            "additionalProperties": false
+          },
+          "askedBy": {
+            "$ref": "#/components/schemas/OperatorPermissionRow"
+          },
+          "agentTarget": {
+            "type": "object",
+            "properties": {
+              "builtin": {
+                "type": "boolean",
+                "description": "OpenCode's built-in agent: Allow for agent is not offered"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": ["builtin"],
+            "additionalProperties": false
           }
         },
         "required": ["directory", "time", "request"],
@@ -29437,6 +29691,205 @@
           }
         },
         "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorPermissionDecideInput": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": ["allow", "allow-session", "allow-agent", "deny"]
+          },
+          "patterns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "note": {
+            "type": "string"
+          },
+          "via": {
+            "type": "string",
+            "enum": ["inbox", "agent", "session", "details", "project", "chat", "client"],
+            "description": "Where it was decided: a place in the web UI, or client (the TUI or an API client)"
+          }
+        },
+        "required": ["decision", "via"],
+        "additionalProperties": false
+      },
+      "OperatorPermissionDecisionRule": {
+        "type": "object",
+        "properties": {
+          "permission": {
+            "type": "string"
+          },
+          "pattern": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": ["allow", "ask", "deny"]
+          },
+          "where": {
+            "type": "string",
+            "description": "session, or the file the agent's rule was written to"
+          }
+        },
+        "required": ["permission", "pattern", "action", "where"],
+        "additionalProperties": false
+      },
+      "OperatorPermissionDecideResult": {
+        "type": "object",
+        "properties": {
+          "rules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPermissionDecisionRule"
+            },
+            "description": "The rules written"
+          },
+          "covered": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Other waiting requests the rules answered"
+          },
+          "reload": {
+            "type": "string",
+            "enum": ["now", "when-idle"]
+          }
+        },
+        "required": ["rules", "covered"],
+        "additionalProperties": false
+      },
+      "OperatorPermissionGoneError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorPermissionGoneError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorPermissionRefusedError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorPermissionRefusedError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorPermissionDecision": {
+        "type": "object",
+        "properties": {
+          "requestID": {
+            "type": "string"
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "sessionTitle": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "directory": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "permission": {
+            "type": "string"
+          },
+          "patterns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "askedAt": {
+            "type": "number"
+          },
+          "decidedAt": {
+            "type": "number"
+          },
+          "decision": {
+            "type": "string",
+            "enum": ["allow", "allow-session", "allow-agent", "deny", "cancelled"],
+            "description": "allow: this request only; allow-session / allow-agent: a rule was added to the session or the agent; deny: rejected (with a note when there is one); cancelled: no decision"
+          },
+          "cause": {
+            "type": "string",
+            "enum": ["stopped", "reloaded", "dismissed", "cascade", "covered"],
+            "description": "stopped / reloaded / dismissed: why a request ended without a decision; cascade: denied with the request in `by`; covered: allowed by the rule another decision (`by`) added"
+          },
+          "by": {
+            "type": "string"
+          },
+          "rule": {
+            "$ref": "#/components/schemas/OperatorPermissionDecisionRule"
+          },
+          "note": {
+            "type": "string"
+          },
+          "who": {
+            "type": "string",
+            "description": "The config `username` (one shared server password: no logins)"
+          },
+          "via": {
+            "type": "string",
+            "enum": ["inbox", "agent", "session", "details", "project", "chat", "client"],
+            "description": "Where it was decided: a place in the web UI, or client (the TUI or an API client)"
+          }
+        },
+        "required": [
+          "requestID",
+          "sessionID",
+          "directory",
+          "permission",
+          "patterns",
+          "metadata",
+          "askedAt",
+          "decidedAt",
+          "decision",
+          "who",
+          "via"
+        ],
         "additionalProperties": false
       },
       "Model": {
@@ -31193,6 +31646,10 @@
           },
           "changed": {
             "type": "boolean"
+          },
+          "reload": {
+            "type": "string",
+            "enum": ["now", "when-idle"]
           }
         },
         "required": ["path", "changed"],
@@ -32041,67 +32498,6 @@
       "OperatorToolRunsAs": {
         "type": "string",
         "enum": ["primary", "subagent", "session"]
-      },
-      "OperatorPermissionOrigin": {
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": [
-              "opencode-default",
-              "opencode-agent",
-              "config-permission",
-              "config-tools",
-              "agent",
-              "truncation",
-              "session-user",
-              "session-always",
-              "session-task",
-              "session-client",
-              "session-opencode"
-            ],
-            "description": "opencode-default / opencode-agent: OpenCode's code (its defaults, its definition of the agent); config-permission / config-tools: a config file's `permission` or legacy `tools` key; agent: the agent's own `permission` (its agent file or config entry); truncation: OpenCode's truncation folder allow; session-*: the session's own rules, set by you, by Always allow, added by `task` for a subagent, by a client's tool switch, or by OpenCode"
-          },
-          "path": {
-            "type": "string"
-          },
-          "agent": {
-            "type": "string"
-          },
-          "time": {
-            "type": "number"
-          }
-        },
-        "required": ["kind"],
-        "additionalProperties": false
-      },
-      "OperatorPermissionRow": {
-        "type": "object",
-        "properties": {
-          "index": {
-            "type": "number",
-            "description": "1-based, in evaluation order"
-          },
-          "permission": {
-            "type": "string"
-          },
-          "pattern": {
-            "type": "string"
-          },
-          "action": {
-            "type": "string",
-            "enum": ["allow", "ask", "deny"]
-          },
-          "part": {
-            "type": "string",
-            "enum": ["opencode", "config", "agent", "truncation", "session"]
-          },
-          "from": {
-            "$ref": "#/components/schemas/OperatorPermissionOrigin"
-          }
-        },
-        "required": ["index", "permission", "pattern", "action", "part", "from"],
-        "additionalProperties": false
       },
       "OperatorToolSource": {
         "type": "object",
@@ -34147,6 +34543,10 @@
         "properties": {
           "path": {
             "type": "string"
+          },
+          "reload": {
+            "type": "string",
+            "enum": ["now", "when-idle"]
           }
         },
         "required": ["path"],
@@ -48035,6 +48435,10 @@
     {
       "name": "operator project records",
       "description": "Project record routes."
+    },
+    {
+      "name": "operator permission decisions",
+      "description": "Permission decision routes."
     },
     {
       "name": "event",

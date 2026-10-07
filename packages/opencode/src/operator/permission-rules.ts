@@ -32,12 +32,13 @@ export const Origin = Schema.Struct({
     "truncation",
     "session-user",
     "session-always",
+    "session-allow",
     "session-task",
     "session-client",
     "session-opencode",
   ]).annotate({
     description:
-      "opencode-default / opencode-agent: OpenCode's code (its defaults, its definition of the agent); config-permission / config-tools: a config file's `permission` or legacy `tools` key; agent: the agent's own `permission` (its agent file or config entry); truncation: OpenCode's truncation folder allow; session-*: the session's own rules, set by you, by Always allow, added by `task` for a subagent, by a client's tool switch, or by OpenCode",
+      "opencode-default / opencode-agent: OpenCode's code (its defaults, its definition of the agent); config-permission / config-tools: a config file's `permission` or legacy `tools` key; agent: the agent's own `permission` (its agent file or config entry); truncation: OpenCode's truncation folder allow; session-*: the session's own rules, set by you, by Always allow (a client's Always), by Allow for session (the fork's reply card), added by `task` for a subagent, by a client's tool switch, or by OpenCode",
   }),
   path: Schema.optional(Schema.String).annotate({ description: "The file the rule is written in" }),
   agent: Schema.optional(Schema.String).annotate({ description: "opencode-agent: the agent whose definition it is" }),
@@ -402,7 +403,7 @@ export function sessionRows(input: {
   start: number
   parent: boolean
   primaryTools?: string[]
-  recorded?: ReadonlyArray<Rule & { origin: "user" | "always" | "task" | "client"; time?: number }>
+  recorded?: ReadonlyArray<Rule & { origin: "user" | "always" | "allow" | "task" | "client"; time?: number }>
 }): Row[] {
   const pool = [...(input.recorded ?? [])]
   return input.rules.map((rule, index) => {

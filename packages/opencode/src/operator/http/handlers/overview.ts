@@ -13,7 +13,7 @@ export const operatorOverviewHandlers = HttpApiBuilder.group(OperatorRootApi, "o
       .handle("status", () => Effect.sync(() => overview.status()))
       .handle("sessions", (ctx) => overview.sessions(ctx.query))
       .handle("stats", (ctx) => overview.stats({ days: ctx.query.days ?? 14, offset: ctx.query.offset ?? 0 }))
-      .handle("permissions", () => Effect.sync(() => inbox.pending()))
+      .handle("permissions", () => inbox.pending())
       .handle("projects", () => overview.projects())
   }),
 )

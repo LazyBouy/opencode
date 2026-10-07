@@ -18,6 +18,7 @@ import { recordOf, useProjectRecords } from "./project-record"
 import { requestError } from "./config-helpers"
 import { FieldHelp } from "../ui/field-help"
 import { ModelWithSource } from "../ui/prompt-trace"
+import { PermissionRequests } from "../ui/permission-requests"
 
 // Agents open in an overlay on the Agents page; this route (links to /operator/agents/<name>) opens it
 // there, keeping the tab and the folder.
@@ -32,7 +33,7 @@ export default function AgentPage() {
   return <Navigate href={`/operator/agents?${query.toString()}`} />
 }
 
-export const AGENT_TABS = ["overview", "prompt", "tools", "permissions", "sessions", "queue"] as const
+export const AGENT_TABS = ["overview", "prompt", "tools", "permissions", "requests", "sessions", "queue"] as const
 
 // One agent of a project (`directory`): its name, tags and actions, then the section `tab`. The
 // Agents page shows it in its overlay, with the sections as the left menu.
@@ -324,6 +325,9 @@ export function AgentDetail(props: { name: string; directory: string; tab: strin
             </Match>
             <Match when={props.tab === "queue"}>
               <AgentQueue agent={current().name} directory={directory()} />
+            </Match>
+            <Match when={props.tab === "requests"}>
+              <PermissionRequests filter={{ agent: current().name, project: directory() }} via="agent" />
             </Match>
           </Switch>
         </RecordView>
