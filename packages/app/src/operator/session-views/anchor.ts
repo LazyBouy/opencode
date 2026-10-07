@@ -8,6 +8,7 @@
 // The elements an anchor is chosen from: small blocks, so the one at the top of the view is close to
 // what is being read.
 const ANCHORS = [
+  '[data-slot="operator-transcript-section-head"]',
   '[data-slot="operator-transcript-exchange"]',
   '[data-component="operator-call"] > header',
   '[data-component="operator-call"] tr',

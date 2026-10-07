@@ -8,10 +8,11 @@ import type {
   OperatorTurn,
   OperatorUnrecordedStep,
 } from "@opencode-ai/sdk/v2/client"
-import { createMemo, createSignal, For, type JSX, Match, Show, Switch } from "solid-js"
+import { createMemo, For, type JSX, Match, Show, Switch } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { FieldHelp } from "../ui/field-help"
 import { keepInPlace } from "./anchor"
+import { useOpen } from "./transcript-state"
 import { prettyArgs, subagentOf } from "./content"
 import { useOpenSessionView } from "./view"
 
@@ -202,7 +203,7 @@ export function SessionTotalsView(props: { list: OperatorCallList }) {
   )
 }
 
-// "Where the input tokens went": a stacked bar and a table, over every recorded call.
+// "Where the input tokens went": a stacked bar and a table, over the calls the provider billed.
 export function InputBreakdown(props: { list: OperatorCallList }) {
   const language = useLanguage()
   const { n, share } = useNumbers()
@@ -210,8 +211,7 @@ export function InputBreakdown(props: { list: OperatorCallList }) {
   const whole = () => parts().reduce((total, item) => total + Math.max(0, item.tokens), 0)
   return (
     <Show when={whole() > 0}>
-      <details data-slot="operator-accounting-breakdown" data-testid="transcript-input-by" open>
-        <summary>{language.t("operator.accounting.inputBy")}</summary>
+      <div data-slot="operator-accounting-breakdown" data-testid="transcript-input-by">
         <div data-slot="operator-accounting-bar" role="img" aria-label={language.t("operator.accounting.inputBy")}>
           <For each={parts().filter((item) => item.tokens > 0)}>
             {(item) => (
@@ -254,9 +254,36 @@ export function InputBreakdown(props: { list: OperatorCallList }) {
             </For>
           </tbody>
         </table>
-      </details>
+        <Show when={props.list.session.notCounted.failed || props.list.session.notCounted.noUsage}>
+          <p data-slot="operator-note" data-testid="transcript-not-counted">
+            {[
+              props.list.session.notCounted.failed
+                ? language.t("operator.accounting.notCountedFailed", { count: props.list.session.notCounted.failed })
+                : "",
+              props.list.session.notCounted.noUsage
+                ? language.t("operator.accounting.notCountedNoUsage", { count: props.list.session.notCounted.noUsage })
+                : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          </p>
+        </Show>
+      </div>
     </Show>
   )
+}
+
+// The share of the biggest parts of the input, for the section's closed line.
+export function inputShares(list: OperatorCallList, language: Language) {
+  const parts = list.session.inputBy.filter((item) => item.tokens > 0)
+  const whole = parts.reduce((total, item) => total + item.tokens, 0)
+  return parts
+    .toSorted((a, b) => b.tokens - a.tokens)
+    .slice(0, 3)
+    .map(
+      (item) =>
+        `${language.t(`operator.accounting.group.${item.group}` as Key).toLowerCase()} ${Math.round((item.tokens / whole) * 100)}%`,
+    )
 }
 
 // ---- Turns ----
@@ -555,6 +582,7 @@ export function AccountingTable(props: { accounting: OperatorCallAccounting }) {
 // "Sent, in detail": every item in request order with its count and labels; items sent before fold
 // into "Same as call N" with their count and cache state.
 export function SentDetail(props: {
+  callID: string
   accounting: OperatorCallAccounting
   onlyNew: boolean
   expanded: boolean
@@ -585,6 +613,7 @@ export function SentDetail(props: {
               <For each={group.items}>
                 {(item) => (
                   <ItemView
+                    callID={props.callID}
                     item={item}
                     expanded={props.expanded}
                     toolPrompt={props.toolPrompt}
@@ -596,6 +625,7 @@ export function SentDetail(props: {
           >
             <Show when={!props.onlyNew}>
               <SeenGroup
+                callID={props.callID}
                 group={group}
                 expanded={props.expanded}
                 n={n}
@@ -611,6 +641,7 @@ export function SentDetail(props: {
 }
 
 function SeenGroup(props: {
+  callID: string
   group: { since?: number; items: OperatorInputItem[] }
   expanded: boolean
   n: (value: number) => string
@@ -618,13 +649,19 @@ function SeenGroup(props: {
   subagents: OperatorCallList["session"]["subagents"]
 }) {
   const language = useLanguage()
-  const [open, setOpen] = createSignal(false)
+  const [open, setOpen] = useOpen(() => `group:${props.callID}:${props.group.since}:${props.group.items[0]?.id}`)
   const tokens = () => props.group.items.reduce((total, item) => total + item.tokens, 0)
+  // Sent before, so never "new": how much of it the provider read from its cache.
   const cache = () => {
     const states = new Set(props.group.items.map((item) => item.cache))
-    return states.size === 1
-      ? language.t(`operator.accounting.cache.${[...states][0]}` as Key)
-      : language.t("operator.accounting.cache.mixed")
+    const only = states.size === 1 ? [...states][0] : undefined
+    return language.t(
+      only === "read"
+        ? "operator.accounting.groupCache.read"
+        : only === "new" || only === "write"
+          ? "operator.accounting.groupCache.new"
+          : "operator.accounting.groupCache.partial",
+    )
   }
   return (
     <div data-slot="operator-call-seen" data-testid="call-seen">
@@ -646,7 +683,13 @@ function SeenGroup(props: {
       <Show when={open() || props.expanded}>
         <For each={props.group.items}>
           {(item) => (
-            <ItemView item={item} expanded={props.expanded} toolPrompt={props.toolPrompt} subagents={props.subagents} />
+            <ItemView
+              callID={props.callID}
+              item={item}
+              expanded={props.expanded}
+              toolPrompt={props.toolPrompt}
+              subagents={props.subagents}
+            />
           )}
         </For>
       </Show>
@@ -655,6 +698,7 @@ function SeenGroup(props: {
 }
 
 function ItemView(props: {
+  callID: string
   item: OperatorInputItem
   expanded: boolean
   toolPrompt?: string
@@ -744,7 +788,7 @@ function ItemView(props: {
       </Match>
     </Switch>
   )
-  const [open, setOpen] = createSignal(false)
+  const [open, setOpen] = useOpen(() => `item:${props.callID}:${props.item.id}`)
   return (
     <div data-slot="operator-call-item" data-kind={item().kind} data-testid="call-item">
       <button

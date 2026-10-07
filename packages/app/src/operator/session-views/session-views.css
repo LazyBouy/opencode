@@ -403,3 +403,37 @@ details[data-slot="operator-extra"] {
 details[data-slot="operator-extra"] > summary {
   cursor: pointer;
 }
+
+/* The Transcript's three sections (Summary, Where the input tokens went, Call details). */
+[data-slot="operator-transcript-inner"] {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+[data-slot="operator-transcript-section"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-bottom: 1px solid var(--v2-border-border-muted);
+  padding-bottom: 12px;
+}
+
+[data-slot="operator-transcript-section-head"] {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-align: start;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+[data-slot="operator-transcript-section-body"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+[data-slot="operator-transcript-section-body"][hidden] {
+  display: none;
+}

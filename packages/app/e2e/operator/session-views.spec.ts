@@ -72,7 +72,7 @@ test("the Transcript accounts for every token: session totals, turns, and each c
   await expect(totals.getByRole("row", { name: /This session/ })).toContainText("3")
   await expect(totals.getByRole("row", { name: /Side calls/ })).toBeVisible()
   await expect(totals).toContainText("The provider reported no cost for calls 1, 2.")
-  await expect(transcript.getByTestId("transcript-input-by")).toContainText("Where the input tokens went")
+  await expect(transcript.getByTestId("transcript-section-input")).toContainText("Where the input tokens went")
   await expect(transcript.getByTestId("transcript-input-by")).toContainText("Formatting and unattributed")
   await expect(transcript.getByTestId("transcript-counting")).toContainText("No tokenizer")
 
