@@ -15,6 +15,7 @@ import { LiveIndicator } from "../ui/live-indicator"
 import { PageHeader } from "../ui/page-header"
 import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOverlay } from "../ui/record-overlay"
 import { requestError } from "./config-helpers"
+import { useOverlayParams } from "../ui/overlay-nav"
 
 type Reply = "once" | "always" | "reject"
 
@@ -71,7 +72,7 @@ export default function InboxPage() {
   useRecordOverlay(
     () => !!params.ask,
     () => <AskOverlay />,
-    () => setParams({ ask: undefined }),
+    ["ask"],
   )
 
   return (
@@ -175,7 +176,7 @@ function AskOverlay() {
   const openSession = useOpenSession()
   const { pending, titles, groups, reply, busy } = useInbox()
   const dialog = useDialog()
-  const [params, setParams] = useSearchParams<{ ask?: string }>()
+  const [params, setParams] = useOverlayParams<{ ask?: string }>()
   const item = createMemo(() => pending.data?.find((entry) => entry.request.id === params.ask))
   const blocks = createMemo<OverlayBlock[]>(() =>
     groups().map((group) => ({

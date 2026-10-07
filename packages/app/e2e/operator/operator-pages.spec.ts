@@ -28,10 +28,10 @@ test("the dashboard shows usage, approvals and recent sessions", async ({ page }
 
   const recent = page.locator('[data-component="operator-panel"]').filter({ hasText: "Recent sessions" })
   await expect(recent).toContainText("Fix the parser")
-  // A recent session opens in the overlay; Maximize opens the full session page.
+  // A recent session opens in the overlay; Open in Chats opens the full session page.
   await recent.getByRole("row", { name: /Fix the parser/ }).click()
   await expect(page).toHaveURL(/session=ses_op_1/)
-  await page.getByRole("dialog").getByRole("button", { name: "Maximize" }).click()
+  await page.getByRole("dialog").getByRole("button", { name: "Open in Chats" }).click()
   await expect(page).toHaveURL(/\/session\/ses_op_1$/)
 })
 
@@ -143,8 +143,11 @@ test("the projects page lists projects and opens a project's agents", async ({ p
   await expect(rows.nth(0)).toContainText("smoke-project")
   await expect(rows.nth(1)).toContainText("notes")
   await rows.nth(0).click()
-  await page.getByRole("dialog").getByRole("button", { name: "Agents", exact: true }).click()
-  await expect(page).toHaveURL(/\/operator\/agents\?dir=/)
+  // The project's Agents section lists its agents; one opens in the Agents page's overlay.
+  await page.getByRole("dialog").getByRole("tab", { name: "Agents", exact: true }).click()
+  await expect(page.getByRole("dialog").getByTestId("project-agent").filter({ hasText: "reviewer" })).toBeVisible()
+  await page.getByRole("dialog").getByTestId("project-agent").filter({ hasText: "reviewer" }).click()
+  await expect(page).toHaveURL(/\/operator\/agents\?.*agent=reviewer/)
   await expect(page.locator('[data-component="operator-table"]')).toContainText("reviewer")
 })
 
@@ -174,7 +177,7 @@ test("the sessions page searches on the server and opens a session", async ({ pa
   expect(state.sessionQueries.some((query) => query.get("search") === "plan" && query.get("roots") === "true")).toBe(
     true,
   )
-  // A session opens in the overlay: its conversation, with a prompt box; Maximize opens the full page.
+  // A session opens in the overlay: its conversation, with a prompt box; Open in Chats opens the full page.
   await table.getByRole("row", { name: /Plan the release/ }).click()
   await expect(page).toHaveURL(/session=ses_op_2/)
   const overlay = page.getByRole("dialog")
@@ -188,7 +191,7 @@ test("the sessions page searches on the server and opens a session", async ({ pa
   await overlay.getByRole("button", { name: "Send" }).click()
   await expect.poll(() => sent.length).toBe(1)
   expect(sent[0]).toContain("Keep going.")
-  await overlay.getByRole("button", { name: "Maximize" }).click()
+  await overlay.getByRole("button", { name: "Open in Chats" }).click()
   await expect(page).toHaveURL(/\/session\/ses_op_2$/)
 })
 

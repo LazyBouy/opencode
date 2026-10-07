@@ -20,6 +20,7 @@ import { useTrashItem } from "./trash"
 import { ScopePicker } from "../ui/scope-picker"
 import { StatTile } from "../ui/stat-tile"
 import { requestError } from "./config-helpers"
+import { useOverlayParams } from "../ui/overlay-nav"
 
 // What OpenCode keeps for a project: its files and database, read for the page and its overlay.
 function useMemory(directory: () => string | undefined) {
@@ -48,7 +49,7 @@ export default function MemoryPage() {
   useRecordOverlay(
     () => !!(params.file || params.summary),
     () => <MemoryOverlay />,
-    () => setParams({ file: undefined, summary: undefined }),
+    ["file", "summary"],
   )
 
   const loaded = (file: OperatorMemoryFile) => language.t(`operator.memory.loaded.${file.loaded}`)
@@ -242,7 +243,7 @@ function MemoryOverlay() {
   const openSession = useOpenSession()
   const directory = useScopedProject()
   const memory = useMemory(directory)
-  const [params, setParams] = useSearchParams<{ file?: string; summary?: string }>()
+  const [params, setParams] = useOverlayParams<{ file?: string; summary?: string }>()
   const [store, setStore] = createStore({ text: "", saved: "", error: "", busy: false, editing: false })
   const locale = () => language.intl()
   const trash = useTrashItem(directory)

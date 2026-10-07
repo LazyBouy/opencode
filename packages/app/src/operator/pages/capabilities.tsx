@@ -18,6 +18,7 @@ import { PageHeader } from "../ui/page-header"
 import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOverlay } from "../ui/record-overlay"
 import { useTrashItem } from "./trash"
 import { ScopePicker } from "../ui/scope-picker"
+import { useOverlayParams } from "../ui/overlay-nav"
 
 // Where OpenCode's own skills say they live, and OpenCode's own commands (`Default` in
 // command/index.ts; `merge` is the fork's).
@@ -100,7 +101,7 @@ export default function CapabilitiesPage() {
   useRecordOverlay(
     () => !!params.item,
     () => <CapabilityOverlay />,
-    () => setParams({ kind: undefined, item: undefined }),
+    ["kind", "item"],
   )
   const open = (kind: Kind, item: string) => setParams({ kind, item })
 
@@ -335,7 +336,7 @@ function CapabilityOverlay() {
   const language = useLanguage()
   const { directory, tools, skills, commands, servers } = useCapabilities()
   const mcpToggle = useMcpToggle(directory)
-  const [params, setParams] = useSearchParams<Params>()
+  const [params, setParams] = useOverlayParams<Params>()
   const trash = useTrashItem(directory)
   const gone = () => setParams({ item: undefined })
   const deleteButton = (kind: "skill" | "command" | "tool" | "mcp", name: string, label = name) => (

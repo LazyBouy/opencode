@@ -24,10 +24,13 @@ const addRule = async (page: Page, permission: string, pattern: string, action: 
   await add
     .locator('[data-component="select-v2-root"][aria-label="New rule\'s action"] [data-component="select-v2"]')
     .click()
+  // The list just opened is the last one (one that is still closing may be there too).
   await page
     .locator('[data-component="menu-v2-item"]')
     .filter({ hasText: new RegExp(`^${action}$`, "i") })
+    .last()
     .click()
+  await expect(page.getByRole("listbox")).toHaveCount(0)
   await add.getByRole("button", { name: "Add rule" }).click()
 }
 
@@ -37,7 +40,10 @@ const choose = async (page: Page, label: string, action: string) => {
   await page
     .locator('[data-component="menu-v2-item"]')
     .filter({ hasText: new RegExp(`^${action}$`, "i") })
+    .last()
     .click()
+  // The list closes before anything else opens.
+  await expect(page.getByRole("listbox")).toHaveCount(0)
 }
 
 test("the Permissions tab shows where each rule comes from, and edits the agent's own rules in place", async ({

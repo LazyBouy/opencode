@@ -1,10 +1,10 @@
-import { useNavigate, useSearchParams } from "@solidjs/router"
+import { useSearchParams } from "@solidjs/router"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import type { OperatorProject, OperatorPromptCatalog, OperatorPromptProject } from "@opencode-ai/sdk/v2/client"
 import { useQuery, useQueryClient } from "@tanstack/solid-query"
-import { createEffect, createMemo, createSignal, on, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, Match, on, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
@@ -18,6 +18,7 @@ import { Field } from "../ui/field"
 import { useFolderBrowser } from "../ui/folder-browser"
 import { NamespacePicker, useNamespaceScope } from "../ui/namespace-picker"
 import { PageHeader } from "../ui/page-header"
+import { type DetailSection, DetailOverlay } from "../ui/detail-overlay"
 import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOverlay } from "../ui/record-overlay"
 import { requestError } from "./config-helpers"
 import { useProfileNames } from "./profile-data"
@@ -25,13 +26,23 @@ import { namespaceDefault, OPENCODE } from "./profile-model"
 import { RegisterProject } from "../project-gate"
 import { useMoveToTrash } from "../ui/confirm"
 import { ProjectRecordFields, ProjectRecordForm } from "./project-record"
-import { ProjectPromptForm, useProjectSettings } from "./project-prompt"
+import { useProjectSettings } from "./project-prompt"
+import { ConfigEditor } from "./config-editor"
+import {
+  PROJECT_SECTIONS,
+  ProjectAgents,
+  ProjectMembers,
+  ProjectPromptSection,
+  type ProjectSection,
+  ProjectSessions,
+} from "./project-sections"
+import { useOverlayParams } from "../ui/overlay-nav"
 
 // A project as the page lists it: a git project the server knows, or a folder outside git — a
 // project once registered (it has prompt settings), else "not a project". Folders outside git that
 // are not projects belong to OpenCode.
 type Row = OperatorProject & { key: string; ns: string; registered: boolean }
-type Params = { project?: string; block?: string; edit?: string }
+type Params = { project?: string; block?: string; edit?: string; psec?: string }
 
 function useProjectRows() {
   const language = useLanguage()
@@ -191,7 +202,7 @@ export default function ProjectsPage() {
   useRecordOverlay(
     () => !!(params.project || params.block),
     () => <ProjectOverlay />,
-    () => setParams({ project: undefined, block: undefined, edit: undefined }),
+    ["project", "block", "edit", "psec"],
   )
 
   // Opens the folder in this browser and loads it on the server, which records it as a project.
@@ -309,22 +320,25 @@ export default function ProjectsPage() {
   )
 }
 
-// The overlay of Projects: the namespaces in scope on the left, a namespace's projects or one
-// project on the right.
+// The overlay of Projects: the namespaces in scope on the left and a namespace's projects on the
+// right; an open project shows its own sections instead (fixes_spec.md §2), with "‹ All projects" back
+// to the namespaces.
 function ProjectOverlay() {
   const language = useLanguage()
   const data = useProjectRows()
-  const [params, setParams] = useSearchParams<Params>()
+  const [params, setParams] = useOverlayParams<Params>()
   // Kept here, not in the project's view: a move to another namespace switches the pane (and the view
   // with it) while the edit finishes.
   const [editing, setEditing] = createSignal(params.edit === "added")
   const [copying, setCopying] = createSignal(false)
+  const [dirty, setDirty] = createSignal(false)
   createEffect(
     on(
       () => params.project,
       () => {
         setEditing(params.edit === "added")
         setCopying(false)
+        setDirty(false)
       },
       { defer: true },
     ),
@@ -348,42 +362,127 @@ function ProjectOverlay() {
         })),
     })),
   )
+  const records = createMemo(() => blocks().flatMap((item) => item.records.map((record) => record.id)))
+  // A folder that is not a project has only its overview and sessions.
+  const sections = createMemo<DetailSection[]>(() =>
+    (row()?.registered ? PROJECT_SECTIONS : (["overview", "sessions"] as const)).map((id) => ({
+      id,
+      label: language.t(`operator.projects.section.${id}` as Parameters<typeof language.t>[0]),
+      icon: SECTION_ICONS[id],
+    })),
+  )
+  // A project just added opens on its prompt settings, to choose its namespace.
+  const section = (): ProjectSection =>
+    (PROJECT_SECTIONS as ReadonlyArray<string>).includes(params.psec ?? "")
+      ? (params.psec as ProjectSection)
+      : params.edit === "added"
+        ? "prompt"
+        : "overview"
+  const onEditing = (on: boolean) => {
+    setEditing(on)
+    // A project just added stays on its prompt settings once they are saved.
+    if (!on) setParams({ edit: undefined, ...(params.edit === "added" && !params.psec ? { psec: "prompt" } : {}) })
+  }
 
   return (
-    <RecordOverlay
-      title={language.t("operator.page.projects.title")}
-      namespaces={data.scope.namespaces()}
-      blocks={blocks()}
-      block={block()}
-      record={params.project}
-      editing={editing() || copying()}
-      onBlock={(id) => setParams({ block: id, project: undefined, edit: undefined })}
-      onRecord={(_, key) => setParams({ project: key, block: undefined, edit: undefined })}
+    <Show
+      when={params.project}
+      fallback={
+        <RecordOverlay
+          title={language.t("operator.page.projects.title")}
+          namespaces={data.scope.namespaces()}
+          blocks={blocks()}
+          block={block()}
+          editing={false}
+          onBlock={(id) => setParams({ block: id, project: undefined, edit: undefined, psec: undefined })}
+          onRecord={(_, key) => setParams({ project: key, block: undefined, edit: undefined, psec: undefined })}
+        >
+          {null}
+        </RecordOverlay>
+      }
     >
-      <Show when={row()} fallback={<p data-slot="operator-note">{language.t("operator.projects.noSuchProject")}</p>}>
-        {(found) => (
-          <ProjectRecord
-            row={found()}
-            setting={data.settingOf(found().key)}
-            purpose={data.purposeName(found())}
-            profile={data.profileName(found())}
-            nsName={data.nsName(found().ns)}
-            added={params.edit === "added"}
-            editing={editing()}
-            onEditing={setEditing}
-            copying={copying()}
-            onCopying={setCopying}
-            onOpen={(key) => setParams({ project: key, block: undefined, edit: undefined })}
-            onGone={() => setParams({ project: undefined, block: found().ns, edit: undefined })}
-            onDone={() => {
-              setEditing(false)
-              setParams({ edit: undefined })
-            }}
-          />
-        )}
-      </Show>
-    </RecordOverlay>
+      {(key) => (
+        <DetailOverlay
+          title={row() ? nameOf(row()!) : key()}
+          back={{
+            label: language.t("operator.projects.allProjects"),
+            onClick: () => setParams({ project: undefined, block: row()?.ns, edit: undefined, psec: undefined }),
+          }}
+          sections={sections()}
+          section={section()}
+          records={records()}
+          record={key()}
+          editing={editing() || copying() || dirty()}
+          onSection={(id) => setParams({ psec: id === "overview" ? undefined : id, edit: undefined })}
+          onRecord={(next) => setParams({ project: next, edit: undefined })}
+        >
+          <Show
+            when={row()}
+            fallback={<p data-slot="operator-note">{language.t("operator.projects.noSuchProject")}</p>}
+          >
+            {(found) => (
+              <Switch>
+                <Match when={section() === "overview"}>
+                  <ProjectRecord
+                    row={found()}
+                    setting={data.settingOf(found().key)}
+                    profile={data.profileName(found())}
+                    nsName={data.nsName(found().ns)}
+                    editing={editing()}
+                    onEditing={onEditing}
+                    copying={copying()}
+                    onCopying={setCopying}
+                    onOpen={(next) => setParams({ project: next, block: undefined, edit: undefined, psec: undefined })}
+                    onGone={() =>
+                      setParams({ project: undefined, block: found().ns, edit: undefined, psec: undefined })
+                    }
+                  />
+                </Match>
+                <Match when={section() === "agents"}>
+                  <ProjectAgents directory={found().key} />
+                </Match>
+                <Match when={section() === "sessions"}>
+                  <ProjectSessions directory={found().key} />
+                </Match>
+                <Match when={section() === "config"}>
+                  <ConfigEditor directory={found().key} onDirty={setDirty} />
+                </Match>
+                <Match when={section() === "prompt"}>
+                  <ProjectPromptSection
+                    setting={data.settingOf(found().key)}
+                    name={nameOf(found())}
+                    nsName={data.nsName(found().ns)}
+                    purpose={data.purposeName(found())}
+                    profile={data.profileName(found())}
+                    added={params.edit === "added"}
+                    editing={editing()}
+                    onEditing={onEditing}
+                  />
+                </Match>
+                <Match when={section() === "members"}>
+                  <ProjectMembers
+                    setting={data.settingOf(found().key)}
+                    name={nameOf(found())}
+                    editing={editing()}
+                    onEditing={onEditing}
+                  />
+                </Match>
+              </Switch>
+            )}
+          </Show>
+        </DetailOverlay>
+      )}
+    </Show>
   )
+}
+
+const SECTION_ICONS: Record<ProjectSection, DetailSection["icon"]> = {
+  overview: "folder",
+  agents: "brain",
+  sessions: "bullet-list",
+  config: "sliders",
+  prompt: "prompt",
+  members: "subagent",
 }
 
 // One project: its details, Edit for its prompt settings (Cancel or Save then), and what can be done
@@ -392,24 +491,19 @@ function ProjectOverlay() {
 function ProjectRecord(props: {
   row: Row
   setting: OperatorPromptProject
-  purpose: string
   profile: string
   nsName: string
-  added: boolean
   editing: boolean
   onEditing: (editing: boolean) => void
   copying: boolean
   onCopying: (copying: boolean) => void
   onOpen: (key: string) => void
   onGone: () => void
-  onDone: () => void
 }) {
   const language = useLanguage()
-  const navigate = useNavigate()
   const server = useServer()
   const tabs = useTabs()
   const locale = () => language.intl()
-  const scoped = (page: string) => navigate(`/operator/${page}?dir=${encodeURIComponent(props.row.key)}`)
 
   const name = () => nameOf(props.row)
   const api = useOperatorClient()
@@ -431,26 +525,13 @@ function ProjectRecord(props: {
         ),
     )
 
-  // What Edit edits: the project (its goal, members, …) or its prompt settings (also what a newly added
-  // project opens in, to choose its namespace).
-  const [mode, setMode] = createSignal<"project" | "prompt">("prompt")
-  const edit = (next: "project" | "prompt") => {
-    setMode(next)
-    props.onEditing(true)
-  }
-
   return (
     <Show
       when={!props.editing}
       fallback={
-        <Show
-          when={mode() === "project"}
-          fallback={<ProjectPromptForm project={props.setting} added={props.added} onDone={props.onDone} />}
-        >
-          <RecordView title={name()}>
-            <ProjectRecordForm setting={props.setting} name={name()} onDone={props.onDone} />
-          </RecordView>
-        </Show>
+        <RecordView title={name()}>
+          <ProjectRecordForm setting={props.setting} name={name()} onDone={() => props.onEditing(false)} />
+        </RecordView>
       }
     >
       <Show when={props.copying}>
@@ -483,23 +564,14 @@ function ProjectRecord(props: {
           actions={
             <>
               <Show when={props.row.registered}>
-                <ButtonV2 variant="contrast" onClick={() => edit("project")}>
+                <ButtonV2 variant="contrast" onClick={() => props.onEditing(true)}>
                   {language.t("operator.projects.editProject")}
-                </ButtonV2>
-                <ButtonV2 variant="outline" onClick={() => edit("prompt")}>
-                  {language.t("operator.projects.editPrompt")}
                 </ButtonV2>
                 <ButtonV2
                   variant="outline"
                   onClick={() => void tabs.newDraft({ server: server.key, directory: props.row.key })}
                 >
                   {language.t("operator.projects.newSession")}
-                </ButtonV2>
-                <ButtonV2 variant="neutral" onClick={() => scoped("agents")}>
-                  {language.t("operator.page.agents.title")}
-                </ButtonV2>
-                <ButtonV2 variant="neutral" onClick={() => scoped("config")}>
-                  {language.t("operator.page.config.title")}
                 </ButtonV2>
                 <ButtonV2 variant="neutral" onClick={() => props.onCopying(true)}>
                   {language.t("operator.projects.copy")}
@@ -508,9 +580,6 @@ function ProjectRecord(props: {
                   {language.t("operator.trash.delete")}
                 </ButtonV2>
               </Show>
-              <ButtonV2 variant="neutral" onClick={() => scoped("sessions")}>
-                {language.t("operator.page.sessions.title")}
-              </ButtonV2>
             </>
           }
         >

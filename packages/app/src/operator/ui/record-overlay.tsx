@@ -1,20 +1,22 @@
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Icon } from "@opencode-ai/ui/icon"
-import { Dialog } from "@opencode-ai/ui/v2/dialog-v2"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
+import { useSearchParams } from "@solidjs/router"
 import { createEffect, createMemo, For, Index, type JSX, on, onCleanup, onMount, Show, untrack } from "solid-js"
 import "@/components/settings-v2/settings-v2.css"
 import { useLanguage } from "@/context/language"
 import type { OperatorNamespaceSummary } from "@opencode-ai/sdk/v2/client"
 import { FieldHelp } from "./field-help"
 import { NamespaceAction } from "./namespace-picker"
+import { OverlayControls, OverlayFrame, type Step, useOverlayFrame } from "./overlay-frame"
+import { useCloseOverlay } from "./overlay-nav"
 import "./record-overlay.css"
 
 type IconName = Parameters<typeof Icon>[0]["name"]
 
-export type OverlayRecord = { id: string; label: JSX.Element; detail?: JSX.Element }
+// `name`: the record's name as text (for the back path), when `label` is not plain text.
+export type OverlayRecord = { id: string; label: JSX.Element; name?: string; detail?: JSX.Element }
 
 // One block of a page (a section of Layer Definition, Group types, …): a left-menu item in the
 // overlay, with its records.
@@ -44,8 +46,6 @@ export function RecordOverlay(props: {
   onRecord: (block: string, record: string) => void
   children: JSX.Element
 }) {
-  const language = useLanguage()
-  const dialog = useDialog()
   const all = createMemo(() =>
     props.blocks.flatMap((block) => block.records.map((record) => ({ block: block.id, id: record.id }))),
   )
@@ -55,6 +55,14 @@ export function RecordOverlay(props: {
   const go = (by: number) => {
     const next = all()[index() + by]
     if (next && !props.editing) props.onRecord(next.block, next.id)
+  }
+  const step = (): Step => ({ index: index(), count: all().length, go })
+  // The back path names the record shown, or the block.
+  const label = () => {
+    const block = props.blocks.find((item) => item.id === props.block)
+    const record = props.record ? block?.records.find((item) => item.id === props.record) : undefined
+    if (!record) return block?.label
+    return record.name ?? (typeof record.label === "string" ? record.label : props.record)
   }
 
   // Moving to another block replaces its pane, and the focused button with it: keep focus in the
@@ -90,87 +98,68 @@ export function RecordOverlay(props: {
   })
 
   return (
-    <Dialog size="x-large" variant="settings" class="record-overlay">
-      <TabsV2
-        orientation="vertical"
-        variant="settings"
-        value={props.block}
-        onChange={(value: string) => {
-          if (!props.editing) props.onBlock(value)
-        }}
-        class="settings-v2"
-      >
-        <TabsV2.List aria-label={props.title}>
-          <div class="flex flex-col gap-1.5 w-full">
-            <TabsV2.SectionTitle>{props.title}</TabsV2.SectionTitle>
-            <Index each={props.blocks}>
-              {(block) => (
-                <TabsV2.Trigger value={block().id} disabled={props.editing && block().id !== props.block}>
-                  <Icon name={block().icon} />
-                  {block().label}
-                </TabsV2.Trigger>
-              )}
-            </Index>
-          </div>
-        </TabsV2.List>
-        {/* Blocks are rebuilt whenever the catalog refreshes; Index keeps the panes, and an open edit. */}
-        <Index each={props.blocks}>
-          {(block) => (
-            <TabsV2.Content value={block().id} class="settings-v2-panel" data-component="record-overlay-panel">
-              <div class="settings-v2-tab-header" data-slot="record-overlay-header">
-                <div data-slot="record-overlay-header-row">
-                  <h2 class="settings-v2-tab-title">{block().label}</h2>
-                  <span class="flex items-center gap-1">
-                    <Show when={index() >= 0}>
-                      <IconButtonV2
-                        variant="ghost-muted"
-                        size="small"
-                        icon={<Icon name="chevron-left" />}
-                        aria-label={language.t("operator.overlay.previous")}
-                        disabled={props.editing || index() <= 0}
-                        onClick={() => go(-1)}
-                      />
-                      <span data-slot="record-overlay-position">
-                        {language.t("operator.overlay.position", { index: index() + 1, count: all().length })}
-                      </span>
-                      <IconButtonV2
-                        variant="ghost-muted"
-                        size="small"
-                        icon={<Icon name="chevron-right" />}
-                        aria-label={language.t("operator.overlay.next")}
-                        disabled={props.editing || index() >= all().length - 1}
-                        onClick={() => go(1)}
-                      />
-                    </Show>
-                    <IconButtonV2
-                      variant="ghost-muted"
-                      size="small"
-                      icon={<Icon name="close" />}
-                      aria-label={language.t("operator.overlay.close")}
-                      onClick={() => dialog.close()}
-                    />
-                  </span>
-                </div>
-              </div>
-              <div class="settings-v2-tab-body" data-slot="record-overlay-body" tabIndex={-1}>
-                <Show
-                  when={props.record}
-                  fallback={
-                    <BlockList
-                      block={block()}
-                      namespaces={props.namespaces}
-                      onOpen={(id) => props.onRecord(block().id, id)}
-                    />
-                  }
-                >
-                  {props.children}
+    <OverlayFrame label={label()} editing={props.editing} step={step()}>
+      <RecordPanes {...props} step={step()} />
+    </OverlayFrame>
+  )
+}
+
+function RecordPanes(props: Parameters<typeof RecordOverlay>[0] & { step: Step }) {
+  const frame = useOverlayFrame()!
+  const step = () => props.step
+  return (
+    <TabsV2
+      orientation="vertical"
+      variant="settings"
+      value={props.block}
+      onChange={(value: string) => {
+        if (!props.editing) props.onBlock(value)
+      }}
+      class="settings-v2"
+    >
+      <TabsV2.List aria-label={props.title}>
+        <div class="flex flex-col gap-1.5 w-full">
+          <TabsV2.SectionTitle>{props.title}</TabsV2.SectionTitle>
+          <Index each={props.blocks}>
+            {(block) => (
+              <TabsV2.Trigger value={block().id} disabled={props.editing && block().id !== props.block}>
+                <Icon name={block().icon} />
+                {block().label}
+              </TabsV2.Trigger>
+            )}
+          </Index>
+        </div>
+      </TabsV2.List>
+      {/* Blocks are rebuilt whenever the catalog refreshes; Index keeps the panes, and an open edit. */}
+      <Index each={props.blocks}>
+        {(block) => (
+          <TabsV2.Content value={block().id} class="settings-v2-panel" data-component="record-overlay-panel">
+            <div class="settings-v2-tab-header" data-slot="record-overlay-header">
+              <div data-slot="record-overlay-header-row">
+                <h2 class="settings-v2-tab-title">{block().label}</h2>
+                <Show when={!frame.full()}>
+                  <OverlayControls step={step()} editing={props.editing} />
                 </Show>
               </div>
-            </TabsV2.Content>
-          )}
-        </Index>
-      </TabsV2>
-    </Dialog>
+            </div>
+            <div class="settings-v2-tab-body" data-slot="record-overlay-body" tabIndex={-1}>
+              <Show
+                when={props.record}
+                fallback={
+                  <BlockList
+                    block={block()}
+                    namespaces={props.namespaces}
+                    onOpen={(id) => props.onRecord(block().id, id)}
+                  />
+                }
+              >
+                {props.children}
+              </Show>
+            </div>
+          </TabsV2.Content>
+        )}
+      </Index>
+    </TabsV2>
   )
 }
 
@@ -262,20 +251,40 @@ export function RecordField(props: { label: string; help: JSX.Element; children:
   )
 }
 
-// Opens the overlay while `wanted` is true (a record or block chosen in the URL), and calls
-// `onClose` when it closes, so the page can clear its URL state.
-export function useRecordOverlay(wanted: () => boolean, render: () => JSX.Element, onClose: () => void) {
+// Opens the overlay while `wanted` is true (a record or block chosen in the URL); `keys` are the URL
+// keys it owns (Full screen's `full` too). Closing it (Close, Esc, the backdrop) goes back to the page
+// it was opened on, or clears its keys in place; when the address loses them (the browser's Back), it
+// closes.
+export function useRecordOverlay(wanted: () => boolean, render: () => JSX.Element, keys: ReadonlyArray<string>) {
   const dialog = useDialog()
+  const [, setParams] = useSearchParams()
+  const owned = [...keys, "full"]
+  const close = useCloseOverlay(owned, () =>
+    setParams(Object.fromEntries(owned.map((key) => [key, undefined])), { replace: true }),
+  )
   let shown = false
   let leaving = false
+  let gone = false
   createEffect(() => {
-    if (!wanted() || shown) return
+    if (!wanted()) {
+      if (!shown) return
+      gone = true
+      untrack(() => dialog.close())
+      return
+    }
+    if (shown) return
     shown = true
     untrack(() =>
       dialog.show(render, () => {
         shown = false
-        // Leaving the page (a link in the overlay) closes it too; its URL state goes with the page.
-        if (!leaving) onClose()
+        // Leaving the page (a link in the overlay) closes it too; its URL state goes with the page. The
+        // browser's Back already took its keys away.
+        if (leaving) return
+        if (gone) {
+          gone = false
+          return
+        }
+        close()
       }),
     )
   })

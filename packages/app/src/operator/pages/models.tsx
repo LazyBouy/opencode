@@ -21,6 +21,7 @@ import { type Scope, ScopeSwitch } from "../ui/scope-switch"
 import { ModelWithSource } from "../ui/prompt-trace"
 import { showToast } from "@/utils/toast"
 import { requestError } from "./config-helpers"
+import { useOverlayParams } from "../ui/overlay-nav"
 
 type Row = Model & { providerName: string; isDefault: boolean; isSmall: boolean }
 
@@ -89,7 +90,7 @@ export default function ModelsPage() {
   useRecordOverlay(
     () => !!params.model,
     () => <ModelOverlay />,
-    () => setParams({ model: undefined }),
+    ["model"],
   )
   const locale = () => language.intl()
   const perMillion = (value: number) => (value ? formatCost(value, locale()) : "—")
@@ -287,7 +288,7 @@ function ModelOverlay() {
     setScope("busy", true)
     await setModel(directory(), scope.value, key, model).finally(() => setScope("busy", false))
   }
-  const [params, setParams] = useSearchParams<{ model?: string }>()
+  const [params, setParams] = useOverlayParams<{ model?: string }>()
   const locale = () => language.intl()
   const perMillion = (value: number) => (value ? formatCost(value, locale()) : "—")
   const keyOf = (model: Row) => `${model.providerID}/${model.id}`

@@ -27,6 +27,7 @@ import {
   HELPER,
   REQUIRED,
 } from "./profile-model"
+import { useOverlayParams } from "../ui/overlay-nav"
 
 type Block = "types" | "groups"
 type Params = { type?: string; group?: string; rns?: string; block?: string }
@@ -75,7 +76,7 @@ export function GroupDefinition(props: { ns: string; namespaces: ReadonlyArray<O
   useRecordOverlay(
     () => !!(params.type || params.group || params.block),
     () => <GroupOverlay ns={props.ns} namespaces={props.namespaces} />,
-    () => setParams({ type: undefined, group: undefined, rns: undefined, block: undefined }),
+    ["type", "group", "rns", "block"],
   )
   const namespaceColumn = <T,>() =>
     all()
@@ -213,7 +214,7 @@ function GroupOverlay(props: { ns: string; namespaces: ReadonlyArray<OperatorNam
     () => props.ns,
     () => props.namespaces,
   )
-  const [params, setParams] = useSearchParams<Params>()
+  const [params, setParams] = useOverlayParams<Params>()
   const [editing, setEditing] = createSignal(false)
   const recordNs = () => (all() ? params.rns : props.ns)
   const block = (): Block =>

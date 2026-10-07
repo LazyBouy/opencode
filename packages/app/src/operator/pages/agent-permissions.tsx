@@ -1,4 +1,3 @@
-import { useSearchParams } from "@solidjs/router"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SegmentedControlItemV2, SegmentedControlV2 } from "@opencode-ai/ui/v2/segmented-control-v2"
@@ -18,6 +17,7 @@ import { PermissionImpact } from "../ui/permission-impact"
 import { useOriginText } from "../ui/permission-origin"
 import { orderCheck, type Rule } from "../ui/rules"
 import { requestError } from "./config-helpers"
+import { useOverlayParams } from "../ui/overlay-nav"
 
 type Scope = "project" | "global"
 
@@ -68,7 +68,7 @@ export function useConfirmOrder() {
 // edit mode, `aperm` the permission it is filtered to.
 export function AgentPermissions(props: { agent: string; directory: string }) {
   const language = useLanguage()
-  const [params, setParams] = useSearchParams<{ aedit?: string; aperm?: string }>()
+  const [params, setParams] = useOverlayParams<{ aedit?: string; aperm?: string }>()
   const info = useAgentPermissions(
     () => props.agent,
     () => props.directory,

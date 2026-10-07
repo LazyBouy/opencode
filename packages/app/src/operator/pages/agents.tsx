@@ -26,6 +26,7 @@ import { AGENT_TABS, AgentDetail } from "./agent"
 import { ScopePicker } from "../ui/scope-picker"
 import { FieldHelp } from "../ui/field-help"
 import { ModelWithSource } from "../ui/prompt-trace"
+import { useOverlayParams } from "../ui/overlay-nav"
 
 export function useAgents() {
   const api = useOperatorClient()
@@ -122,7 +123,7 @@ export default function AgentsPage() {
   useRecordOverlay(
     () => !!params.agent,
     () => <AgentOverlay rows={rows} />,
-    () => setParams({ agent: undefined, adir: undefined, atab: undefined, aedit: undefined, aperm: undefined }),
+    ["agent", "adir", "atab", "aedit", "aperm"],
   )
   const sourceLabel = (agent: OperatorAgent) => language.t(`operator.agents.source.${agent.source.kind}`)
   const projectName = (key: string) =>
@@ -305,7 +306,7 @@ function AgentOverlay(props: { rows: () => ReadonlyArray<Row> }) {
   const language = useLanguage()
   const scope = useOperatorScope()
   const projects = useOperatorProjects()
-  const [params, setParams] = useSearchParams<{
+  const [params, setParams] = useOverlayParams<{
     agent?: string
     adir?: string
     atab?: string

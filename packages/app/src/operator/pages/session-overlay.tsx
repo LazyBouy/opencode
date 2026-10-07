@@ -18,6 +18,7 @@ import { RecordField, RecordView, useRecordOverlay } from "../ui/record-overlay"
 import { SessionPermissions } from "../ui/session-permissions"
 import { useOpenSessionView, VIEWS } from "../session-views/view"
 import { requestError } from "./config-helpers"
+import { useOverlayParams } from "../ui/overlay-nav"
 
 export const SESSION_TABS = ["conversation", "details", "subagents", "permissions"] as const
 
@@ -28,13 +29,13 @@ export function useSessionOverlay(rows: () => ReadonlyArray<Pick<GlobalSession, 
   useRecordOverlay(
     () => !!params.session,
     () => <SessionOverlay rows={rows} />,
-    () => setParams({ session: undefined, stab: undefined, sperm: undefined }),
+    ["session", "stab", "sperm"],
   )
   return (id: string) => setParams({ session: id })
 }
 
 // A session in the overlay: its conversation (with a prompt box to continue it), its details and its
-// subagents' sessions on the left. Maximize opens the full session page, with review, files and
+// subagents' sessions on the left. Open in Chats opens the full session page, with review, files and
 // terminal. Built by the fork: upstream's session page belongs to its route.
 function SessionOverlay(props: { rows: () => ReadonlyArray<Pick<GlobalSession, "id" | "directory">> }) {
   const language = useLanguage()
@@ -44,7 +45,7 @@ function SessionOverlay(props: { rows: () => ReadonlyArray<Pick<GlobalSession, "
   const openView = useOpenSessionView()
   const dialog = useDialog()
   const moveToTrash = useMoveToTrash()
-  const [params, setParams] = useSearchParams<{ session?: string; stab?: string; sperm?: string }>()
+  const [params, setParams] = useOverlayParams<{ session?: string; stab?: string; sperm?: string }>()
   const id = () => params.session ?? ""
   const tab = () =>
     SESSION_TABS.includes(params.stab as (typeof SESSION_TABS)[number]) ? params.stab! : "conversation"

@@ -69,7 +69,8 @@ test("a skill and a session move to Trash", async ({ page }) => {
     path: "/operator/trash/item",
     body: { kind: "skill", name: "release-notes" },
   })
-  await page.getByRole("button", { name: "Close" }).click()
+  // The record is gone from the address, so its overlay closes.
+  await expect(page.getByRole("dialog")).toBeHidden()
 
   await page.goto("/operator/sessions")
   await page

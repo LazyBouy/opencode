@@ -1,7 +1,10 @@
 import { type JSX, type ParentProps, Show } from "solid-js"
+import { usePageLabel } from "./overlay-nav"
 
 // Title block at the top of every operator page; children render below it (usually page tabs).
 export function PageHeader(props: ParentProps<{ title: string; description?: string; actions?: JSX.Element }>) {
+  // The page's crumb on the back path.
+  usePageLabel(() => props.title)
   return (
     <header data-component="operator-page-header">
       <div data-slot="operator-page-heading">

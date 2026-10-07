@@ -14,6 +14,7 @@ import { EmptyState } from "../ui/empty-state"
 import { PageHeader } from "../ui/page-header"
 import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOverlay } from "../ui/record-overlay"
 import { requestError } from "./config-helpers"
+import { useOverlayParams } from "../ui/overlay-nav"
 
 // What is in Trash, and putting it back or deleting it for good; any change refreshes what it can
 // affect.
@@ -96,7 +97,7 @@ export default function TrashPage() {
   useRecordOverlay(
     () => !!params.entry,
     () => <TrashOverlay />,
-    () => setParams({ entry: undefined }),
+    ["entry"],
   )
   const empty = async () => {
     const ok = await confirm({
@@ -178,7 +179,7 @@ function TrashOverlay() {
   const language = useLanguage()
   const trash = useTrash()
   const purge = useDeleteForGood()
-  const [params, setParams] = useSearchParams<{ entry?: string }>()
+  const [params, setParams] = useOverlayParams<{ entry?: string }>()
   const entry = createMemo(() => trash.entries.data?.find((item) => item.id === params.entry))
   const blocks = createMemo<OverlayBlock[]>(() =>
     kinds

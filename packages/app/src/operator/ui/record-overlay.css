@@ -127,3 +127,139 @@
   color: var(--v2-text-text-base);
   overflow-wrap: anywhere;
 }
+
+/* The overlay's frame (overlay-frame.tsx): as the dialog's content it lays out as before; in full
+   screen it fills the window below the title bar, with its top bar above the record's menu and view. */
+[data-component="operator-overlay-frame"] {
+  display: contents;
+}
+
+[data-component="dialog-v2"][data-size] [data-slot="dialog-container"].operator-overlay-full {
+  position: fixed;
+  top: var(--operator-full-top, 0px);
+  bottom: var(--operator-full-bottom, 0px);
+  left: 0;
+  right: 0;
+  width: auto;
+  height: auto;
+  max-width: none;
+  max-height: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+[data-component="operator-overlay-frame"][data-full] {
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+[data-component="operator-overlay-frame"][data-full] > .settings-v2 {
+  flex: 1;
+  min-height: 0;
+}
+
+[data-slot="operator-overlay-topbar"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--v2-border-border-muted);
+}
+
+[data-slot="operator-overlay-topbar-controls"] {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+/* The back path: ‹ Back, then Dashboard › Projects › opencode. */
+[data-component="operator-trail"] {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  font-size: 13px;
+  overflow: hidden;
+}
+
+[data-slot="operator-trail-crumb"] {
+  border: 0;
+  background: transparent;
+  color: var(--v2-text-text-muted);
+  font: inherit;
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+[data-slot="operator-trail-crumb"]:hover {
+  color: var(--v2-text-text-base);
+  background: var(--v2-background-bg-layer-02);
+}
+
+[data-slot="operator-trail-current"] {
+  color: var(--v2-text-text-base);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-slot="operator-trail-separator"] {
+  color: var(--v2-text-text-muted);
+  white-space: pre;
+}
+
+/* "‹ All projects" at the top of a record's menu. */
+[data-slot="record-overlay-back"] {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--v2-text-text-muted);
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: start;
+}
+
+[data-slot="record-overlay-back"]:hover:not(:disabled) {
+  color: var(--v2-text-text-base);
+  background: var(--v2-background-bg-layer-02);
+}
+
+/* "Discard your changes?", asked inside the overlay. */
+[data-component="dialog-v2"] [data-slot="dialog-container"]:has([data-component="operator-overlay-frame"]) {
+  position: relative;
+}
+
+[data-slot="operator-overlay-question"] {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--v2-overlay-simple-overlay-scrim);
+}
+
+[data-slot="operator-overlay-question-box"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 360px;
+  padding: 16px;
+  border-radius: 8px;
+  background: var(--v2-background-bg-layer-01);
+  box-shadow: var(--v2-elevation-overlay);
+}

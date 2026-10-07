@@ -1,4 +1,4 @@
-import { useNavigate, useSearchParams } from "@solidjs/router"
+import { useNavigate } from "@solidjs/router"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
@@ -31,6 +31,7 @@ import { useAgentPromptSetting } from "./agent-prompt"
 import { requestError } from "./config-helpers"
 import { OPENCODE, PREFIX } from "./profile-model"
 import { accessOf, compareNames, type LastTool, lastTools, readableJson } from "./tool-prompt-model"
+import { useOverlayParams } from "../ui/overlay-nav"
 
 type Key = Parameters<ReturnType<typeof useLanguage>["t"]>[0]
 type RunsAs = "primary" | "subagent" | "session"
@@ -551,7 +552,7 @@ function ToolOverlay(props: {
   const language = useLanguage()
   const dialog = useDialog()
   const navigate = useNavigate()
-  const [, setParams] = useSearchParams<{ atab?: string; aperm?: string; aedit?: string }>()
+  const [, setParams] = useOverlayParams<{ atab?: string; aperm?: string; aedit?: string }>()
   const origin = useOriginText()
   const sourceText = useSourceText()
   const number = (value: number) => exact(language, value)

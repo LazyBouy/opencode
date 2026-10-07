@@ -10,6 +10,7 @@ import { isChatPage, rememberChat, useOpenDefaultChat } from "./session-views/ch
 import { SessionViewCommands } from "./session-views/switch"
 import { OperatorTitlebarControls } from "./titlebar-controls"
 import { ProjectGate } from "./project-gate"
+import { useTrailKeeper } from "./ui/overlay-nav"
 import { isActivePage, operatorPages } from "./pages"
 import "./operator.css"
 import "./ui/selectable.css"
@@ -26,6 +27,8 @@ export function OperatorSidebar() {
     createStore({ collapsed: { chat: true, operator: false } }),
   )
   useOperatorCommands()
+  // The back path, and the questions before an edit is lost (ui/overlay-nav.ts).
+  useTrailKeeper()
   const openChat = useOpenDefaultChat()
   // Chats returns to the chat tab shown last.
   createEffect(() => rememberChat(location.pathname + location.search))

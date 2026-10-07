@@ -63,10 +63,15 @@ test("a project opens in the overlay; Edit moves it after a check, then links it
   await row.click()
   const overlay = page.getByRole("dialog")
   await expect(overlay.getByRole("heading", { name: /smoke-project/ })).toBeVisible()
-  await expect(overlay.getByRole("tab", { name: "OpenCode" })).toHaveAttribute("aria-selected", "true")
-  for (const action of ["Edit project", "Prompt settings", "New session", "Agents", "Config", "Sessions"])
+  // An open project has its own sections, and "‹ All projects" back to the namespaces.
+  await expect(overlay.getByRole("button", { name: "All projects" })).toBeVisible()
+  for (const section of ["Overview", "Agents", "Sessions", "Config", "Prompt", "Members and groups"])
+    await expect(overlay.getByRole("tab", { name: section, exact: true })).toBeVisible()
+  await expect(overlay.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true")
+  for (const action of ["Edit project", "New session", "Copy project", "Delete"])
     await expect(overlay.getByRole("button", { name: action, exact: true })).toBeVisible()
 
+  await overlay.getByRole("tab", { name: "Prompt", exact: true }).click()
   await overlay.getByRole("button", { name: "Prompt settings", exact: true }).click()
   await expect(overlay.locator('[data-component="select-v2-root"][aria-label="Default profile"]')).toContainText(
     "Namespace default (OpenCode)",
@@ -77,7 +82,7 @@ test("a project opens in the overlay; Edit moves it after a check, then links it
   await expect(overlay.getByRole("status")).toContainText("Release goal")
   expect(state.prompt.projects[directory]!.namespace).toBe("opencode")
   await overlay.getByRole("button", { name: "Move", exact: true }).click()
-  await expect(overlay.getByRole("button", { name: "Edit project", exact: true })).toBeVisible()
+  await expect(overlay.getByRole("button", { name: "Prompt settings", exact: true })).toBeVisible()
   expect(state.prompt.writes.map((write) => write.body)).toEqual([
     { key: directory, namespace: "acme", dryRun: true },
     { key: directory, namespace: "acme" },
@@ -88,14 +93,15 @@ test("a project opens in the overlay; Edit moves it after a check, then links it
   await pick(page, "Project Purpose", "Ship tools")
   await pick(page, "Default profile", "Spec")
   await overlay.getByRole("button", { name: "Save", exact: true }).click()
-  await expect(overlay.getByRole("button", { name: "Edit project", exact: true })).toBeVisible()
+  await expect(overlay.getByRole("button", { name: "Prompt settings", exact: true })).toBeVisible()
   expect(state.prompt.writes[2]!.body).toEqual({
     key: directory,
     purpose: "ship",
     // The project is in Acme now: Acme's own copy of the Spec profile.
     defaultProfile: "profile.spec",
   })
-  // The goal is the linked Project Purpose layer's text.
+  // The goal is the linked Project Purpose layer's text, in the project's record.
+  await overlay.getByRole("tab", { name: "Members and groups", exact: true }).click()
   await expect(overlay.getByTestId("project-goal")).toContainText("Ship.")
   await overlay.getByRole("button", { name: "Close" }).click()
   await expect(row).toContainText("Acme")
@@ -116,7 +122,8 @@ test("a folder outside git is its own row in OpenCode, marked when it is not a p
   const overlay = page.getByRole("dialog")
   await expect(overlay).toContainText("it is not a project")
   await expect(overlay.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0)
-  await expect(overlay.getByRole("button", { name: "Sessions", exact: true })).toBeVisible()
+  await expect(overlay.getByRole("tab", { name: "Sessions", exact: true })).toBeVisible()
+  await expect(overlay.getByRole("tab", { name: "Config", exact: true })).toHaveCount(0)
 })
 
 test("an added project stays in OpenCode unless another namespace is chosen", async ({ page }) => {
@@ -135,7 +142,7 @@ test("an added project stays in OpenCode unless another namespace is chosen", as
   await overlay.getByRole("button", { name: "Check the move" }).click()
   await expect(overlay.getByRole("status")).toContainText("Acme already has everything")
   await overlay.getByRole("button", { name: "Move", exact: true }).click()
-  await expect(overlay.getByRole("button", { name: "Edit project", exact: true })).toBeVisible()
+  await expect(overlay.getByRole("button", { name: "Prompt settings", exact: true })).toBeVisible()
   expect(state.prompt.projects[`${workspace}/site`]).toEqual({ namespace: "acme" })
 })
 

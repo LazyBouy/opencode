@@ -39,6 +39,7 @@ import {
   WRITTEN,
 } from "./profile-model"
 import { PurposeDraft } from "./purpose-draft"
+import { useOverlayParams } from "../ui/overlay-nav"
 
 // Each Layer Definition section's icon in the overlay's menu.
 const ICONS: Record<Section, OverlayBlock["icon"]> = {
@@ -113,7 +114,7 @@ export function LayerDefinition(props: { ns: string; namespaces: ReadonlyArray<O
   useRecordOverlay(
     () => !!(params.layer || params.block),
     () => <LayerOverlay ns={props.ns} namespaces={props.namespaces} />,
-    () => setParams({ layer: undefined, rns: undefined, block: undefined }),
+    ["layer", "rns", "block"],
   )
 
   const sections = createMemo(() => {
@@ -221,7 +222,7 @@ function LayerOverlay(props: { ns: string; namespaces: ReadonlyArray<OperatorNam
     () => props.ns,
     () => props.namespaces,
   )
-  const [params, setParams] = useSearchParams<{ layer?: string; rns?: string; block?: string; edit?: string }>()
+  const [params, setParams] = useOverlayParams<{ layer?: string; rns?: string; block?: string; edit?: string }>()
   const [editing, setEditing] = createSignal(false)
   // The record's namespace: the one the page shows, or (all of them) the one in the URL.
   const recordNs = () => (all() ? params.rns : props.ns)

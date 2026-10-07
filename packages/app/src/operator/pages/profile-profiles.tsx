@@ -31,6 +31,7 @@ import {
   regroup,
   slotProblem,
 } from "./profile-model"
+import { useOverlayParams } from "../ui/overlay-nav"
 
 type Row = { ns: string | undefined; item: Profile }
 
@@ -80,7 +81,7 @@ export function ProfileDefinition(props: { ns: string; namespaces: ReadonlyArray
   useRecordOverlay(
     () => !!(params.profile || params.block),
     () => <ProfileOverlay ns={props.ns} namespaces={props.namespaces} />,
-    () => setParams({ profile: undefined, rns: undefined, block: undefined }),
+    ["profile", "rns", "block"],
   )
 
   return (
@@ -154,7 +155,7 @@ function ProfileOverlay(props: { ns: string; namespaces: ReadonlyArray<OperatorN
     () => props.ns,
     () => props.namespaces,
   )
-  const [params, setParams] = useSearchParams<{ profile?: string; rns?: string; block?: string }>()
+  const [params, setParams] = useOverlayParams<{ profile?: string; rns?: string; block?: string }>()
   const [editing, setEditing] = createSignal(false)
   const recordNs = () => (all() ? params.rns : props.ns)
   const catalog = () => data.catalogs.of(recordNs()) ?? data.catalogs.first()
