@@ -117,8 +117,8 @@ export function TranscriptView(props: { sessionID: string }) {
         .then((result) => new Set(result.data!.calls.map((call) => call.callID))),
   }))
   const matches = (call: OperatorCallSummary) => {
-    if (store.filter === "errors") return !!call.error || !!call.retryOf
-    if (store.filter === "agent" && (call.kind !== "agent" || call.retryOf || call.error)) return false
+    if (store.filter === "errors") return call.failed
+    if (store.filter === "agent" && (call.kind !== "agent" || call.failed)) return false
     if (store.filter === "side" && !SIDE.has(call.kind)) return false
     const search = store.search.trim().toLowerCase()
     if (!search) return true
@@ -272,7 +272,7 @@ export function TranscriptView(props: { sessionID: string }) {
               <button
                 type="button"
                 data-active={view.call() === call.callID ? "" : undefined}
-                data-error={call.error ? "" : undefined}
+                data-error={call.failed ? "" : undefined}
                 onClick={() => view.set("transcript", call.callID)}
               >
                 {language.t("operator.transcript.callShort", { index: call.index })} · {kindText(language, call)}
@@ -501,12 +501,10 @@ function CallHeader(props: { call: OperatorCallSummary }) {
   return (
     <span class="inline-flex items-center gap-2 flex-wrap" data-testid="call-header">
       <Tag variant={props.call.kind === "agent" ? "accent" : "neutral"}>{kindText(language, props.call)}</Tag>
-      <Show when={props.call.retryOf}>
-        {(retry) => (
-          <Tag data-warning="">
-            {language.t("operator.transcript.retry", { attempt: retry().attempt, index: retry().index })}
-          </Tag>
-        )}
+      <Show when={props.call.attempts > 1}>
+        <Tag data-warning={props.call.failed ? "" : undefined}>
+          {language.t("operator.transcript.attempt", { attempt: props.call.attempt, attempts: props.call.attempts })}
+        </Tag>
       </Show>
       <Show when={props.call.error}>
         {(error) => (

@@ -54,7 +54,7 @@ function Extras(props: { message: UserMessage; parts: () => ReadonlyArray<Part> 
     for (const call of mine()) for (const id of call.added) if (!seen.has(id)) seen.set(id, call)
     return [...seen]
   })
-  const side = createMemo(() => mine().filter((call) => call.kind !== "agent" || call.retryOf || call.error))
+  const side = createMemo(() => mine().filter((call) => call.kind !== "agent" || call.failed))
   const open = (call: OperatorCallSummary) => (
     <button type="button" data-slot="operator-link" onClick={() => view.set("transcript", call.callID)}>
       {language.t("operator.detailed.openTranscript")}
@@ -87,19 +87,16 @@ function Extras(props: { message: UserMessage; parts: () => ReadonlyArray<Part> 
         {(call) => (
           <div
             data-slot="operator-extra"
-            data-kind={call.error ? "error" : call.retryOf ? "retry" : call.kind}
+            data-kind={call.error ? "error" : call.failed ? "retry" : call.kind}
             data-testid="detailed-side"
           >
-            <Tag data-warning={call.error || call.retryOf ? "" : undefined}>
+            <Tag data-warning={call.failed ? "" : undefined}>
               {call.error
                 ? language.t("operator.transcript.error", {
                     status: String(call.error.status ?? call.httpStatus ?? ""),
                   })
-                : call.retryOf
-                  ? language.t("operator.transcript.retry", {
-                      attempt: call.retryOf.attempt,
-                      index: call.retryOf.index,
-                    })
+                : call.failed
+                  ? language.t("operator.transcript.attempt", { attempt: call.attempt, attempts: call.attempts })
                   : language.t(`operator.transcript.kind.${call.kind}` as Key)}
             </Tag>
             <span data-slot="operator-note">

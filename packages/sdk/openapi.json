@@ -32705,6 +32705,21 @@
             "required": ["callID", "index", "attempt"],
             "additionalProperties": false
           },
+          "attempt": {
+            "type": "number",
+            "description": "Its attempt of the step (1-based); side calls: 1"
+          },
+          "attempts": {
+            "type": "number",
+            "description": "How many attempts the step took"
+          },
+          "failed": {
+            "type": "boolean",
+            "description": "Failed: an error, or a later attempt of the same step replaced it"
+          },
+          "waitBefore": {
+            "type": "number"
+          },
           "format": {
             "type": "string"
           },
@@ -32818,6 +32833,9 @@
           "callID",
           "index",
           "kind",
+          "attempt",
+          "attempts",
+          "failed",
           "format",
           "endpoint",
           "startedAt",
@@ -32916,11 +32934,29 @@
             "type": "number",
             "description": "Its steps OpenCode stored but did not record"
           },
+          "status": {
+            "type": "string",
+            "enum": ["ok", "failed", "running", "unrecorded", "empty"],
+            "description": "ok: a step succeeded; failed: every call failed; running: a call is still receiving; unrecorded: only steps that were not recorded; empty: nothing yet"
+          },
+          "failure": {
+            "type": "object",
+            "properties": {
+              "index": {
+                "type": "number"
+              },
+              "status": {
+                "type": "number"
+              }
+            },
+            "required": ["index"],
+            "additionalProperties": false
+          },
           "totals": {
             "$ref": "#/components/schemas/OperatorTokenTotals"
           }
         },
-        "required": ["index", "text", "calls", "unrecorded", "totals"],
+        "required": ["index", "text", "calls", "unrecorded", "status", "totals"],
         "additionalProperties": false
       },
       "OperatorInputGroup": {
@@ -32965,7 +33001,7 @@
               "required": ["id", "totals"],
               "additionalProperties": false
             },
-            "description": "agent: agent steps (with steps not recorded); side: title, compaction, summary and other calls; retries: retries and failed calls; session: this session; subagents and all (with subagents) when it has any"
+            "description": "agent: agent steps that succeeded (with steps not recorded); side: title, compaction, summary and other calls that succeeded; retries: failed calls and attempts; session: this session; subagents and all (with subagents) when it has any"
           },
           "inputBy": {
             "type": "array",
@@ -32985,7 +33021,23 @@
               "required": ["group", "tokens", "cacheRead"],
               "additionalProperties": false
             },
-            "description": "Where the input tokens went, over the recorded calls"
+            "description": "Where the input tokens went, over the calls the provider billed"
+          },
+          "notCounted": {
+            "type": "object",
+            "properties": {
+              "failed": {
+                "type": "number",
+                "description": "Failed calls with no billed input"
+              },
+              "noUsage": {
+                "type": "number",
+                "description": "Other calls with no usage reported (yet)"
+              }
+            },
+            "required": ["failed", "noUsage"],
+            "additionalProperties": false,
+            "description": "Calls left out of where the input went"
           },
           "providerMissing": {
             "type": "array",
@@ -33005,7 +33057,7 @@
             "description": "Calls whose attribution is uncertain"
           }
         },
-        "required": ["rows", "inputBy", "providerMissing", "subagents", "uncertain"],
+        "required": ["rows", "inputBy", "notCounted", "providerMissing", "subagents", "uncertain"],
         "additionalProperties": false
       },
       "OperatorUnrecordedStep": {
@@ -33022,6 +33074,28 @@
           }
         },
         "required": ["assistantMessageID", "totals"],
+        "additionalProperties": false
+      },
+      "OperatorTranscriptReason": {
+        "type": "string",
+        "enum": ["before-recording", "recording-off", "no-calls", "none-billed", "no-usage"]
+      },
+      "OperatorTranscriptAvailability": {
+        "type": "object",
+        "properties": {
+          "recorded": {
+            "type": "string",
+            "enum": ["all", "some", "none"],
+            "description": "Whether the session's steps were recorded: all, some or none"
+          },
+          "calls": {
+            "$ref": "#/components/schemas/OperatorTranscriptReason"
+          },
+          "input": {
+            "$ref": "#/components/schemas/OperatorTranscriptReason"
+          }
+        },
+        "required": ["recorded"],
         "additionalProperties": false
       },
       "OperatorCallList": {
@@ -33080,9 +33154,12 @@
               "$ref": "#/components/schemas/OperatorUnrecordedStep"
             },
             "description": "Steps OpenCode stored that were not recorded (their totals from OpenCode's stored usage)"
+          },
+          "availability": {
+            "$ref": "#/components/schemas/OperatorTranscriptAvailability"
           }
         },
-        "required": ["calls", "exchanges", "totals", "turns", "session", "unrecorded"],
+        "required": ["calls", "exchanges", "totals", "turns", "session", "unrecorded", "availability"],
         "additionalProperties": false
       },
       "OperatorCallExport": {
@@ -33670,6 +33747,21 @@
             "required": ["callID", "index", "attempt"],
             "additionalProperties": false
           },
+          "attempt": {
+            "type": "number",
+            "description": "Its attempt of the step (1-based); side calls: 1"
+          },
+          "attempts": {
+            "type": "number",
+            "description": "How many attempts the step took"
+          },
+          "failed": {
+            "type": "boolean",
+            "description": "Failed: an error, or a later attempt of the same step replaced it"
+          },
+          "waitBefore": {
+            "type": "number"
+          },
           "format": {
             "type": "string"
           },
@@ -33821,6 +33913,9 @@
           "callID",
           "index",
           "kind",
+          "attempt",
+          "attempts",
+          "failed",
           "format",
           "endpoint",
           "startedAt",

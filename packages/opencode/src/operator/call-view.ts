@@ -84,7 +84,19 @@ export const Summary = Schema.Struct({
   assistantMessageID: Schema.optional(Schema.String),
   exchange: Schema.optional(Schema.Finite).annotate({ description: "The user message the call answers, 1-based" }),
   step: Schema.optional(Schema.Finite).annotate({ description: "Agent steps: the step within its exchange" }),
-  retryOf: Schema.optional(Schema.Struct({ callID: Schema.String, index: Schema.Finite, attempt: Schema.Finite })),
+  retryOf: Schema.optional(
+    Schema.Struct({ callID: Schema.String, index: Schema.Finite, attempt: Schema.Finite }),
+  ).annotate({
+    description: "A later attempt: the attempt before it (its id and index) and this call's attempt number",
+  }),
+  attempt: Schema.Finite.annotate({ description: "Its attempt of the step (1-based); side calls: 1" }),
+  attempts: Schema.Finite.annotate({ description: "How many attempts the step took" }),
+  failed: Schema.Boolean.annotate({
+    description: "Failed: an error, or a later attempt of the same step replaced it",
+  }),
+  waitBefore: Schema.optional(Schema.Finite).annotate({
+    description: "Milliseconds between the previous attempt's end and this one's start",
+  }),
   format: Schema.String,
   endpoint: Schema.String,
   startedAt: Schema.Finite,
@@ -159,6 +171,7 @@ export const List = Schema.Struct({
   unrecorded: Schema.Array(OperatorCallAccounting.Unrecorded).annotate({
     description: "Steps OpenCode stored that were not recorded (their totals from OpenCode's stored usage)",
   }),
+  availability: OperatorCallAccounting.Availability,
 }).annotate({ identifier: "OperatorCallList" })
 export type List = typeof List.Type
 
@@ -205,7 +218,8 @@ export type Detail = typeof Detail.Type
 export type Input = {
   calls: ReadonlyArray<{ call: OperatorCallStore.Call; body?: Record<string, unknown>; hashes: string[] }>
   messages: ReadonlyArray<{
-    info: { id: string; role: string; parentID?: string; agent?: string; summary?: boolean; time: { created: number } }
+    // A user message's `summary` is its file diffs; an assistant's `summary: true` is a compaction summary.
+    info: { id: string; role: string; parentID?: string; agent?: string; summary?: unknown; time: { created: number } }
     parts: ReadonlyArray<Record<string, unknown>>
   }>
 }
@@ -270,6 +284,22 @@ function build(input: Input): Built[] {
   const savedTexts = input.messages.flatMap((message) =>
     message.parts.filter((part) => part.type === "text").map((part) => String(part.text ?? "")),
   )
+  // Attempts: the calls of one step share its assistant message (a retry after an error repeats the
+  // request); without one, the retry chain links them.
+  const groupOf = new Map<string, string>()
+  for (const { call } of input.calls)
+    groupOf.set(
+      call.callID,
+      call.assistantMessageID ?? (call.retryOf ? (groupOf.get(call.retryOf) ?? call.retryOf) : call.callID),
+    )
+  const groups = new Map<string, string[]>()
+  for (const { call } of input.calls) {
+    const key = groupOf.get(call.callID)!
+    groups.set(key, [...(groups.get(key) ?? []), call.callID])
+  }
+  const byID = new Map(input.calls.map(({ call }) => [call.callID, call]))
+  const stepOf = new Map<string, number>()
+
   const built: Built[] = []
   const seen = new Map<string, number>()
   const steps = new Map<number, number>()
@@ -288,16 +318,21 @@ function build(input: Input): Built[] {
     const sameTools = built.findLast((item) => JSON.stringify(item.tools) === JSON.stringify(tools))
     const previous = built.findLast((item) => item.summary.agent === call.agent && item.summary.kind === call.kind)
     const exchange = exchangeOf(call.userMessageID)
-    let step: number | undefined
-    if (call.kind === "agent" && exchange !== undefined && !call.retryOf) {
+    const group = groups.get(groupOf.get(call.callID)!)!
+    const attempt = group.indexOf(call.callID) + 1
+    const attempts = group.length
+    // A step's number: its place among the turn's steps; all its attempts share it.
+    let step = stepOf.get(groupOf.get(call.callID)!)
+    if (step === undefined && call.kind === "agent" && exchange !== undefined) {
       step = (steps.get(exchange) ?? 0) + 1
       steps.set(exchange, step)
-    } else if (call.retryOf) step = built.find((item) => item.summary.callID === call.retryOf)?.summary.step
-    const retried = call.retryOf ? built.find((item) => item.summary.callID === call.retryOf) : undefined
-    const attempt = retried
-      ? built.filter((item) => item.summary.retryOf?.callID === retried.summary.callID).length + 1
-      : 0
-    const cost = call.kind === "agent" && !call.retryOf ? stepFinish(call.assistantMessageID)?.cost : undefined
+      stepOf.set(groupOf.get(call.callID)!, step)
+    }
+    const before = attempt > 1 ? byID.get(group[attempt - 2]!) : undefined
+    const retried = before ? built.find((item) => item.summary.callID === before.callID) : undefined
+    const failed = !!call.error || (call.httpStatus ?? 0) >= 400 || attempt < attempts
+    // The step's stored cost belongs to its last attempt (the one that produced the stored message).
+    const cost = call.kind === "agent" && attempt === attempts ? stepFinish(call.assistantMessageID)?.cost : undefined
     built.push({
       system: parts.system,
       tools,
@@ -313,6 +348,10 @@ function build(input: Input): Built[] {
         ...(exchange !== undefined ? { exchange } : {}),
         ...(step !== undefined ? { step } : {}),
         ...(retried ? { retryOf: { callID: retried.summary.callID, index: retried.summary.index, attempt } } : {}),
+        attempt,
+        attempts,
+        failed,
+        ...(before?.finishedAt ? { waitBefore: Math.max(0, call.startedAt - before.finishedAt) } : {}),
         format: call.format,
         endpoint: call.endpoint,
         startedAt: call.startedAt,
@@ -387,7 +426,7 @@ export function detail(input: Input, callID: string): Detail | undefined {
   )
   const saved = (line: string) => savedTexts.some((text) => text.includes(line))
   const summaries = input.messages
-    .filter((message) => message.info.summary)
+    .filter((message) => message.info.role === "assistant" && message.info.summary === true)
     .flatMap((message) => message.parts.filter((part) => part.type === "text").map((part) => String(part.text ?? "")))
   // Where each message was first sent.
   const firstSeen = new Map<string, number>()
@@ -425,7 +464,7 @@ export function detail(input: Input, callID: string): Detail | undefined {
   // The stored parts against what the provider sent: reasoning OpenCode did not keep, other text or calls.
   const warnings: Array<Detail["warnings"][number]> = []
   const message = input.messages.find((entry) => entry.info.id === call.assistantMessageID)
-  if (message && call.response?.parsed && !call.retryOf) {
+  if (message && call.response?.parsed && item.summary.attempt === item.summary.attempts) {
     const blocks = call.response.blocks
     const stored = message.parts
     const reasoning = blocks.some((block) => block.type === "reasoning" && block.text)

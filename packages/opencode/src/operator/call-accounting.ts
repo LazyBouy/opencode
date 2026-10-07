@@ -13,7 +13,7 @@ import { OperatorTokenizers } from "./tokenizers"
 // tokenizer, tokenizers.ts) or estimated (characters ÷ 4), and say which. Pure: the calls service gives
 // it the calls in order, their bodies, the session's messages and the model prices.
 
-export const VERSION = 1
+export const VERSION = 2
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] }
 
@@ -65,7 +65,9 @@ export const InputItem = Schema.Struct({
     description: "A tool's name, or the in-memory text (reminder.plan, …)",
   }),
   call: Schema.optional(Schema.Finite).annotate({ description: "The call that returned it (assistant items)" }),
-  turn: Schema.optional(Schema.Finite).annotate({ description: "The turn a user text belongs to" }),
+  turn: Schema.optional(Schema.Finite).annotate({
+    description: "The turn it belongs to: the user message it is in, or the last one before it",
+  }),
   turns: Schema.optional(Schema.Struct({ from: Schema.Finite, to: Schema.Finite })),
   preview: Schema.optional(Schema.String),
   chars: Schema.Finite,
@@ -311,7 +313,8 @@ export type CallInput = {
 
 export type Context = {
   messages: ReadonlyArray<{
-    info: { id: string; role: string; summary?: boolean }
+    // A user message's `summary` is its file diffs; an assistant's `summary: true` is a compaction summary.
+    info: { id: string; role: string; parentID?: string; summary?: unknown }
     parts: ReadonlyArray<Record<string, unknown>>
   }>
   price?: (model: string) => Price | undefined
@@ -406,16 +409,13 @@ export function account(
       .filter((text) => text.trim())
   const userTexts = users.map((message, at) => ({ turn: at + 1, texts: texts(message, false) }))
   const syntheticTexts = context.messages.flatMap((message) => texts(message, true))
-  const summaries = context.messages.flatMap((message, at) =>
-    message.info.summary
-      ? [
-          {
-            texts: texts(message, false),
-            before: context.messages.slice(0, at).filter((m) => m.info.role === "user").length,
-          },
-        ]
-      : [],
-  )
+  // Compaction summaries: the assistant message OpenCode writes when it compacts (`summary: true`); it
+  // covers the turns before the user message that asked for it.
+  const summaries = context.messages.flatMap((message) => {
+    if (message.info.role !== "assistant" || message.info.summary !== true) return []
+    const parent = users.findIndex((user) => user.info.id === message.info.parentID)
+    return [{ texts: texts(message, false), before: parent >= 0 ? parent : users.length }]
+  })
   const savedAnywhere = (line: string) =>
     context.messages.some((message) =>
       message.parts.some((part) => part.type === "text" && String(part.text ?? "").includes(line)),
@@ -572,6 +572,21 @@ function one(
     return undefined
   }
 
+  // Each message's turn: a user message whose own text matches a stored user message sets it (searching
+  // only later turns, so a repeated text matches the right one); the messages after it belong to it.
+  let current = 0
+  const turnOf = ctx.parts.messages.map((message, at) => {
+    const own = OperatorCallPieces.pieces(message, at).filter(
+      (piece) => piece.kind === "text" && piece.role === "user" && piece.payload.trim(),
+    )
+    const found = ctx.userTexts.find(
+      (item) =>
+        item.turn > current && own.some((piece) => item.texts.some((text) => text.trim() === piece.payload.trim())),
+    )
+    if (found) current = found.turn
+    return current || undefined
+  })
+
   // The messages, piece by piece.
   const messageItems: Mutable<InputItem>[] = []
   let unrecognized = 0
@@ -587,6 +602,7 @@ function one(
         chars: piece.payload.length,
         cache: "new" as Cache,
         ...(since !== undefined ? { since } : {}),
+        ...(turnOf[at] !== undefined ? { turn: turnOf[at] } : {}),
         flags: [] as InputItem["flags"][number][],
       }
       contents.set(id, piece.payload)
@@ -615,12 +631,7 @@ function one(
             push({ kind: "assistant", ...(by !== undefined ? { call: by } : {}), preview: preview(piece.payload) })
           } else if (ctx.syntheticTexts.some((text) => text.trim() === piece.payload.trim()))
             push({ kind: "added-saved", preview: preview(piece.payload) })
-          else {
-            const turn = ctx.userTexts.find((item) =>
-              item.texts.some((text) => text.trim() === piece.payload.trim()),
-            )?.turn
-            push({ kind: "user", ...(turn !== undefined ? { turn } : {}), preview: preview(piece.payload) })
-          }
+          else push({ kind: "user", preview: preview(piece.payload) })
           return
         }
         case "reasoning": {
@@ -942,6 +953,13 @@ export const Turn = Schema.Struct({
   text: Schema.String,
   calls: Schema.Array(Schema.String).annotate({ description: "Its recorded calls (ids), in order" }),
   unrecorded: Schema.Finite.annotate({ description: "Its steps OpenCode stored but did not record" }),
+  status: Schema.Literals(["ok", "failed", "running", "unrecorded", "empty"]).annotate({
+    description:
+      "ok: a step succeeded; failed: every call failed; running: a call is still receiving; unrecorded: only steps that were not recorded; empty: nothing yet",
+  }),
+  failure: Schema.optional(Schema.Struct({ index: Schema.Finite, status: Schema.optional(Schema.Finite) })).annotate({
+    description: "A failed turn: its last call (index) and that call's HTTP status",
+  }),
   totals: Totals,
 }).annotate({ identifier: "OperatorTurn" })
 export type Turn = typeof Turn.Type
@@ -959,11 +977,15 @@ export const Row = Schema.Literals(["agent", "side", "retries", "session", "suba
 export const SessionTotals = Schema.Struct({
   rows: Schema.Array(Schema.Struct({ id: Row, totals: Totals })).annotate({
     description:
-      "agent: agent steps (with steps not recorded); side: title, compaction, summary and other calls; retries: retries and failed calls; session: this session; subagents and all (with subagents) when it has any",
+      "agent: agent steps that succeeded (with steps not recorded); side: title, compaction, summary and other calls that succeeded; retries: failed calls and attempts; session: this session; subagents and all (with subagents) when it has any",
   }),
   inputBy: Schema.Array(Schema.Struct({ group: Group, tokens: Schema.Finite, cacheRead: Schema.Finite })).annotate({
-    description: "Where the input tokens went, over the recorded calls",
+    description: "Where the input tokens went, over the calls the provider billed",
   }),
+  notCounted: Schema.Struct({
+    failed: Schema.Finite.annotate({ description: "Failed calls with no billed input" }),
+    noUsage: Schema.Finite.annotate({ description: "Other calls with no usage reported (yet)" }),
+  }).annotate({ description: "Calls left out of where the input went" }),
   providerMissing: Schema.Array(Schema.Finite).annotate({
     description: "Calls whose provider reported no cost (their index)",
   }),
@@ -977,8 +999,10 @@ type Listed = {
   index: number
   kind: string
   exchange?: number
-  retryOf?: unknown
-  error?: unknown
+  failed: boolean
+  receiving?: boolean
+  httpStatus?: number
+  error?: { status?: number }
   finishedAt?: number
   accounting: Accounting
 }
@@ -1019,9 +1043,17 @@ export function summarize(input: {
     text: exchange.text,
     calls: [],
     unrecorded: 0,
+    status: "empty",
     totals: empty(),
   }))
-  const other: Mutable<Turn> & { calls: string[] } = { index: 0, text: "", calls: [], unrecorded: 0, totals: empty() }
+  const other: Mutable<Turn> & { calls: string[] } = {
+    index: 0,
+    text: "",
+    calls: [],
+    unrecorded: 0,
+    status: "empty",
+    totals: empty(),
+  }
   const turnOf = (exchange: number | undefined) => turns.find((turn) => turn.index === exchange) ?? other
   const rows = { agent: empty(), side: empty(), retries: empty() }
   for (const call of input.calls) {
@@ -1029,11 +1061,25 @@ export function summarize(input: {
     const turn = turnOf(call.exchange)
     turn.calls.push(call.callID)
     turn.totals = add(turn.totals, totals)
-    const row = call.retryOf || call.error ? "retries" : call.kind === "agent" ? "agent" : "side"
+    const row = call.failed ? "retries" : call.kind === "agent" ? "agent" : "side"
     rows[row] = add(rows[row], totals)
+  }
+  // A turn's status: a step succeeded, a call is still receiving, or every call failed (its last one).
+  const byID = new Map(input.calls.map((call) => [call.callID, call]))
+  for (const turn of [...turns, other]) {
+    const calls = turn.calls.map((id) => byID.get(id)!)
+    if (calls.some((call) => call.receiving)) turn.status = "running"
+    else if (calls.some((call) => !call.failed)) turn.status = "ok"
+    else if (calls.length) {
+      turn.status = "failed"
+      const last = calls.at(-1)!
+      const status = last.httpStatus ?? last.error?.status
+      turn.failure = { index: last.index, ...(status !== undefined ? { status } : {}) }
+    }
   }
   for (const step of input.unrecorded) {
     const turn = turnOf(step.exchange)
+    if (turn.status === "empty") turn.status = "unrecorded"
     turn.unrecorded++
     turn.totals = add(turn.totals, step.totals)
     rows.agent = add(rows.agent, step.totals)
@@ -1046,8 +1092,16 @@ export function summarize(input: {
     const found = groups.get(group) ?? { tokens: 0, cacheRead: 0 }
     groups.set(group, { tokens: found.tokens + tokens, cacheRead: found.cacheRead + cacheRead })
   }
+  // Only what the provider billed: a call without billed input (a failure, or no usage reported) adds
+  // nothing, and is counted in the note instead.
+  const notCounted = { failed: 0, noUsage: 0 }
   for (const call of input.calls) {
     const accounting = call.accounting.input
+    if (accounting.billed === undefined) {
+      if (call.failed) notCounted.failed++
+      else notCounted.noUsage++
+      continue
+    }
     for (const item of accounting.items) {
       const read =
         item.cache === "read"
@@ -1082,6 +1136,7 @@ export function summarize(input: {
           : []),
       ],
       inputBy: order.map((group) => ({ group, ...(groups.get(group) ?? { tokens: 0, cacheRead: 0 }) })),
+      notCounted,
       providerMissing: input.calls
         .filter(
           (call) =>
@@ -1191,4 +1246,60 @@ export function markdown(accounting: Accounting): string[] {
     `Cost: ${money(cost.provider)} (provider${cost.generationId ? `, ${cost.generationId}` : ""}) · ${money(cost.opencode)} (OpenCode)`,
   )
   return out
+}
+
+// ---- What the Transcript can show ----
+
+// Call recording started on 6 October 2026: older sessions have no recorded calls.
+export const RECORDING_SINCE = Date.UTC(2026, 9, 6)
+
+export const Reason = Schema.Literals([
+  "before-recording",
+  "recording-off",
+  "no-calls",
+  "none-billed",
+  "no-usage",
+]).annotate({
+  identifier: "OperatorTranscriptReason",
+  description:
+    "before-recording: the session is older than call recording; recording-off: calls ran while recording was off; no-calls: no model call yet; none-billed: every call failed before the provider billed it; no-usage: the provider reported no usage",
+})
+export type Reason = typeof Reason.Type
+
+export const Availability = Schema.Struct({
+  recorded: Schema.Literals(["all", "some", "none"]).annotate({
+    description: "Whether the session's steps were recorded: all, some or none",
+  }),
+  calls: Schema.optional(Reason).annotate({ description: "Why some or all calls are missing" }),
+  input: Schema.optional(Reason).annotate({ description: "Why where the input went has nothing to show" }),
+}).annotate({ identifier: "OperatorTranscriptAvailability" })
+export type Availability = typeof Availability.Type
+
+export function availabilityOf(input: {
+  calls: ReadonlyArray<{ failed: boolean; accounting: Accounting }>
+  unrecorded: number
+  created: number
+}): Availability {
+  const recorded = input.calls.length === 0 ? (input.unrecorded ? "none" : "all") : input.unrecorded ? "some" : "all"
+  const calls: Reason | undefined =
+    input.calls.length === 0 && !input.unrecorded
+      ? "no-calls"
+      : recorded === "all"
+        ? undefined
+        : input.created < RECORDING_SINCE
+          ? "before-recording"
+          : "recording-off"
+  const billed = input.calls.filter((call) => call.accounting.input.billed !== undefined).length
+  const reason: Reason | undefined = billed
+    ? undefined
+    : input.calls.length === 0
+      ? calls
+      : input.calls.every((call) => call.failed)
+        ? "none-billed"
+        : "no-usage"
+  return {
+    recorded: input.calls.length === 0 && !input.unrecorded ? "none" : recorded,
+    ...(calls ? { calls } : {}),
+    ...(reason ? { input: reason } : {}),
+  }
 }

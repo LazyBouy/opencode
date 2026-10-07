@@ -29,6 +29,9 @@ const summary = (index: number, extra: Record<string, unknown>) => ({
   tools: { count: 11, changed: false },
   messages: { total: 1, new: 1 },
   added: [],
+  attempt: 1,
+  attempts: 1,
+  failed: false,
   billing: billingOf(index),
   ...extra,
 })
@@ -284,6 +287,7 @@ export function callsFor(sessionID: string, search?: string | null) {
         text: "fix the login bug",
         calls: ["call_1", "call_2", "call_3"],
         unrecorded: 0,
+        status: "ok",
         totals: totals([1, 2, 3]),
       },
     ],
@@ -304,11 +308,13 @@ export function callsFor(sessionID: string, search?: string | null) {
         { group: "added", tokens: 13, cacheRead: 0 },
         { group: "formatting", tokens: 1186, cacheRead: 158 },
       ],
+      notCounted: { failed: 0, noUsage: 0 },
       providerMissing: [1, 2],
       subagents: [],
       uncertain: 0,
     },
     unrecorded: [],
+    availability: { recorded: "all" },
   }
 }
 

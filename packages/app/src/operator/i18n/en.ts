@@ -811,7 +811,7 @@ export const dict = {
   "operator.transcript.kind.summary": "Summary",
   "operator.transcript.kind.other": "Other",
   "operator.transcript.kind.unlinked": "Unlinked",
-  "operator.transcript.retry": "Retry {{attempt}} of call {{index}}",
+  "operator.transcript.attempt": "Attempt {{attempt}} of {{attempts}}",
   "operator.transcript.error": "Error {{status}}",
   "operator.transcript.receivingTag": "Receiving…",
   "operator.transcript.duration": "{{total}} (first token {{first}})",

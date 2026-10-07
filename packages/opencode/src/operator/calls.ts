@@ -296,13 +296,30 @@ const layer = Layer.effect(
       const calls = base.calls.map((call, at) => ({ ...call, billing: OperatorCallView.billingOf(accountings[at]!) }))
       const covered = new Set(calls.flatMap((call) => (call.assistantMessageID ? [call.assistantMessageID] : [])))
       const unrecorded = OperatorCallAccounting.unrecordedSteps(loaded.input.messages, covered)
+      const listed = calls.map((call, at) => ({ ...call, accounting: accountings[at]! }))
       const summary = OperatorCallAccounting.summarize({
-        calls: calls.map((call, at) => ({ ...call, accounting: accountings[at]! })),
+        calls: listed,
         exchanges: base.exchanges,
         unrecorded,
         subagents: yield* rollup(sessionID, 1),
       })
-      const view: OperatorCallView.List = { ...base, calls, turns: summary.turns, session: summary.session, unrecorded }
+      const created = yield* sessions.get(SessionID.make(sessionID)).pipe(
+        Effect.map((info) => info.time.created),
+        Effect.orElseSucceed(() => Date.now()),
+      )
+      const availability = OperatorCallAccounting.availabilityOf({
+        calls: listed,
+        unrecorded: unrecorded.length,
+        created,
+      })
+      const view: OperatorCallView.List = {
+        ...base,
+        calls,
+        turns: summary.turns,
+        session: summary.session,
+        unrecorded,
+        availability,
+      }
       return { loaded, view, accountings }
     })
 
@@ -330,9 +347,7 @@ const layer = Layer.effect(
       const picked = all.calls
         .slice(start)
         .filter((call) =>
-          !kinds
-            ? true
-            : kinds.some((kind) => (kind === "errors" ? !!call.error || !!call.retryOf : call.kind === kind)),
+          !kinds ? true : kinds.some((kind) => (kind === "errors" ? call.failed : call.kind === kind)),
         )
         .filter((call) => !matched || matched.has(call.callID))
       return { ...all, calls: filter?.limit ? picked.slice(0, filter.limit) : picked }

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { OperatorCallAccounting } from "@/operator/call-accounting"
 import { OperatorCallFormat } from "@/operator/call-format"
+import { OperatorCallView } from "@/operator/call-view"
 import type { OperatorCallStore } from "@/operator/call-store"
 import { OperatorTokenizers } from "@/operator/tokenizers"
 
@@ -375,6 +376,7 @@ describe("token accounting", () => {
         index: item.index,
         kind: "agent",
         exchange: item.exchange,
+        failed: false,
         finishedAt: 1,
         accounting: accountings[at]!,
       })),
@@ -412,5 +414,241 @@ describe("token accounting", () => {
     const went = summary.session.inputBy.reduce((total, item) => total + item.tokens, 0)
     expect(went).toBe(7104 + 7200 + 7592)
     expect(summary.session.inputBy.find((item) => item.group === "tools")!.tokens).toBeGreaterThan(0)
+  })
+})
+
+// The evidence session of transcript_view_spec_v2.md: four turns, eleven calls. Turn 1's call failed
+// (403); turn 2's step failed four times (429); turn 3 succeeded; turn 4's step took five attempts.
+// OpenCode puts `summary: {diffs}` on ordinary user messages.
+const evidence = () => {
+  const user = (id: string, text: string) => ({
+    info: { id, role: "user", summary: { diffs: [] }, time: { created: 1 } },
+    parts: [{ type: "text", text }],
+  })
+  const assistant = (id: string, parentID: string, parts: Record<string, unknown>[] = []) => ({
+    info: { id, role: "assistant", parentID, time: { created: 1 } },
+    parts,
+  })
+  const finish = (cost: number) => ({
+    type: "step-finish",
+    cost,
+    tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+  })
+  const answer3 = "Hello! How can I help?"
+  const messages = [
+    user("u1", "Hi"),
+    assistant("a1", "u1"),
+    user("u2", "hi"),
+    assistant("a2", "u2"),
+    user("u3", "hi "),
+    assistant("a3", "u3", [{ type: "text", text: answer3 }, finish(0)]),
+    user("u4", "can you tell me a bit about yourself"),
+    assistant("a4", "u4", [{ type: "text", text: "I am an assistant." }, finish(0)]),
+  ]
+  const say = (text: string) => ({ role: "user", content: [{ type: "text", text }] })
+  const sys = { role: "system", content: system }
+  const lists: Record<number, unknown[]> = {
+    1: [sys, say("Hi")],
+    2: [sys, say("Hi"), say("hi")],
+    6: [sys, say("Hi"), say("hi"), say("hi ")],
+    7: [
+      sys,
+      say("Hi"),
+      say("hi"),
+      say("hi "),
+      { role: "assistant", content: answer3 },
+      say("can you tell me a bit about yourself"),
+    ],
+  }
+  const listOf = (index: number) => lists[index >= 7 ? 7 : index >= 6 ? 6 : index >= 2 ? 2 : 1]!
+  const plan = [
+    { user: "u1", asst: "a1", status: 403 },
+    { user: "u2", asst: "a2", status: 429 },
+    { user: "u2", asst: "a2", status: 429 },
+    { user: "u2", asst: "a2", status: 429 },
+    { user: "u2", asst: "a2", status: 429 },
+    {
+      user: "u3",
+      asst: "a3",
+      status: 200,
+      usage: { input: 8441, output: 29, reasoning: 19, cacheRead: 1856 },
+      text: answer3,
+    },
+    { user: "u4", asst: "a4", status: 429 },
+    { user: "u4", asst: "a4", status: 429 },
+    { user: "u4", asst: "a4", status: 429 },
+    { user: "u4", asst: "a4", status: 429 },
+    {
+      user: "u4",
+      asst: "a4",
+      status: 200,
+      usage: { input: 8490, output: 118, reasoning: 54, cacheRead: 1856 },
+      text: "I am an assistant.",
+    },
+  ]
+  const calls = plan.map((step, at) => {
+    const index = at + 1
+    const list = listOf(index)
+    const body = { model: "ling-3.1-flash-free", messages: list, tools, stream: true }
+    const previous = at > 0 && plan[at - 1]!.asst === step.asst ? `call_${index - 1}` : undefined
+    const call: OperatorCallStore.Call = {
+      callID: `call_${index}`,
+      sessionID: "ses_evidence",
+      kind: "agent",
+      agent: "build",
+      model: "opencode/ling-3.1-flash-free",
+      endpoint: "opencode.ai/zen/v1/chat/completions",
+      format: "openai-chat",
+      startedAt: index * 10_000,
+      finishedAt: index * 10_000 + 500,
+      httpStatus: step.status,
+      userMessageID: step.user,
+      assistantMessageID: step.asst,
+      ...(previous ? { retryOf: previous } : {}),
+      request: { body: {}, bytes: JSON.stringify(body).length, exact: true, headers: {} },
+      ...(step.status >= 400
+        ? { error: { status: step.status, body: "{}" } }
+        : {
+            response: {
+              parsed: true,
+              blocks: [{ type: "text" as const, text: step.text ?? "" }],
+              usage: step.usage,
+              ids: [`gen-${index}`],
+            },
+          }),
+    }
+    return { call, body, hashes: list.map((item) => OperatorCallFormat.hash(JSON.stringify(item))) }
+  })
+  return { calls, messages }
+}
+
+// What the calls service does: the summaries, then the accounting, then turns and totals.
+const transcript = (input: ReturnType<typeof evidence>, created = Date.UTC(2026, 9, 7)) => {
+  const view = OperatorCallView.list(input as unknown as OperatorCallView.Input)
+  const accountings = OperatorCallAccounting.account(
+    input.calls.map((item, at) => ({
+      ...item,
+      index: view.calls[at]!.index,
+      ...(view.calls[at]!.exchange !== undefined ? { exchange: view.calls[at]!.exchange } : {}),
+    })),
+    { messages: input.messages as unknown as OperatorCallAccounting.Context["messages"] },
+  )
+  const listed = view.calls.map((call, at) => ({ ...call, accounting: accountings[at]! }))
+  const summary = OperatorCallAccounting.summarize({
+    calls: listed,
+    exchanges: view.exchanges,
+    unrecorded: [],
+    subagents: [],
+  })
+  return {
+    view,
+    accountings,
+    summary,
+    availability: OperatorCallAccounting.availabilityOf({ calls: listed, unrecorded: 0, created }),
+  }
+}
+
+describe("transcript v2: attempts, totals, turns, compaction", () => {
+  test("attempts of one step are one step; the totals count succeeded steps and failed attempts", () => {
+    const { view, summary } = transcript(evidence())
+    const at = (index: number) => view.calls[index - 1]!
+    expect(
+      [2, 3, 4, 5].map((index) => [at(index).attempt, at(index).attempts, at(index).step, at(index).failed]),
+    ).toEqual([
+      [1, 4, 1, true],
+      [2, 4, 1, true],
+      [3, 4, 1, true],
+      [4, 4, 1, true],
+    ])
+    expect([at(11).attempt, at(11).attempts, at(11).step, at(11).failed]).toEqual([5, 5, 1, false])
+    expect(at(11).waitBefore).toBe(9500)
+    expect(at(6)).toMatchObject({ attempt: 1, attempts: 1, step: 1, failed: false })
+    expect(at(1)).toMatchObject({ attempt: 1, attempts: 1, failed: true })
+    // Agent steps: the two that succeeded; Retries and errors: the nine failed calls.
+    const row = (id: string) => summary.session.rows.find((item) => item.id === id)!.totals
+    expect(row("agent").calls).toBe(2)
+    expect(row("retries").calls).toBe(9)
+    expect(row("session").calls).toBe(11)
+    // Where the input went: only calls 6 and 11, which the provider billed.
+    expect(summary.session.inputBy.reduce((total, item) => total + item.tokens, 0)).toBe(8441 + 8490)
+    expect(summary.session.notCounted).toEqual({ failed: 9, noUsage: 0 })
+    // Turns: failed ones name their last call.
+    expect(summary.turns.map((turn) => [turn.index, turn.status, turn.failure?.index, turn.failure?.status])).toEqual([
+      [1, "failed", 1, 403],
+      [2, "failed", 5, 429],
+      [3, "ok", undefined, undefined],
+      [4, "ok", undefined, undefined],
+    ])
+  })
+
+  test("earlier turns are labelled by turn, never as a compaction summary", () => {
+    const { accountings } = transcript(evidence())
+    const last = accountings[10]!.input.items.filter((item) => item.message !== undefined)
+    expect(last.map((item) => [item.kind, item.turn, item.preview])).toEqual([
+      ["user", 1, "Hi"],
+      ["user", 2, "hi"],
+      ["user", 3, "hi"],
+      ["assistant", 3, "Hello! How can I help?"],
+      ["user", 4, "can you tell me a bit about yourself"],
+    ])
+    expect(accountings.flatMap((item) => item.input.items).some((item) => item.kind === "summary")).toBe(false)
+  })
+
+  test("a real compaction summary is still one, covering the turns before it", () => {
+    const messages = [
+      { info: { id: "u1", role: "user", summary: { diffs: [] } }, parts: [{ type: "text", text: "Do the work" }] },
+      { info: { id: "a1", role: "assistant", parentID: "u1" }, parts: [] },
+      { info: { id: "c1", role: "user" }, parts: [{ type: "compaction", auto: true }] },
+      {
+        info: { id: "s1", role: "assistant", parentID: "c1", summary: true },
+        parts: [{ type: "text", text: "We did the work." }],
+      },
+      { info: { id: "u2", role: "user", summary: { diffs: [] } }, parts: [{ type: "text", text: "next" }] },
+    ]
+    const list = [
+      { role: "system", content: system },
+      { role: "user", content: "What did we do so far?" },
+      { role: "assistant", content: "We did the work." },
+      { role: "user", content: "next" },
+    ]
+    const [accounting] = OperatorCallAccounting.account(
+      [
+        recorded({
+          index: 1,
+          list: list.slice(1),
+          usage: { input: 3000, output: 5 },
+          blocks: [{ type: "text", text: "ok" }],
+          exchange: 3,
+          user: "u2",
+          assistant: "a2",
+        }),
+      ],
+      { messages: messages as unknown as OperatorCallAccounting.Context["messages"] },
+    )
+    const items = accounting!.input.items.filter((item) => item.message !== undefined)
+    expect(items.map((item) => item.kind)).toEqual(["user", "summary", "user"])
+    expect(items[1]).toMatchObject({ turns: { from: 1, to: 1 } })
+    expect(items[2]).toMatchObject({ turn: 3, preview: "next" })
+  })
+
+  test("what the Transcript can show, and why not", () => {
+    expect(transcript(evidence()).availability).toEqual({ recorded: "all" })
+    // Every call failed: nothing billed.
+    const failed = evidence()
+    failed.calls = failed.calls.slice(0, 5)
+    expect(transcript(failed).availability).toEqual({ recorded: "all", input: "none-billed" })
+    // A session from before recording (the Kimi session of 3 October): its steps only.
+    const none = { calls: [] as ReturnType<typeof evidence>["calls"], messages: [] }
+    expect(OperatorCallAccounting.availabilityOf({ calls: [], unrecorded: 3, created: Date.UTC(2026, 9, 3) })).toEqual({
+      recorded: "none",
+      calls: "before-recording",
+      input: "before-recording",
+    })
+    expect(
+      OperatorCallAccounting.availabilityOf({ calls: [], unrecorded: 2, created: Date.UTC(2026, 9, 7) }),
+    ).toMatchObject({
+      calls: "recording-off",
+    })
+    expect(transcript(none).availability).toEqual({ recorded: "none", calls: "no-calls", input: "no-calls" })
   })
 })

@@ -3784,6 +3784,19 @@ export type OperatorCallSummary = {
     index: number
     attempt: number
   }
+  /**
+   * Its attempt of the step (1-based); side calls: 1
+   */
+  attempt: number
+  /**
+   * How many attempts the step took
+   */
+  attempts: number
+  /**
+   * Failed: an error, or a later attempt of the same step replaced it
+   */
+  failed: boolean
+  waitBefore?: number
   format: string
   endpoint: string
   startedAt: number
@@ -3883,6 +3896,14 @@ export type OperatorTurn = {
    * Its steps OpenCode stored but did not record
    */
   unrecorded: number
+  /**
+   * ok: a step succeeded; failed: every call failed; running: a call is still receiving; unrecorded: only steps that were not recorded; empty: nothing yet
+   */
+  status: "ok" | "failed" | "running" | "unrecorded" | "empty"
+  failure?: {
+    index: number
+    status?: number
+  }
   totals: OperatorTokenTotals
 }
 
@@ -3905,20 +3926,33 @@ export type OperatorSubagentTotals = {
 
 export type OperatorSessionTotals = {
   /**
-   * agent: agent steps (with steps not recorded); side: title, compaction, summary and other calls; retries: retries and failed calls; session: this session; subagents and all (with subagents) when it has any
+   * agent: agent steps that succeeded (with steps not recorded); side: title, compaction, summary and other calls that succeeded; retries: failed calls and attempts; session: this session; subagents and all (with subagents) when it has any
    */
   rows: Array<{
     id: "agent" | "side" | "retries" | "session" | "subagents" | "all"
     totals: OperatorTokenTotals
   }>
   /**
-   * Where the input tokens went, over the recorded calls
+   * Where the input tokens went, over the calls the provider billed
    */
   inputBy: Array<{
     group: OperatorInputGroup
     tokens: number
     cacheRead: number
   }>
+  /**
+   * Calls left out of where the input went
+   */
+  notCounted: {
+    /**
+     * Failed calls with no billed input
+     */
+    failed: number
+    /**
+     * Other calls with no usage reported (yet)
+     */
+    noUsage: number
+  }
   /**
    * Calls whose provider reported no cost (their index)
    */
@@ -3934,6 +3968,17 @@ export type OperatorUnrecordedStep = {
   assistantMessageID: string
   exchange?: number
   totals: OperatorTokenTotals
+}
+
+export type OperatorTranscriptReason = "before-recording" | "recording-off" | "no-calls" | "none-billed" | "no-usage"
+
+export type OperatorTranscriptAvailability = {
+  /**
+   * Whether the session's steps were recorded: all, some or none
+   */
+  recorded: "all" | "some" | "none"
+  calls?: OperatorTranscriptReason
+  input?: OperatorTranscriptReason
 }
 
 export type OperatorCallList = {
@@ -3956,6 +4001,7 @@ export type OperatorCallList = {
    * Steps OpenCode stored that were not recorded (their totals from OpenCode's stored usage)
    */
   unrecorded: Array<OperatorUnrecordedStep>
+  availability: OperatorTranscriptAvailability
 }
 
 export type OperatorCallExport = {
@@ -4184,6 +4230,19 @@ export type OperatorCallDetail = {
     index: number
     attempt: number
   }
+  /**
+   * Its attempt of the step (1-based); side calls: 1
+   */
+  attempt: number
+  /**
+   * How many attempts the step took
+   */
+  attempts: number
+  /**
+   * Failed: an error, or a later attempt of the same step replaced it
+   */
+  failed: boolean
+  waitBefore?: number
   format: string
   endpoint: string
   startedAt: number
