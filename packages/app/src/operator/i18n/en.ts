@@ -1227,7 +1227,7 @@ export const dict = {
   "operator.modelDefaults.pickerGlobal": "{{what}} for all projects",
   "operator.modelDefaults.how.project": "Set for this project ({{path}})",
   "operator.modelDefaults.how.global": "Set globally ({{path}})",
-  "operator.modelDefaults.how.opencode": "OpenCode's choice: {{rule}}",
+  "operator.modelDefaults.how.opencode": "{{rule}}",
   "operator.modelDefaults.how.eachProject": "Not set: each project uses its own setting, else OpenCode's choice",
   "operator.modelDefaults.confirmTitle": "Change the {{what}}?",
   "operator.modelDefaults.confirmSet": "Writes `{{key}}: {{model}}` to {{file}}.",
