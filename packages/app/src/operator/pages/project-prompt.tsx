@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createEffect, For, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
-import { useOperatorClient } from "../data"
+import { asList, useOperatorClient } from "../data"
 import { Field } from "../ui/field"
 import { RecordView } from "../ui/record-overlay"
 import { requestError } from "./config-helpers"
@@ -25,7 +25,7 @@ export function useProjectSettings() {
       api
         .client()
         .operator.projectSettings.list()
-        .then((result) => result.data ?? []),
+        .then((result) => asList(result.data)),
   }))
 }
 

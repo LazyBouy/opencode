@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createMemo } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { showToast } from "@/utils/toast"
-import { useOperatorClient } from "../data"
+import { asList, useOperatorClient } from "../data"
 import { useOperatorProjects } from "../project"
 import { requestError } from "./config-helpers"
 import { ALL, type Catalog, type Group, type Layer, PREFIX, type Profile, OPENCODE } from "./profile-model"
@@ -30,7 +30,7 @@ export function useNamespaces() {
       api
         .client()
         .operator.namespace.list()
-        .then((result) => result.data ?? []),
+        .then((result) => asList(result.data)),
   }))
 }
 

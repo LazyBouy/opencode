@@ -22,6 +22,12 @@ export function ready<T>(query: { readonly status: string; readonly data: T | un
   return query.status === "success" ? query.data : undefined
 }
 
+// A list the server sent, or none: a server without the fork's routes (another server's tab, an
+// older build) answers with something else, which must not break the page.
+export function asList<T>(value: ReadonlyArray<T> | undefined | null): ReadonlyArray<T> {
+  return Array.isArray(value) ? value : []
+}
+
 export function useServerStatus() {
   const api = useOperatorClient()
   return useQuery(() => ({

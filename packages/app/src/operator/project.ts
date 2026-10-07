@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/solid-query"
 import { createMemo } from "solid-js"
 import { useLayout } from "@/context/layout"
 import { displayName } from "@/pages/layout/helpers"
-import { useOperatorClient } from "./data"
+import { asList, useOperatorClient } from "./data"
 import { useOperatorScope } from "./scope"
 
 export type ProjectOption = { directory: string; label: string }
@@ -22,7 +22,7 @@ export function useOperatorProjects() {
       api
         .client()
         .project.list()
-        .then((result) => result.data ?? []),
+        .then((result) => asList(result.data)),
     staleTime: 60_000,
   }))
   const settings = useQuery(() => ({
@@ -31,7 +31,7 @@ export function useOperatorProjects() {
       api
         .client()
         .operator.projectSettings.list()
-        .then((result) => result.data ?? []),
+        .then((result) => asList(result.data)),
   }))
   return createMemo<ProjectOption[]>(() => {
     const listed = new Map<string, string>()
