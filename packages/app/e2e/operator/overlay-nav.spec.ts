@@ -41,8 +41,11 @@ test("full screen keeps the record's menu, shows how you got there, and survives
   await expect(page.getByRole("dialog").getByRole("tab", { name: "Overview" })).toBeVisible()
   await page.getByRole("dialog").getByRole("button", { name: "Full screen" }).click()
   await page.getByRole("button", { name: "Exit full screen" }).click()
-  await expect(page).not.toHaveURL(/full=1/)
   await expect(page.getByRole("dialog")).toBeVisible()
+  // Close at once, with leaving full screen still on its way: back to Projects.
+  await page.getByRole("dialog").getByRole("button", { name: "Close" }).click()
+  await expect(page.getByRole("dialog")).toBeHidden()
+  await expect(page).toHaveURL(/\/operator\/projects$/)
 })
 
 test("‹ Back and the browser's Back go to Projects, then the Dashboard", async ({ page }) => {

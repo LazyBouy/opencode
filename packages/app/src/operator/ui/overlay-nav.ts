@@ -124,11 +124,12 @@ export function useOverlayParams<T extends Record<string, string | string[] | un
 export function useCloseOverlay(keys: ReadonlyArray<string>, clear: () => void) {
   const navigate = useNavigate()
   const location = useLocation()
-  const href = () => `${location.pathname}${location.search}`
   return () => {
-    const at = href()
+    // (Its own last change, such as leaving full screen, may still be on its way: only another page
+    // counts as going somewhere else.)
+    const at = location.pathname
     setTimeout(() => {
-      if (href() !== at) return
+      if (location.pathname !== at) return
       const target = closeTarget(trail(), keys)
       const depth = historyDepth()
       if (target && depth !== undefined && target.depth < depth) navigate(target.depth - depth)
