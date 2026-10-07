@@ -36,40 +36,68 @@
 
 [data-slot="operator-transcript-body"] {
   display: grid;
-  grid-template-columns: 160px minmax(0, 1fr);
+  grid-template-columns: 260px minmax(0, 1fr);
   gap: 12px;
   align-items: start;
 }
 
-[data-slot="operator-transcript-jump"] {
+/* Call details' left list: All turns, each turn, its steps and their attempts. */
+[data-slot="operator-transcript-list"] {
   position: sticky;
   top: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   max-height: 70vh;
   overflow-y: auto;
+  font-size: 12px;
 }
 
-[data-slot="operator-transcript-jump"] button {
+[data-slot="operator-transcript-list"] button {
   border: 0;
   background: transparent;
   color: var(--v2-text-text-muted);
   font: inherit;
-  font-size: 12px;
   text-align: start;
   padding: 3px 6px;
   border-radius: 6px;
   cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-[data-slot="operator-transcript-jump"] button:hover,
-[data-slot="operator-transcript-jump"] button[data-active] {
+[data-slot="operator-transcript-list-turn"] {
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+[data-slot="operator-transcript-list"] button[data-slot="operator-transcript-list-turn"] {
+  color: var(--v2-text-text-base);
+}
+
+[data-slot="operator-transcript-list-call"][data-depth="1"],
+[data-slot="operator-transcript-list-step"] {
+  padding-inline-start: 18px !important;
+}
+
+[data-slot="operator-transcript-list-call"][data-depth="2"] {
+  padding-inline-start: 30px !important;
+}
+
+[data-slot="operator-transcript-list-step"] {
+  padding: 3px 6px;
+  color: var(--v2-text-text-muted);
+}
+
+[data-slot="operator-transcript-list"] button:hover,
+[data-slot="operator-transcript-list"] button[data-active] {
   background: var(--v2-background-bg-layer-01);
   color: var(--v2-text-text-base);
 }
 
-[data-slot="operator-transcript-jump"] button[data-error] {
+[data-slot="operator-transcript-list"] [data-status="failed"],
+[data-slot="operator-transcript-list"] button[data-status="failed"] {
   color: var(--v2-state-fg-warning);
 }
 
@@ -78,11 +106,9 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  [data-slot="operator-transcript-jump"] {
+  [data-slot="operator-transcript-list"] {
     position: static;
-    flex-direction: row;
-    flex-wrap: wrap;
-    max-height: none;
+    max-height: 40vh;
   }
 }
 
@@ -167,6 +193,30 @@
   color: var(--v2-text-text-accent);
 }
 
+/* Earlier turns a call sends again: one folded row (or group) each, under one line saying why. */
+[data-slot="operator-accounting-fold"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  padding: 0;
+  cursor: pointer;
+}
+
+[data-component="operator-accounting"] tr[data-item="earlier-turn"] th {
+  font-weight: 400;
+  color: var(--v2-text-text-muted);
+}
+
+[data-component="operator-accounting"] tr[data-nested] th {
+  padding-inline-start: 22px;
+}
+
+[data-slot="operator-accounting-earlier-note"] td,
 [data-slot="operator-accounting-boundary"] td,
 [data-slot="operator-accounting-delta"] td {
   color: var(--v2-text-text-muted);
@@ -282,6 +332,28 @@
   border-radius: 10px;
   background: var(--v2-background-bg-base);
   min-width: 0;
+}
+
+[data-slot="operator-call-toggle"] {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  padding: 0;
+  cursor: pointer;
+}
+
+[data-component="operator-call"]:not([data-open]) {
+  padding-block: 6px;
+}
+
+[data-component="operator-call"][data-failed] {
+  border-inline-start: 3px solid var(--v2-state-fg-warning);
 }
 
 [data-component="operator-call"][data-focused] {

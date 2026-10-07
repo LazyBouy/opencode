@@ -18,7 +18,8 @@ export type TranscriptState = {
   expanded: boolean
   // Turns folded, by turn index.
   folded: Record<string, boolean>
-  // Everything else that opens: `item:<call>:<item>`, `group:<call>:<key>`, `raw:<call>:<part>`, …
+  // Everything else that opens: `item:<call>:<item>`, `group:<call>:<key>`, `raw:<call>:<part>`,
+  // `card:<selection>:<call>`, … (false: closed where it opens by default).
   open: Record<string, boolean>
   // What Call details shows: "all", "turn:<n>" or "call:<id>"; none: the latest turn.
   selection?: string
@@ -88,10 +89,14 @@ export function useTranscriptState() {
   return useContext(Context)
 }
 
-// One thing that opens and closes, kept in the state (a plain signal outside a Transcript).
-export function useOpen(key: () => string): [() => boolean, (open: boolean) => void] {
+// One thing that opens and closes, kept in the state (a plain signal outside a Transcript); until it is
+// opened or closed, it is as `fallback` says.
+export function useOpen(
+  key: () => string,
+  fallback: () => boolean = () => false,
+): [() => boolean, (open: boolean) => void] {
   const context = useTranscriptState()
-  const [local, setLocal] = createStore({ open: false })
-  if (!context) return [() => local.open, (open) => setLocal("open", open)]
-  return [() => !!context.state.open[key()], (open) => context.setState("open", key(), open)]
+  const [local, setLocal] = createStore<{ open?: boolean }>({})
+  if (!context) return [() => local.open ?? fallback(), (open) => setLocal("open", open)]
+  return [() => context.state.open[key()] ?? fallback(), (open) => context.setState("open", key(), open)]
 }

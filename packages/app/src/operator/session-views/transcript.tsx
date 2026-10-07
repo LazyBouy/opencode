@@ -41,8 +41,10 @@ import {
   UnrecordedRow,
   useNumbers,
 } from "./accounting"
-import { createScrollAnchor, keepInPlace } from "./anchor"
+import { createScrollAnchor, keepInPlace, reanchor } from "./anchor"
 import { prettyArgs } from "./content"
+import { TurnList } from "./transcript-list"
+import { listOf, type Selection, selectionOf } from "./transcript-model"
 import {
   createTranscriptState,
   type Filter,
@@ -148,6 +150,69 @@ export function TranscriptView(props: { sessionID: string }) {
   const unrecordedOf = (turn: OperatorTurn) =>
     filtering() ? [] : (data()?.unrecorded ?? []).filter((step) => (step.exchange ?? 0) === turn.index)
   const exchangeTime = (index: number) => data()?.exchanges.find((item) => item.index === index)?.time
+
+  // What the pane shows (§2.2): a link's call or turn first, else the one kept with the view state, else
+  // the latest turn (so a running session follows along until something is picked).
+  const linked = () => {
+    const call = view.call()
+    if (call) return `call:${call}`
+    const turn = view.turn()
+    if (turn) return turn === "all" ? "all" : `turn:${turn}`
+    return undefined
+  }
+  createEffect(() => {
+    const value = linked()
+    if (value && value !== store.selection) setStore("selection", value)
+  })
+  const selection = createMemo((): Selection | undefined => {
+    const turns = data()?.turns ?? []
+    const picked = selectionOf(linked() ?? store.selection, turns)
+    // A call or turn no longer listed (another session's link, a stale state): the latest turn.
+    if (picked?.kind === "call" && data() && !byID().has(picked.callID)) return selectionOf(undefined, turns)
+    if (picked?.kind === "turn" && data() && !turns.some((turn) => turn.index === picked.turn))
+      return selectionOf(undefined, turns)
+    return picked
+  })
+  // The selection as a key: where each card's open state is kept (a card can be open in one and
+  // folded in another).
+  const selectionKey = () => {
+    const value = selection()
+    if (!value) return ""
+    return value.kind === "all" ? "all" : value.kind === "turn" ? `turn=${value.turn}` : `call=${value.callID}`
+  }
+  const pick = (value: string) => {
+    setStore("selection", value)
+    if (value.startsWith("call:")) view.select(value.slice(5))
+    else view.selectTurn(value === "all" ? "all" : value.slice(5))
+  }
+  const listed = createMemo(() => listOf(data()?.turns ?? [], byID(), matches))
+  const selectedCall = () => {
+    const value = selection()
+    return value?.kind === "call" ? value.callID : undefined
+  }
+  // The pane's turns (the list's own objects, so cards stay as the list refreshes).
+  const paneTurns = createMemo(() => {
+    const value = selection()
+    const turns = data()?.turns ?? []
+    if (!value) return []
+    if (value.kind === "all") return turns.filter((turn) => !filtering() || callsOf(turn).length)
+    if (value.kind === "turn") return turns.filter((turn) => turn.index === value.turn)
+    return turns.filter((turn) => turn.calls.includes(value.callID))
+  })
+  // Filters and search narrow the list; the pane keeps the selection only while it still matches.
+  const inFilter = () => {
+    const value = selection()
+    if (!value || value.kind === "all" || !filtering()) return true
+    if (value.kind === "call") return shown().has(value.callID)
+    return paneTurns().some((turn) => callsOf(turn).length > 0)
+  }
+  // A card is open where it is the selected call; elsewhere, unless it is a failed attempt the step
+  // retried (those stay folded, one line each, until opened).
+  const openByDefault = (call: OperatorCallSummary) => {
+    const value = selection()
+    if (value?.kind === "call") return call.callID === value.callID
+    return !(call.failed && call.attempt < call.attempts)
+  }
   const recount = async () => {
     await api
       .client()
@@ -195,21 +260,43 @@ export function TranscriptView(props: { sessionID: string }) {
   // The scroll position is kept with the view state and restored once the list is there (unless a call
   // is linked). Cards grow as their details load, so it is tried again as the content grows, until it
   // is reached or the reader scrolls.
-  let restored = false
   let target: number | undefined
   const restore = () => {
     if (target === undefined || !root) return
     root.scrollTop = target
     if (Math.abs(root.scrollTop - target) < 2) target = undefined
+    reanchor(root)
   }
+  // Picking something scrolls to it once (a call to its card, a turn to the pane's top when that is above
+  // the view); a refresh of the list never does.
+  let pane: HTMLDivElement | undefined
+  let turnList: HTMLElement | undefined
+  let scrolledFor: string | undefined
   createEffect(
-    on(data, (value) => {
-      if (!value || restored) return
-      restored = true
-      if (!view.call() && store.scroll.page) {
-        target = store.scroll.page
-        requestAnimationFrame(restore)
+    on([() => !!data(), selectionKey], ([loaded, key]) => {
+      if (!loaded || !key || key === scrolledFor) return
+      const first = scrolledFor === undefined
+      scrolledFor = key
+      if (first) {
+        if (turnList) turnList.scrollTop = store.scroll.list
+        if (!view.call()) {
+          if (store.scroll.page) {
+            target = store.scroll.page
+            requestAnimationFrame(restore)
+          }
+          return
+        }
       }
+      target = undefined
+      requestAnimationFrame(() => {
+        if (!root || !pane) return
+        const call = selectedCall()
+        const card = call ? root.querySelector(`[data-call-id="${CSS.escape(call)}"]`) : undefined
+        if (card) card.scrollIntoView({ block: "start" })
+        else if (pane.getBoundingClientRect().top < root.getBoundingClientRect().top)
+          pane.scrollIntoView({ block: "start" })
+        reanchor(root)
+      })
     }),
   )
   onMount(() => {
@@ -270,18 +357,6 @@ export function TranscriptView(props: { sessionID: string }) {
           })
         : "",
   }
-
-  // A link to one call (`?call=`) scrolls to it once it is listed: once per selection, never again when
-  // the list refreshes.
-  let scrolledTo: string | undefined
-  createEffect(() => {
-    const id = view.call()
-    if (!id || id === scrolledTo || !calls().some((call) => call.callID === id)) return
-    scrolledTo = id
-    requestAnimationFrame(() =>
-      document.querySelector(`[data-call-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "start" }),
-    )
-  })
 
   return (
     <TranscriptStateProvider value={{ state: store, setState: setStore }}>
@@ -401,24 +476,36 @@ export function TranscriptView(props: { sessionID: string }) {
             </Show>
 
             <div data-slot="operator-transcript-body">
-              <nav data-slot="operator-transcript-jump" aria-label={language.t("operator.transcript.calls")}>
-                <For each={calls()}>
-                  {(call) => (
-                    <button
-                      type="button"
-                      data-active={view.call() === call.callID ? "" : undefined}
-                      data-error={call.failed ? "" : undefined}
-                      onClick={() => view.select(call.callID)}
-                    >
-                      {language.t("operator.transcript.callShort", { index: call.index })} · {kindText(language, call)}
-                    </button>
-                  )}
-                </For>
-              </nav>
-              <div data-slot="operator-transcript-calls" ref={content}>
-                <For each={data()?.turns ?? []}>
-                  {(turn) => (
-                    <Show when={!filtering() || callsOf(turn).length}>
+              <TurnList
+                turns={listed()}
+                selection={selection()}
+                filtering={filtering()}
+                kindText={(call) => kindText(language, call)}
+                onPick={pick}
+                ref={(element) => (turnList = element)}
+                onScroll={(top) => setStore("scroll", "list", top)}
+              />
+              <div data-slot="operator-transcript-calls" data-testid="transcript-pane" ref={pane}>
+                <Show
+                  when={inFilter()}
+                  fallback={
+                    <p data-slot="operator-note" data-testid="transcript-not-in-filter">
+                      {language.t("operator.transcript.notInFilter")}{" "}
+                      <button
+                        type="button"
+                        data-slot="operator-link"
+                        onClick={() => {
+                          setStore("filter", "all")
+                          setStore("search", "")
+                        }}
+                      >
+                        {language.t("operator.transcript.clearFilter")}
+                      </button>
+                    </p>
+                  }
+                >
+                  <For each={paneTurns()}>
+                    {(turn) => (
                       <section data-slot="operator-transcript-turn" data-testid="transcript-turn">
                         <TurnHeader
                           turn={turn}
@@ -431,7 +518,9 @@ export function TranscriptView(props: { sessionID: string }) {
                           }
                         />
                         <Show when={!store.folded[String(turn.index)]}>
-                          <For each={unrecordedOf(turn)}>{(step) => <UnrecordedRow step={step} />}</For>
+                          <Show when={!selectedCall()}>
+                            <For each={unrecordedOf(turn)}>{(step) => <UnrecordedRow step={step} />}</For>
+                          </Show>
                           <For each={callsOf(turn)}>
                             {(call) => (
                               <>
@@ -444,19 +533,22 @@ export function TranscriptView(props: { sessionID: string }) {
                                   call={call}
                                   sessionID={props.sessionID}
                                   directory={directory()}
-                                  focused={view.call() === call.callID}
+                                  focused={selectedCall() === call.callID}
                                   expanded={store.expanded}
                                   onlyNew={store.onlyNew}
                                   subagents={data()?.session.subagents ?? []}
+                                  turns={data()?.turns ?? []}
+                                  openKey={`card:${selectionKey()}:${call.callID}`}
+                                  openByDefault={openByDefault(call)}
                                 />
                               </>
                             )}
                           </For>
                         </Show>
                       </section>
-                    </Show>
-                  )}
-                </For>
+                    )}
+                  </For>
+                </Show>
               </div>
             </div>
           </TranscriptSection>
@@ -517,9 +609,18 @@ function CallCard(props: {
   expanded: boolean
   onlyNew: boolean
   subagents: OperatorCallList["session"]["subagents"]
+  turns: ReadonlyArray<OperatorTurn>
+  // Where its open state is kept, and whether it opens before that.
+  openKey: string
+  openByDefault: boolean
 }) {
   const language = useLanguage()
   const api = useOperatorClient()
+  const [opened, setOpened] = useOpen(
+    () => props.openKey,
+    () => props.openByDefault,
+  )
+  const open = () => opened() || props.expanded
   const [visible, setVisible] = createSignal(false)
   let element: HTMLElement | undefined
   onMount(() => {
@@ -540,11 +641,11 @@ function CallCard(props: {
   const context = useTranscriptState()
   const kept = () =>
     !!context &&
-    Object.entries(context.state.open).some(([key, open]) => open && key.split(":")[1] === props.call.callID)
+    Object.entries(context.state.open).some(([key, open]) => open && key.split(":").includes(props.call.callID))
   const detail = useQuery(() => ({
     // Refreshed by the call's update event (TranscriptView), so its key does not change as it completes.
     queryKey: api.key("call", props.sessionID, props.call.callID),
-    enabled: (visible() || props.focused || props.expanded || kept()) && !!props.directory,
+    enabled: open() && (visible() || props.focused || props.expanded || kept()) && !!props.directory,
     queryFn: () =>
       api
         .client()
@@ -567,103 +668,128 @@ function CallCard(props: {
       data-call-id={props.call.callID}
       data-kind={props.call.kind}
       data-focused={props.focused ? "" : undefined}
+      data-open={open() ? "" : undefined}
+      data-failed={props.call.failed ? "" : undefined}
       data-testid="transcript-call"
     >
       <header data-slot="operator-call-head">
-        <CallHeader call={props.call} />
-      </header>
-      <Suspense fallback={<p data-slot="operator-note">{language.t("common.loading")}</p>}>
-        <Show
-          when={ready(detail)}
-          fallback={
-            <p data-slot="operator-note" data-slot-loading="">
-              {detail.error
-                ? requestError(detail.error)
-                : `${language.t("common.loading")}${language.t("common.loading.ellipsis")}`}
-            </p>
-          }
+        <button
+          type="button"
+          data-slot="operator-call-toggle"
+          aria-expanded={open()}
+          data-testid="call-toggle"
+          onClick={(event) => keepInPlace(event.currentTarget, () => setOpened(!open()))}
         >
-          {(data) => (
-            <>
-              <Show when={data().accounting}>{(accounting) => <AccountingTable accounting={accounting()} />}</Show>
-              <section data-slot="operator-call-section" data-testid="call-sent">
-                <h4>{language.t("operator.accounting.sentDetail")}</h4>
+          <Icon name={open() ? "chevron-down" : "chevron-right"} size="small" />
+          <CallHeader call={props.call} />
+        </button>
+      </header>
+      <Show when={open()}>
+        <Suspense fallback={<p data-slot="operator-note">{language.t("common.loading")}</p>}>
+          <Show
+            when={ready(detail)}
+            fallback={
+              <p data-slot="operator-note" data-slot-loading="">
+                {detail.error
+                  ? requestError(detail.error)
+                  : `${language.t("common.loading")}${language.t("common.loading.ellipsis")}`}
+              </p>
+            }
+          >
+            {(data) => (
+              <>
                 <Show when={data().accounting}>
                   {(accounting) => (
-                    <SentDetail
-                      callID={props.call.callID}
+                    <AccountingTable
                       accounting={accounting()}
-                      onlyNew={props.onlyNew}
+                      callID={props.call.callID}
+                      turn={props.call.exchange}
+                      turns={props.turns}
                       expanded={props.expanded}
-                      toolPrompt={toolPrompt(data())}
-                      subagents={props.subagents}
                     />
                   )}
                 </Show>
-                <Show when={Object.keys(data().parameters).length}>
-                  <dl data-slot="operator-call-parameters">
-                    <For each={Object.entries(data().parameters)}>
-                      {([key, value]) => (
-                        <>
-                          <dt>{key}</dt>
-                          <dd>
-                            <code>{typeof value === "string" ? value : JSON.stringify(value)}</code>
-                          </dd>
-                        </>
-                      )}
-                    </For>
-                  </dl>
+                <section data-slot="operator-call-section" data-testid="call-sent">
+                  <h4>{language.t("operator.accounting.sentDetail")}</h4>
+                  <Show when={data().accounting}>
+                    {(accounting) => (
+                      <SentDetail
+                        callID={props.call.callID}
+                        accounting={accounting()}
+                        turn={props.call.exchange}
+                        turns={props.turns}
+                        onlyNew={props.onlyNew}
+                        expanded={props.expanded}
+                        toolPrompt={toolPrompt(data())}
+                        subagents={props.subagents}
+                      />
+                    )}
+                  </Show>
+                  <Show when={Object.keys(data().parameters).length}>
+                    <dl data-slot="operator-call-parameters">
+                      <For each={Object.entries(data().parameters)}>
+                        {([key, value]) => (
+                          <>
+                            <dt>{key}</dt>
+                            <dd>
+                              <code>{typeof value === "string" ? value : JSON.stringify(value)}</code>
+                            </dd>
+                          </>
+                        )}
+                      </For>
+                    </dl>
+                  </Show>
+                </section>
+                <section data-slot="operator-call-section" data-testid="call-received">
+                  <h4>
+                    {props.call.receiving
+                      ? language.t("operator.transcript.receiving")
+                      : language.t("operator.transcript.received")}
+                  </h4>
+                  <ReceivedPart detail={data()} />
+                </section>
+                <Show when={data().accounting}>{(accounting) => <ChangesPart accounting={accounting()} />}</Show>
+                <div data-slot="operator-call-raw">
+                  <ButtonV2
+                    size="small"
+                    variant="ghost"
+                    onClick={(event: MouseEvent) =>
+                      keepInPlace(event.currentTarget as Element, () => setRawRequest(!rawRequest()))
+                    }
+                  >
+                    {language.t("operator.transcript.rawRequest")}
+                  </ButtonV2>
+                  <ButtonV2
+                    size="small"
+                    variant="ghost"
+                    onClick={(event: MouseEvent) =>
+                      keepInPlace(event.currentTarget as Element, () => setRawResponse(!rawResponse()))
+                    }
+                  >
+                    {language.t("operator.transcript.rawResponse")}
+                  </ButtonV2>
+                </div>
+                <Show when={rawRequest()}>
+                  <RawPart
+                    sessionID={props.sessionID}
+                    callID={props.call.callID}
+                    directory={props.directory}
+                    part="request"
+                  />
                 </Show>
-              </section>
-              <section data-slot="operator-call-section" data-testid="call-received">
-                <h4>
-                  {props.call.receiving
-                    ? language.t("operator.transcript.receiving")
-                    : language.t("operator.transcript.received")}
-                </h4>
-                <ReceivedPart detail={data()} />
-              </section>
-              <Show when={data().accounting}>{(accounting) => <ChangesPart accounting={accounting()} />}</Show>
-              <div data-slot="operator-call-raw">
-                <ButtonV2
-                  size="small"
-                  variant="ghost"
-                  onClick={(event: MouseEvent) =>
-                    keepInPlace(event.currentTarget as Element, () => setRawRequest(!rawRequest()))
-                  }
-                >
-                  {language.t("operator.transcript.rawRequest")}
-                </ButtonV2>
-                <ButtonV2
-                  size="small"
-                  variant="ghost"
-                  onClick={(event: MouseEvent) =>
-                    keepInPlace(event.currentTarget as Element, () => setRawResponse(!rawResponse()))
-                  }
-                >
-                  {language.t("operator.transcript.rawResponse")}
-                </ButtonV2>
-              </div>
-              <Show when={rawRequest()}>
-                <RawPart
-                  sessionID={props.sessionID}
-                  callID={props.call.callID}
-                  directory={props.directory}
-                  part="request"
-                />
-              </Show>
-              <Show when={rawResponse()}>
-                <RawPart
-                  sessionID={props.sessionID}
-                  callID={props.call.callID}
-                  directory={props.directory}
-                  part="response"
-                />
-              </Show>
-            </>
-          )}
-        </Show>
-      </Suspense>
+                <Show when={rawResponse()}>
+                  <RawPart
+                    sessionID={props.sessionID}
+                    callID={props.call.callID}
+                    directory={props.directory}
+                    part="response"
+                  />
+                </Show>
+              </>
+            )}
+          </Show>
+        </Suspense>
+      </Show>
     </article>
   )
 }

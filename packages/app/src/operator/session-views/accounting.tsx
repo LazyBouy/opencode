@@ -1,3 +1,4 @@
+import { Icon } from "@opencode-ai/ui/icon"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import type {
   OperatorCallAccounting,
@@ -13,6 +14,7 @@ import { useLanguage } from "@/context/language"
 import { FieldHelp } from "../ui/field-help"
 import { keepInPlace } from "./anchor"
 import { useOpen } from "./transcript-state"
+import { cacheOf, type EarlierTurn, splitByTurn } from "./transcript-model"
 import { prettyArgs, subagentOf } from "./content"
 import { useOpenSessionView } from "./view"
 
@@ -354,11 +356,61 @@ export function UnrecordedRow(props: { step: OperatorUnrecordedStep }) {
   )
 }
 
+// ---- Earlier turns sent again ----
+
+// "Turn 1 · You: “Hi” · sent again · 1 token · same as call 1", or "… · no answer (call 1 failed: 403),
+// still sent · …": an earlier turn the call sends again (the model receives the whole conversation).
+export function earlierTurnLine(
+  language: Language,
+  group: EarlierTurn,
+  turn: OperatorTurn | undefined,
+  n: (value: number) => string,
+  withTokens = true,
+) {
+  const you = `${language.t("operator.accounting.turnYou", { turn: group.turn, text: group.text ?? turn?.text ?? "" })}${group.answered ? language.t("operator.accounting.plusAnswer") : ""}`
+  const failure = !group.answered ? turn?.failure : undefined
+  const sent = failure
+    ? failure.status !== undefined
+      ? language.t("operator.accounting.noAnswerStatus", { call: failure.index, status: failure.status })
+      : language.t("operator.accounting.noAnswer", { call: failure.index })
+    : language.t("operator.accounting.sentAgain")
+  const tokens = withTokens
+    ? [
+        group.tokens === 1
+          ? language.t("operator.accounting.oneToken")
+          : language.t("operator.accounting.tokenCount", { count: n(group.tokens) }),
+      ]
+    : []
+  const since = group.since !== undefined ? [language.t("operator.accounting.sinceCall", { call: group.since })] : []
+  return [you, sent, ...tokens, ...since].join(" · ")
+}
+
+// The one line above the earlier turns: why a call carries them.
+function earlierNote(language: Language, earlier: ReadonlyArray<EarlierTurn>) {
+  const from = earlier[0]!.turn
+  const to = earlier.at(-1)!.turn
+  return from === to
+    ? language.t("operator.accounting.earlierTurn", { turn: from })
+    : language.t("operator.accounting.earlierTurns", { from, to })
+}
+
+// A folded group was sent before, so never "new": how much of it the provider read from its cache.
+function groupCacheText(language: Language, items: ReadonlyArray<OperatorInputItem>) {
+  return language.t(`operator.accounting.groupCache.${cacheOf(items)}` as Key)
+}
+
 // ---- One call ----
 
 // The accounting table: what was sent and received, every token in one row, summing to the billed
 // totals; the cache boundary drawn where it falls and the measured delta on the items it covers.
-export function AccountingTable(props: { accounting: OperatorCallAccounting }) {
+export function AccountingTable(props: {
+  accounting: OperatorCallAccounting
+  callID: string
+  // The call's own turn, and the session's turns: earlier turns it sends again fold into one row each.
+  turn?: number
+  turns: ReadonlyArray<OperatorTurn>
+  expanded: boolean
+}) {
   const language = useLanguage()
   const { n, money } = useNumbers()
   const input = () => props.accounting.input
@@ -366,11 +418,121 @@ export function AccountingTable(props: { accounting: OperatorCallAccounting }) {
   const cost = () => props.accounting.cost
   const deltaItems = createMemo(() => new Set(input().delta?.items ?? []))
   const lastDelta = () => input().delta?.items.at(-1)
+  const split = createMemo(() => splitByTurn(input().items, props.turn))
   const labelOf = (id: string) => {
     const item = input().items.find((entry) => entry.id === id)
     return item ? itemLabel(language, item) : language.t("operator.accounting.formatting")
   }
   const negative = () => (input().unattributed ?? 0) < 0
+  // The cache boundary and the measured delta, after the item they fall on.
+  const Marks = (marks: { item: string }) => (
+    <>
+      <Show when={input().boundary?.item === marks.item ? input().boundary : undefined}>
+        {(boundary) => (
+          <tr data-slot="operator-accounting-boundary" data-testid="accounting-boundary">
+            <td colSpan={4}>
+              {language.t("operator.accounting.boundary", {
+                read: n(input().cacheRead),
+                after: n(boundary().after),
+                item: labelOf(boundary().item),
+              })}
+            </td>
+          </tr>
+        )}
+      </Show>
+      <Show when={input().delta && lastDelta() === marks.item ? input().delta : undefined}>
+        {(delta) => (
+          <tr data-slot="operator-accounting-delta" data-testid="accounting-delta">
+            <td colSpan={4}>
+              {language.t("operator.accounting.delta", { tokens: n(delta().tokens), call: delta().from })}
+            </td>
+          </tr>
+        )}
+      </Show>
+    </>
+  )
+  const Row = (row: { item: OperatorInputItem; nested?: boolean }) => (
+    <>
+      <tr
+        data-item={row.item.kind}
+        data-delta={deltaItems().has(row.item.id) ? "" : undefined}
+        data-nested={row.nested ? "" : undefined}
+        data-testid="accounting-row"
+      >
+        <th scope="row">
+          <span class="inline-flex items-center gap-1 flex-wrap">
+            {itemLabel(language, row.item)}
+            <Show when={row.item.since !== undefined && !deltaItems().has(row.item.id)}>
+              <span data-slot="operator-note">
+                {language.t("operator.accounting.sinceCall", { call: row.item.since! })}
+              </span>
+            </Show>
+            <Flags item={row.item} />
+          </span>
+        </th>
+        <td data-align="end">{n(row.item.tokens)}</td>
+        <td>{language.t(methodKey(row.item.method))}</td>
+        <td data-cache={row.item.cache}>
+          {row.item.kind === "parameters" ? "" : language.t(`operator.accounting.cache.${row.item.cache}` as Key)}
+        </td>
+      </tr>
+      <Marks item={row.item.id} />
+    </>
+  )
+  // An earlier turn, folded into one row; opening it lists its items.
+  const Earlier = (row: { group: EarlierTurn }) => {
+    const [open, setOpen] = useOpen(() => `tturn:${props.callID}:${row.group.turn}`)
+    const shown = () => open() || props.expanded
+    const methods = () => [...new Set(row.group.items.map((item) => language.t(methodKey(item.method))))].join(", ")
+    const ids = () => new Set(row.group.items.map((item) => item.id))
+    return (
+      <>
+        <tr
+          data-item="earlier-turn"
+          data-delta={row.group.items.some((item) => deltaItems().has(item.id)) ? "" : undefined}
+          data-testid="accounting-earlier"
+        >
+          <th scope="row">
+            <button
+              type="button"
+              data-slot="operator-accounting-fold"
+              aria-expanded={shown()}
+              onClick={(event) => keepInPlace(event.currentTarget, () => setOpen(!open()))}
+            >
+              <Icon name={shown() ? "chevron-down" : "chevron-right"} size="small" />
+              {earlierTurnLine(
+                language,
+                row.group,
+                props.turns.find((turn) => turn.index === row.group.turn),
+                n,
+                false,
+              )}
+            </button>
+          </th>
+          <td data-align="end">{n(row.group.tokens)}</td>
+          <td>{methods()}</td>
+          <td data-cache={cacheOf(row.group.items)}>{groupCacheText(language, row.group.items)}</td>
+        </tr>
+        <Show
+          when={shown()}
+          fallback={
+            <>
+              <Show when={input().boundary && ids().has(input().boundary!.item)}>
+                <Marks item={input().boundary!.item} />
+              </Show>
+              <Show
+                when={lastDelta() !== undefined && ids().has(lastDelta()!) && input().boundary?.item !== lastDelta()}
+              >
+                <Marks item={lastDelta()!} />
+              </Show>
+            </>
+          }
+        >
+          <For each={row.group.items}>{(item) => <Row item={item} nested />}</For>
+        </Show>
+      </>
+    )
+  }
   return (
     <div data-slot="operator-call-accounting" data-testid="call-accounting">
       <table data-component="operator-accounting" aria-label={language.t("operator.accounting.callTable")}>
@@ -385,54 +547,20 @@ export function AccountingTable(props: { accounting: OperatorCallAccounting }) {
           </tr>
         </thead>
         <tbody>
-          <For each={input().items}>
-            {(item) => (
-              <>
-                <tr
-                  data-item={item.kind}
-                  data-delta={deltaItems().has(item.id) ? "" : undefined}
-                  data-testid="accounting-row"
-                >
-                  <th scope="row">
-                    <span class="inline-flex items-center gap-1 flex-wrap">
-                      {itemLabel(language, item)}
-                      <Show when={item.since !== undefined && !deltaItems().has(item.id)}>
-                        <span data-slot="operator-note">
-                          {language.t("operator.accounting.sinceCall", { call: item.since! })}
-                        </span>
-                      </Show>
-                      <Flags item={item} />
-                    </span>
-                  </th>
-                  <td data-align="end">{n(item.tokens)}</td>
-                  <td>{language.t(methodKey(item.method))}</td>
-                  <td data-cache={item.cache}>
-                    {item.kind === "parameters" ? "" : language.t(`operator.accounting.cache.${item.cache}` as Key)}
-                  </td>
-                </tr>
-                <Show when={input().boundary?.item === item.id ? input().boundary : undefined}>
-                  {(boundary) => (
-                    <tr data-slot="operator-accounting-boundary" data-testid="accounting-boundary">
-                      <td colSpan={4}>
-                        {language.t("operator.accounting.boundary", {
-                          read: n(input().cacheRead),
-                          after: n(boundary().after),
-                          item: labelOf(boundary().item),
-                        })}
-                      </td>
-                    </tr>
-                  )}
-                </Show>
-                <Show when={input().delta && lastDelta() === item.id ? input().delta : undefined}>
-                  {(delta) => (
-                    <tr data-slot="operator-accounting-delta" data-testid="accounting-delta">
-                      <td colSpan={4}>
-                        {language.t("operator.accounting.delta", { tokens: n(delta().tokens), call: delta().from })}
-                      </td>
-                    </tr>
-                  )}
-                </Show>
-              </>
+          <For each={split().entries}>
+            {(entry) => (
+              <Show when={entry.earlier} fallback={<Row item={entry.item!} />}>
+                {(group) => (
+                  <>
+                    <Show when={group() === split().earlier[0]}>
+                      <tr data-slot="operator-accounting-earlier-note" data-testid="accounting-earlier-note">
+                        <td colSpan={4}>{earlierNote(language, split().earlier)}</td>
+                      </tr>
+                    </Show>
+                    <Earlier group={group()} />
+                  </>
+                )}
+              </Show>
             )}
           </For>
           <Show when={input().unattributed !== undefined}>
@@ -580,10 +708,13 @@ export function AccountingTable(props: { accounting: OperatorCallAccounting }) {
 }
 
 // "Sent, in detail": every item in request order with its count and labels; items sent before fold
-// into "Same as call N" with their count and cache state.
+// into "Same as call N" with their count and cache state, and earlier turns sent again into one
+// folded group per turn, under one line saying why.
 export function SentDetail(props: {
   callID: string
   accounting: OperatorCallAccounting
+  turn?: number
+  turns: ReadonlyArray<OperatorTurn>
   onlyNew: boolean
   expanded: boolean
   toolPrompt?: string
@@ -591,26 +722,31 @@ export function SentDetail(props: {
 }) {
   const language = useLanguage()
   const { n } = useNumbers()
+  const split = createMemo(() => splitByTurn(props.accounting.input.items, props.turn))
   // Consecutive items sent in the same earlier call fold together.
-  const groups = createMemo(() => {
-    const out: Array<{ since?: number; items: OperatorInputItem[] }> = []
-    for (const item of props.accounting.input.items) {
+  const blocks = createMemo(() => {
+    const out: Array<{ since?: number; items: OperatorInputItem[]; earlier?: EarlierTurn }> = []
+    for (const entry of split().entries) {
+      if (entry.earlier) {
+        out.push({ items: entry.earlier.items, earlier: entry.earlier })
+        continue
+      }
+      const item = entry.item
       if (item.kind === "parameters") continue
       const since = item.kind === "system" || item.kind === "tools" ? undefined : item.since
       const last = out.at(-1)
-      if (since !== undefined && last && last.since === since) last.items.push(item)
+      if (since !== undefined && last && !last.earlier && last.since === since) last.items.push(item)
       else out.push({ ...(since !== undefined ? { since } : {}), items: [item] })
     }
     return out
   })
   return (
     <div data-slot="operator-call-part" data-testid="call-sent-items">
-      <For each={groups()}>
-        {(group) => (
-          <Show
-            when={group.since !== undefined}
+      <For each={blocks()}>
+        {(block) => (
+          <Switch
             fallback={
-              <For each={group.items}>
+              <For each={block.items}>
                 {(item) => (
                   <ItemView
                     callID={props.callID}
@@ -623,19 +759,85 @@ export function SentDetail(props: {
               </For>
             }
           >
-            <Show when={!props.onlyNew}>
-              <SeenGroup
-                callID={props.callID}
-                group={group}
-                expanded={props.expanded}
-                n={n}
-                toolPrompt={props.toolPrompt}
-                subagents={props.subagents}
-              />
-            </Show>
-          </Show>
+            <Match when={block.earlier}>
+              {(group) => (
+                <Show when={!props.onlyNew}>
+                  <Show when={group() === split().earlier[0]}>
+                    <p data-slot="operator-note" data-testid="call-earlier-note">
+                      {earlierNote(language, split().earlier)}
+                    </p>
+                  </Show>
+                  <EarlierGroup
+                    callID={props.callID}
+                    group={group()}
+                    turn={props.turns.find((turn) => turn.index === group().turn)}
+                    expanded={props.expanded}
+                    toolPrompt={props.toolPrompt}
+                    subagents={props.subagents}
+                  />
+                </Show>
+              )}
+            </Match>
+            <Match when={block.since !== undefined}>
+              <Show when={!props.onlyNew}>
+                <SeenGroup
+                  callID={props.callID}
+                  group={block}
+                  expanded={props.expanded}
+                  n={n}
+                  toolPrompt={props.toolPrompt}
+                  subagents={props.subagents}
+                />
+              </Show>
+            </Match>
+          </Switch>
         )}
       </For>
+    </div>
+  )
+}
+
+// An earlier turn the call sends again, folded: its line, and its items when opened.
+function EarlierGroup(props: {
+  callID: string
+  group: EarlierTurn
+  turn: OperatorTurn | undefined
+  expanded: boolean
+  toolPrompt?: string
+  subagents: OperatorCallList["session"]["subagents"]
+}) {
+  const language = useLanguage()
+  const { n } = useNumbers()
+  const [open, setOpen] = useOpen(() => `sturn:${props.callID}:${props.group.turn}`)
+  const shown = () => open() || props.expanded
+  return (
+    <div data-slot="operator-call-seen" data-earlier="" data-testid="call-earlier">
+      <button
+        type="button"
+        data-slot="operator-accounting-fold"
+        aria-expanded={shown()}
+        onClick={(event) => keepInPlace(event.currentTarget, () => setOpen(!open()))}
+      >
+        <Icon name={shown() ? "chevron-down" : "chevron-right"} size="small" />
+        <span>
+          {earlierTurnLine(language, props.group, props.turn, n)}
+          {" · "}
+          {groupCacheText(language, props.group.items)}
+        </span>
+      </button>
+      <Show when={shown()}>
+        <For each={props.group.items}>
+          {(item) => (
+            <ItemView
+              callID={props.callID}
+              item={item}
+              expanded={props.expanded}
+              toolPrompt={props.toolPrompt}
+              subagents={props.subagents}
+            />
+          )}
+        </For>
+      </Show>
     </div>
   )
 }
@@ -651,18 +853,7 @@ function SeenGroup(props: {
   const language = useLanguage()
   const [open, setOpen] = useOpen(() => `group:${props.callID}:${props.group.since}:${props.group.items[0]?.id}`)
   const tokens = () => props.group.items.reduce((total, item) => total + item.tokens, 0)
-  // Sent before, so never "new": how much of it the provider read from its cache.
-  const cache = () => {
-    const states = new Set(props.group.items.map((item) => item.cache))
-    const only = states.size === 1 ? [...states][0] : undefined
-    return language.t(
-      only === "read"
-        ? "operator.accounting.groupCache.read"
-        : only === "new" || only === "write"
-          ? "operator.accounting.groupCache.new"
-          : "operator.accounting.groupCache.partial",
-    )
-  }
+  const cache = () => groupCacheText(language, props.group.items)
   return (
     <div data-slot="operator-call-seen" data-testid="call-seen">
       <span data-slot="operator-note">

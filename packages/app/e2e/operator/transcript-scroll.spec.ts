@@ -106,7 +106,8 @@ async function stays(page: Page, name: string, control: Locator, action?: () => 
 
 test("expanding, loading and refreshing never move the transcript", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 })
-  await page.goto(`/server/${base64Encode(fixture.serverKey)}/session/${sessionID}?view=transcript`)
+  // All turns: the whole session top to bottom.
+  await page.goto(`/server/${base64Encode(fixture.serverKey)}/session/${sessionID}?view=transcript&turn=all`)
   await expect(page.getByTestId("transcript-call")).toHaveCount(TURNS * PER_TURN)
   const cards = page.getByTestId("transcript-call")
 
@@ -123,7 +124,8 @@ test("expanding, loading and refreshing never move the transcript", async ({ pag
   await stays(
     page,
     "Same as call N",
-    await inside(16, (card) => card.getByTestId("call-seen").locator(":scope > button")),
+    // (A "Same as call N" group, or an earlier turn sent again: both fold the same way.)
+    await inside(16, (card) => card.locator('[data-slot="operator-call-seen"]').first().locator(":scope > button")),
   )
   await stays(page, "turn header", await centred(page, page.getByTestId("transcript-exchange").nth(3)))
   await stays(page, "turn header again", page.getByTestId("transcript-exchange").nth(3))

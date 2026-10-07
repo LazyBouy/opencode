@@ -10,16 +10,24 @@ export const VIEWS = ["user", "transcript", "detailed"] as const
 export type SessionView = (typeof VIEWS)[number]
 
 export function useSessionView() {
-  const [params, setParams] = useSearchParams<{ view?: string; call?: string }>()
+  const [params, setParams] = useSearchParams<{ view?: string; call?: string; turn?: string }>()
   const view = (): SessionView => (params.view === "transcript" || params.view === "detailed" ? params.view : "user")
   return {
     view,
     // The call a link points at (Transcript).
     call: () => params.call,
     set: (next: SessionView, call?: string) =>
-      setParams({ view: next === "user" ? undefined : next, call: next === "transcript" ? call : undefined }),
-    // Picks a call in the Transcript: the address changes without a new history entry.
-    select: (call: string | undefined) => setParams({ call }, { replace: true }),
+      setParams({
+        view: next === "user" ? undefined : next,
+        call: next === "transcript" ? call : undefined,
+        turn: undefined,
+      }),
+    // The turn the Transcript shows ("all", or a turn's number).
+    turn: () => params.turn,
+    // Picks a call, a turn or all turns in the Transcript: the address changes without a new history
+    // entry.
+    select: (call: string | undefined) => setParams({ call, turn: undefined }, { replace: true }),
+    selectTurn: (turn: string | undefined) => setParams({ turn, call: undefined }, { replace: true }),
   }
 }
 

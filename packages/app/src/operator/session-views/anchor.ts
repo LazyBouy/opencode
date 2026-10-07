@@ -21,7 +21,7 @@ const ANCHORS = [
 ].join(", ")
 
 type Anchor = { element: Element; offset: number }
-const anchors = new WeakMap<Element, { pin: (element: Element) => void }>()
+const anchors = new WeakMap<Element, { pin: (element: Element) => void; pick: () => void }>()
 
 export function createScrollAnchor(scroller: HTMLElement, contents: ReadonlyArray<HTMLElement>) {
   let anchor: Anchor | undefined
@@ -66,6 +66,7 @@ export function createScrollAnchor(scroller: HTMLElement, contents: ReadonlyArra
       if (box.bottom > view.top && box.top < view.bottom) anchor = { element, offset: box.top - view.top }
       else pick()
     },
+    pick,
   }
   anchors.set(scroller, api)
   return () => {
@@ -81,4 +82,10 @@ export function keepInPlace(control: Element | null | undefined, change: () => v
   const api = scroller ? anchors.get(scroller) : undefined
   if (control && api) api.pin(control)
   change()
+}
+
+// After the Transcript scrolled itself (to a selection, or back to where the reader was), what is now
+// at the top of the view is what stays in place.
+export function reanchor(scroller: Element | undefined) {
+  if (scroller) anchors.get(scroller)?.pick()
 }
