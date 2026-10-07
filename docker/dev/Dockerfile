@@ -57,4 +57,13 @@ ENV PATH=/opt/bun/bin:$PATH
 COPY --from=base /opt/bun /opt/bun
 COPY --from=dev /opencode /opencode
 WORKDIR /opencode/packages/app
+# Warm Vite's dependency cache: the markdown worker's packages (marked, katex, shiki) are found only
+# when a session page renders markdown, and finding them makes Vite reload the page in the middle of
+# a test. Requesting those modules once here pre-bundles them into the image.
+RUN bash -c 'bunx vite --host 127.0.0.1 --port 3999 > /tmp/vite-warm.log 2>&1 & pid=$!; \
+  for i in $(seq 1 30); do curl -sf -o /dev/null http://127.0.0.1:3999/ && break; sleep 1; done; \
+  for f in session-ui/src/components/markdown.worker.ts session-ui/src/components/markdown-stream.ts ui/src/context/marked-parser.tsx; do \
+    curl -s -o /dev/null "http://127.0.0.1:3999/@fs/opencode/packages/$f"; done; \
+  for i in $(seq 1 60); do grep -q "optimized" /tmp/vite-warm.log && break; sleep 1; done; sleep 2; \
+  kill $pid; grep -i "optimiz" /tmp/vite-warm.log || true'
 ENV CI=1

@@ -9,7 +9,7 @@ import type {
   OperatorCallSummary,
   OperatorTurn,
 } from "@opencode-ai/sdk/v2/client"
-import { useQuery, useQueryClient } from "@tanstack/solid-query"
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/solid-query"
 import {
   createEffect,
   createMemo,
@@ -21,13 +21,14 @@ import {
   onCleanup,
   onMount,
   Show,
+  Suspense,
   Switch,
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
 import { showToast } from "@/utils/toast"
-import { useOperatorClient } from "../data"
+import { ready, useOperatorClient } from "../data"
 import { requestError } from "../pages/config-helpers"
 import {
   AccountingTable,
@@ -38,6 +39,7 @@ import {
   TurnHeader,
   UnrecordedRow,
 } from "./accounting"
+import { createScrollAnchor, keepInPlace } from "./anchor"
 import { prettyArgs } from "./content"
 import { useOpenSessionView, useSessionView } from "./view"
 import "./session-views.css"
@@ -73,7 +75,8 @@ export function TranscriptView(props: { sessionID: string }) {
         .session.get({ sessionID: props.sessionID })
         .then((result) => result.data!),
   }))
-  const directory = () => session.data?.directory
+  // Every read goes through ready(): a query still loading must not suspend the page (its scroll resets).
+  const directory = () => ready(session)?.directory
   const list = useQuery(() => ({
     queryKey: api.key("calls", props.sessionID),
     enabled: !!directory(),
@@ -82,7 +85,9 @@ export function TranscriptView(props: { sessionID: string }) {
         .client()
         .operator.call.list({ sessionID: props.sessionID, directory: directory() })
         .then((result) => result.data!),
+    placeholderData: keepPreviousData,
   }))
+  const data = () => ready(list)
 
   // New calls appear as they start; a call's response completes it.
   const stop = serverSdk().event.listen((event) => {
@@ -115,6 +120,7 @@ export function TranscriptView(props: { sessionID: string }) {
         .client()
         .operator.call.list({ sessionID: props.sessionID, directory: directory(), search: settled() })
         .then((result) => new Set(result.data!.calls.map((call) => call.callID))),
+    placeholderData: keepPreviousData,
   }))
   const matches = (call: OperatorCallSummary) => {
     if (store.filter === "errors") return call.failed
@@ -122,22 +128,22 @@ export function TranscriptView(props: { sessionID: string }) {
     if (store.filter === "side" && !SIDE.has(call.kind)) return false
     const search = store.search.trim().toLowerCase()
     if (!search) return true
-    if (searched.data?.has(call.callID)) return true
-    const exchange = list.data?.exchanges.find((item) => item.index === call.exchange)
+    if (ready(searched)?.has(call.callID)) return true
+    const exchange = data()?.exchanges.find((item) => item.index === call.exchange)
     return [call.model, call.agent, call.kind, exchange?.text]
       .filter(Boolean)
       .some((value) => String(value).toLowerCase().includes(search))
   }
-  const calls = createMemo(() => (list.data?.calls ?? []).filter(matches))
-  const byID = createMemo(() => new Map((list.data?.calls ?? []).map((call) => [call.callID, call])))
+  const calls = createMemo(() => (data()?.calls ?? []).filter(matches))
+  const byID = createMemo(() => new Map((data()?.calls ?? []).map((call) => [call.callID, call])))
   // The turns in order (the list's own objects, so cards stay as the list refreshes), each with its
   // calls that pass the filter (side calls where they happened) and the steps that were not recorded.
   const shown = createMemo(() => new Set(calls().map((call) => call.callID)))
   const filtering = () => store.filter !== "all" || !!store.search.trim()
   const callsOf = (turn: OperatorTurn) => turn.calls.filter((id) => shown().has(id)).map((id) => byID().get(id)!)
   const unrecordedOf = (turn: OperatorTurn) =>
-    filtering() ? [] : (list.data?.unrecorded ?? []).filter((step) => (step.exchange ?? 0) === turn.index)
-  const exchangeTime = (index: number) => list.data?.exchanges.find((item) => item.index === index)?.time
+    filtering() ? [] : (data()?.unrecorded ?? []).filter((step) => (step.exchange ?? 0) === turn.index)
+  const exchangeTime = (index: number) => data()?.exchanges.find((item) => item.index === index)?.time
   const recount = async () => {
     await api
       .client()
@@ -176,19 +182,30 @@ export function TranscriptView(props: { sessionID: string }) {
       )
   }
 
-  // A link to one call (`?call=`) scrolls to it once it is listed.
+  // What the reader sees stays in place as the transcript grows or shrinks around it (anchor.ts).
+  let root: HTMLDivElement | undefined
+  let content: HTMLDivElement | undefined
+  onMount(() => {
+    const head = root?.querySelector<HTMLElement>('[data-slot="operator-transcript-head"]')
+    if (root && content) onCleanup(createScrollAnchor(root, head ? [head, content] : [content]))
+  })
+
+  // A link to one call (`?call=`) scrolls to it once it is listed: once per selection, never again when
+  // the list refreshes.
+  let scrolledTo: string | undefined
   createEffect(() => {
     const id = view.call()
-    if (!id || !calls().some((call) => call.callID === id)) return
+    if (!id || id === scrolledTo || !calls().some((call) => call.callID === id)) return
+    scrolledTo = id
     requestAnimationFrame(() =>
       document.querySelector(`[data-call-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "start" }),
     )
   })
 
   return (
-    <div data-component="operator-transcript" data-testid="transcript">
+    <div data-component="operator-transcript" data-testid="transcript" ref={root}>
       <header data-slot="operator-transcript-head">
-        <Show when={list.data}>
+        <Show when={data()}>
           {(data) => (
             <>
               <SessionTotalsView list={data()} />
@@ -216,7 +233,13 @@ export function TranscriptView(props: { sessionID: string }) {
             checked={store.onlyNew}
             onChange={(on: boolean) => setStore("onlyNew", on)}
           />
-          <ButtonV2 size="small" variant="outline" onClick={() => setStore("expanded", !store.expanded)}>
+          <ButtonV2
+            size="small"
+            variant="outline"
+            onClick={(event: MouseEvent) =>
+              keepInPlace(event.currentTarget as Element, () => setStore("expanded", !store.expanded))
+            }
+          >
             {language.t(store.expanded ? "operator.accounting.collapseAll" : "operator.accounting.expandAll")}
           </ButtonV2>
           <TextInputV2
@@ -242,11 +265,13 @@ export function TranscriptView(props: { sessionID: string }) {
           </ButtonV2>
         </div>
         <p data-slot="operator-note" data-testid="transcript-counting">
-          {tokenizers.data?.tokenizers?.length
+          {ready(tokenizers)?.tokenizers?.length
             ? language.t("operator.accounting.countingWith", {
-                names: tokenizers.data.tokenizers.map((item) => item.label).join(", "),
+                names: ready(tokenizers)!
+                  .tokenizers.map((item) => item.label)
+                  .join(", "),
               })
-            : language.t("operator.accounting.countingEstimates", { folder: tokenizers.data?.folder ?? "" })}{" "}
+            : language.t("operator.accounting.countingEstimates", { folder: ready(tokenizers)?.folder ?? "" })}{" "}
           {language.t("operator.transcript.template")}
         </p>
       </header>
@@ -256,7 +281,7 @@ export function TranscriptView(props: { sessionID: string }) {
           {requestError(list.error)}
         </pre>
       </Show>
-      <Show when={list.data && !list.data.calls.length}>
+      <Show when={data() && !data()!.calls.length}>
         <p data-slot="operator-note" data-testid="transcript-empty">
           {language.t("operator.transcript.noCalls")}{" "}
           <button type="button" data-slot="operator-link" onClick={() => view.set("detailed")}>
@@ -273,15 +298,15 @@ export function TranscriptView(props: { sessionID: string }) {
                 type="button"
                 data-active={view.call() === call.callID ? "" : undefined}
                 data-error={call.failed ? "" : undefined}
-                onClick={() => view.set("transcript", call.callID)}
+                onClick={() => view.select(call.callID)}
               >
                 {language.t("operator.transcript.callShort", { index: call.index })} · {kindText(language, call)}
               </button>
             )}
           </For>
         </nav>
-        <div data-slot="operator-transcript-calls">
-          <For each={list.data?.turns ?? []}>
+        <div data-slot="operator-transcript-calls" ref={content}>
+          <For each={data()?.turns ?? []}>
             {(turn) => (
               <Show when={!filtering() || callsOf(turn).length}>
                 <section data-slot="operator-transcript-turn" data-testid="transcript-turn">
@@ -289,7 +314,9 @@ export function TranscriptView(props: { sessionID: string }) {
                     turn={turn}
                     time={exchangeTime(turn.index)}
                     open={!store.folded[turn.index]}
-                    onToggle={() => setStore("folded", turn.index, !store.folded[turn.index])}
+                    onToggle={(control) =>
+                      keepInPlace(control, () => setStore("folded", turn.index, !store.folded[turn.index]))
+                    }
                   />
                   <Show when={!store.folded[turn.index]}>
                     <For each={unrecordedOf(turn)}>{(step) => <UnrecordedRow step={step} />}</For>
@@ -308,7 +335,7 @@ export function TranscriptView(props: { sessionID: string }) {
                             focused={view.call() === call.callID}
                             expanded={store.expanded}
                             onlyNew={store.onlyNew}
-                            subagents={list.data?.session.subagents ?? []}
+                            subagents={data()?.session.subagents ?? []}
                           />
                         </>
                       )}
@@ -350,13 +377,15 @@ function CallCard(props: {
     onCleanup(() => observer.disconnect())
   })
   const detail = useQuery(() => ({
-    queryKey: api.key("call", props.sessionID, props.call.callID, props.call.receiving),
+    // Refreshed by the call's update event (TranscriptView), so its key does not change as it completes.
+    queryKey: api.key("call", props.sessionID, props.call.callID),
     enabled: (visible() || props.focused || props.expanded) && !!props.directory,
     queryFn: () =>
       api
         .client()
         .operator.call.get({ sessionID: props.sessionID, callID: props.call.callID, directory: props.directory })
         .then((result) => result.data!),
+    placeholderData: keepPreviousData,
   }))
   const [raw, setRaw] = createStore({ request: false, response: false })
   // The agent's Tool Prompt tab, from a call's tools item.
@@ -377,83 +406,97 @@ function CallCard(props: {
       <header data-slot="operator-call-head">
         <CallHeader call={props.call} />
       </header>
-      <Show
-        when={detail.data}
-        fallback={
-          <p data-slot="operator-note">
-            {detail.error
-              ? requestError(detail.error)
-              : `${language.t("common.loading")}${language.t("common.loading.ellipsis")}`}
-          </p>
-        }
-      >
-        {(data) => (
-          <>
-            <Show when={data().accounting}>{(accounting) => <AccountingTable accounting={accounting()} />}</Show>
-            <section data-slot="operator-call-section" data-testid="call-sent">
-              <h4>{language.t("operator.accounting.sentDetail")}</h4>
-              <Show when={data().accounting}>
-                {(accounting) => (
-                  <SentDetail
-                    accounting={accounting()}
-                    onlyNew={props.onlyNew}
-                    expanded={props.expanded}
-                    toolPrompt={toolPrompt(data())}
-                    subagents={props.subagents}
-                  />
-                )}
+      <Suspense fallback={<p data-slot="operator-note">{language.t("common.loading")}</p>}>
+        <Show
+          when={ready(detail)}
+          fallback={
+            <p data-slot="operator-note" data-slot-loading="">
+              {detail.error
+                ? requestError(detail.error)
+                : `${language.t("common.loading")}${language.t("common.loading.ellipsis")}`}
+            </p>
+          }
+        >
+          {(data) => (
+            <>
+              <Show when={data().accounting}>{(accounting) => <AccountingTable accounting={accounting()} />}</Show>
+              <section data-slot="operator-call-section" data-testid="call-sent">
+                <h4>{language.t("operator.accounting.sentDetail")}</h4>
+                <Show when={data().accounting}>
+                  {(accounting) => (
+                    <SentDetail
+                      accounting={accounting()}
+                      onlyNew={props.onlyNew}
+                      expanded={props.expanded}
+                      toolPrompt={toolPrompt(data())}
+                      subagents={props.subagents}
+                    />
+                  )}
+                </Show>
+                <Show when={Object.keys(data().parameters).length}>
+                  <dl data-slot="operator-call-parameters">
+                    <For each={Object.entries(data().parameters)}>
+                      {([key, value]) => (
+                        <>
+                          <dt>{key}</dt>
+                          <dd>
+                            <code>{typeof value === "string" ? value : JSON.stringify(value)}</code>
+                          </dd>
+                        </>
+                      )}
+                    </For>
+                  </dl>
+                </Show>
+              </section>
+              <section data-slot="operator-call-section" data-testid="call-received">
+                <h4>
+                  {props.call.receiving
+                    ? language.t("operator.transcript.receiving")
+                    : language.t("operator.transcript.received")}
+                </h4>
+                <ReceivedPart detail={data()} />
+              </section>
+              <Show when={data().accounting}>{(accounting) => <ChangesPart accounting={accounting()} />}</Show>
+              <div data-slot="operator-call-raw">
+                <ButtonV2
+                  size="small"
+                  variant="ghost"
+                  onClick={(event: MouseEvent) =>
+                    keepInPlace(event.currentTarget as Element, () => setRaw("request", !raw.request))
+                  }
+                >
+                  {language.t("operator.transcript.rawRequest")}
+                </ButtonV2>
+                <ButtonV2
+                  size="small"
+                  variant="ghost"
+                  onClick={(event: MouseEvent) =>
+                    keepInPlace(event.currentTarget as Element, () => setRaw("response", !raw.response))
+                  }
+                >
+                  {language.t("operator.transcript.rawResponse")}
+                </ButtonV2>
+              </div>
+              <Show when={raw.request}>
+                <RawPart
+                  sessionID={props.sessionID}
+                  callID={props.call.callID}
+                  directory={props.directory}
+                  part="request"
+                />
               </Show>
-              <Show when={Object.keys(data().parameters).length}>
-                <dl data-slot="operator-call-parameters">
-                  <For each={Object.entries(data().parameters)}>
-                    {([key, value]) => (
-                      <>
-                        <dt>{key}</dt>
-                        <dd>
-                          <code>{typeof value === "string" ? value : JSON.stringify(value)}</code>
-                        </dd>
-                      </>
-                    )}
-                  </For>
-                </dl>
+              <Show when={raw.response}>
+                <RawPart
+                  sessionID={props.sessionID}
+                  callID={props.call.callID}
+                  directory={props.directory}
+                  part="response"
+                />
               </Show>
-            </section>
-            <section data-slot="operator-call-section" data-testid="call-received">
-              <h4>
-                {props.call.receiving
-                  ? language.t("operator.transcript.receiving")
-                  : language.t("operator.transcript.received")}
-              </h4>
-              <ReceivedPart detail={data()} />
-            </section>
-            <Show when={data().accounting}>{(accounting) => <ChangesPart accounting={accounting()} />}</Show>
-            <div data-slot="operator-call-raw">
-              <ButtonV2 size="small" variant="ghost" onClick={() => setRaw("request", !raw.request)}>
-                {language.t("operator.transcript.rawRequest")}
-              </ButtonV2>
-              <ButtonV2 size="small" variant="ghost" onClick={() => setRaw("response", !raw.response)}>
-                {language.t("operator.transcript.rawResponse")}
-              </ButtonV2>
-            </div>
-            <Show when={raw.request}>
-              <RawPart
-                sessionID={props.sessionID}
-                callID={props.call.callID}
-                directory={props.directory}
-                part="request"
-              />
-            </Show>
-            <Show when={raw.response}>
-              <RawPart
-                sessionID={props.sessionID}
-                callID={props.call.callID}
-                directory={props.directory}
-                part="response"
-              />
-            </Show>
-          </>
-        )}
-      </Show>
+            </>
+          )}
+        </Show>
+      </Suspense>
     </article>
   )
 }
@@ -635,7 +678,7 @@ function RawPart(props: {
         .then((result) => result.data!),
   }))
   const pretty = createMemo(() => {
-    const text = raw.data?.text ?? ""
+    const text = ready(raw)?.text ?? ""
     try {
       return JSON.stringify(JSON.parse(text), null, 2)
     } catch {
@@ -644,7 +687,7 @@ function RawPart(props: {
   })
   return (
     <div data-slot="operator-call-part" data-testid={`call-raw-${props.part}`}>
-      <Show when={raw.data} fallback={<p data-slot="operator-note">{language.t("common.loading")}</p>}>
+      <Show when={ready(raw)} fallback={<p data-slot="operator-note">{language.t("common.loading")}</p>}>
         {(data) => (
           <>
             <div class="flex items-center gap-2">

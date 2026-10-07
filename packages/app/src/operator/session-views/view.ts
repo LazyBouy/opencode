@@ -18,6 +18,8 @@ export function useSessionView() {
     call: () => params.call,
     set: (next: SessionView, call?: string) =>
       setParams({ view: next === "user" ? undefined : next, call: next === "transcript" ? call : undefined }),
+    // Picks a call in the Transcript: the address changes without a new history entry.
+    select: (call: string | undefined) => setParams({ call }, { replace: true }),
   }
 }
 

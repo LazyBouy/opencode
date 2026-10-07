@@ -15,6 +15,13 @@ export function useOperatorClient() {
   }
 }
 
+// A query's data without suspending: undefined until it has data. Reading `.data` of a query that has
+// none yet suspends the nearest <Suspense>, which for a page is the one around the whole layout
+// (pages/layout-new.tsx): the page is rebuilt and its scroll positions reset.
+export function ready<T>(query: { readonly status: string; readonly data: T | undefined }): T | undefined {
+  return query.status === "success" ? query.data : undefined
+}
+
 export function useServerStatus() {
   const api = useOperatorClient()
   return useQuery(() => ({

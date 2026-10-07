@@ -11,6 +11,7 @@ import type {
 import { createMemo, createSignal, For, type JSX, Match, Show, Switch } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { FieldHelp } from "../ui/field-help"
+import { keepInPlace } from "./anchor"
 import { prettyArgs, subagentOf } from "./content"
 import { useOpenSessionView } from "./view"
 
@@ -281,7 +282,12 @@ function tokensOf(totals: OperatorTokenTotals, numbers: ReturnType<typeof useNum
   }
 }
 
-export function TurnHeader(props: { turn: OperatorTurn; open: boolean; onToggle: () => void; time?: number }) {
+export function TurnHeader(props: {
+  turn: OperatorTurn
+  open: boolean
+  onToggle: (control: Element) => void
+  time?: number
+}) {
   const language = useLanguage()
   const numbers = useNumbers()
   return (
@@ -290,7 +296,7 @@ export function TurnHeader(props: { turn: OperatorTurn; open: boolean; onToggle:
       data-slot="operator-transcript-exchange"
       data-testid="transcript-exchange"
       aria-expanded={props.open}
-      onClick={props.onToggle}
+      onClick={(event) => props.onToggle(event.currentTarget)}
     >
       <strong>
         {props.turn.index
@@ -630,7 +636,11 @@ function SeenGroup(props: {
           cache: cache(),
         })}
       </span>{" "}
-      <button type="button" data-slot="operator-link" onClick={() => setOpen(!open())}>
+      <button
+        type="button"
+        data-slot="operator-link"
+        onClick={(event) => keepInPlace(event.currentTarget, () => setOpen(!open()))}
+      >
         {language.t(open() || props.expanded ? "operator.transcript.collapse" : "operator.transcript.expand")}
       </button>
       <Show when={open() || props.expanded}>
@@ -741,7 +751,7 @@ function ItemView(props: {
         type="button"
         data-slot="operator-call-item-head"
         aria-expanded={open() || props.expanded}
-        onClick={() => setOpen(!open())}
+        onClick={(event) => keepInPlace(event.currentTarget, () => setOpen(!open()))}
       >
         <span class="inline-flex items-center gap-1 flex-wrap">
           <strong>{itemLabel(language, item())}</strong>
