@@ -6,7 +6,6 @@ import { useQuery } from "@tanstack/solid-query"
 import { createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
-import { useTitlebarRightMount } from "@/components/titlebar"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useServerSDK } from "@/context/server-sdk"
@@ -18,11 +17,10 @@ import "../operator.css"
 
 type LiveEvent = { id: number; time: number; type: string }
 
-// Session details for the open session tab, opened from a titlebar button. It is mounted by the
-// operator sidebar, so the session page itself is unchanged.
+// Session details for the open session tab, opened from a titlebar button (inside
+// OperatorTitlebarControls, which the operator sidebar mounts), so the session page itself is unchanged.
 export function SessionInspector() {
   const layout = useLayout()
-  const rightMount = useTitlebarRightMount()
   const language = useLanguage()
   const [store, setStore] = createStore({ open: false })
   const sessionID = createMemo(() => {
@@ -34,22 +32,16 @@ export function SessionInspector() {
     <Show when={sessionID()}>
       {(id) => (
         <>
-          <Show when={rightMount()}>
-            {(mount) => (
-              <Portal mount={mount()}>
-                <IconButtonV2
-                  variant="ghost-muted"
-                  size="small"
-                  data-action="operator-inspector"
-                  aria-pressed={store.open}
-                  aria-label={language.t("operator.inspector.toggle")}
-                  title={language.t("operator.inspector.toggle")}
-                  icon={<Icon name="status" />}
-                  onClick={() => setStore("open", !store.open)}
-                />
-              </Portal>
-            )}
-          </Show>
+          <IconButtonV2
+            variant="ghost-muted"
+            size="small"
+            data-action="operator-inspector"
+            aria-pressed={store.open}
+            aria-label={language.t("operator.inspector.toggle")}
+            title={language.t("operator.inspector.toggle")}
+            icon={<Icon name="status" />}
+            onClick={() => setStore("open", !store.open)}
+          />
           <Show when={store.open}>
             <Portal>
               <InspectorPanel sessionID={id()} onClose={() => setStore("open", false)} />

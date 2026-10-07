@@ -251,6 +251,15 @@ export function TranscriptView(props: { sessionID: string }) {
       )
   }
 
+  // Read-only (fixes_spec §5.2): while the Transcript is shown, fork CSS hides the composer (waiting
+  // questions and permission requests stay answerable); typing here does not focus it.
+  onMount(() => {
+    document.body.dataset.operatorView = "transcript"
+    onCleanup(() => {
+      if (document.body.dataset.operatorView === "transcript") delete document.body.dataset.operatorView
+    })
+  })
+
   // What the reader sees stays in place as the transcript grows or shrinks around it (anchor.ts).
   let root: HTMLDivElement | undefined
   let content: HTMLDivElement | undefined
@@ -360,198 +369,215 @@ export function TranscriptView(props: { sessionID: string }) {
 
   return (
     <TranscriptStateProvider value={{ state: store, setState: setStore }}>
-      <div data-component="operator-transcript" data-testid="transcript" ref={root} onScroll={onScroll}>
-        <div data-slot="operator-transcript-inner" ref={content}>
-          <Show when={list.error}>
-            <pre data-slot="operator-error" role="alert">
-              {requestError(list.error)}
-            </pre>
-          </Show>
+      <div data-slot="operator-transcript-frame" data-prevent-autofocus="">
+        <div data-component="operator-transcript" data-testid="transcript" ref={root} onScroll={onScroll}>
+          <div data-slot="operator-transcript-inner" ref={content}>
+            <Show when={list.error}>
+              <pre data-slot="operator-error" role="alert">
+                {requestError(list.error)}
+              </pre>
+            </Show>
 
-          <TranscriptSection
-            id="summary"
-            title={language.t("operator.transcript.section.summary")}
-            closed={closed.summary()}
-          >
-            <Show when={data()}>
-              {(data) => (
-                <Show
-                  when={data().availability.calls !== "no-calls"}
-                  fallback={<NoDetails text={reason("no-calls")} />}
-                >
-                  <SessionTotalsView list={data()} />
-                  <Show when={data().availability.recorded !== "all"}>
-                    <p data-slot="operator-note" data-testid="transcript-stored">
-                      {language.t(
-                        data().availability.recorded === "none"
-                          ? "operator.transcript.storedTotals"
-                          : "operator.transcript.someStored",
-                      )}
-                    </p>
+            <TranscriptSection
+              id="summary"
+              title={language.t("operator.transcript.section.summary")}
+              closed={closed.summary()}
+            >
+              <Show when={data()}>
+                {(data) => (
+                  <Show
+                    when={data().availability.calls !== "no-calls"}
+                    fallback={<NoDetails text={reason("no-calls")} />}
+                  >
+                    <SessionTotalsView list={data()} />
+                    <Show when={data().availability.recorded !== "all"}>
+                      <p data-slot="operator-note" data-testid="transcript-stored">
+                        {language.t(
+                          data().availability.recorded === "none"
+                            ? "operator.transcript.storedTotals"
+                            : "operator.transcript.someStored",
+                        )}
+                      </p>
+                    </Show>
                   </Show>
-                </Show>
-              )}
-            </Show>
-            <div data-slot="operator-transcript-tools">
-              <ButtonV2 size="small" variant="outline" onClick={() => void download("md")}>
-                {language.t("operator.transcript.exportMd")}
-              </ButtonV2>
-              <ButtonV2 size="small" variant="outline" onClick={() => void download("json")}>
-                {language.t("operator.transcript.exportJson")}
-              </ButtonV2>
-              <ButtonV2
-                size="small"
-                variant="ghost"
-                title={language.t("operator.accounting.recountHint")}
-                onClick={() => void recount()}
-              >
-                {language.t("operator.accounting.recount")}
-              </ButtonV2>
-            </div>
-            <p data-slot="operator-note" data-testid="transcript-counting">
-              {ready(tokenizers)?.tokenizers?.length
-                ? language.t("operator.accounting.countingWith", {
-                    names: ready(tokenizers)!
-                      .tokenizers.map((item) => item.label)
-                      .join(", "),
-                  })
-                : language.t("operator.accounting.countingEstimates", { folder: ready(tokenizers)?.folder ?? "" })}{" "}
-              {language.t("operator.transcript.template")}
-            </p>
-          </TranscriptSection>
-
-          <TranscriptSection id="input" title={language.t("operator.accounting.inputBy")} closed={closed.input()}>
-            <Show when={data()}>
-              {(data) => (
-                <Show
-                  when={!data().availability.input}
-                  fallback={<NoDetails text={reason(data().availability.input)} />}
+                )}
+              </Show>
+              <div data-slot="operator-transcript-tools">
+                <ButtonV2 size="small" variant="outline" onClick={() => void download("md")}>
+                  {language.t("operator.transcript.exportMd")}
+                </ButtonV2>
+                <ButtonV2 size="small" variant="outline" onClick={() => void download("json")}>
+                  {language.t("operator.transcript.exportJson")}
+                </ButtonV2>
+                <ButtonV2
+                  size="small"
+                  variant="ghost"
+                  title={language.t("operator.accounting.recountHint")}
+                  onClick={() => void recount()}
                 >
-                  <InputBreakdown list={data()} />
-                </Show>
-              )}
-            </Show>
-          </TranscriptSection>
+                  {language.t("operator.accounting.recount")}
+                </ButtonV2>
+              </div>
+              <p data-slot="operator-note" data-testid="transcript-counting">
+                {ready(tokenizers)?.tokenizers?.length
+                  ? language.t("operator.accounting.countingWith", {
+                      names: ready(tokenizers)!
+                        .tokenizers.map((item) => item.label)
+                        .join(", "),
+                    })
+                  : language.t("operator.accounting.countingEstimates", {
+                      folder: ready(tokenizers)?.folder ?? "",
+                    })}{" "}
+                {language.t("operator.transcript.template")}
+              </p>
+            </TranscriptSection>
 
-          <TranscriptSection id="calls" title={language.t("operator.transcript.section.calls")} closed={closed.calls()}>
-            <div data-slot="operator-transcript-tools">
-              <SegmentedControlV2
-                class="operator-segmented-fit"
-                value={store.filter}
-                onChange={(value) => value && setStore("filter", value as Filter)}
-                aria-label={language.t("operator.transcript.filter")}
-              >
-                <For each={FILTERS}>
-                  {(filter) => (
-                    <SegmentedControlItemV2 value={filter}>
-                      {language.t(`operator.transcript.filter.${filter}` as Key)}
-                    </SegmentedControlItemV2>
-                  )}
-                </For>
-              </SegmentedControlV2>
-              <CheckboxV2
-                label={language.t("operator.accounting.onlyNew")}
-                checked={store.onlyNew}
-                onChange={(on: boolean) => setStore("onlyNew", on)}
-              />
-              <ButtonV2
-                size="small"
-                variant="outline"
-                onClick={(event: MouseEvent) =>
-                  keepInPlace(event.currentTarget as Element, () => setStore("expanded", !store.expanded))
-                }
-              >
-                {language.t(store.expanded ? "operator.accounting.collapseAll" : "operator.accounting.expandAll")}
-              </ButtonV2>
-              <TextInputV2
-                appearance="base"
-                value={store.search}
-                placeholder={language.t("operator.transcript.search")}
-                aria-label={language.t("operator.transcript.search")}
-                onInput={(event) => setStore("search", event.currentTarget.value)}
-              />
-            </div>
-            <Show when={data()?.availability.calls === "no-calls"}>
-              <NoDetails text={reason("no-calls")} />
-            </Show>
+            <TranscriptSection id="input" title={language.t("operator.accounting.inputBy")} closed={closed.input()}>
+              <Show when={data()}>
+                {(data) => (
+                  <Show
+                    when={!data().availability.input}
+                    fallback={<NoDetails text={reason(data().availability.input)} />}
+                  >
+                    <InputBreakdown list={data()} />
+                  </Show>
+                )}
+              </Show>
+            </TranscriptSection>
 
-            <div data-slot="operator-transcript-body">
-              <TurnList
-                turns={listed()}
-                selection={selection()}
-                filtering={filtering()}
-                kindText={(call) => kindText(language, call)}
-                onPick={pick}
-                ref={(element) => (turnList = element)}
-                onScroll={(top) => setStore("scroll", "list", top)}
-              />
-              <div data-slot="operator-transcript-calls" data-testid="transcript-pane" ref={pane}>
-                <Show
-                  when={inFilter()}
-                  fallback={
-                    <p data-slot="operator-note" data-testid="transcript-not-in-filter">
-                      {language.t("operator.transcript.notInFilter")}{" "}
-                      <button
-                        type="button"
-                        data-slot="operator-link"
-                        onClick={() => {
-                          setStore("filter", "all")
-                          setStore("search", "")
-                        }}
-                      >
-                        {language.t("operator.transcript.clearFilter")}
-                      </button>
-                    </p>
-                  }
+            <TranscriptSection
+              id="calls"
+              title={language.t("operator.transcript.section.calls")}
+              closed={closed.calls()}
+            >
+              <div data-slot="operator-transcript-tools">
+                <SegmentedControlV2
+                  class="operator-segmented-fit"
+                  value={store.filter}
+                  onChange={(value) => value && setStore("filter", value as Filter)}
+                  aria-label={language.t("operator.transcript.filter")}
                 >
-                  <For each={paneTurns()}>
-                    {(turn) => (
-                      <section data-slot="operator-transcript-turn" data-testid="transcript-turn">
-                        <TurnHeader
-                          turn={turn}
-                          time={exchangeTime(turn.index)}
-                          open={!store.folded[String(turn.index)]}
-                          onToggle={(control) =>
-                            keepInPlace(control, () =>
-                              setStore("folded", String(turn.index), !store.folded[String(turn.index)]),
-                            )
-                          }
-                        />
-                        <Show when={!store.folded[String(turn.index)]}>
-                          <Show when={!selectedCall()}>
-                            <For each={unrecordedOf(turn)}>{(step) => <UnrecordedRow step={step} />}</For>
-                          </Show>
-                          <For each={callsOf(turn)}>
-                            {(call) => (
-                              <>
-                                <Show when={call.kind === "compaction"}>
-                                  <div data-slot="operator-transcript-divider">
-                                    {language.t("operator.transcript.compacted")}
-                                  </div>
-                                </Show>
-                                <CallCard
-                                  call={call}
-                                  sessionID={props.sessionID}
-                                  directory={directory()}
-                                  focused={selectedCall() === call.callID}
-                                  expanded={store.expanded}
-                                  onlyNew={store.onlyNew}
-                                  subagents={data()?.session.subagents ?? []}
-                                  turns={data()?.turns ?? []}
-                                  openKey={`card:${selectionKey()}:${call.callID}`}
-                                  openByDefault={openByDefault(call)}
-                                />
-                              </>
-                            )}
-                          </For>
-                        </Show>
-                      </section>
+                  <For each={FILTERS}>
+                    {(filter) => (
+                      <SegmentedControlItemV2 value={filter}>
+                        {language.t(`operator.transcript.filter.${filter}` as Key)}
+                      </SegmentedControlItemV2>
                     )}
                   </For>
-                </Show>
+                </SegmentedControlV2>
+                <CheckboxV2
+                  label={language.t("operator.accounting.onlyNew")}
+                  checked={store.onlyNew}
+                  onChange={(on: boolean) => setStore("onlyNew", on)}
+                />
+                <ButtonV2
+                  size="small"
+                  variant="outline"
+                  onClick={(event: MouseEvent) =>
+                    keepInPlace(event.currentTarget as Element, () => setStore("expanded", !store.expanded))
+                  }
+                >
+                  {language.t(store.expanded ? "operator.accounting.collapseAll" : "operator.accounting.expandAll")}
+                </ButtonV2>
+                <TextInputV2
+                  appearance="base"
+                  value={store.search}
+                  placeholder={language.t("operator.transcript.search")}
+                  aria-label={language.t("operator.transcript.search")}
+                  onInput={(event) => setStore("search", event.currentTarget.value)}
+                />
               </div>
-            </div>
-          </TranscriptSection>
+              <Show when={data()?.availability.calls === "no-calls"}>
+                <NoDetails text={reason("no-calls")} />
+              </Show>
+
+              <div data-slot="operator-transcript-body">
+                <TurnList
+                  turns={listed()}
+                  selection={selection()}
+                  filtering={filtering()}
+                  kindText={(call) => kindText(language, call)}
+                  onPick={pick}
+                  ref={(element) => (turnList = element)}
+                  onScroll={(top) => setStore("scroll", "list", top)}
+                />
+                <div data-slot="operator-transcript-calls" data-testid="transcript-pane" ref={pane}>
+                  <Show
+                    when={inFilter()}
+                    fallback={
+                      <p data-slot="operator-note" data-testid="transcript-not-in-filter">
+                        {language.t("operator.transcript.notInFilter")}{" "}
+                        <button
+                          type="button"
+                          data-slot="operator-link"
+                          onClick={() => {
+                            setStore("filter", "all")
+                            setStore("search", "")
+                          }}
+                        >
+                          {language.t("operator.transcript.clearFilter")}
+                        </button>
+                      </p>
+                    }
+                  >
+                    <For each={paneTurns()}>
+                      {(turn) => (
+                        <section data-slot="operator-transcript-turn" data-testid="transcript-turn">
+                          <TurnHeader
+                            turn={turn}
+                            time={exchangeTime(turn.index)}
+                            open={!store.folded[String(turn.index)]}
+                            onToggle={(control) =>
+                              keepInPlace(control, () =>
+                                setStore("folded", String(turn.index), !store.folded[String(turn.index)]),
+                              )
+                            }
+                          />
+                          <Show when={!store.folded[String(turn.index)]}>
+                            <Show when={!selectedCall()}>
+                              <For each={unrecordedOf(turn)}>{(step) => <UnrecordedRow step={step} />}</For>
+                            </Show>
+                            <For each={callsOf(turn)}>
+                              {(call) => (
+                                <>
+                                  <Show when={call.kind === "compaction"}>
+                                    <div data-slot="operator-transcript-divider">
+                                      {language.t("operator.transcript.compacted")}
+                                    </div>
+                                  </Show>
+                                  <CallCard
+                                    call={call}
+                                    sessionID={props.sessionID}
+                                    directory={directory()}
+                                    focused={selectedCall() === call.callID}
+                                    expanded={store.expanded}
+                                    onlyNew={store.onlyNew}
+                                    subagents={data()?.session.subagents ?? []}
+                                    turns={data()?.turns ?? []}
+                                    openKey={`card:${selectionKey()}:${call.callID}`}
+                                    openByDefault={openByDefault(call)}
+                                  />
+                                </>
+                              )}
+                            </For>
+                          </Show>
+                        </section>
+                      )}
+                    </For>
+                  </Show>
+                </div>
+              </div>
+            </TranscriptSection>
+          </div>
+        </div>
+        <div data-slot="operator-transcript-readonly" data-testid="transcript-readonly">
+          <span>{language.t("operator.transcript.readOnly")}</span>
+          <ButtonV2 size="small" variant="outline" onClick={() => view.set("user")}>
+            {language.t("operator.sessionViews.user")}
+          </ButtonV2>
+          <ButtonV2 size="small" variant="outline" onClick={() => view.set("detailed")}>
+            {language.t("operator.sessionViews.detailed")}
+          </ButtonV2>
         </div>
       </div>
     </TranscriptStateProvider>

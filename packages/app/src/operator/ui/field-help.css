@@ -25,6 +25,13 @@
   outline-offset: 1px;
 }
 
+/* A settings row whose title is a flex element (a name with its tags): the (i) stays on that line,
+   after it and vertically centred, instead of wrapping below. */
+[data-slot="settings-v2-row-title"]:has(> .flex, > .inline-flex) {
+  display: flex;
+  align-items: center;
+}
+
 .field-help-content {
   max-width: 320px;
   white-space: normal;

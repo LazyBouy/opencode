@@ -1237,3 +1237,10 @@ details[data-slot="operator-as-sent"] [data-component="operator-code"][data-mode
   overflow-y: auto;
   padding: 0 16px 16px;
 }
+
+/* Session details, an 8 px gap, then User | Detailed | Transcript (titlebar-controls.tsx). */
+[data-component="operator-titlebar-controls"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

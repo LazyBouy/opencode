@@ -6,9 +6,9 @@ import { useSettingsDialog } from "@/components/settings-dialog"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
 import { useOperatorCommands } from "./commands"
-import { SessionInspector } from "./inspector/inspector"
 import { isChatPage, rememberChat, useOpenDefaultChat } from "./session-views/chat"
-import { SessionViewSwitch } from "./session-views/switch"
+import { SessionViewCommands } from "./session-views/switch"
+import { OperatorTitlebarControls } from "./titlebar-controls"
 import { ProjectGate } from "./project-gate"
 import { isActivePage, operatorPages } from "./pages"
 import "./operator.css"
@@ -89,8 +89,8 @@ export function OperatorSidebar() {
         </For>
       </div>
 
-      <SessionViewSwitch />
-      <SessionInspector />
+      <SessionViewCommands />
+      <OperatorTitlebarControls />
       <ProjectGate />
       <div data-slot="operator-sidebar-footer">
         <button

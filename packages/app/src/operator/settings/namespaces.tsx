@@ -91,8 +91,9 @@ export const SettingsNamespacesV2: Component = () => {
                   }}
                 >
                   <SettingsRowV2
+                    field={item.namespace.name}
                     title={
-                      <span class="flex items-center gap-2">
+                      <span class="inline-flex items-center gap-2">
                         {item.namespace.name}
                         <Show when={item.namespace.id === OPENCODE}>
                           <Tag title={language.t("operator.builtin.hint")}>{language.t("operator.builtin.label")}</Tag>

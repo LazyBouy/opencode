@@ -3,10 +3,10 @@ import { useServer } from "@/context/server"
 import { sessionHref } from "@/utils/session-route"
 import { useOpenSession } from "../data"
 
-// The full session page's three views: User (OpenCode's chat, unchanged), Transcript (every model call,
-// exactly as sent and received) and Detailed (the chat with reasoning, step markers and what the chat
-// hides). The view is kept in the URL as `?view=transcript|detailed`; none is User.
-export const VIEWS = ["user", "transcript", "detailed"] as const
+// The full session page's three views: User (OpenCode's chat, unchanged), Detailed (the chat with
+// reasoning, step markers and what the chat hides) and Transcript (every model call, exactly as sent and
+// received; read-only). The view is kept in the URL as `?view=detailed|transcript`; none is User.
+export const VIEWS = ["user", "detailed", "transcript"] as const
 export type SessionView = (typeof VIEWS)[number]
 
 export function useSessionView() {

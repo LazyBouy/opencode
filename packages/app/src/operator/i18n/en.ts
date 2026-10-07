@@ -408,6 +408,8 @@ export const dict = {
   "operator.nav.chatHint":
     "Chats: your open chats, at the one you used last. With none open, the default agent's main session in your project.",
   "operator.chats.sessionsOf": "{{agent}}'s sessions",
+  "operator.chats.project": "Project: {{project}}",
+  "operator.chats.projectNamespace": "Namespace: {{namespace}}",
   "operator.chats.sessionsIn": "{{agent}}'s sessions in {{project}}",
   "operator.chats.none": "No other sessions yet",
   "operator.chats.newSession": "New session with {{agent}}",
@@ -710,6 +712,8 @@ export const dict = {
   "operator.transcript.reason.no-calls": "no model call has been made in this session yet",
   "operator.transcript.reason.none-billed": "no call was billed: every call failed ({{statuses}})",
   "operator.transcript.reason.no-usage": "the provider did not report token usage for these calls",
+  "operator.transcript.readOnly":
+    "Read-only: this view shows exactly what was sent and received. Switch to User or Detailed to write.",
   "operator.transcript.allTurns": "All turns",
   "operator.transcript.list": "Turns and calls",
   "operator.transcript.list.quoted": "“{{text}}”",
