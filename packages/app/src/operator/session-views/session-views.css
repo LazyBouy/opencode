@@ -377,7 +377,8 @@ body[data-operator-view="transcript"]
 
 [data-slot="operator-call-toggle"] {
   display: flex;
-  align-items: center;
+  /* A header that wraps keeps its chevron on its first line. */
+  align-items: flex-start;
   gap: 6px;
   width: 100%;
   border: 0;
@@ -387,6 +388,11 @@ body[data-operator-view="transcript"]
   text-align: start;
   padding: 0;
   cursor: pointer;
+}
+
+[data-slot="operator-call-toggle"] > [data-component="icon"] {
+  flex: none;
+  margin-top: 3px;
 }
 
 [data-component="operator-call"]:not([data-open]) {
