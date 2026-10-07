@@ -15,7 +15,16 @@ import { ProjectRecordFields, ProjectRecordForm } from "./project-record"
 // opens in its own page's overlay), its prompt settings and its record (members and groups). Config is
 // the Config page's editor (config-editor.tsx).
 
-export const PROJECT_SECTIONS = ["overview", "agents", "sessions", "config", "prompt", "members", "requests"] as const
+export const PROJECT_SECTIONS = [
+  "overview",
+  "agents",
+  "sessions",
+  "config",
+  "prompt",
+  "members",
+  "models",
+  "requests",
+] as const
 export type ProjectSection = (typeof PROJECT_SECTIONS)[number]
 
 const folderOf = (directory: string) => encodeURIComponent(directory)

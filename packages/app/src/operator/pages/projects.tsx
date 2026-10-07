@@ -29,6 +29,7 @@ import { ProjectRecordFields, ProjectRecordForm } from "./project-record"
 import { useProjectSettings } from "./project-prompt"
 import { ConfigEditor } from "./config-editor"
 import { PermissionRequests } from "../ui/permission-requests"
+import { ProjectModelPickers } from "../ui/model-defaults"
 import {
   PROJECT_SECTIONS,
   ProjectAgents,
@@ -460,6 +461,9 @@ function ProjectOverlay() {
                     onEditing={onEditing}
                   />
                 </Match>
+                <Match when={section() === "models"}>
+                  <ProjectModelPickers directory={found().key} />
+                </Match>
                 <Match when={section() === "requests"}>
                   <PermissionRequests filter={{ project: found().key }} via="project" />
                 </Match>
@@ -487,6 +491,7 @@ const SECTION_ICONS: Record<ProjectSection, DetailSection["icon"]> = {
   config: "sliders",
   prompt: "prompt",
   members: "subagent",
+  models: "providers",
   requests: "warning",
 }
 

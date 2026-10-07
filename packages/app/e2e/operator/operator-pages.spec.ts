@@ -263,7 +263,8 @@ test("Providers & Models shows the default and small model with where they come 
   await expect(overlay.getByRole("button", { name: "Use as default model" })).toBeDisabled()
   await overlay.getByRole("button", { name: "Use as small model" }).click()
   await expect.poll(() => state.writes.length).toBe(1)
-  expect(new URL(state.writes[0]!.url).searchParams.get("scope")).toBe("global")
+  // A project is in context: This project.
+  expect(new URL(state.writes[0]!.url).searchParams.get("scope")).toBe("project")
   expect(state.writes[0]!.body).toEqual({ small_model: "opencode/claude-opus-4-6" })
 })
 

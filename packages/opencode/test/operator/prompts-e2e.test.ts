@@ -373,12 +373,15 @@ unix("the default and small model are traced to where they are set; title runs o
       const prompts = yield* OperatorPrompts.Service
       const defaults = yield* models.defaults()
       // No default model in config: OpenCode's own ranking chooses.
-      expect(defaults.model).toEqual({ model: "test/test-model", source: "ranking" })
+      expect(defaults.model).toEqual({ model: "test/test-model", source: "ranking", how: "opencode" })
+      // Set for this project, in its config.
       expect(defaults.small).toEqual({
         model: "test/test-model",
         source: "small",
         path: path.join(directory, "opencode.json"),
+        how: "project",
       })
+      expect(defaults.global.model).toBeUndefined()
       expect((yield* prompts.preview({ agent: "title" })).modelSource.source).toBe("small")
       expect(
         (yield* prompts.preview({ agent: "build", providerID: "test", modelID: "test-model" })).modelSource,

@@ -22,6 +22,7 @@ import { ModelWithSource } from "../ui/prompt-trace"
 import { showToast } from "@/utils/toast"
 import { requestError } from "./config-helpers"
 import { useOverlayParams } from "../ui/overlay-nav"
+import { ModelsPerProject } from "../ui/model-defaults"
 
 type Row = Model & { providerName: string; isDefault: boolean; isSmall: boolean }
 
@@ -233,6 +234,7 @@ export default function ModelsPage() {
           </div>
         </dl>
       </section>
+      <ModelsPerProject />
       <div data-slot="operator-tiles">
         <For each={providers.data?.providers ?? []}>
           {(provider) => (
@@ -283,7 +285,8 @@ function ModelOverlay() {
   const language = useLanguage()
   const { providers, rows, directory } = useModels()
   const setModel = useSetModel()
-  const [scope, setScope] = createStore({ value: "global" as Scope, busy: false })
+  // This project when a project is in context, else Global.
+  const [scope, setScope] = createStore({ value: (directory() ? "project" : "global") as Scope, busy: false })
   const use = async (key: "model" | "small_model", model: string) => {
     setScope("busy", true)
     await setModel(directory(), scope.value, key, model).finally(() => setScope("busy", false))

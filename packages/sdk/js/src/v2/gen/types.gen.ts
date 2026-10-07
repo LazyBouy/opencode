@@ -3316,6 +3316,7 @@ export type OperatorModelSource = {
    */
   source: "agent" | "default" | "recent" | "ranking" | "small" | "small-family" | "none" | "chosen"
   path?: string
+  how?: "project" | "global" | "opencode"
   unavailable?: boolean
   agent?: OperatorAgentModel
 }
@@ -3399,6 +3400,14 @@ export type OperatorTool = {
 export type OperatorModelDefaults = {
   model: OperatorModelSource
   small: OperatorModelSource
+  /**
+   * What the global config sets for every project (`model`, `small_model`)
+   */
+  global: {
+    model?: string
+    small?: string
+    path?: string
+  }
 }
 
 export type OperatorPromptTool = {

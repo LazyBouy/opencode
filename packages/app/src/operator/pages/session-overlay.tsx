@@ -18,7 +18,7 @@ import { RecordField, RecordView, useRecordOverlay } from "../ui/record-overlay"
 import { SessionPermissions } from "../ui/session-permissions"
 import { useOpenSessionView, VIEWS } from "../session-views/view"
 import { requestError } from "./config-helpers"
-import { useOverlayParams } from "../ui/overlay-nav"
+import { closeTopOverlay, useOverlayParams } from "../ui/overlay-nav"
 import { PermissionRequests } from "../ui/permission-requests"
 
 export const SESSION_TABS = ["conversation", "details", "subagents", "permissions", "requests"] as const
@@ -131,7 +131,7 @@ function SessionOverlay(props: { rows: () => ReadonlyArray<Pick<GlobalSession, "
         .operator.trash.session({ sessionID: id() }, { throwOnError: true })
         .then(async () => {
           showToast({ title: language.t("operator.trash.moved", { name: session.data?.title ?? id() }) })
-          dialog.close()
+          closeTopOverlay()
           await queryClient.invalidateQueries({ queryKey: api.key() })
         })
         .catch((error: unknown) =>

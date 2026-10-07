@@ -1,5 +1,4 @@
 import { useSearchParams } from "@solidjs/router"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { SegmentedControlItemV2, SegmentedControlV2 } from "@opencode-ai/ui/v2/segmented-control-v2"
 import { createMemo, For, Show } from "solid-js"
@@ -12,7 +11,7 @@ import { PageHeader } from "../ui/page-header"
 import { DecidedRequests } from "../ui/permission-requests"
 import { type OverlayBlock, RecordOverlay, RecordView, useRecordOverlay } from "../ui/record-overlay"
 import { ReplyCard } from "../ui/reply-card"
-import { useOverlayParams } from "../ui/overlay-nav"
+import { closeTopOverlay, useOverlayParams } from "../ui/overlay-nav"
 
 // Pending permission requests, grouped project → session, oldest first (as the server returns them).
 function useInbox() {
@@ -126,7 +125,6 @@ export default function InboxPage() {
 function AskOverlay() {
   const language = useLanguage()
   const { items, groups } = useInbox()
-  const dialog = useDialog()
   const [params, setParams] = useOverlayParams<{ ask?: string }>()
   const item = createMemo(() => items().find((entry) => entry.request.id === params.ask))
   const blocks = createMemo<OverlayBlock[]>(() =>
@@ -148,7 +146,7 @@ function AskOverlay() {
     const order = blocks().flatMap((block) => block.records.map((record) => record.id))
     const following = order[order.indexOf(params.ask ?? "") + 1]
     if (following) setParams({ ask: following })
-    else dialog.close()
+    else closeTopOverlay()
   }
 
   return (

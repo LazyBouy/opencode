@@ -52,11 +52,19 @@ export function OverlayFrame(props: {
         resolve(ok)
       })
     })
+  // The dialog closes the one on top, and not while another is still closing (a question just
+  // answered): try again until this one has closed, while it is the one on top.
+  const onTop = () => {
+    const layers = document.querySelectorAll("[data-dialog-layer]")
+    return !!element && !!layers[layers.length - 1]?.contains(element)
+  }
   // Close: while editing, only after asking.
   const close = () => {
-    const go = () => {
+    const go = (tries = 0) => {
+      if (!element?.isConnected || tries > 20) return
       setClosing(true)
-      dialog.close()
+      if (onTop()) dialog.close()
+      setTimeout(() => go(tries + 1), 150)
     }
     if (!props.editing) return go()
     void ask().then((ok) => ok && go())

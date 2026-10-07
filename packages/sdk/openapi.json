@@ -31866,6 +31866,10 @@
           "path": {
             "type": "string"
           },
+          "how": {
+            "type": "string",
+            "enum": ["project", "global", "opencode"]
+          },
           "unavailable": {
             "type": "boolean"
           },
@@ -32072,9 +32076,25 @@
           },
           "small": {
             "$ref": "#/components/schemas/OperatorModelSource"
+          },
+          "global": {
+            "type": "object",
+            "properties": {
+              "model": {
+                "type": "string"
+              },
+              "small": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "What the global config sets for every project (`model`, `small_model`)"
           }
         },
-        "required": ["model", "small"],
+        "required": ["model", "small", "global"],
         "additionalProperties": false
       },
       "OperatorPromptTool": {

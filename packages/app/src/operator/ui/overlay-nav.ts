@@ -111,6 +111,12 @@ function topFrame() {
   return top?.contains(element) ? frame : undefined
 }
 
+// Closes the open overlay on top (a record deleted from it, or nothing left to show): after a question
+// just answered, it waits until that has closed.
+export function closeTopOverlay() {
+  frames.at(-1)?.close()
+}
+
 // Search params inside an open overlay: a change replaces the history entry unless it says otherwise.
 export function useOverlayParams<T extends Record<string, string | string[] | undefined>>() {
   const [params, setParams] = useSearchParams<T>()

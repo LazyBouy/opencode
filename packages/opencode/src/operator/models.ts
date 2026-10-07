@@ -36,6 +36,10 @@ export const Source = Schema.Struct({
       "chosen: picked for this preview; agent: the agent's own model; default: config `model`; recent: the TUI's recent models; ranking: OpenCode's own choice (first connected provider, built-in ranking); small: config `small_model`; small-family: OpenCode's small-model search; none: no model available",
   }),
   path: Schema.optional(Schema.String).annotate({ description: "The file the model is set in" }),
+  how: Schema.optional(Schema.Literals(["project", "global", "opencode"])).annotate({
+    description:
+      "The default and small model: set in this project's config, set in the global config, or OpenCode's choice",
+  }),
   unavailable: Schema.optional(Schema.Boolean).annotate({
     description: "Set in config but not offered by the connected providers",
   }),
@@ -47,7 +51,15 @@ export const Source = Schema.Struct({
 }).annotate({ identifier: "OperatorModelSource" })
 export type Source = typeof Source.Type
 
-export const Defaults = Schema.Struct({ model: Source, small: Source }).annotate({
+export const Defaults = Schema.Struct({
+  model: Source,
+  small: Source,
+  global: Schema.Struct({
+    model: Schema.optional(Schema.String),
+    small: Schema.optional(Schema.String),
+    path: Schema.optional(Schema.String).annotate({ description: "The global config file" }),
+  }).annotate({ description: "What the global config sets for every project (`model`, `small_model`)" }),
+}).annotate({
   identifier: "OperatorModelDefaults",
 })
 export type Defaults = typeof Defaults.Type
@@ -142,9 +154,32 @@ const layer = Layer.effect(
       return found ? source({ model: `${found.providerID}/${found.id}`, source: "small-family" }) : fallback
     })
 
+    // How a default was chosen: set in a project file, in the global config, or by OpenCode.
+    const how = (value: Source): Source => ({
+      ...value,
+      how:
+        value.source === "default" || value.source === "small"
+          ? value.path?.startsWith(Global.Path.config)
+            ? "global"
+            : "project"
+          : "opencode",
+    })
+
+    // What the global config file sets, for every project.
+    const global = Effect.fnUntraced(function* () {
+      const layers = yield* operatorConfig.layers()
+      const file = layers.sources.findLast((source) => source.kind === "global")
+      const value = file ? (parse(file.text) as { model?: unknown; small_model?: unknown } | undefined) : undefined
+      return {
+        ...(typeof value?.model === "string" ? { model: value.model } : {}),
+        ...(typeof value?.small_model === "string" ? { small: value.small_model } : {}),
+        path: file?.path ?? layers.targets.global,
+      }
+    })
+
     const defaults = Effect.fn("OperatorModels.defaults")(function* () {
       const chosen = yield* model()
-      return { model: chosen, small: yield* small(chosen) }
+      return { model: how(chosen), small: how(yield* small(chosen)), global: yield* global() }
     })
 
     // Where an agent's own model is set: its agent file's frontmatter, else the last config file with
