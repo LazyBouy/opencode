@@ -1,5 +1,6 @@
 import { OperatorCalls } from "@/operator/calls"
 import { OperatorCallView } from "@/operator/call-view"
+import { OperatorTokenizers } from "@/operator/tokenizers"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "@/server/routes/instance/httpapi/middleware/authorization"
@@ -18,6 +19,8 @@ export const OperatorCallPaths = {
   export: "/operator/session/:sessionID/calls/export",
   call: "/operator/session/:sessionID/call/:callID",
   raw: "/operator/session/:sessionID/call/:callID/raw",
+  recount: "/operator/session/:sessionID/calls/recount",
+  tokenizers: "/operator/tokenizers",
 } as const
 
 export class ApiCallNotFoundError extends Schema.ErrorClass<{
@@ -91,6 +94,29 @@ export const OperatorCallApi = HttpApi.make("operator-calls")
             summary: "A model call's raw request or response",
             description:
               "The request body exactly as sent (rebuilt byte for byte), or the assembled response (the raw stream for formats that are not read).",
+          }),
+        ),
+        HttpApiEndpoint.post("recount", OperatorCallPaths.recount, {
+          params,
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Struct({ ok: Schema.Boolean }), "The counts are made again when next read"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.call.recount",
+            summary: "Count a session's tokens again",
+            description:
+              "Reloads the tokenizers and clears the session's stored token counts, so each call's accounting is made again (after a tokenizer is added).",
+          }),
+        ),
+        HttpApiEndpoint.get("tokenizers", OperatorCallPaths.tokenizers, {
+          query: WorkspaceRoutingQuery,
+          success: described(OperatorTokenizers.List, "The tokenizers that count tokens per model"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.call.tokenizers",
+            summary: "List tokenizers",
+            description:
+              "The tokenizers loaded from the tokenizer folder, the models each counts for, and modules that failed to load. Without one, the Transcript estimates (characters ÷ 4).",
           }),
         ),
       )

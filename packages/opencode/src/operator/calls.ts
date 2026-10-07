@@ -9,12 +9,17 @@ import { InstanceState } from "@/effect/instance-state"
 import type { InstanceContext } from "@/project/instance-context"
 import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Provider } from "@/provider/provider"
+import { OperatorCallAccounting } from "./call-accounting"
 import { OperatorCallFormat } from "./call-format"
 import { OperatorCallStore } from "./call-store"
 import { OperatorCallView } from "./call-view"
 import { OperatorProjects } from "./projects"
 import { OperatorProviderTap } from "./provider-tap"
 import { OperatorRegistry } from "./registry"
+import { OperatorTokenizers } from "./tokenizers"
 
 // Recorded model calls (provider-tap.ts, call-store.ts): registers each call the prompt plugin sees in
 // `chat.headers`, linking it to its session, agent and the step's assistant message, and deletes a
@@ -61,6 +66,10 @@ export interface Interface {
     part: "request" | "response",
   ) => Effect.Effect<typeof Raw.Type, NotFoundError>
   readonly export: (sessionID: string, format: "md" | "json") => Effect.Effect<typeof Export.Type>
+  /** Clears a session's stored token counts, so they are made again (after a tokenizer is added). */
+  readonly recount: (sessionID: string) => Effect.Effect<void>
+  /** The tokenizers loaded from the tokenizer folder (tokenizers.ts). */
+  readonly tokenizers: () => Effect.Effect<OperatorTokenizers.List>
   /** The newest recorded call of an agent of this project: its tools as sent. */
   readonly last: (agent: string) => Effect.Effect<typeof Last.Type>
   /** Registers a call about to be sent; its id, or nothing when it is not recorded. */
@@ -80,6 +89,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const sessions = yield* Session.Service
     const config = yield* Config.Service
+    const providers = yield* Provider.Service
     // The last call of each assistant message: a later one for the same message is a retry.
     const lastCall = new Map<string, string>()
 
@@ -163,6 +173,10 @@ const layer = Layer.effect(
     )
 
     // A session's calls with their parsed bodies, and its messages.
+    type Loaded = {
+      loaded: Array<{ call: OperatorCallStore.Call; body?: Record<string, unknown>; text: string; hashes: string[] }>
+      input: OperatorCallView.Input
+    }
     const load = Effect.fnUntraced(function* (sessionID: string) {
       const calls = yield* Effect.promise(() => OperatorCallStore.list(sessionID))
       const loaded = yield* Effect.promise(() =>
@@ -183,18 +197,122 @@ const layer = Layer.effect(
       const messages = yield* sessions
         .messages({ sessionID: SessionID.make(sessionID) })
         .pipe(Effect.orElseSucceed(() => []))
-      return { loaded, input: { calls: loaded, messages } as unknown as OperatorCallView.Input }
+      const result: Loaded = { loaded, input: { calls: loaded, messages } as unknown as OperatorCallView.Input }
+      return result
+    })
+
+    // Each model's prices per million tokens (for the cost split), when the provider lists it.
+    const pricesOf = Effect.fnUntraced(function* (models: ReadonlyArray<string>) {
+      const prices = new Map<string, OperatorCallAccounting.Price>()
+      for (const model of new Set(models)) {
+        const at = model.indexOf("/")
+        if (at <= 0) continue
+        const found = yield* providers
+          .getModel(ProviderV2.ID.make(model.slice(0, at)), ModelV2.ID.make(model.slice(at + 1)))
+          .pipe(Effect.option)
+        if (found._tag === "None") continue
+        const cost = found.value.cost
+        prices.set(model, {
+          input: cost?.input ?? 0,
+          output: cost?.output ?? 0,
+          cacheRead: cost?.cache?.read ?? 0,
+          cacheWrite: cost?.cache?.write ?? 0,
+        })
+      }
+      return prices
+    })
+
+    // The calls' accounting (call-accounting.ts): stored counts are reused while current; the rest are
+    // made now and stored once their call is complete. `fresh` is made again with its contents.
+    const accounted = Effect.fnUntraced(function* (sessionID: string, loaded: Loaded, fresh?: string) {
+      yield* Effect.promise(() => OperatorTokenizers.ready())
+      const base = OperatorCallView.list(loaded.input)
+      const stored = (yield* Effect.promise(() => OperatorCallStore.accounting(sessionID))) as Map<
+        string,
+        OperatorCallAccounting.Accounting
+      >
+      if (fresh) stored.delete(fresh)
+      const prices = yield* pricesOf(loaded.loaded.flatMap((item) => (item.call.model ? [item.call.model] : [])))
+      const accountings = OperatorCallAccounting.account(
+        loaded.loaded.map((item, at) => ({
+          call: item.call,
+          body: item.body,
+          hashes: item.hashes,
+          index: base.calls[at]!.index,
+          ...(base.calls[at]!.exchange !== undefined ? { exchange: base.calls[at]!.exchange } : {}),
+          ...(base.calls[at]!.cost !== undefined ? { opencodeCost: base.calls[at]!.cost } : {}),
+        })),
+        { messages: loaded.input.messages, price: (model) => prices.get(model) },
+        stored,
+      )
+      // Stored once complete (the counts of a call still receiving change).
+      const save = accountings.flatMap((accounting, at) => {
+        const call = loaded.loaded[at]!.call
+        const before = stored.get(call.callID)
+        if (!call.finishedAt || accounting === before) return []
+        return [{ callID: call.callID, accounting: OperatorCallAccounting.lean(accounting) }]
+      })
+      yield* Effect.promise(() => OperatorCallStore.saveAccounting(sessionID, save).catch(() => undefined))
+      return { base, accountings }
+    })
+
+    // A session's totals with its subagents' (rolled up, a few levels deep).
+    const rollup = (sessionID: string, depth: number): Effect.Effect<OperatorCallAccounting.Subagent[]> =>
+      Effect.gen(function* () {
+        if (depth > 4) return []
+        const children = yield* sessions.children(SessionID.make(sessionID)).pipe(Effect.orElseSucceed(() => []))
+        return yield* Effect.forEach(children, (child) =>
+          Effect.gen(function* () {
+            const loaded = yield* load(child.id)
+            const { base, accountings } = yield* accounted(child.id, loaded)
+            const covered = new Set(
+              base.calls.flatMap((call) => (call.assistantMessageID ? [call.assistantMessageID] : [])),
+            )
+            const summary = OperatorCallAccounting.summarize({
+              calls: base.calls.map((call, at) => ({ ...call, accounting: accountings[at]! })),
+              exchanges: base.exchanges,
+              unrecorded: OperatorCallAccounting.unrecordedSteps(loaded.input.messages, covered),
+              subagents: yield* rollup(child.id, depth + 1),
+            })
+            const all =
+              summary.session.rows.find((row) => row.id === "all") ??
+              summary.session.rows.find((row) => row.id === "session")!
+            return {
+              sessionID: child.id,
+              title: child.title,
+              ...(child.agent ? { agent: child.agent } : {}),
+              totals: all.totals,
+            }
+          }),
+        )
+      })
+
+    // The list with every call's billing, the turns and the session's totals.
+    const full = Effect.fnUntraced(function* (sessionID: string) {
+      const loaded = yield* load(sessionID)
+      const { base, accountings } = yield* accounted(sessionID, loaded)
+      const calls = base.calls.map((call, at) => ({ ...call, billing: OperatorCallView.billingOf(accountings[at]!) }))
+      const covered = new Set(calls.flatMap((call) => (call.assistantMessageID ? [call.assistantMessageID] : [])))
+      const unrecorded = OperatorCallAccounting.unrecordedSteps(loaded.input.messages, covered)
+      const summary = OperatorCallAccounting.summarize({
+        calls: calls.map((call, at) => ({ ...call, accounting: accountings[at]! })),
+        exchanges: base.exchanges,
+        unrecorded,
+        subagents: yield* rollup(sessionID, 1),
+      })
+      const view: OperatorCallView.List = { ...base, calls, turns: summary.turns, session: summary.session, unrecorded }
+      return { loaded, view, accountings }
     })
 
     const list = Effect.fn("OperatorCalls.list")(function* (
       sessionID: string,
       filter?: { after?: string; limit?: number; kind?: string; search?: string },
     ) {
-      const { input, loaded } = yield* load(sessionID)
-      const all = OperatorCallView.list(input)
+      const { loaded: found, view: all } = yield* full(sessionID)
+      const loaded = found.loaded
       // Search: what a call sent (its whole body) and what came back.
       const query = filter?.search?.trim().toLowerCase()
-      const found = query
+      const matched = query
         ? new Set(
             loaded
               .filter((item) =>
@@ -214,15 +332,21 @@ const layer = Layer.effect(
             ? true
             : kinds.some((kind) => (kind === "errors" ? !!call.error || !!call.retryOf : call.kind === kind)),
         )
-        .filter((call) => !found || found.has(call.callID))
+        .filter((call) => !matched || matched.has(call.callID))
       return { ...all, calls: filter?.limit ? picked.slice(0, filter.limit) : picked }
     })
 
     const detail = Effect.fn("OperatorCalls.detail")(function* (sessionID: string, callID: string) {
-      const { input } = yield* load(sessionID)
-      const found = OperatorCallView.detail(input, callID)
+      const loaded = yield* load(sessionID)
+      const found = OperatorCallView.detail(loaded.input, callID)
       if (!found) return yield* new NotFoundError({ message: `No call ${callID} in session ${sessionID}` })
-      return found
+      const { base, accountings } = yield* accounted(sessionID, loaded, callID)
+      const at = base.calls.findIndex((call) => call.callID === callID)
+      const accounting = accountings[at]
+      return {
+        ...found,
+        ...(accounting ? { billing: OperatorCallView.billingOf(accounting), accounting } : {}),
+      }
     })
 
     const raw = Effect.fn("OperatorCalls.raw")(function* (
@@ -243,8 +367,7 @@ const layer = Layer.effect(
     })
 
     const exportSession = Effect.fn("OperatorCalls.export")(function* (sessionID: string, format: "md" | "json") {
-      const { loaded, input } = yield* load(sessionID)
-      const view = OperatorCallView.list(input)
+      const { loaded, view, accountings } = yield* full(sessionID)
       if (format === "json")
         return {
           format,
@@ -252,18 +375,32 @@ const layer = Layer.effect(
             {
               sessionID,
               totals: view.totals,
+              session: view.session,
+              turns: view.turns,
+              unrecorded: view.unrecorded,
               calls: view.calls.map((summary, at) => ({
                 ...summary,
-                request: loaded[at]!.text,
-                response: loaded[at]!.call.response ?? null,
-                error: loaded[at]!.call.error,
+                accounting: OperatorCallAccounting.lean(accountings[at]!),
+                request: loaded.loaded[at]!.text,
+                response: loaded.loaded[at]!.call.response ?? null,
+                error: loaded.loaded[at]!.call.error,
               })),
             },
             null,
             2,
           ),
         }
-      return { format, text: OperatorCallView.markdown(input, view) }
+      return { format, text: OperatorCallView.markdown(loaded.input, view, accountings) }
+    })
+
+    const recount = Effect.fn("OperatorCalls.recount")(function* (sessionID: string) {
+      yield* Effect.promise(() => OperatorTokenizers.reload())
+      yield* Effect.promise(() => OperatorCallStore.clearAccounting(sessionID))
+    })
+
+    const tokenizers = Effect.fn("OperatorCalls.tokenizers")(function* () {
+      yield* Effect.promise(() => OperatorTokenizers.ready())
+      return OperatorTokenizers.list()
     })
 
     const last = Effect.fn("OperatorCalls.last")(function* (agent: string) {
@@ -289,8 +426,8 @@ const layer = Layer.effect(
       }
     })
 
-    return Service.of({ begin, list, detail, raw, export: exportSession, last })
+    return Service.of({ begin, list, detail, raw, export: exportSession, last, recount, tokenizers })
   }),
 )
 
-export const node = LayerNode.make({ service: Service, layer, deps: [Session.node, Config.node] })
+export const node = LayerNode.make({ service: Service, layer, deps: [Session.node, Config.node, Provider.node] })

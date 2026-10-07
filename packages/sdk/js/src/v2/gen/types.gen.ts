@@ -3751,6 +3751,21 @@ export type OperatorCallUsage = {
   cost?: number
 }
 
+export type OperatorCallBilling = {
+  input?: number
+  cacheRead: number
+  cacheWrite: number
+  new?: number
+  output?: number
+  reasoning: number
+  unattributed?: number
+  provider?: number
+  opencode?: number
+  generationId?: string
+  uncertain?: "estimate" | "counted"
+  unrecognized: number
+}
+
 export type OperatorCallSummary = {
   callID: string
   /**
@@ -3811,6 +3826,7 @@ export type OperatorCallSummary = {
      */
     new: number
   }
+  billing?: OperatorCallBilling
   /**
    * Texts OpenCode added to this request in memory (not saved): the plan reminders, the switch back to building, the step-limit notice
    */
@@ -3828,6 +3844,98 @@ export type OperatorCallExchange = {
   recorded: boolean
 }
 
+export type OperatorTokenTotals = {
+  calls: number
+  /**
+   * Billed input, cache included
+   */
+  input: number
+  cacheRead: number
+  cacheWrite: number
+  new: number
+  /**
+   * Billed output, reasoning included
+   */
+  output: number
+  reasoning: number
+  /**
+   * OpenCode's cost
+   */
+  cost: number
+  /**
+   * The provider's cost, where it reports one
+   */
+  providerCost: number
+}
+
+export type OperatorTurn = {
+  /**
+   * The turn (its user message), 1-based; 0: calls outside any turn
+   */
+  index: number
+  userMessageID?: string
+  text: string
+  /**
+   * Its recorded calls (ids), in order
+   */
+  calls: Array<string>
+  /**
+   * Its steps OpenCode stored but did not record
+   */
+  unrecorded: number
+  totals: OperatorTokenTotals
+}
+
+export type OperatorInputGroup =
+  | "system"
+  | "tools"
+  | "history"
+  | "reasoning-sent"
+  | "tool-results"
+  | "user"
+  | "added"
+  | "formatting"
+
+export type OperatorSubagentTotals = {
+  sessionID: string
+  title: string
+  agent?: string
+  totals: OperatorTokenTotals
+}
+
+export type OperatorSessionTotals = {
+  /**
+   * agent: agent steps (with steps not recorded); side: title, compaction, summary and other calls; retries: retries and failed calls; session: this session; subagents and all (with subagents) when it has any
+   */
+  rows: Array<{
+    id: "agent" | "side" | "retries" | "session" | "subagents" | "all"
+    totals: OperatorTokenTotals
+  }>
+  /**
+   * Where the input tokens went, over the recorded calls
+   */
+  inputBy: Array<{
+    group: OperatorInputGroup
+    tokens: number
+    cacheRead: number
+  }>
+  /**
+   * Calls whose provider reported no cost (their index)
+   */
+  providerMissing: Array<number>
+  subagents: Array<OperatorSubagentTotals>
+  /**
+   * Calls whose attribution is uncertain
+   */
+  uncertain: number
+}
+
+export type OperatorUnrecordedStep = {
+  assistantMessageID: string
+  exchange?: number
+  totals: OperatorTokenTotals
+}
+
 export type OperatorCallList = {
   calls: Array<OperatorCallSummary>
   exchanges: Array<OperatorCallExchange>
@@ -3839,6 +3947,15 @@ export type OperatorCallList = {
     cacheRead: number
     cost: number
   }
+  /**
+   * Each turn's calls and totals (its user message and everything the agent did for it)
+   */
+  turns: Array<OperatorTurn>
+  session: OperatorSessionTotals
+  /**
+   * Steps OpenCode stored that were not recorded (their totals from OpenCode's stored usage)
+   */
+  unrecorded: Array<OperatorUnrecordedStep>
 }
 
 export type OperatorCallExport = {
@@ -3883,6 +4000,170 @@ export type OperatorCallReceived = {
   usage?: OperatorCallUsage
   ids?: Array<string>
   raw?: string
+}
+
+export type OperatorInputItemKind =
+  | "system"
+  | "tools"
+  | "user"
+  | "added-saved"
+  | "added-request"
+  | "attachment"
+  | "summary"
+  | "assistant"
+  | "reasoning-sent"
+  | "tool-call"
+  | "tool-result"
+  | "parameters"
+  | "unrecognized"
+
+export type OperatorTokenMethod = "counted" | "estimate" | "reported" | "settings"
+
+export type OperatorTokenCache = "read" | "partial" | "write" | "new"
+
+export type OperatorInputItemPart = {
+  name: string
+  chars: number
+  tokens: number
+  description?: {
+    chars: number
+    tokens: number
+  }
+  schema?: {
+    chars: number
+    tokens: number
+  }
+}
+
+export type OperatorInputItem = {
+  id: string
+  kind: OperatorInputItemKind
+  message?: number
+  name?: string
+  call?: number
+  turn?: number
+  turns?: {
+    from: number
+    to: number
+  }
+  preview?: string
+  chars: number
+  tokens: number
+  method: OperatorTokenMethod
+  cache: OperatorTokenCache
+  since?: number
+  flags: Array<"cleared" | "shortened" | "encrypted" | "not-estimated">
+  parts?: Array<OperatorInputItemPart>
+  attachment?: {
+    type: "image" | "file"
+    mime?: string
+    size?: number
+  }
+  content?: string
+}
+
+export type OperatorOutputItem = {
+  id: string
+  kind: "reasoning" | "reasoning-summary" | "reasoning-hidden" | "reasoning-encrypted" | "text" | "tool-call"
+  name?: string
+  chars: number
+  tokens: number
+  method: OperatorTokenMethod
+  content?: string
+}
+
+export type OperatorCallAccounting = {
+  version: number
+  /**
+   * The tokenizer that counted the items, or estimate
+   */
+  tokenizer: string
+  /**
+   * The order the model reads the parts in (the cache is read from the start)
+   */
+  order: "system-tools-messages" | "tools-system-messages"
+  input: {
+    items: Array<OperatorInputItem>
+    billed?: number
+    cacheRead: number
+    cacheWrite: number
+    new?: number
+    unattributed?: number
+    boundary?: {
+      /**
+       * The item the cache read ends in, or formatting
+       */
+      item: string
+      /**
+       * Its tokens read from cache
+       */
+      read: number
+      /**
+       * Its tokens after the boundary
+       */
+      after: number
+    }
+    delta?: {
+      /**
+       * The previous call (its index)
+       */
+      from: number
+      /**
+       * Billed input now minus billed input then: measured
+       */
+      tokens: number
+      /**
+       * The items added since (ids)
+       */
+      items: Array<string>
+    }
+    uncertain?: "estimate" | "counted"
+    /**
+     * Characters of content no item recognized
+     */
+    unrecognized: number
+  }
+  output: {
+    items: Array<OperatorOutputItem>
+    billed?: number
+    reasoning: number
+    unattributed?: number
+  }
+  cost: {
+    provider?: number
+    opencode?: number
+    difference?: number
+    generationId?: string
+    split?: {
+      input: number
+      cacheRead: number
+      cacheWrite: number
+      output: number
+      reasoning: number
+    }
+  }
+  changes?: {
+    from: number
+    /**
+     * Items new since that call (ids)
+     */
+    added: Array<string>
+    removed: Array<{
+      kind: OperatorInputItemKind
+      name?: string
+      preview?: string
+      tokens: number
+    }>
+    /**
+     * System or tools that differ (ids)
+     */
+    changed: Array<string>
+    /**
+     * The input's change in tokens (measured when `measured`)
+     */
+    tokens: number
+    measured: boolean
+  }
 }
 
 export type OperatorCallDetail = {
@@ -3945,6 +4226,7 @@ export type OperatorCallDetail = {
      */
     new: number
   }
+  billing?: OperatorCallBilling
   /**
    * Texts OpenCode added to this request in memory (not saved): the plan reminders, the switch back to building, the step-limit notice
    */
@@ -3960,6 +4242,7 @@ export type OperatorCallDetail = {
   }
   received?: OperatorCallReceived
   warnings: Array<"reasoning-not-stored" | "text-differs" | "tool-calls-differ">
+  accounting?: OperatorCallAccounting
 }
 
 export type OperatorCallNotFoundError = {
@@ -3975,6 +4258,27 @@ export type OperatorCallRaw = {
    */
   text: string
   bytes: number
+}
+
+export type OperatorTokenizer = {
+  id: string
+  label: string
+  models: Array<string>
+  file?: string
+}
+
+export type OperatorTokenizerLoadError = {
+  file: string
+  message: string
+}
+
+export type OperatorTokenizerList = {
+  /**
+   * Where tokenizer modules are loaded from
+   */
+  folder: string
+  tokenizers: Array<OperatorTokenizer>
+  errors: Array<OperatorTokenizerLoadError>
 }
 
 export type OperatorPermissionPatternForm =
@@ -15286,6 +15590,66 @@ export type OperatorCallRawResponses = {
 }
 
 export type OperatorCallRawResponse = OperatorCallRawResponses[keyof OperatorCallRawResponses]
+
+export type OperatorCallRecountData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/session/{sessionID}/calls/recount"
+}
+
+export type OperatorCallRecountErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorCallRecountError = OperatorCallRecountErrors[keyof OperatorCallRecountErrors]
+
+export type OperatorCallRecountResponses = {
+  /**
+   * The counts are made again when next read
+   */
+  200: {
+    ok: boolean
+  }
+}
+
+export type OperatorCallRecountResponse = OperatorCallRecountResponses[keyof OperatorCallRecountResponses]
+
+export type OperatorCallTokenizersData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/tokenizers"
+}
+
+export type OperatorCallTokenizersErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorCallTokenizersError = OperatorCallTokenizersErrors[keyof OperatorCallTokenizersErrors]
+
+export type OperatorCallTokenizersResponses = {
+  /**
+   * The tokenizers that count tokens per model
+   */
+  200: OperatorTokenizerList
+}
+
+export type OperatorCallTokenizersResponse = OperatorCallTokenizersResponses[keyof OperatorCallTokenizersResponses]
 
 export type OperatorAgentPermissionsGetData = {
   body?: never

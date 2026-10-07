@@ -146,6 +146,29 @@ unix("every call is recorded exactly: OpenAI chat, with tool steps, a plan → b
     expect(later.sent.filter((message) => message.seenIn !== undefined).length).toBe(later.sent.length - 2)
     expect(later.received?.blocks.at(-1)).toMatchObject({ type: "tool-call", name: "glob" })
     expect(later.warnings).toEqual([])
+    // Token accounting: every recorded call sums exactly to what the provider billed.
+    for (const call of view.calls) {
+      const found = yield* api.detail(session.id, call.callID)
+      const accounting = found.accounting!
+      const items = accounting.input.items.reduce((total, item) => total + item.tokens, 0)
+      expect(items + (accounting.input.unattributed ?? 0)).toBe(accounting.input.billed!)
+      expect(accounting.input.items.some((item) => item.kind === "system")).toBe(true)
+      expect(accounting.input.unrecognized).toBe(0)
+    }
+    expect(later.accounting?.input.items.find((item) => item.kind === "tools")?.parts?.length).toBeGreaterThan(0)
+    // Turns and the session: the session is its turns; every call is in one turn.
+    expect(view.turns.flatMap((turn) => turn.calls).toSorted()).toEqual(
+      view.calls.map((call) => call.callID).toSorted(),
+    )
+    const sessionRow = view.session.rows.find((row) => row.id === "session")!.totals
+    expect(sessionRow.calls).toBe(view.calls.length)
+    expect(sessionRow.input).toBe(view.turns.reduce((total, turn) => total + turn.totals.input, 0))
+    expect(view.calls.every((call) => call.billing?.input !== undefined)).toBe(true)
+    // Counts are stored once; a recount clears them.
+    expect((yield* Effect.promise(() => OperatorCallStore.accounting(session.id))).size).toBe(view.calls.length)
+    yield* api.recount(session.id)
+    expect((yield* Effect.promise(() => OperatorCallStore.accounting(session.id))).size).toBe(0)
+    expect((yield* api.export(session.id, "md")).text).toContain("Formatting and unattributed")
     // Raw request byte for byte; exports.
     const raw = yield* api.raw(session.id, agentSteps[2]!.callID, "request")
     expect(fake.hits.map((hit) => hit.body)).toContain(raw.text)

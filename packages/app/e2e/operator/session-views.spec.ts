@@ -58,7 +58,7 @@ test.beforeEach(async ({ page }) => {
   await mockOperator(page)
 })
 
-test("the Transcript shows every call by exchange, folds what was sent before, and marks what OpenCode added", async ({
+test("the Transcript accounts for every token: session totals, turns, and each call's table summing to what was billed", async ({
   page,
 }) => {
   await page.goto(`/server/${base64Encode(fixture.serverKey)}/session/${sessionID}`)
@@ -67,22 +67,62 @@ test("the Transcript shows every call by exchange, folds what was sent before, a
   await expect(page).toHaveURL(/view=transcript/)
 
   const transcript = page.getByTestId("transcript")
-  await expect(transcript.getByTestId("transcript-totals")).toContainText("3 calls")
-  await expect(transcript.getByTestId("transcript-exchange")).toContainText("fix the login bug")
+  // The session: totals by kind of call, and where the input went.
+  const totals = transcript.getByTestId("transcript-totals")
+  await expect(totals.getByRole("row", { name: /This session/ })).toContainText("3")
+  await expect(totals.getByRole("row", { name: /Side calls/ })).toBeVisible()
+  await expect(totals).toContainText("The provider reported no cost for calls 1, 2.")
+  await expect(transcript.getByTestId("transcript-input-by")).toContainText("Where the input tokens went")
+  await expect(transcript.getByTestId("transcript-input-by")).toContainText("Formatting and unattributed")
+  await expect(transcript.getByTestId("transcript-counting")).toContainText("No tokenizer")
+
+  // The turn, with its totals.
+  const turn = transcript.getByTestId("transcript-exchange")
+  await expect(turn).toContainText("Turn 1")
+  await expect(turn).toContainText("fix the login bug")
+  await expect(turn).toContainText("3 calls · in 14,824")
   const calls = transcript.getByTestId("transcript-call")
   await expect(calls).toHaveCount(3)
   await expect(calls.nth(0).getByTestId("call-header")).toContainText("Title")
   await expect(calls.nth(1).getByTestId("call-header")).toContainText("Agent step 1")
   await expect(calls.nth(1).getByTestId("call-header")).toContainText("in 7,104 (cache 6,912)")
+  await expect(calls.nth(1).getByTestId("call-header")).toContainText("gen-2")
+  // A call's details load once it scrolls into view.
+  await calls.nth(1).scrollIntoViewIfNeeded()
   await expect(calls.nth(1).getByTestId("call-received")).toContainText("The login form posts to the wrong route.")
 
-  // The third call: the same system text and tools as call 2, the first message folded, a reminder marked.
+  // Every call's table sums exactly to the billed input.
+  for (const at of [0, 1, 2]) {
+    await calls.nth(at).scrollIntoViewIfNeeded()
+    const table = calls.nth(at).getByTestId("call-accounting")
+    await expect(table.getByTestId("accounting-total-input")).toBeVisible()
+    const cells = await table
+      .locator('[data-testid="accounting-row"] td:nth-child(2), [data-testid="accounting-formatting"] td:nth-child(2)')
+      .allInnerTexts()
+    const sum = cells.reduce((total, text) => total + Number(text.replace(/[^\d-]/g, "")), 0)
+    const billed = Number(
+      (await table.getByTestId("accounting-total-input").locator("td").first().innerText()).replace(/[^\d]/g, ""),
+    )
+    expect(sum).toBe(billed)
+  }
+
+  // The third call: the tools item, the added reminder, the measured delta and the cache boundary.
   const third = calls.nth(2)
-  await expect(third.getByTestId("call-system")).toContainText("same as call 2")
-  await expect(third.getByTestId("call-tools")).toContainText("11 tools, same as call 2")
-  await expect(third.getByTestId("call-messages")).toContainText("Message 1: same as call 2")
-  await expect(third.getByTestId("call-messages")).toContainText("Added by OpenCode for this request (not saved)")
-  await expect(third.getByTestId("call-messages")).toContainText("Plan mode is off.")
+  const table = third.getByTestId("call-accounting")
+  await expect(table).toContainText("Tools (2)")
+  await expect(table).toContainText("Added by OpenCode for this request (not saved): switch to build")
+  await expect(table.getByTestId("accounting-delta")).toContainText("Measured: +96 since call 2")
+  await expect(table.getByTestId("accounting-boundary")).toContainText("Cache boundary")
+  await expect(third.getByTestId("accounting-cost")).toContainText("gen-3")
+  // Items sent before fold with their count; Expand everything shows them all.
+  await expect(third.getByTestId("call-seen")).toContainText("Same as call 2: 1 items · 4 tokens")
+  await expect(third.getByText("export function login() {}")).toHaveCount(0)
+  await transcript.getByRole("button", { name: "Expand everything" }).click()
+  await expect(third.getByText("export function login() {}")).toBeVisible()
+  await expect(third.getByTestId("call-sent-items")).toContainText("fix the login bug")
+  // What changed since the previous call.
+  await expect(third.getByTestId("call-changes")).toContainText("What changed since call 2")
+  await expect(third.getByTestId("call-changes")).toContainText("+96 tokens, measured")
 
   // The exact request body.
   await third.getByRole("button", { name: "Request JSON" }).click()
@@ -99,12 +139,15 @@ test("the Transcript shows every call by exchange, folds what was sent before, a
   await expect(page.getByTestId("transcript")).toHaveCount(0)
 })
 
-test("the filter shows one kind of call", async ({ page }) => {
+test("the filter shows one kind of call; a turn folds", async ({ page }) => {
   await page.goto(`/server/${base64Encode(fixture.serverKey)}/session/${sessionID}?view=transcript`)
   const transcript = page.getByTestId("transcript")
   await expect(transcript.getByTestId("transcript-call")).toHaveCount(3)
-  await transcript.getByRole("button", { name: "Title", exact: true }).click()
+  await transcript.getByRole("button", { name: "Side calls", exact: true }).click()
   await expect(transcript.getByTestId("transcript-call")).toHaveCount(1)
+  await transcript.getByRole("button", { name: "All", exact: true }).click()
+  await transcript.getByTestId("transcript-exchange").click()
+  await expect(transcript.getByTestId("transcript-call")).toHaveCount(0)
 })
 
 test("Detailed shows the chat with reasoning, todo updates and a marker for each model step", async ({ page }) => {

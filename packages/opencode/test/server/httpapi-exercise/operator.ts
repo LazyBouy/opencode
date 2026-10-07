@@ -434,7 +434,28 @@ export const operatorScenarios: Scenario[] = [
       array(body.calls)
       array(body.exchanges)
       object(body.totals)
+      array(body.turns)
+      object(body.session)
+      array(body.session.rows)
+      array(body.unrecorded)
     }),
+  http.protected
+    .post("/operator/session/{sessionID}/calls/recount", "operator.call.recount")
+    .mutating()
+    .at((ctx) => ({
+      path: route("/operator/session/{sessionID}/calls/recount", { sessionID: "ses_nocalls" }),
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => {
+      object(body)
+      check(body.ok === true, "a recount should be accepted")
+    }),
+  http.protected.get("/operator/tokenizers", "operator.call.tokenizers").json(200, (body) => {
+    object(body)
+    array(body.tokenizers)
+    array(body.errors)
+    check(typeof body.folder === "string", "the tokenizer folder should be named")
+  }),
   http.protected
     .get("/operator/session/{sessionID}/calls/export", "operator.call.export")
     .at((ctx) => ({

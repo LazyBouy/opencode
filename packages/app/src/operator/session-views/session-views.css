@@ -91,6 +91,12 @@
   min-width: 0;
 }
 
+[data-slot="operator-transcript-turn"] {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 [data-slot="operator-transcript-exchange"] {
   display: flex;
   flex-wrap: wrap;
@@ -98,6 +104,158 @@
   gap: 8px;
   padding: 8px 0 2px;
   border-top: 1px solid var(--v2-border-border-muted);
+  text-align: start;
+  cursor: pointer;
+}
+
+[data-slot="operator-transcript-exchange"][aria-expanded="false"]::after {
+  content: "…";
+  color: var(--v2-text-text-muted);
+}
+
+[data-slot="operator-transcript-unrecorded"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px dashed var(--v2-border-border-base);
+  border-radius: 8px;
+}
+
+/* Token accounting (accounting.tsx): every billed token in one row. */
+[data-component="operator-accounting"] {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-component="operator-accounting"] :is(th, td) {
+  padding: 3px 8px;
+  text-align: start;
+  font-weight: 400;
+  border-bottom: 1px solid var(--v2-border-border-muted);
+  vertical-align: top;
+}
+
+[data-component="operator-accounting"] thead th {
+  color: var(--v2-text-text-muted);
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+[data-component="operator-accounting"] [data-align="end"] {
+  text-align: end;
+  white-space: nowrap;
+}
+
+[data-component="operator-accounting"] tr[data-total] :is(th, td) {
+  font-weight: 600;
+  border-bottom: none;
+}
+
+[data-component="operator-accounting"] tr[data-delta] th {
+  box-shadow: inset 3px 0 0 var(--v2-border-border-accent, var(--v2-text-text-accent));
+}
+
+[data-component="operator-accounting"] td[data-cache="read"],
+[data-component="operator-accounting"] td[data-cache="partial"] {
+  color: var(--v2-text-text-accent);
+}
+
+[data-slot="operator-accounting-boundary"] td,
+[data-slot="operator-accounting-delta"] td {
+  color: var(--v2-text-text-muted);
+  font-style: italic;
+  border-bottom: 1px dashed var(--v2-border-border-base);
+}
+
+[data-slot="operator-accounting-session"],
+[data-slot="operator-call-accounting"] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-x: auto;
+}
+
+[data-slot="operator-accounting-breakdown"] > summary {
+  cursor: pointer;
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+
+[data-slot="operator-accounting-bar"] {
+  display: flex;
+  height: 10px;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 6px;
+  background: var(--v2-background-bg-layer-01);
+}
+
+[data-slot="operator-accounting-bar"] span,
+[data-slot="operator-accounting-swatch"] {
+  background: var(--accounting-color, var(--v2-text-text-muted));
+}
+
+[data-slot="operator-accounting-swatch"] {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-inline-end: 6px;
+}
+
+[data-group="system"] {
+  --accounting-color: #6366f1;
+}
+[data-group="tools"] {
+  --accounting-color: #f59e0b;
+}
+[data-group="history"] {
+  --accounting-color: #10b981;
+}
+[data-group="reasoning-sent"] {
+  --accounting-color: #ec4899;
+}
+[data-group="tool-results"] {
+  --accounting-color: #0ea5e9;
+}
+[data-group="user"] {
+  --accounting-color: #84cc16;
+}
+[data-group="added"] {
+  --accounting-color: #a855f7;
+}
+[data-group="formatting"] {
+  --accounting-color: #9ca3af;
+}
+
+[data-slot="operator-call-item"] {
+  border-inline-start: 2px solid var(--v2-border-border-muted);
+  padding-inline-start: 8px;
+}
+
+[data-slot="operator-call-item-head"] {
+  text-align: start;
+  cursor: pointer;
+}
+
+[data-slot="operator-accounting-sections"],
+[data-slot="operator-accounting-changes"] {
+  margin: 4px 0;
+  padding-inline-start: 16px;
+  font-size: 12px;
+}
+
+[data-slot="operator-accounting-changes"] li[data-change="added"] {
+  color: var(--v2-text-text-success, var(--v2-text-text-base));
+}
+
+[data-slot="operator-accounting-changes"] li[data-change="removed"] {
+  color: var(--v2-text-text-muted);
 }
 
 [data-slot="operator-transcript-exchange-text"] {

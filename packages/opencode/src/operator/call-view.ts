@@ -3,7 +3,8 @@ export * as OperatorCallView from "./call-view"
 import { Schema } from "effect"
 import { OperatorCallFormat } from "./call-format"
 import type { OperatorCallStore } from "./call-store"
-import { OperatorPromptText } from "./prompt-text"
+import { OperatorCallAccounting } from "./call-accounting"
+import { OperatorCallPieces } from "./call-pieces"
 
 // Formats recorded calls (call-store.ts) for the Transcript view: each call's place in the session
 // (exchange, step, retry), what it sent compared with earlier calls (system text and tools: the same,
@@ -39,6 +40,39 @@ export const Received = Schema.Struct({
 }).annotate({ identifier: "OperatorCallReceived" })
 
 export const Kind = Schema.Literals(["agent", "title", "compaction", "summary", "other", "unlinked"])
+
+// A call's billed totals, from its accounting (call-accounting.ts): input with cache, output with
+// reasoning, both costs, the provider's generation id.
+export const Billing = Schema.Struct({
+  input: Schema.optional(Schema.Finite),
+  cacheRead: Schema.Finite,
+  cacheWrite: Schema.Finite,
+  new: Schema.optional(Schema.Finite),
+  output: Schema.optional(Schema.Finite),
+  reasoning: Schema.Finite,
+  unattributed: Schema.optional(Schema.Finite),
+  provider: Schema.optional(Schema.Finite),
+  opencode: Schema.optional(Schema.Finite),
+  generationId: Schema.optional(Schema.String),
+  uncertain: Schema.optional(Schema.Literals(["estimate", "counted"])),
+  unrecognized: Schema.Finite,
+}).annotate({ identifier: "OperatorCallBilling" })
+export type Billing = typeof Billing.Type
+
+export const billingOf = (accounting: OperatorCallAccounting.Accounting): Billing => ({
+  ...(accounting.input.billed !== undefined ? { input: accounting.input.billed } : {}),
+  cacheRead: accounting.input.cacheRead,
+  cacheWrite: accounting.input.cacheWrite,
+  ...(accounting.input.new !== undefined ? { new: accounting.input.new } : {}),
+  ...(accounting.output.billed !== undefined ? { output: accounting.output.billed } : {}),
+  reasoning: accounting.output.reasoning,
+  ...(accounting.input.unattributed !== undefined ? { unattributed: accounting.input.unattributed } : {}),
+  ...(accounting.cost.provider !== undefined ? { provider: accounting.cost.provider } : {}),
+  ...(accounting.cost.opencode !== undefined ? { opencode: accounting.cost.opencode } : {}),
+  ...(accounting.cost.generationId ? { generationId: accounting.cost.generationId } : {}),
+  ...(accounting.input.uncertain ? { uncertain: accounting.input.uncertain } : {}),
+  unrecognized: accounting.input.unrecognized,
+})
 
 export const Summary = Schema.Struct({
   callID: Schema.String,
@@ -83,6 +117,7 @@ export const Summary = Schema.Struct({
     total: Schema.Finite,
     new: Schema.Finite.annotate({ description: "Messages no earlier call sent" }),
   }),
+  billing: Schema.optional(Billing).annotate({ description: "The call's billed tokens and costs (its accounting)" }),
   added: Schema.Array(
     Schema.Literals(["reminder.plan", "reminder.plan-mode", "reminder.build-switch", "notice.max-steps"]),
   ).annotate({
@@ -100,7 +135,7 @@ export const Exchange = Schema.Struct({
   recorded: Schema.Boolean.annotate({ description: "Whether any call of it was recorded" }),
 }).annotate({ identifier: "OperatorCallExchange" })
 
-export const List = Schema.Struct({
+const BaseFields = {
   calls: Schema.Array(Summary),
   exchanges: Schema.Array(Exchange),
   totals: Schema.Struct({
@@ -110,6 +145,19 @@ export const List = Schema.Struct({
     reasoning: Schema.Finite,
     cacheRead: Schema.Finite,
     cost: Schema.Finite,
+  }),
+}
+const BaseList = Schema.Struct(BaseFields)
+export type Base = typeof BaseList.Type
+
+export const List = Schema.Struct({
+  ...BaseFields,
+  turns: Schema.Array(OperatorCallAccounting.Turn).annotate({
+    description: "Each turn's calls and totals (its user message and everything the agent did for it)",
+  }),
+  session: OperatorCallAccounting.SessionTotals,
+  unrecorded: Schema.Array(OperatorCallAccounting.Unrecorded).annotate({
+    description: "Steps OpenCode stored that were not recorded (their totals from OpenCode's stored usage)",
   }),
 }).annotate({ identifier: "OperatorCallList" })
 export type List = typeof List.Type
@@ -147,6 +195,9 @@ export const Detail = Schema.Struct({
   parameters: Schema.Record(Schema.String, Schema.Unknown),
   received: Schema.optional(Received),
   warnings: Schema.Array(Schema.Literals(["reasoning-not-stored", "text-differs", "tool-calls-differ"])),
+  accounting: Schema.optional(OperatorCallAccounting.Accounting).annotate({
+    description: "Every billed token of the call, by item",
+  }),
 }).annotate({ identifier: "OperatorCallDetail" })
 export type Detail = typeof Detail.Type
 
@@ -159,72 +210,15 @@ export type Input = {
   }>
 }
 
-// ---- Reading a body ----
+// ---- Reading a body (call-pieces.ts) ----
 
-function textOf(value: unknown): string {
-  if (typeof value === "string") return value
-  if (Array.isArray(value))
-    return value
-      .map((item) => {
-        if (typeof item === "string") return item
-        const record = item as Record<string, unknown>
-        if (typeof record?.text === "string") return record.text
-        return ""
-      })
-      .filter(Boolean)
-      .join("\n")
-  if (value && typeof value === "object" && Array.isArray((value as Record<string, unknown>).parts))
-    return textOf((value as Record<string, unknown>).parts)
-  return ""
-}
-
-const SYSTEM_ROLES = ["system", "developer"]
-
-// The system text as sent, and the message list without system-role items.
-export function sections(body: Record<string, unknown> | undefined) {
-  if (!body) return { system: "", messages: [] as unknown[], messagesKey: undefined as string | undefined }
-  const key = ["messages", "input", "contents"].find((name) => Array.isArray(body[name]))
-  const list = key ? (body[key] as unknown[]) : []
-  const isSystem = (item: unknown) =>
-    !!item && typeof item === "object" && SYSTEM_ROLES.includes(String((item as Record<string, unknown>).role))
-  const inline = list.filter(isSystem).map((item) => textOf((item as Record<string, unknown>).content))
-  const own = [body.system, body.instructions, body.systemInstruction].map(textOf).filter(Boolean)
-  return { system: [...own, ...inline].join("\n"), messages: list.filter((item) => !isSystem(item)), messagesKey: key }
-}
-
-export function toolNames(body: Record<string, unknown> | undefined) {
-  const tools = body?.tools
-  if (!Array.isArray(tools)) return [] as Array<{ name: string; json: string }>
-  return tools.flatMap((tool) => {
-    const record = tool as Record<string, any>
-    if (Array.isArray(record.functionDeclarations))
-      return record.functionDeclarations.map((item: Record<string, unknown>) => ({
-        name: String(item.name),
-        json: JSON.stringify(item),
-      }))
-    const name = record.function?.name ?? record.name
-    return name ? [{ name: String(name), json: JSON.stringify(tool) }] : []
-  })
-}
+const { sections, toolNames, SYSTEM_ROLES, IN_MEMORY_LINES, IN_MEMORY, CLEARED, textOf } = OperatorCallPieces
+export { sections, toolNames }
 
 const roleOf = (item: unknown) => {
   const record = (item ?? {}) as Record<string, unknown>
   return String(record.role ?? record.type ?? "?")
 }
-
-// Texts OpenCode adds to a request in memory: the plan reminders, the switch to build, the step limit.
-const IN_MEMORY_IDS = ["reminder.plan", "reminder.plan-mode", "reminder.build-switch", "notice.max-steps"] as const
-// Each in-memory text by its first plain line, which is how it is found in a body.
-const IN_MEMORY_LINES = IN_MEMORY_IDS.map((id) => ({
-  id,
-  line:
-    (OperatorPromptText.BUILTINS.find((item) => item.id === id)?.text ?? "")
-      .split("\n")
-      .find((line) => line.trim() && !line.startsWith("<"))
-      ?.trim() ?? "",
-})).filter((item) => item.line)
-const IN_MEMORY = IN_MEMORY_LINES.map((item) => item.line)
-const CLEARED = "[Old tool result content cleared]"
 
 function marksOf(item: unknown, saved: (text: string) => boolean, summaries: ReadonlyArray<string>) {
   const json = JSON.stringify(item ?? null)
@@ -349,7 +343,7 @@ function build(input: Input): Built[] {
   return built
 }
 
-export function list(input: Input): List {
+export function list(input: Input): Base {
   const built = build(input)
   const recorded = new Set(built.flatMap((item) => (item.summary.userMessageID ? [item.summary.userMessageID] : [])))
   const exchanges = input.messages
@@ -478,11 +472,35 @@ function messageText(content: unknown): string {
 }
 
 // The transcript as Markdown: each exchange, its calls, what each sent that is new, and what came back.
-export function markdown(input: Input, view: List): string {
+export function markdown(
+  input: Input,
+  view: List,
+  accountings: ReadonlyArray<OperatorCallAccounting.Accounting> = [],
+): string {
+  const n = (value: number) => value.toLocaleString("en-US")
+  const ROWS: Record<string, string> = {
+    agent: "Agent steps",
+    side: "Side calls (title, compaction, summary)",
+    retries: "Retries and errors",
+    session: "**This session**",
+    subagents: `Subagent sessions (${view.session.subagents.length}, rolled up)`,
+    all: "**With subagents**",
+  }
   const out: string[] = [
     "# Transcript",
     "",
-    `${view.totals.calls} calls · in ${view.totals.input} · out ${view.totals.output} · reasoning ${view.totals.reasoning} · cache read ${view.totals.cacheRead} · $${view.totals.cost.toFixed(4)}`,
+    "| | Calls | Input new | Cache read | Cache write | Output | of which reasoning | Cost (OpenCode) | Cost (provider) |",
+    "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ...view.session.rows.map(
+      (row) =>
+        `| ${ROWS[row.id]} | ${row.totals.calls} | ${n(row.totals.new)} | ${n(row.totals.cacheRead)} | ${n(row.totals.cacheWrite)} | ${n(row.totals.output)} | ${n(row.totals.reasoning)} | $${row.totals.cost.toFixed(4)} | $${row.totals.providerCost.toFixed(4)} |`,
+    ),
+    "",
+    "**Where the input tokens went**",
+    "",
+    "| Part | Tokens | of which cache read |",
+    "|---|---:|---:|",
+    ...view.session.inputBy.map((item) => `| ${item.group} | ${n(item.tokens)} | ${n(item.cacheRead)} |`),
     "",
     "> This is what the provider received. The provider then turns it into the model's own token format (its chat template), which is not visible here.",
   ]
@@ -490,9 +508,11 @@ export function markdown(input: Input, view: List): string {
   for (const call of view.calls) byExchange.set(call.exchange, [...(byExchange.get(call.exchange) ?? []), call])
   const heading = (exchange: number | undefined) => {
     const found = view.exchanges.find((item) => item.index === exchange)
-    return found
-      ? `## Exchange ${found.index} · You · ${new Date(found.time).toISOString()} · ${found.text}`
-      : "## Other calls"
+    const turn = view.turns.find((item) => item.index === (exchange ?? 0))
+    const totals = turn
+      ? ` · ${turn.totals.calls} calls · in ${n(turn.totals.input)} (cache read ${n(turn.totals.cacheRead)} · new ${n(turn.totals.new)}) · out ${n(turn.totals.output)} (reasoning ${n(turn.totals.reasoning)}) · $${turn.totals.cost.toFixed(4)}`
+      : ""
+    return found ? `## Turn ${found.index} · You: "${found.text}"${totals}` : `## Other calls${totals}`
   }
   for (const [exchange, calls] of byExchange) {
     out.push("", heading(exchange))
@@ -507,9 +527,10 @@ export function markdown(input: Input, view: List): string {
         "",
         `### Call ${call.index} · ${kind}${call.agent ? ` · ${call.agent}` : ""}${call.model ? ` · ${call.model}` : ""} · ${new Date(call.startedAt).toISOString()}${usage}`,
         "",
-        "**Sent**",
-        "",
       )
+      const accounting = accountings[call.index - 1]
+      if (accounting) out.push(...OperatorCallAccounting.markdown(accounting), "")
+      out.push("**Sent**", "")
       if (found.systemText)
         out.push(
           call.system.sameAs !== undefined && call.system.sameAs < call.index

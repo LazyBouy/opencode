@@ -148,6 +148,10 @@ import type {
   OperatorCallListResponses,
   OperatorCallRawErrors,
   OperatorCallRawResponses,
+  OperatorCallRecountErrors,
+  OperatorCallRecountResponses,
+  OperatorCallTokenizersErrors,
+  OperatorCallTokenizersResponses,
   OperatorConfigLayersErrors,
   OperatorConfigLayersResponses,
   OperatorConfigSchemaErrors,
@@ -4087,6 +4091,74 @@ export class Call extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<OperatorCallRawResponses, OperatorCallRawErrors, ThrowOnError>({
       url: "/operator/session/{sessionID}/call/{callID}/raw",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Count a session's tokens again
+   *
+   * Reloads the tokenizers and clears the session's stored token counts, so each call's accounting is made again (after a tokenizer is added).
+   */
+  public recount<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<OperatorCallRecountResponses, OperatorCallRecountErrors, ThrowOnError>(
+      {
+        url: "/operator/session/{sessionID}/calls/recount",
+        ...options,
+        ...params,
+      },
+    )
+  }
+
+  /**
+   * List tokenizers
+   *
+   * The tokenizers loaded from the tokenizer folder, the models each counts for, and modules that failed to load. Without one, the Transcript estimates (characters ÷ 4).
+   */
+  public tokenizers<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorCallTokenizersResponses,
+      OperatorCallTokenizersErrors,
+      ThrowOnError
+    >({
+      url: "/operator/tokenizers",
       ...options,
       ...params,
     })

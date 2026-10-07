@@ -1,12 +1,13 @@
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { CheckboxV2 } from "@opencode-ai/ui/v2/checkbox-v2"
 import { SegmentedControlItemV2, SegmentedControlV2 } from "@opencode-ai/ui/v2/segmented-control-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import type {
   OperatorCallDetail,
-  OperatorCallExchange,
-  OperatorCallMessage,
+  OperatorCallList,
   OperatorCallSummary,
+  OperatorTurn,
 } from "@opencode-ai/sdk/v2/client"
 import { useQuery, useQueryClient } from "@tanstack/solid-query"
 import {
@@ -28,25 +29,42 @@ import { useServerSDK } from "@/context/server-sdk"
 import { showToast } from "@/utils/toast"
 import { useOperatorClient } from "../data"
 import { requestError } from "../pages/config-helpers"
-import { lineDiff, type Piece, pieces, prettyArgs, runs } from "./content"
+import {
+  AccountingTable,
+  ChangesPart,
+  InputBreakdown,
+  SentDetail,
+  SessionTotalsView,
+  TurnHeader,
+  UnrecordedRow,
+} from "./accounting"
+import { prettyArgs } from "./content"
 import { useOpenSessionView, useSessionView } from "./view"
 import "./session-views.css"
 
 type Key = Parameters<ReturnType<typeof useLanguage>["t"]>[0]
 type Language = ReturnType<typeof useLanguage>
-type Filter = "all" | "agent" | "title" | "compaction" | "summary" | "errors"
-const FILTERS: Filter[] = ["all", "agent", "title", "compaction", "summary", "errors"]
+type Filter = "all" | "agent" | "side" | "errors"
+const FILTERS: Filter[] = ["all", "agent", "side", "errors"]
+const SIDE = new Set(["title", "compaction", "summary", "other", "unlinked"])
 
-// The Transcript view: every model call of the session, in order, grouped by the user message it
-// answers, each exactly as sent (formatted for reading; earlier messages folded) and as received, with
-// the exact request body and the response a click away. Read-only; it follows a running session.
+// The Transcript view: every model call of the session, by turn (a user message and everything the
+// agent did for it), each with its token accounting (every billed token in one row: accounting.tsx),
+// what it sent and received, and the exact request body and response a click away. Read-only; it
+// follows a running session.
 export function TranscriptView(props: { sessionID: string }) {
   const language = useLanguage()
   const api = useOperatorClient()
   const serverSdk = useServerSDK()
   const queryClient = useQueryClient()
   const view = useSessionView()
-  const [store, setStore] = createStore({ filter: "all" as Filter, search: "" })
+  const [store, setStore] = createStore({
+    filter: "all" as Filter,
+    search: "",
+    onlyNew: false,
+    expanded: false,
+    folded: {} as Record<number, boolean>,
+  })
   const session = useQuery(() => ({
     queryKey: api.key("session", props.sessionID),
     queryFn: () =>
@@ -100,7 +118,8 @@ export function TranscriptView(props: { sessionID: string }) {
   }))
   const matches = (call: OperatorCallSummary) => {
     if (store.filter === "errors") return !!call.error || !!call.retryOf
-    if (store.filter !== "all" && call.kind !== store.filter) return false
+    if (store.filter === "agent" && (call.kind !== "agent" || call.retryOf || call.error)) return false
+    if (store.filter === "side" && !SIDE.has(call.kind)) return false
     const search = store.search.trim().toLowerCase()
     if (!search) return true
     if (searched.data?.has(call.callID)) return true
@@ -110,25 +129,34 @@ export function TranscriptView(props: { sessionID: string }) {
       .some((value) => String(value).toLowerCase().includes(search))
   }
   const calls = createMemo(() => (list.data?.calls ?? []).filter(matches))
-  // The transcript in order: exchange headers (with the calls that answer them), and side calls where
-  // they happened.
-  const items = createMemo(() => {
-    const out: Array<{ exchange: OperatorCallExchange } | { call: OperatorCallSummary }> = []
-    const exchanges = list.data?.exchanges ?? []
-    let next = 0
-    for (const call of calls()) {
-      while (next < exchanges.length && (call.exchange ?? 0) >= exchanges[next]!.index) {
-        out.push({ exchange: exchanges[next]! })
-        next++
-      }
-      out.push({ call })
-    }
-    if (store.filter === "all" && !store.search.trim())
-      for (; next < exchanges.length; next++) out.push({ exchange: exchanges[next]! })
-    return out
-  })
-  const number = (value: number) => new Intl.NumberFormat(language.intl()).format(value)
-
+  const byID = createMemo(() => new Map((list.data?.calls ?? []).map((call) => [call.callID, call])))
+  // The turns in order (the list's own objects, so cards stay as the list refreshes), each with its
+  // calls that pass the filter (side calls where they happened) and the steps that were not recorded.
+  const shown = createMemo(() => new Set(calls().map((call) => call.callID)))
+  const filtering = () => store.filter !== "all" || !!store.search.trim()
+  const callsOf = (turn: OperatorTurn) => turn.calls.filter((id) => shown().has(id)).map((id) => byID().get(id)!)
+  const unrecordedOf = (turn: OperatorTurn) =>
+    filtering() ? [] : (list.data?.unrecorded ?? []).filter((step) => (step.exchange ?? 0) === turn.index)
+  const exchangeTime = (index: number) => list.data?.exchanges.find((item) => item.index === index)?.time
+  const recount = async () => {
+    await api
+      .client()
+      .operator.call.recount({ sessionID: props.sessionID, directory: directory() }, { throwOnError: true })
+      .then(() => queryClient.invalidateQueries({ queryKey: api.key("call", props.sessionID) }))
+      .then(() => list.refetch())
+      .catch((error: unknown) =>
+        showToast({ title: language.t("operator.transcript.exportFailed"), description: requestError(error) }),
+      )
+  }
+  const tokenizers = useQuery(() => ({
+    queryKey: api.key("tokenizers"),
+    enabled: !!directory(),
+    queryFn: () =>
+      api
+        .client()
+        .operator.call.tokenizers({ directory: directory() })
+        .then((result) => result.data!),
+  }))
   const download = async (format: "md" | "json") => {
     await api
       .client()
@@ -162,16 +190,10 @@ export function TranscriptView(props: { sessionID: string }) {
       <header data-slot="operator-transcript-head">
         <Show when={list.data}>
           {(data) => (
-            <p data-slot="operator-note" data-testid="transcript-totals">
-              {language.t("operator.transcript.totals", {
-                calls: data().totals.calls,
-                input: number(data().totals.input),
-                output: number(data().totals.output),
-                reasoning: number(data().totals.reasoning),
-                cache: number(data().totals.cacheRead),
-                cost: `$${data().totals.cost.toFixed(4)}`,
-              })}
-            </p>
+            <>
+              <SessionTotalsView list={data()} />
+              <InputBreakdown list={data()} />
+            </>
           )}
         </Show>
         <div data-slot="operator-transcript-tools">
@@ -189,6 +211,14 @@ export function TranscriptView(props: { sessionID: string }) {
               )}
             </For>
           </SegmentedControlV2>
+          <CheckboxV2
+            label={language.t("operator.accounting.onlyNew")}
+            checked={store.onlyNew}
+            onChange={(on: boolean) => setStore("onlyNew", on)}
+          />
+          <ButtonV2 size="small" variant="outline" onClick={() => setStore("expanded", !store.expanded)}>
+            {language.t(store.expanded ? "operator.accounting.collapseAll" : "operator.accounting.expandAll")}
+          </ButtonV2>
           <TextInputV2
             appearance="base"
             value={store.search}
@@ -202,8 +232,23 @@ export function TranscriptView(props: { sessionID: string }) {
           <ButtonV2 size="small" variant="outline" onClick={() => void download("json")}>
             {language.t("operator.transcript.exportJson")}
           </ButtonV2>
+          <ButtonV2
+            size="small"
+            variant="ghost"
+            title={language.t("operator.accounting.recountHint")}
+            onClick={() => void recount()}
+          >
+            {language.t("operator.accounting.recount")}
+          </ButtonV2>
         </div>
-        <p data-slot="operator-note">{language.t("operator.transcript.template")}</p>
+        <p data-slot="operator-note" data-testid="transcript-counting">
+          {tokenizers.data?.tokenizers?.length
+            ? language.t("operator.accounting.countingWith", {
+                names: tokenizers.data.tokenizers.map((item) => item.label).join(", "),
+              })
+            : language.t("operator.accounting.countingEstimates", { folder: tokenizers.data?.folder ?? "" })}{" "}
+          {language.t("operator.transcript.template")}
+        </p>
       </header>
 
       <Show when={list.error}>
@@ -236,47 +281,45 @@ export function TranscriptView(props: { sessionID: string }) {
           </For>
         </nav>
         <div data-slot="operator-transcript-calls">
-          <For each={items()}>
-            {(item) =>
-              "exchange" in item ? (
-                <ExchangeHeader exchange={item.exchange} onDetailed={() => view.set("detailed")} />
-              ) : (
-                <>
-                  <Show when={item.call.kind === "compaction"}>
-                    <div data-slot="operator-transcript-divider">{language.t("operator.transcript.compacted")}</div>
-                  </Show>
-                  <CallCard
-                    call={item.call}
-                    sessionID={props.sessionID}
-                    directory={directory()}
-                    focused={view.call() === item.call.callID}
-                    agentDirectory={directory()}
+          <For each={list.data?.turns ?? []}>
+            {(turn) => (
+              <Show when={!filtering() || callsOf(turn).length}>
+                <section data-slot="operator-transcript-turn" data-testid="transcript-turn">
+                  <TurnHeader
+                    turn={turn}
+                    time={exchangeTime(turn.index)}
+                    open={!store.folded[turn.index]}
+                    onToggle={() => setStore("folded", turn.index, !store.folded[turn.index])}
                   />
-                </>
-              )
-            }
+                  <Show when={!store.folded[turn.index]}>
+                    <For each={unrecordedOf(turn)}>{(step) => <UnrecordedRow step={step} />}</For>
+                    <For each={callsOf(turn)}>
+                      {(call) => (
+                        <>
+                          <Show when={call.kind === "compaction"}>
+                            <div data-slot="operator-transcript-divider">
+                              {language.t("operator.transcript.compacted")}
+                            </div>
+                          </Show>
+                          <CallCard
+                            call={call}
+                            sessionID={props.sessionID}
+                            directory={directory()}
+                            focused={view.call() === call.callID}
+                            expanded={store.expanded}
+                            onlyNew={store.onlyNew}
+                            subagents={list.data?.session.subagents ?? []}
+                          />
+                        </>
+                      )}
+                    </For>
+                  </Show>
+                </section>
+              </Show>
+            )}
           </For>
         </div>
       </div>
-    </div>
-  )
-}
-
-function ExchangeHeader(props: { exchange: OperatorCallExchange; onDetailed: () => void }) {
-  const language = useLanguage()
-  return (
-    <div data-slot="operator-transcript-exchange" data-testid="transcript-exchange">
-      <strong>{language.t("operator.transcript.you")}</strong>
-      <span data-slot="operator-note">{clock(language, props.exchange.time)}</span>
-      <span data-slot="operator-transcript-exchange-text">{props.exchange.text}</span>
-      <Show when={!props.exchange.recorded}>
-        <span data-slot="operator-note">
-          {language.t("operator.transcript.notRecorded")}{" "}
-          <button type="button" data-slot="operator-link" onClick={props.onDetailed}>
-            {language.t("operator.transcript.openDetailed")}
-          </button>
-        </span>
-      </Show>
     </div>
   )
 }
@@ -287,7 +330,9 @@ function CallCard(props: {
   sessionID: string
   directory: string | undefined
   focused: boolean
-  agentDirectory: string | undefined
+  expanded: boolean
+  onlyNew: boolean
+  subagents: OperatorCallList["session"]["subagents"]
 }) {
   const language = useLanguage()
   const api = useOperatorClient()
@@ -306,7 +351,7 @@ function CallCard(props: {
   })
   const detail = useQuery(() => ({
     queryKey: api.key("call", props.sessionID, props.call.callID, props.call.receiving),
-    enabled: (visible() || props.focused) && !!props.directory,
+    enabled: (visible() || props.focused || props.expanded) && !!props.directory,
     queryFn: () =>
       api
         .client()
@@ -314,6 +359,11 @@ function CallCard(props: {
         .then((result) => result.data!),
   }))
   const [raw, setRaw] = createStore({ request: false, response: false })
+  // The agent's Tool Prompt tab, from a call's tools item.
+  const toolPrompt = (detail: OperatorCallDetail) =>
+    detail.agent && props.directory
+      ? `/operator/agents?agent=${encodeURIComponent(detail.agent)}&adir=${encodeURIComponent(props.directory)}&atab=tools`
+      : undefined
 
   return (
     <article
@@ -339,11 +389,20 @@ function CallCard(props: {
       >
         {(data) => (
           <>
+            <Show when={data().accounting}>{(accounting) => <AccountingTable accounting={accounting()} />}</Show>
             <section data-slot="operator-call-section" data-testid="call-sent">
-              <h4>{language.t("operator.transcript.sent")}</h4>
-              <SystemPart detail={data()} />
-              <ToolsPart detail={data()} directory={props.agentDirectory} />
-              <MessagesPart messages={data().sent} />
+              <h4>{language.t("operator.accounting.sentDetail")}</h4>
+              <Show when={data().accounting}>
+                {(accounting) => (
+                  <SentDetail
+                    accounting={accounting()}
+                    onlyNew={props.onlyNew}
+                    expanded={props.expanded}
+                    toolPrompt={toolPrompt(data())}
+                    subagents={props.subagents}
+                  />
+                )}
+              </Show>
               <Show when={Object.keys(data().parameters).length}>
                 <dl data-slot="operator-call-parameters">
                   <For each={Object.entries(data().parameters)}>
@@ -367,6 +426,7 @@ function CallCard(props: {
               </h4>
               <ReceivedPart detail={data()} />
             </section>
+            <Show when={data().accounting}>{(accounting) => <ChangesPart accounting={accounting()} />}</Show>
             <div data-slot="operator-call-raw">
               <ButtonV2 size="small" variant="ghost" onClick={() => setRaw("request", !raw.request)}>
                 {language.t("operator.transcript.rawRequest")}
@@ -418,17 +478,24 @@ function CallHeader(props: { call: OperatorCallSummary }) {
             })
           : seconds(call.finishedAt - call.startedAt),
       )
+    // Billed: input with the cache, output with reasoning (the call's accounting), else as reported.
+    const b = call.billing
     const u = usage()
-    if (u?.input !== undefined)
+    const input = b?.input ?? u?.input
+    const read = b?.cacheRead ?? u?.cacheRead
+    if (input !== undefined)
       out.push(
-        u.cacheRead
-          ? language.t("operator.transcript.inCache", { input: number(u.input), cache: number(u.cacheRead) })
-          : language.t("operator.transcript.in", { input: number(u.input) }),
+        read
+          ? language.t("operator.transcript.inCache", { input: number(input), cache: number(read) })
+          : language.t("operator.transcript.in", { input: number(input) }),
       )
-    if (u?.output !== undefined) out.push(language.t("operator.transcript.out", { output: number(u.output) }))
-    if (u?.reasoning) out.push(language.t("operator.transcript.reasoningTokens", { count: number(u.reasoning) }))
-    const cost = call.cost ?? u?.cost
+    const output = b?.output ?? u?.output
+    if (output !== undefined) out.push(language.t("operator.transcript.out", { output: number(output) }))
+    const reasoning = b?.reasoning ?? u?.reasoning
+    if (reasoning) out.push(language.t("operator.transcript.reasoningTokens", { count: number(reasoning) }))
+    const cost = b?.opencode ?? call.cost ?? b?.provider ?? u?.cost
     if (cost !== undefined) out.push(`$${cost.toFixed(4)}`)
+    if (b?.generationId) out.push(b.generationId)
     return out
   }
   return (
@@ -454,230 +521,6 @@ function CallHeader(props: { call: OperatorCallSummary }) {
       <span>{parts().join(" · ")}</span>
     </span>
   )
-}
-
-// The system text: in full the first time; later "same as call N", or what changed since.
-function SystemPart(props: { detail: OperatorCallDetail }) {
-  const language = useLanguage()
-  const [open, setOpen] = createSignal(false)
-  const number = (value: number) => new Intl.NumberFormat(language.intl()).format(value)
-  return (
-    <Show when={props.detail.system.chars}>
-      <div data-slot="operator-call-part" data-testid="call-system">
-        <Switch
-          fallback={
-            <details open>
-              <summary>
-                {language.t("operator.transcript.system", { chars: number(props.detail.system.chars) })}
-              </summary>
-              <pre data-component="operator-code">{props.detail.systemText}</pre>
-            </details>
-          }
-        >
-          <Match when={props.detail.previousSystem}>
-            {(previous) => (
-              <details>
-                <summary data-warning="">
-                  {language.t("operator.transcript.systemChanged", { index: previous().index })}
-                </summary>
-                <pre data-component="operator-code" data-slot="operator-text-diff">
-                  <For each={lineDiff(previous().text, props.detail.systemText ?? "")}>
-                    {(line) => (
-                      <span data-change={line.change}>{`${line.change === "added" ? "+" : "−"} ${line.text}\n`}</span>
-                    )}
-                  </For>
-                </pre>
-              </details>
-            )}
-          </Match>
-          <Match when={props.detail.system.sameAs}>
-            {(index) => (
-              <div>
-                <span data-slot="operator-note">
-                  {language.t("operator.transcript.systemSame", {
-                    index: index(),
-                    chars: number(props.detail.system.chars),
-                  })}
-                </span>{" "}
-                <button type="button" data-slot="operator-link" onClick={() => setOpen(!open())}>
-                  {language.t(open() ? "operator.transcript.collapse" : "operator.transcript.expand")}
-                </button>
-                <Show when={open()}>
-                  <pre data-component="operator-code">{props.detail.systemText}</pre>
-                </Show>
-              </div>
-            )}
-          </Match>
-        </Switch>
-      </div>
-    </Show>
-  )
-}
-
-// The tools: "11 tools, same as call 6", or what changed, with the names and the value as sent.
-function ToolsPart(props: { detail: OperatorCallDetail; directory: string | undefined }) {
-  const language = useLanguage()
-  const [open, setOpen] = createSignal(false)
-  const toolPrompt = () =>
-    props.detail.agent && props.directory
-      ? `/operator/agents?agent=${encodeURIComponent(props.detail.agent)}&adir=${encodeURIComponent(props.directory)}&atab=tools`
-      : undefined
-  return (
-    <Show when={props.detail.tools.count}>
-      <div data-slot="operator-call-part" data-testid="call-tools">
-        <span data-slot="operator-note">
-          {props.detail.tools.sameAs !== undefined
-            ? language.t("operator.transcript.toolsSame", {
-                count: props.detail.tools.count,
-                index: props.detail.tools.sameAs,
-              })
-            : language.t("operator.transcript.tools", { count: props.detail.tools.count })}
-        </span>{" "}
-        <button type="button" data-slot="operator-link" onClick={() => setOpen(!open())}>
-          {language.t(open() ? "operator.transcript.collapse" : "operator.transcript.expand")}
-        </button>{" "}
-        <Show when={toolPrompt()}>
-          {(href) => (
-            <a data-slot="operator-link" href={href()}>
-              {language.t("operator.transcript.toolPrompt")}
-            </a>
-          )}
-        </Show>
-        <Show when={props.detail.toolsDiff}>
-          {(diff) => (
-            <p data-slot="operator-note" data-warning="">
-              {language.t("operator.transcript.toolsChanged", {
-                index: diff().index,
-                added: diff().added.join(", ") || "—",
-                removed: diff().removed.join(", ") || "—",
-                changed: diff().changed.join(", ") || "—",
-              })}
-            </p>
-          )}
-        </Show>
-        <Show when={open()}>
-          <p data-slot="operator-note">{props.detail.toolNames.join(", ")}</p>
-          <pre data-component="operator-code">{JSON.stringify(props.detail.toolsValue, null, 2)}</pre>
-        </Show>
-      </div>
-    </Show>
-  )
-}
-
-// The messages: those earlier calls sent fold into "Messages 1–14: same as call 6"; new ones in full.
-function MessagesPart(props: { messages: ReadonlyArray<OperatorCallMessage> }) {
-  const language = useLanguage()
-  const [shown, setShown] = createStore<Record<number, boolean>>({})
-  return (
-    <div data-slot="operator-call-part" data-testid="call-messages">
-      <For each={runs(props.messages)}>
-        {(item) =>
-          "seen" in item ? (
-            <div data-slot="operator-call-seen">
-              <span data-slot="operator-note">
-                {item.seen.from === item.seen.to
-                  ? language.t("operator.transcript.seenOne", { index: item.seen.from, call: item.seen.call })
-                  : language.t("operator.transcript.seen", {
-                      from: item.seen.from,
-                      to: item.seen.to,
-                      call: item.seen.call,
-                    })}
-              </span>{" "}
-              <button
-                type="button"
-                data-slot="operator-link"
-                onClick={() => setShown(item.seen.from, !shown[item.seen.from])}
-              >
-                {language.t(shown[item.seen.from] ? "operator.transcript.collapse" : "operator.transcript.expand")}
-              </button>
-              <Show when={shown[item.seen.from]}>
-                <For each={props.messages.filter((m) => m.index >= item.seen.from && m.index <= item.seen.to)}>
-                  {(message) => <MessageView message={message} />}
-                </For>
-              </Show>
-            </div>
-          ) : (
-            <MessageView message={item.message} />
-          )
-        }
-      </For>
-    </div>
-  )
-}
-
-function MessageView(props: { message: OperatorCallMessage }) {
-  const language = useLanguage()
-  return (
-    <div data-slot="operator-call-message" data-role={props.message.role} data-testid="call-message">
-      <div class="flex items-center gap-1 flex-wrap">
-        <strong>{props.message.role}</strong>
-        <span data-slot="operator-note">#{props.message.index}</span>
-        <For each={props.message.marks}>
-          {(mark) => (
-            <Tag data-mark={mark} data-warning={mark === "in-memory" || mark === "cleared" ? "" : undefined}>
-              {language.t(`operator.transcript.mark.${mark}` as Key)}
-            </Tag>
-          )}
-        </For>
-      </div>
-      <For each={pieces(props.message.content)}>{(piece) => <PieceView piece={piece} />}</For>
-    </div>
-  )
-}
-
-function PieceView(props: { piece: Piece }): JSX.Element {
-  const language = useLanguage()
-  const openView = useOpenSessionView()
-  const piece = props.piece
-  switch (piece.kind) {
-    case "text":
-      return (
-        <pre data-component="operator-code" data-slot="operator-call-text">
-          {piece.text}
-        </pre>
-      )
-    case "reasoning":
-      return (
-        <details open data-slot="operator-call-reasoning">
-          <summary>{language.t("operator.transcript.reasoning")}</summary>
-          <Show
-            when={!piece.encrypted}
-            fallback={<p data-slot="operator-note">{language.t("operator.transcript.encrypted")}</p>}
-          >
-            <pre data-component="operator-code">{piece.text}</pre>
-          </Show>
-        </details>
-      )
-    case "tool-call":
-      return <ToolCallView name={piece.name} id={piece.id} args={piece.args} />
-    case "tool-result":
-      return (
-        <div data-slot="operator-call-tool-result">
-          <span data-slot="operator-note">
-            {language.t("operator.transcript.toolResult", { id: piece.id ?? piece.name ?? "" })}
-          </span>
-          <pre data-component="operator-code">{piece.text}</pre>
-          <Show when={piece.subagent}>
-            {(id) => (
-              <button type="button" data-slot="operator-link" onClick={() => openView(id(), "transcript")}>
-                {language.t("operator.transcript.subagent", { id: id() })}
-              </button>
-            )}
-          </Show>
-        </div>
-      )
-    case "attachment":
-      return (
-        <p data-slot="operator-note">
-          {language.t(piece.type === "image" ? "operator.transcript.image" : "operator.transcript.file", {
-            mime: piece.mime ?? "",
-            size: piece.size !== undefined ? new Intl.NumberFormat(language.intl()).format(piece.size) : "?",
-          })}
-        </p>
-      )
-    case "json":
-      return <pre data-component="operator-code">{JSON.stringify(piece.value, null, 2)}</pre>
-  }
 }
 
 function ToolCallView(props: { name: string; id?: string; args: string }) {

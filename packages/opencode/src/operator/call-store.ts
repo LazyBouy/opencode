@@ -120,6 +120,38 @@ export async function body(call: Call) {
   return OperatorCallFormat.rebuild(call.request.body, (key) => texts.get(key))
 }
 
+// Each call's token accounting (call-accounting.ts), computed once its response is complete:
+// `accounting.jsonl`, one `{ callID, accounting }` per line, the last line of a call wins. Kept beside
+// the calls so the calls file stays as recorded; "Recount" clears it.
+const accountingFile = (sessionID: string) => path.join(folder(sessionID), "accounting.jsonl")
+
+export async function accounting(sessionID: string): Promise<Map<string, unknown>> {
+  const text = await fs.readFile(accountingFile(sessionID), "utf8").catch(() => "")
+  const found = new Map<string, unknown>()
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue
+    try {
+      const item = JSON.parse(line) as { callID?: string; accounting?: unknown }
+      if (item.callID && item.accounting) found.set(item.callID, item.accounting)
+    } catch {
+      // a torn line: recomputed
+    }
+  }
+  return found
+}
+
+export function saveAccounting(sessionID: string, items: ReadonlyArray<{ callID: string; accounting: unknown }>) {
+  if (!items.length) return Promise.resolve()
+  return queued(sessionID, async () => {
+    await fs.mkdir(folder(sessionID), { recursive: true })
+    await fs.appendFile(accountingFile(sessionID), items.map((item) => JSON.stringify(item)).join("\n") + "\n")
+  })
+}
+
+export function clearAccounting(sessionID: string) {
+  return queued(sessionID, () => fs.rm(accountingFile(sessionID), { force: true }))
+}
+
 export async function remove(sessionID: string) {
   queues.delete(sessionID)
   await fs.rm(folder(sessionID), { recursive: true, force: true })

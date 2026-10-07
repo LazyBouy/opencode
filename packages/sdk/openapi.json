@@ -15220,6 +15220,130 @@
         ]
       }
     },
+    "/operator/session/{sessionID}/calls/recount": {
+      "post": {
+        "tags": ["operator calls"],
+        "operationId": "operator.call.recount",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The counts are made again when next read",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["ok"],
+                  "additionalProperties": false,
+                  "description": "The counts are made again when next read"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Reloads the tokenizers and clears the session's stored token counts, so each call's accounting is made again (after a tokenizer is added).",
+        "summary": "Count a session's tokens again",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.call.recount({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/tokenizers": {
+      "get": {
+        "tags": ["operator calls"],
+        "operationId": "operator.call.tokenizers",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The tokenizers that count tokens per model",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTokenizerList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The tokenizers loaded from the tokenizer folder, the models each counts for, and modules that failed to load. Without one, the Transcript estimates (characters ÷ 4).",
+        "summary": "List tokenizers",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.call.tokenizers({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/operator/agent/{name}/permissions": {
       "get": {
         "tags": ["operator agent permissions"],
@@ -32489,6 +32613,50 @@
         },
         "additionalProperties": false
       },
+      "OperatorCallBilling": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "number"
+          },
+          "cacheRead": {
+            "type": "number"
+          },
+          "cacheWrite": {
+            "type": "number"
+          },
+          "new": {
+            "type": "number"
+          },
+          "output": {
+            "type": "number"
+          },
+          "reasoning": {
+            "type": "number"
+          },
+          "unattributed": {
+            "type": "number"
+          },
+          "provider": {
+            "type": "number"
+          },
+          "opencode": {
+            "type": "number"
+          },
+          "generationId": {
+            "type": "string"
+          },
+          "uncertain": {
+            "type": "string",
+            "enum": ["estimate", "counted"]
+          },
+          "unrecognized": {
+            "type": "number"
+          }
+        },
+        "required": ["cacheRead", "cacheWrite", "reasoning", "unrecognized"],
+        "additionalProperties": false
+      },
       "OperatorCallSummary": {
         "type": "object",
         "properties": {
@@ -32634,6 +32802,9 @@
             "required": ["total", "new"],
             "additionalProperties": false
           },
+          "billing": {
+            "$ref": "#/components/schemas/OperatorCallBilling"
+          },
           "added": {
             "type": "array",
             "items": {
@@ -32683,6 +32854,176 @@
         "required": ["userMessageID", "index", "text", "time", "recorded"],
         "additionalProperties": false
       },
+      "OperatorTokenTotals": {
+        "type": "object",
+        "properties": {
+          "calls": {
+            "type": "number"
+          },
+          "input": {
+            "type": "number",
+            "description": "Billed input, cache included"
+          },
+          "cacheRead": {
+            "type": "number"
+          },
+          "cacheWrite": {
+            "type": "number"
+          },
+          "new": {
+            "type": "number"
+          },
+          "output": {
+            "type": "number",
+            "description": "Billed output, reasoning included"
+          },
+          "reasoning": {
+            "type": "number"
+          },
+          "cost": {
+            "type": "number",
+            "description": "OpenCode's cost"
+          },
+          "providerCost": {
+            "type": "number",
+            "description": "The provider's cost, where it reports one"
+          }
+        },
+        "required": ["calls", "input", "cacheRead", "cacheWrite", "new", "output", "reasoning", "cost", "providerCost"],
+        "additionalProperties": false
+      },
+      "OperatorTurn": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "number",
+            "description": "The turn (its user message), 1-based; 0: calls outside any turn"
+          },
+          "userMessageID": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "calls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Its recorded calls (ids), in order"
+          },
+          "unrecorded": {
+            "type": "number",
+            "description": "Its steps OpenCode stored but did not record"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/OperatorTokenTotals"
+          }
+        },
+        "required": ["index", "text", "calls", "unrecorded", "totals"],
+        "additionalProperties": false
+      },
+      "OperatorInputGroup": {
+        "type": "string",
+        "enum": ["system", "tools", "history", "reasoning-sent", "tool-results", "user", "added", "formatting"]
+      },
+      "OperatorSubagentTotals": {
+        "type": "object",
+        "properties": {
+          "sessionID": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/OperatorTokenTotals"
+          }
+        },
+        "required": ["sessionID", "title", "totals"],
+        "additionalProperties": false
+      },
+      "OperatorSessionTotals": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "enum": ["agent", "side", "retries", "session", "subagents", "all"]
+                },
+                "totals": {
+                  "$ref": "#/components/schemas/OperatorTokenTotals"
+                }
+              },
+              "required": ["id", "totals"],
+              "additionalProperties": false
+            },
+            "description": "agent: agent steps (with steps not recorded); side: title, compaction, summary and other calls; retries: retries and failed calls; session: this session; subagents and all (with subagents) when it has any"
+          },
+          "inputBy": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "group": {
+                  "$ref": "#/components/schemas/OperatorInputGroup"
+                },
+                "tokens": {
+                  "type": "number"
+                },
+                "cacheRead": {
+                  "type": "number"
+                }
+              },
+              "required": ["group", "tokens", "cacheRead"],
+              "additionalProperties": false
+            },
+            "description": "Where the input tokens went, over the recorded calls"
+          },
+          "providerMissing": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "Calls whose provider reported no cost (their index)"
+          },
+          "subagents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorSubagentTotals"
+            }
+          },
+          "uncertain": {
+            "type": "number",
+            "description": "Calls whose attribution is uncertain"
+          }
+        },
+        "required": ["rows", "inputBy", "providerMissing", "subagents", "uncertain"],
+        "additionalProperties": false
+      },
+      "OperatorUnrecordedStep": {
+        "type": "object",
+        "properties": {
+          "assistantMessageID": {
+            "type": "string"
+          },
+          "exchange": {
+            "type": "number"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/OperatorTokenTotals"
+          }
+        },
+        "required": ["assistantMessageID", "totals"],
+        "additionalProperties": false
+      },
       "OperatorCallList": {
         "type": "object",
         "properties": {
@@ -32722,9 +33063,26 @@
             },
             "required": ["calls", "input", "output", "reasoning", "cacheRead", "cost"],
             "additionalProperties": false
+          },
+          "turns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorTurn"
+            },
+            "description": "Each turn's calls and totals (its user message and everything the agent did for it)"
+          },
+          "session": {
+            "$ref": "#/components/schemas/OperatorSessionTotals"
+          },
+          "unrecorded": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorUnrecordedStep"
+            },
+            "description": "Steps OpenCode stored that were not recorded (their totals from OpenCode's stored usage)"
           }
         },
-        "required": ["calls", "exchanges", "totals"],
+        "required": ["calls", "exchanges", "totals", "turns", "session", "unrecorded"],
         "additionalProperties": false
       },
       "OperatorCallExport": {
@@ -32865,6 +33223,403 @@
           }
         },
         "required": ["parsed", "blocks"],
+        "additionalProperties": false
+      },
+      "OperatorInputItemKind": {
+        "type": "string",
+        "enum": [
+          "system",
+          "tools",
+          "user",
+          "added-saved",
+          "added-request",
+          "attachment",
+          "summary",
+          "assistant",
+          "reasoning-sent",
+          "tool-call",
+          "tool-result",
+          "parameters",
+          "unrecognized"
+        ]
+      },
+      "OperatorTokenMethod": {
+        "type": "string",
+        "enum": ["counted", "estimate", "reported", "settings"]
+      },
+      "OperatorTokenCache": {
+        "type": "string",
+        "enum": ["read", "partial", "write", "new"]
+      },
+      "OperatorInputItemPart": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "chars": {
+            "type": "number"
+          },
+          "tokens": {
+            "type": "number"
+          },
+          "description": {
+            "type": "object",
+            "properties": {
+              "chars": {
+                "type": "number"
+              },
+              "tokens": {
+                "type": "number"
+              }
+            },
+            "required": ["chars", "tokens"],
+            "additionalProperties": false
+          },
+          "schema": {
+            "type": "object",
+            "properties": {
+              "chars": {
+                "type": "number"
+              },
+              "tokens": {
+                "type": "number"
+              }
+            },
+            "required": ["chars", "tokens"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "chars", "tokens"],
+        "additionalProperties": false
+      },
+      "OperatorInputItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/OperatorInputItemKind"
+          },
+          "message": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "call": {
+            "type": "number"
+          },
+          "turn": {
+            "type": "number"
+          },
+          "turns": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "number"
+              },
+              "to": {
+                "type": "number"
+              }
+            },
+            "required": ["from", "to"],
+            "additionalProperties": false
+          },
+          "preview": {
+            "type": "string"
+          },
+          "chars": {
+            "type": "number"
+          },
+          "tokens": {
+            "type": "number"
+          },
+          "method": {
+            "$ref": "#/components/schemas/OperatorTokenMethod"
+          },
+          "cache": {
+            "$ref": "#/components/schemas/OperatorTokenCache"
+          },
+          "since": {
+            "type": "number"
+          },
+          "flags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["cleared", "shortened", "encrypted", "not-estimated"]
+            }
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorInputItemPart"
+            }
+          },
+          "attachment": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["image", "file"]
+              },
+              "mime": {
+                "type": "string"
+              },
+              "size": {
+                "type": "number"
+              }
+            },
+            "required": ["type"],
+            "additionalProperties": false
+          },
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "kind", "chars", "tokens", "method", "cache", "flags"],
+        "additionalProperties": false
+      },
+      "OperatorOutputItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["reasoning", "reasoning-summary", "reasoning-hidden", "reasoning-encrypted", "text", "tool-call"]
+          },
+          "name": {
+            "type": "string"
+          },
+          "chars": {
+            "type": "number"
+          },
+          "tokens": {
+            "type": "number"
+          },
+          "method": {
+            "$ref": "#/components/schemas/OperatorTokenMethod"
+          },
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "kind", "chars", "tokens", "method"],
+        "additionalProperties": false
+      },
+      "OperatorCallAccounting": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number"
+          },
+          "tokenizer": {
+            "type": "string",
+            "description": "The tokenizer that counted the items, or estimate"
+          },
+          "order": {
+            "type": "string",
+            "enum": ["system-tools-messages", "tools-system-messages"],
+            "description": "The order the model reads the parts in (the cache is read from the start)"
+          },
+          "input": {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/OperatorInputItem"
+                }
+              },
+              "billed": {
+                "type": "number"
+              },
+              "cacheRead": {
+                "type": "number"
+              },
+              "cacheWrite": {
+                "type": "number"
+              },
+              "new": {
+                "type": "number"
+              },
+              "unattributed": {
+                "type": "number"
+              },
+              "boundary": {
+                "type": "object",
+                "properties": {
+                  "item": {
+                    "type": "string",
+                    "description": "The item the cache read ends in, or formatting"
+                  },
+                  "read": {
+                    "type": "number",
+                    "description": "Its tokens read from cache"
+                  },
+                  "after": {
+                    "type": "number",
+                    "description": "Its tokens after the boundary"
+                  }
+                },
+                "required": ["item", "read", "after"],
+                "additionalProperties": false
+              },
+              "delta": {
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "type": "number",
+                    "description": "The previous call (its index)"
+                  },
+                  "tokens": {
+                    "type": "number",
+                    "description": "Billed input now minus billed input then: measured"
+                  },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "The items added since (ids)"
+                  }
+                },
+                "required": ["from", "tokens", "items"],
+                "additionalProperties": false
+              },
+              "uncertain": {
+                "type": "string",
+                "enum": ["estimate", "counted"]
+              },
+              "unrecognized": {
+                "type": "number",
+                "description": "Characters of content no item recognized"
+              }
+            },
+            "required": ["items", "cacheRead", "cacheWrite", "unrecognized"],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/OperatorOutputItem"
+                }
+              },
+              "billed": {
+                "type": "number"
+              },
+              "reasoning": {
+                "type": "number"
+              },
+              "unattributed": {
+                "type": "number"
+              }
+            },
+            "required": ["items", "reasoning"],
+            "additionalProperties": false
+          },
+          "cost": {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "number"
+              },
+              "opencode": {
+                "type": "number"
+              },
+              "difference": {
+                "type": "number"
+              },
+              "generationId": {
+                "type": "string"
+              },
+              "split": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "number"
+                  },
+                  "cacheRead": {
+                    "type": "number"
+                  },
+                  "cacheWrite": {
+                    "type": "number"
+                  },
+                  "output": {
+                    "type": "number"
+                  },
+                  "reasoning": {
+                    "type": "number"
+                  }
+                },
+                "required": ["input", "cacheRead", "cacheWrite", "output", "reasoning"],
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
+          "changes": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "number"
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Items new since that call (ids)"
+              },
+              "removed": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "$ref": "#/components/schemas/OperatorInputItemKind"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "preview": {
+                      "type": "string"
+                    },
+                    "tokens": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["kind", "tokens"],
+                  "additionalProperties": false
+                }
+              },
+              "changed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "System or tools that differ (ids)"
+              },
+              "tokens": {
+                "type": "number",
+                "description": "The input's change in tokens (measured when `measured`)"
+              },
+              "measured": {
+                "type": "boolean"
+              }
+            },
+            "required": ["from", "added", "removed", "changed", "tokens", "measured"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["version", "tokenizer", "order", "input", "output", "cost"],
         "additionalProperties": false
       },
       "OperatorCallDetail": {
@@ -33012,6 +33767,9 @@
             "required": ["total", "new"],
             "additionalProperties": false
           },
+          "billing": {
+            "$ref": "#/components/schemas/OperatorCallBilling"
+          },
           "added": {
             "type": "array",
             "items": {
@@ -33054,6 +33812,9 @@
               "type": "string",
               "enum": ["reasoning-not-stored", "text-differs", "tool-calls-differ"]
             }
+          },
+          "accounting": {
+            "$ref": "#/components/schemas/OperatorCallAccounting"
           }
         },
         "required": [
@@ -33110,6 +33871,64 @@
           }
         },
         "required": ["text", "bytes"],
+        "additionalProperties": false
+      },
+      "OperatorTokenizer": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "file": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "label", "models"],
+        "additionalProperties": false
+      },
+      "OperatorTokenizerLoadError": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["file", "message"],
+        "additionalProperties": false
+      },
+      "OperatorTokenizerList": {
+        "type": "object",
+        "properties": {
+          "folder": {
+            "type": "string",
+            "description": "Where tokenizer modules are loaded from"
+          },
+          "tokenizers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorTokenizer"
+            }
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorTokenizerLoadError"
+            }
+          }
+        },
+        "required": ["folder", "tokenizers", "errors"],
         "additionalProperties": false
       },
       "OperatorPermissionPatternForm": {

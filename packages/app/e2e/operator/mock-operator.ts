@@ -411,6 +411,9 @@ export async function mockOperator(page: Page) {
         ? json(route, found)
         : json(route, { name: "OperatorCallNotFoundError", data: { message: "No call" } }, 404)
     }
+    if (url.pathname === "/operator/tokenizers")
+      return json(route, { folder: "/root/.config/opencode/tokenizers", tokenizers: [], errors: [] })
+    if (/^\/operator\/session\/[^/]+\/calls\/recount$/.test(url.pathname)) return json(route, { ok: true })
     // Agents' main and active sessions.
     const sessionState = url.pathname.match(/^\/operator\/agent\/([^/]+)\/(session-state|main|target)$/)
     if (sessionState) {

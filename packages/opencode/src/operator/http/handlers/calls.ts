@@ -23,5 +23,7 @@ export const operatorCallHandlers = HttpApiBuilder.group(InstanceHttpApi, "opera
       .handle("raw", (ctx) =>
         calls.raw(ctx.params.sessionID, ctx.params.callID, ctx.query.part).pipe(Effect.mapError(notFound)),
       )
+      .handle("recount", (ctx) => calls.recount(ctx.params.sessionID).pipe(Effect.as({ ok: true })))
+      .handle("tokenizers", () => calls.tokenizers())
   }),
 )
