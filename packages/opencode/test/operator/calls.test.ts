@@ -164,8 +164,12 @@ unix("every call is recorded exactly: OpenAI chat, with tool steps, a plan → b
     expect(sessionRow.calls).toBe(view.calls.length)
     expect(sessionRow.input).toBe(view.turns.reduce((total, turn) => total + turn.totals.input, 0))
     expect(view.calls.every((call) => call.billing?.input !== undefined)).toBe(true)
-    // Counts are stored once; a recount clears them.
+    // Counts are stored once (opening a call's details stores nothing again); a recount clears them.
     expect((yield* Effect.promise(() => OperatorCallStore.accounting(session.id))).size).toBe(view.calls.length)
+    const stored = yield* Effect.promise(() =>
+      fs.readFile(path.join(OperatorCallStore.root(), session.id, "accounting.jsonl"), "utf8"),
+    )
+    expect(stored.trim().split("\n")).toHaveLength(view.calls.length)
     yield* api.recount(session.id)
     expect((yield* Effect.promise(() => OperatorCallStore.accounting(session.id))).size).toBe(0)
     expect((yield* api.export(session.id, "md")).text).toContain("Formatting and unattributed")

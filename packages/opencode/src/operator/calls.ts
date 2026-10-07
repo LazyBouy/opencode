@@ -231,6 +231,8 @@ const layer = Layer.effect(
         string,
         OperatorCallAccounting.Accounting
       >
+      // A call made again for its contents (details) is stored already when it was before.
+      const kept = fresh && stored.has(fresh) ? fresh : undefined
       if (fresh) stored.delete(fresh)
       const prices = yield* pricesOf(loaded.loaded.flatMap((item) => (item.call.model ? [item.call.model] : [])))
       const accountings = OperatorCallAccounting.account(
@@ -249,7 +251,7 @@ const layer = Layer.effect(
       const save = accountings.flatMap((accounting, at) => {
         const call = loaded.loaded[at]!.call
         const before = stored.get(call.callID)
-        if (!call.finishedAt || accounting === before) return []
+        if (!call.finishedAt || accounting === before || call.callID === kept) return []
         return [{ callID: call.callID, accounting: OperatorCallAccounting.lean(accounting) }]
       })
       yield* Effect.promise(() => OperatorCallStore.saveAccounting(sessionID, save).catch(() => undefined))
