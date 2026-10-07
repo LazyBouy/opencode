@@ -1,5 +1,6 @@
 import { useParams } from "@solidjs/router"
 import { type JSX, Show } from "solid-js"
+import { SessionPicker } from "./session-picker"
 import { TranscriptView } from "./transcript"
 import { UserExtras } from "./user-extras"
 import { useSessionView } from "./view"
@@ -32,4 +33,12 @@ export function afterUser(
   parts: () => ReadonlyArray<{ id: string; type: string; text?: string; synthetic?: boolean }>,
 ): JSX.Element {
   return <UserExtras message={message} parts={parts} />
+}
+
+// At the start of the session's title row (the fork line in message-timeline.tsx): the agent's
+// sessions, to open another or start a new one.
+export function sessionPicker(
+  session: () => { id: string; agent?: string; directory: string; parentID?: string } | undefined,
+): JSX.Element {
+  return <Show when={session()}>{(info) => <SessionPicker session={info()} />}</Show>
 }

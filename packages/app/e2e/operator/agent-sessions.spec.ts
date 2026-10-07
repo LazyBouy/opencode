@@ -38,10 +38,10 @@ test("an agent's sessions show its main and active ones; one can be made main, a
   await expect(page).toHaveURL(/\/session\/ses_op_1$/)
 })
 
-test("Chat opens the default agent's main session in the default project", async ({ page }) => {
+test("with no chat open, Chats opens the default agent's main session in the default project", async ({ page }) => {
   const state = await mockOperator(page)
   await page.goto("/operator")
-  await page.getByRole("navigation", { name: "Operator" }).getByRole("link", { name: "Chat" }).click()
+  await page.getByRole("navigation", { name: "Operator" }).getByRole("link", { name: "Chats" }).click()
   await expect(page).toHaveURL(/\/session\/ses_op_main$/)
   expect(state.mainOpens).toEqual([{ agent: "build", directory }])
 })

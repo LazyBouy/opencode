@@ -9,6 +9,7 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { Session } from "@/session/session"
+import { OperatorFolderSql } from "./folder-sql"
 import { OperatorTrashFiles } from "./trash-files"
 
 export const Status = Schema.Struct({
@@ -64,6 +65,8 @@ export type ProjectSummary = typeof ProjectSummary.Type
 
 export interface SessionInput {
   readonly directory?: string
+  /** Sessions in this folder or a folder inside it (a project with its subfolders, such as an agent's home). */
+  readonly within?: string
   readonly agent?: string
   readonly search?: string
   readonly roots?: boolean
@@ -100,6 +103,7 @@ const layer = Layer.effect(
     const sessions = Effect.fn("OperatorOverview.sessions")(function* (input: SessionInput) {
       const conditions = [
         input.directory ? eq(SessionTable.directory, input.directory) : undefined,
+        input.within ? OperatorFolderSql.within(SessionTable.directory, input.within) : undefined,
         input.agent ? eq(SessionTable.agent, input.agent) : undefined,
         input.search ? like(SessionTable.title, `%${input.search}%`) : undefined,
         input.roots ? isNull(SessionTable.parent_id) : undefined,

@@ -41,7 +41,7 @@ test("the sidebar opens operator pages and marks the current one", async ({ page
   await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeVisible()
 
   // Chat opens the default agent's main session.
-  await nav.getByRole("link", { name: "Chat" }).click()
+  await nav.getByRole("link", { name: "Chats" }).click()
   await expect(page).toHaveURL(/\/session\/ses_op_main$/)
 })
 

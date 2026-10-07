@@ -1397,6 +1397,7 @@ export function MessageTimeline(props: {
                 }}
               >
                 <div class="flex items-center min-w-0 flex-1 w-full">
+                  {OperatorSessionViews.sessionPicker(info)}
                   <Show when={parentID()}>
                     <button
                       type="button"

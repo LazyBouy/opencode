@@ -63,7 +63,7 @@ export function AgentDetail(props: { name: string; directory: string; tab: strin
     queryFn: () =>
       api
         .client()
-        .operator.session.list({ directory: directory(), agent: props.name, limit: "100" })
+        .operator.session.list({ within: directory(), agent: props.name, limit: "100" })
         .then((result) => result.data ?? []),
   }))
   // The agent's main session (kept) and active one (the most recently used) in this project.

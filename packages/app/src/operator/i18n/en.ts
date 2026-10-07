@@ -47,7 +47,7 @@ export const dict = {
   "settings.namespaces.failed": "Couldn't save the namespace",
 
   "operator.nav.label": "Operator",
-  "operator.nav.chat": "Chat",
+  "operator.nav.chat": "Chats",
   "operator.nav.collapse": "Collapse sidebar",
   "operator.nav.expand": "Expand sidebar",
   "operator.nav.settings": "Settings",
@@ -405,7 +405,12 @@ export const dict = {
   "operator.agents.mode.all": "Primary and subagent",
   "operator.agent.notFound": "Agent not found in this project",
   "operator.chat.failed": "Couldn't open the chat",
-  "operator.nav.chatHint": "Chat: the default agent's main session in your project",
+  "operator.nav.chatHint":
+    "Chats: your open chats, at the one you used last. With none open, the default agent's main session in your project.",
+  "operator.chats.sessionsOf": "{{agent}}'s sessions",
+  "operator.chats.sessionsIn": "{{agent}}'s sessions in {{project}}",
+  "operator.chats.none": "No other sessions yet",
+  "operator.chats.newSession": "New session with {{agent}}",
   "operator.agent.mainSession": "Main session: {{title}}",
   "operator.agent.noMainSession": "No main session yet. Open it to start one.",
   "operator.agent.mainLabel": "Main session",

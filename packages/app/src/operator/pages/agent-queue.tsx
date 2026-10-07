@@ -51,7 +51,7 @@ export function AgentQueue(props: { agent: string; directory: string }) {
     queryFn: () =>
       api
         .client()
-        .operator.session.list({ directory: props.directory, agent: props.agent, limit: "100" })
+        .operator.session.list({ within: props.directory, agent: props.agent, limit: "100" })
         .then((result) => result.data ?? []),
   }))
   const items = useQuery(() => ({

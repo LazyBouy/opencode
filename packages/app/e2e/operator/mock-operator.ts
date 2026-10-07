@@ -370,9 +370,12 @@ export async function mockOperator(page: Page) {
     if (url.pathname === "/operator/session") {
       state.sessionQueries.push(url.searchParams)
       const search = url.searchParams.get("search")?.toLowerCase()
+      const agent = url.searchParams.get("agent")
       return json(
         route,
-        sessions.filter((session) => !search || session.title.toLowerCase().includes(search)),
+        sessions.filter(
+          (session) => (!search || session.title.toLowerCase().includes(search)) && (!agent || session.agent === agent),
+        ),
       )
     }
     if (

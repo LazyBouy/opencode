@@ -625,6 +625,14 @@
             "required": false
           },
           {
+            "name": "within",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
             "name": "agent",
             "in": "query",
             "schema": {

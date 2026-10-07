@@ -1578,6 +1578,7 @@ export class Session2 extends HeyApiClient {
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
+      within?: string
       agent?: string
       search?: string
       roots?: "true" | "false"
@@ -1593,6 +1594,7 @@ export class Session2 extends HeyApiClient {
         {
           args: [
             { in: "query", key: "directory" },
+            { in: "query", key: "within" },
             { in: "query", key: "agent" },
             { in: "query", key: "search" },
             { in: "query", key: "roots" },

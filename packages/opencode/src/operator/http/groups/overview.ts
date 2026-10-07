@@ -22,6 +22,9 @@ export const OperatorOverviewPaths = {
 
 export const SessionQuery = Schema.Struct({
   directory: Schema.optional(Schema.String),
+  within: Schema.optional(Schema.String).annotate({
+    description: "Sessions in this folder or a folder inside it (a project with its subfolders)",
+  }),
   agent: Schema.optional(Schema.String),
   search: Schema.optional(Schema.String),
   roots: Schema.optional(QueryBoolean),

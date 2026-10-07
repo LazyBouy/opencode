@@ -1,13 +1,13 @@
 import { A, useLocation } from "@solidjs/router"
 import { Icon } from "@opencode-ai/ui/icon"
-import { For } from "solid-js"
+import { createEffect, For } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSettingsDialog } from "@/components/settings-dialog"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
 import { useOperatorCommands } from "./commands"
 import { SessionInspector } from "./inspector/inspector"
-import { useOpenDefaultChat } from "./session-views/chat"
+import { isChatPage, rememberChat, useOpenDefaultChat } from "./session-views/chat"
 import { SessionViewSwitch } from "./session-views/switch"
 import { ProjectGate } from "./project-gate"
 import { isActivePage, operatorPages } from "./pages"
@@ -27,6 +27,8 @@ export function OperatorSidebar() {
   )
   useOperatorCommands()
   const openChat = useOpenDefaultChat()
+  // Chats returns to the chat tab shown last.
+  createEffect(() => rememberChat(location.pathname + location.search))
 
   const area = () => (location.pathname.startsWith("/operator") ? "operator" : "chat")
   const collapsed = () => store.collapsed[area()]
@@ -55,11 +57,11 @@ export function OperatorSidebar() {
       </div>
 
       <div data-slot="operator-sidebar-items">
-        {/* Chat opens the default agent's main session in the default project (session-views/chat.ts). */}
+        {/* Chats: the chat window at the tab used last, else the default agent's main session (session-views/chat.ts). */}
         <A
           href="/"
           data-slot="operator-sidebar-item"
-          data-active={location.pathname === "/" ? "" : undefined}
+          data-active={location.pathname === "/" || isChatPage(location.pathname) ? "" : undefined}
           title={language.t("operator.nav.chatHint")}
           end
           onClick={(event) => {

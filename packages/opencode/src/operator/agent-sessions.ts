@@ -2,7 +2,7 @@ export * as OperatorAgentSessions from "./agent-sessions"
 
 import fs from "fs/promises"
 import path from "path"
-import { and, desc, eq, isNull, like, or } from "drizzle-orm"
+import { and, desc, eq, isNull } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -15,6 +15,7 @@ import { InstanceStore } from "@/project/instance-store"
 import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { OperatorAgents } from "./agents"
+import { OperatorFolderSql } from "./folder-sql"
 import { OperatorProjects } from "./projects"
 
 // An agent's sessions in a project (project/agent specification §1): one is its main session (kept
@@ -127,8 +128,7 @@ const layer = Layer.effect(
       updated: row.time_updated,
     })
     // A session of the project (its folder or one inside it).
-    const inProject = (root: string) =>
-      or(eq(SessionTable.directory, root), like(SessionTable.directory, `${root.replace(/[\\%_]/g, "\\$&")}/%`))
+    const inProject = (root: string) => OperatorFolderSql.within(SessionTable.directory, root)
     const select = {
       id: SessionTable.id,
       title: SessionTable.title,

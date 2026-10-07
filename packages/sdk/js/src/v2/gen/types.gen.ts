@@ -8998,6 +8998,7 @@ export type OperatorSessionListData = {
   path?: never
   query?: {
     directory?: string
+    within?: string
     agent?: string
     search?: string
     roots?: "true" | "false"
