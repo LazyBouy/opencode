@@ -24,6 +24,10 @@ its own project). They are written to the mounted host folder, so they persist.
 Connect a model provider for OpenCode's own agents under **Settings → Providers**. Credentials are kept
 in the `opencode-data` volume.
 
+The server runs from source through `serve.sh`, which gives it the version in
+`packages/opencode/package.json`. Without it the version is `local`, and OpenCode Zen's free models
+refuse the request ("OpenCode's free tier can only be used from within OpenCode").
+
 ## Live code changes
 
 ```sh
