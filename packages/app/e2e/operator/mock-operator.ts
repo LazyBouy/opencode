@@ -228,6 +228,9 @@ export interface OperatorMock {
   pending: (typeof pendingRequest)[]
   // The reply card's decisions, and the decisions recorded.
   decides: Array<{ id: string; body: Record<string, unknown> }>
+  // Agents' locked rules, and every change to them.
+  locks: Record<string, { locks: Array<{ permission: string; pattern: string }>; inherit: "own" | "parent" }>
+  lockWrites: Array<{ agent: string; body: unknown }>
   decisions: Array<Record<string, unknown>>
   rejectWrite?: string
   // Trash: what is in it, and every call to it.
@@ -279,6 +282,8 @@ export async function mockOperator(page: Page) {
     prompt: prompt.state,
     pending: [pendingRequest],
     decides: [],
+    locks: {},
+    lockWrites: [],
     decisions: [],
     trash: [],
     trashWrites: [],
@@ -571,6 +576,19 @@ export async function mockOperator(page: Page) {
         Object.entries(state.projectRecords).map(([key, record]) => ({ key, ...record })),
       )
     }
+    const locks = url.pathname.match(/^\/operator\/agent\/([^/]+)\/permission-locks$/)
+    if (locks) {
+      const name = decodeURIComponent(locks[1]!)
+      if (method === "PUT") {
+        const body = route.request().postDataJSON() as {
+          locks: Array<{ permission: string; pattern: string }>
+          inherit: "own" | "parent"
+        }
+        state.lockWrites.push({ agent: name, body })
+        state.locks[name] = body
+      }
+      return json(route, state.locks[name] ?? { locks: [], inherit: "own" })
+    }
     const sessionPermissions = url.pathname.match(/^\/operator\/session\/([^/]+)\/permissions$/)
     if (sessionPermissions) {
       const id = decodeURIComponent(sessionPermissions[1]!)
@@ -579,7 +597,7 @@ export async function mockOperator(page: Page) {
         state.sessionPermissionWrites.push({ sessionID: id, body })
         state.sessionRules[id] = body.rules as never
       }
-      return json(route, sessionPermissionsFor(directory, id, state.sessionRules[id]))
+      return json(route, sessionPermissionsFor(directory, id, state.sessionRules[id], state.locks.build?.locks))
     }
     const draft = url.pathname.match(/^\/operator\/agent\/([^/]+)\/tool-prompt\/draft$/)
     if (draft && method === "POST") {

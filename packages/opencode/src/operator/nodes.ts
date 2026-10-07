@@ -26,6 +26,7 @@ import { OperatorPermissionLive } from "./permission-live"
 import { OperatorPermissionDecisions } from "./permission-decisions"
 import { OperatorPermissionDecide } from "./permission-decide"
 import { OperatorReloadWhenIdle } from "./reload-when-idle"
+import { OperatorPermissionLocks } from "./permission-locks"
 
 // Services the fork's routes need, added to the server's service graph in one place.
 export const operatorNodes = [
@@ -48,6 +49,7 @@ export const operatorNodes = [
   OperatorPermissionDecisions.node,
   OperatorPermissionDecide.node,
   OperatorReloadWhenIdle.node,
+  OperatorPermissionLocks.node,
   OperatorPrompts.node,
   OperatorFolders.node,
   OperatorMemory.node,

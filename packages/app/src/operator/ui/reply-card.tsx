@@ -24,6 +24,9 @@ export * as OperatorReplyCard from "./reply-card"
 export type Via = OperatorPermissionDecideInput["via"]
 type Decision = OperatorPermissionDecideInput["decision"]
 
+const ruleText = (rule: { permission: string; pattern: string; action: string }) =>
+  `${rule.permission} ${rule.pattern} ${rule.action}`
+
 // The suggested patterns of a request (OpenCode's `always` patterns), else what it asks for.
 export const suggested = (item: { request: { always: ReadonlyArray<string>; patterns: ReadonlyArray<string> } }) =>
   item.request.always.length ? [...item.request.always] : [...item.request.patterns]
@@ -123,6 +126,7 @@ export function Choices(props: {
   const decide = useDecide()
   const [store, setStore] = createStore({ patterns: suggested(props.item), note: "", busy: false })
   const builtin = () => props.item.agentTarget?.builtin ?? false
+  const lock = () => props.item.lockedBy
   const run = async (decision: Decision) => {
     setStore("busy", true)
     const result = await decide(props.item, {
@@ -156,7 +160,12 @@ export function Choices(props: {
         <ButtonV2 variant="contrast" disabled={store.busy} onClick={() => void run("allow")}>
           {language.t("operator.reply.allow")}
         </ButtonV2>
-        <ButtonV2 variant="outline" disabled={store.busy} onClick={() => void run("allow-session")}>
+        <ButtonV2
+          variant="outline"
+          disabled={store.busy || !!lock()}
+          title={lock() ? language.t("operator.reply.locked", { rule: ruleText(lock()!) }) : undefined}
+          onClick={() => void run("allow-session")}
+        >
           {language.t("operator.reply.allowSession")}
         </ButtonV2>
         <ButtonV2
@@ -171,6 +180,13 @@ export function Choices(props: {
           {language.t("operator.reply.deny")}
         </ButtonV2>
       </div>
+      <Show when={lock()}>
+        {(rule) => (
+          <p data-slot="operator-note" data-testid="reply-locked">
+            {language.t("operator.reply.locked", { rule: ruleText(rule()) })}
+          </p>
+        )}
+      </Show>
       <Show when={builtin()}>
         <p data-slot="operator-note">{language.t("operator.reply.builtinAgent")}</p>
       </Show>

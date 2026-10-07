@@ -371,6 +371,29 @@ export const operatorScenarios: Scenario[] = [
       object(body.targets)
     }),
   http.protected
+    .get("/operator/agent/{name}/permission-locks", "operator.agentPermissions.locks")
+    .at((ctx) => ({
+      path: route("/operator/agent/{name}/permission-locks", { name: "build" }),
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => {
+      object(body)
+      array(body.locks)
+      check(body.inherit === "own", "an agent checks its own locks unless set otherwise")
+    }),
+  http.protected
+    .put("/operator/agent/{name}/permission-locks", "operator.agentPermissions.saveLocks")
+    .at((ctx) => ({
+      path: route("/operator/agent/{name}/permission-locks", { name: "build" }),
+      headers: ctx.headers(),
+      body: { locks: [{ permission: "bash", pattern: "*" }], inherit: "own" },
+    }))
+    .json(200, (body) => {
+      object(body)
+      array(body.locks)
+      check(body.locks.length === 1, "the lock should be kept")
+    }),
+  http.protected
     .get("/operator/agent/{name}/permissions", "operator.agentPermissions.get.missing")
     .at((ctx) => ({ path: route("/operator/agent/{name}/permissions", { name: "missing" }), headers: ctx.headers() }))
     .status(404),

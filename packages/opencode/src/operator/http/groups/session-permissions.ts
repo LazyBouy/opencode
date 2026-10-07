@@ -23,6 +23,14 @@ export class ApiSessionPermissionsNotFoundError extends Schema.ErrorClass<{
   { httpApiStatus: 404 },
 ) {}
 
+export class ApiSessionPermissionsLockedError extends Schema.ErrorClass<{
+  readonly name: "OperatorSessionPermissionsLockedError"
+  readonly data: { readonly message: string }
+}>("OperatorSessionPermissionsLockedError")(
+  { name: Schema.Literal("OperatorSessionPermissionsLockedError"), data: Schema.Struct({ message: Schema.String }) },
+  { httpApiStatus: 400 },
+) {}
+
 export const OperatorSessionPermissionApi = HttpApi.make("operator-session-permissions")
   .add(
     HttpApiGroup.make("operatorSessionPermissions")
@@ -47,13 +55,13 @@ export const OperatorSessionPermissionApi = HttpApi.make("operator-session-permi
             rules: PermissionV1.Ruleset.annotate({ description: "The session's own rules, in order; none resets" }),
           }),
           success: described(OperatorSessionPermissions.Info, "The session's permissions after the save"),
-          error: ApiSessionPermissionsNotFoundError,
+          error: [ApiSessionPermissionsNotFoundError, ApiSessionPermissionsLockedError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "operator.sessionPermissions.save",
             summary: "Replace a session's own permission rules",
             description:
-              "Replace the session's own rules (applied after its agent's from the session's next step) and record where each came from. An empty list resets the session to its agent.",
+              "Replace the session's own rules (applied at once, after its agent's) and record where each came from. An empty list resets the session to its agent. A rule that would change a rule the agent locks is refused.",
           }),
         ),
       )

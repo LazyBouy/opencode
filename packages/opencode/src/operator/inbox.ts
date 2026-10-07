@@ -8,6 +8,7 @@ import { InstanceStore } from "@/project/instance-store"
 import { OperatorAgentPermissions } from "./agent-permissions"
 import { OperatorAgents } from "./agents"
 import { OperatorPermissionDecisions } from "./permission-decisions"
+import { OperatorPermissionLocks } from "./permission-locks"
 import { OperatorPermissionRules } from "./permission-rules"
 import { OperatorSessionPermissions } from "./session-permissions"
 
@@ -25,6 +26,9 @@ export const Pending = Schema.Struct({
   project: Schema.optional(Schema.Struct({ key: Schema.String, namespace: Schema.String })),
   askedBy: Schema.optional(OperatorPermissionRules.Row).annotate({
     description: "The rule that made it ask (none: no rule matched, and OpenCode asks)",
+  }),
+  lockedBy: Schema.optional(PermissionV1.Rule).annotate({
+    description: "The agent's locked rule that decides it: Allow for session is not offered",
   }),
   agentTarget: Schema.optional(
     Schema.Struct({
@@ -55,6 +59,7 @@ const layer = Layer.effect(
     const sessionPermissions = yield* OperatorSessionPermissions.Service
     const agentPermissions = yield* OperatorAgentPermissions.Service
     const agents = yield* OperatorAgents.Service
+    const locks = yield* OperatorPermissionLocks.Service
 
     const describe = (entry: OperatorPermissionDecisions.Asked) =>
       instances
@@ -73,6 +78,10 @@ const layer = Layer.effect(
               )
               .find((row) => !row || row.action === "ask")
             const agent = entry.agent ?? (list._tag === "Some" ? list.value.agent : undefined)
+            const locked = yield* locks.sessionRules(request.sessionID)
+            const lockedBy = request.patterns
+              .map((pattern) => OperatorPermissionLocks.deciding(locked, request.permission, pattern))
+              .find((rule) => rule !== undefined)
             const found = agent
               ? (yield* agents.list().pipe(Effect.orElseSucceed(() => []))).find((item) => item.name === agent)
               : undefined
@@ -98,6 +107,7 @@ const layer = Layer.effect(
                 : {}),
               ...(entry.project ? { project: { key: entry.project, namespace: entry.namespace ?? "opencode" } } : {}),
               ...(asking ? { askedBy: asking } : {}),
+              ...(lockedBy ? { lockedBy } : {}),
               ...(found
                 ? { agentTarget: { builtin: found.source.kind === "builtin", ...(target ? { path: target } : {}) } }
                 : {}),
@@ -125,5 +135,6 @@ export const node = LayerNode.make({
     OperatorSessionPermissions.node,
     OperatorAgentPermissions.node,
     OperatorAgents.node,
+    OperatorPermissionLocks.node,
   ],
 })

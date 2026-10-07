@@ -226,10 +226,17 @@ export function draftFor(directory: string, agent: string, body: { agentRules?: 
   }
 }
 
-// A session's permissions: build's list, then the session's own rules.
-export function sessionPermissionsFor(directory: string, sessionID: string, own: Rule[] = []) {
+// A session's permissions: build's list, then the session's own rules; and build's locked rules.
+export function sessionPermissionsFor(
+  directory: string,
+  sessionID: string,
+  own: Rule[] = [],
+  locks: Array<{ permission: string; pattern: string }> = [],
+) {
   const agent = permissionsFor(directory, "build")
   const start = agent.rows.length
+  const sameKey = (a: { permission: string; pattern: string }, b: { permission: string; pattern: string }) =>
+    a.permission === b.permission && a.pattern === b.pattern
   return {
     sessionID,
     agent: "build",
@@ -247,5 +254,10 @@ export function sessionPermissionsFor(directory: string, sessionID: string, own:
     written: own.map(({ permission, pattern, action }) => ({ permission, pattern, action })),
     forms: agent.forms,
     known: agent.known,
+    locked: locks.flatMap((lock) => {
+      const row = agent.rows.findLast((item) => sameKey(item, lock))
+      return row ? [{ permission: row.permission, pattern: row.pattern, action: row.action }] : []
+    }),
+    allLocked: agent.rows.every((row) => locks.some((lock) => sameKey(lock, row))),
   }
 }

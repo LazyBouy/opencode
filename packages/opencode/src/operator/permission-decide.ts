@@ -13,6 +13,7 @@ import { OperatorAgentPermissions } from "./agent-permissions"
 import { OperatorAgents } from "./agents"
 import { OperatorPermissionDecisions } from "./permission-decisions"
 import { OperatorPermissionLive } from "./permission-live"
+import { OperatorPermissionLocks } from "./permission-locks"
 import { OperatorReloadWhenIdle } from "./reload-when-idle"
 import { OperatorSessionPermissions } from "./session-permissions"
 
@@ -90,6 +91,7 @@ const layer = Layer.effect(
     const agents = yield* OperatorAgents.Service
     const editor = yield* OperatorAgentPermissions.Service
     const agentService = yield* Agent.Service
+    const locks = yield* OperatorPermissionLocks.Service
     // A session's agent; a session started without one has the agent new sessions start with.
     const agentOf = (sessionID: string) =>
       sessions.get(SessionID.make(sessionID)).pipe(
@@ -143,6 +145,15 @@ const layer = Layer.effect(
             }
             case "allow-session": {
               if (!rules.length) return yield* new RefusedError({ message: "Give the rule a pattern" })
+              // A locked agent rule decides it: a session rule would not change anything.
+              const locked = yield* locks.sessionRules(request.sessionID)
+              const lock = request.patterns
+                .map((pattern) => OperatorPermissionLocks.deciding(locked, request.permission, pattern))
+                .find((rule) => rule !== undefined)
+              if (lock)
+                return yield* new RefusedError({
+                  message: `The agent locks the rule ${lock.permission} ${lock.pattern} ${lock.action}: sessions may not override it.`,
+                })
               yield* sessionPermissions
                 .add(request.sessionID, rules, "allow")
                 .pipe(Effect.mapError((error) => new RefusedError({ message: error.message })))
@@ -211,5 +222,6 @@ export const node = LayerNode.make({
     OperatorAgents.node,
     OperatorAgentPermissions.node,
     Agent.node,
+    OperatorPermissionLocks.node,
   ],
 })

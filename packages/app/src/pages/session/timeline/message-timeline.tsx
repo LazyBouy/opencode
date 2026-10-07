@@ -1556,6 +1556,7 @@ export function MessageTimeline(props: {
                                 <DropdownMenu.Item onSelect={() => void sessionArchive.archive(id)}>
                                   <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
                                 </DropdownMenu.Item>
+                                {OperatorSessionViews.menuItems(id, "v1")}
                                 <DropdownMenu.Separator />
                                 <DropdownMenu.Item
                                   onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id} />)}
@@ -1630,6 +1631,7 @@ export function MessageTimeline(props: {
                               <MenuV2.Item onSelect={() => void sessionArchive.archive(id)}>
                                 {language.t("common.archive")}
                               </MenuV2.Item>
+                              {OperatorSessionViews.menuItems(id, "v2")}
                               <MenuV2.Separator />
                               <MenuV2.Item onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id} />)}>
                                 {language.t("common.delete")}...

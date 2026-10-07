@@ -63,6 +63,26 @@ export const dict = {
   "operator.help.namespacePicker":
     "The organization whose items this page shows: all namespaces, or one. Projects and Prompt Profile share the choice until you change it.",
   "operator.profile.defaultIn": "Default in {{namespaces}}",
+  "operator.locks.failed": "Couldn't change the locks",
+  "operator.locks.precedence": "A session's rules override its agent's, except locked rules.",
+  "operator.sessionMenu.permissions": "Session permissions",
+  "operator.locks.lockAll": "Lock all",
+  "operator.locks.inherit": "Locks",
+  "operator.locks.inheritOwn": "Own (default)",
+  "operator.locks.inheritParent": "Own + parent's",
+  "operator.help.lockInherit":
+    "Which locked rules this subagent's sessions check: its own (default), or its own and those of the agent whose session started it. A locked rule decides whatever the session's rules say.",
+  "operator.locks.locked": "Locked",
+  "operator.locks.allLocked": "This agent doesn't let sessions change its permissions.",
+  "operator.sessionPermissions.fromAgent": "From the agent ({{agent}})",
+  "operator.sessionPermissions.fromAgentLabel": "The agent's rules",
+  "operator.sessionPermissions.thisSession": "This session",
+  "operator.sessionPermissions.overrides": "{{rule}} overrides the agent's #{{index}} {{agentRule}}",
+  "operator.locks.unlockAll": "Unlock all",
+  "operator.locks.column": "Sessions may override",
+  "operator.locks.mayOverride": "Sessions may override {{rule}}",
+  "operator.help.ruleLock":
+    "Ticked: a session's own rules (and Allow for session) may override this rule. Unticked (locked): for every request it matches, this rule decides, whatever the session's rules say, even a broader session rule.",
   "operator.reply.failed": "Couldn't answer the request",
   "operator.reply.savedWhenIdle":
     "Saved; applies to new sessions after the project reloads (when no session is running). The agent's sessions use it now.",
@@ -78,6 +98,7 @@ export const dict = {
   "operator.reply.patternOf": "Rule pattern {{index}}",
   "operator.reply.allow": "Allow",
   "operator.reply.allowSession": "Allow for session",
+  "operator.reply.locked": "The agent locks {{rule}}: sessions may not override it, so Allow for session is off.",
   "operator.reply.allowAgent": "Allow for agent",
   "operator.reply.deny": "Deny",
   "operator.reply.builtinAgent":

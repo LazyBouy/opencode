@@ -122,7 +122,11 @@ import type {
   OperatorAgentListResponses,
   OperatorAgentPermissionsGetErrors,
   OperatorAgentPermissionsGetResponses,
+  OperatorAgentPermissionsLocksErrors,
+  OperatorAgentPermissionsLocksResponses,
   OperatorAgentPermissionsSaveErrors,
+  OperatorAgentPermissionsSaveLocksErrors,
+  OperatorAgentPermissionsSaveLocksResponses,
   OperatorAgentPermissionsSaveResponses,
   OperatorAgentPromptGetErrors,
   OperatorAgentPromptGetResponses,
@@ -228,6 +232,7 @@ import type {
   OperatorPermissionDecideResponses,
   OperatorPermissionDecisionsErrors,
   OperatorPermissionDecisionsResponses,
+  OperatorPermissionLocks,
   OperatorPermissionPendingErrors,
   OperatorPermissionPendingResponses,
   OperatorProjectGroup,
@@ -4287,7 +4292,7 @@ export class AgentPermissions extends HeyApiClient {
   /**
    * Save an agent's own permission rules
    *
-   * Write the agent's own rules, in order, to its agent file or its `agent.<name>` config entry at the scope (a built-in agent gets an entry). A permission + pattern pair written twice is refused, and so is an order that saving grouped by permission would change the result of, unless confirmed. The project reloads.
+   * Write the agent's own rules, in order, to its agent file or its `agent.<name>` config entry at the scope (a built-in agent gets an entry). A permission + pattern pair written twice is refused, and so is an order that saving grouped by permission would change the result of, unless confirmed. They apply to the agent's sessions at once; the project reloads to read them when none of its sessions is running.
    */
   public save<ThrowOnError extends boolean = false>(
     parameters: {
@@ -4321,6 +4326,85 @@ export class AgentPermissions extends HeyApiClient {
       ThrowOnError
     >({
       url: "/operator/agent/{name}/permissions",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * An agent's locked rules
+   *
+   * The rules of the agent's list its sessions may not override (by permission and pattern), and, for a subagent, whether it also checks its parent session's agent's locks.
+   */
+  public locks<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorAgentPermissionsLocksResponses,
+      OperatorAgentPermissionsLocksErrors,
+      ThrowOnError
+    >({
+      url: "/operator/agent/{name}/permission-locks",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Lock or unlock an agent's rules
+   *
+   * Set which of the agent's rules its sessions may not override. For every request a locked rule matches, the agent's rule decides, whatever the session's rules say; it applies at once.
+   */
+  public saveLocks<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+      operatorPermissionLocks?: OperatorPermissionLocks
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "operatorPermissionLocks", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorAgentPermissionsSaveLocksResponses,
+      OperatorAgentPermissionsSaveLocksErrors,
+      ThrowOnError
+    >({
+      url: "/operator/agent/{name}/permission-locks",
       ...options,
       ...params,
       headers: {
@@ -4372,7 +4456,7 @@ export class SessionPermissions extends HeyApiClient {
   /**
    * Replace a session's own permission rules
    *
-   * Replace the session's own rules (applied after its agent's from the session's next step) and record where each came from. An empty list resets the session to its agent.
+   * Replace the session's own rules (applied at once, after its agent's) and record where each came from. An empty list resets the session to its agent. A rule that would change a rule the agent locks is refused.
    */
   public save<ThrowOnError extends boolean = false>(
     parameters: {

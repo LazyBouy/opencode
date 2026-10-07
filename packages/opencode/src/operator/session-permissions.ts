@@ -13,6 +13,7 @@ import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { OperatorAgentPermissions } from "./agent-permissions"
 import { OperatorPermissionHook } from "./permission-hook"
+import { OperatorPermissionLocks } from "./permission-locks"
 import { OperatorPermissionRules } from "./permission-rules"
 
 // A session's own permission rules (session.permission, upstream's field): OpenCode applies them after
@@ -46,6 +47,8 @@ function change(work: (store: Store) => void) {
 }
 
 const same = (a: Rule, b: Rule) => a.permission === b.permission && a.pattern === b.pattern && a.action === b.action
+const sameKey = (a: { permission: string; pattern: string }, b: { permission: string; pattern: string }) =>
+  a.permission === b.permission && a.pattern === b.pattern
 
 export async function recorded(sessionID: string): Promise<Recorded[]> {
   return (await read())[sessionID] ?? []
@@ -91,17 +94,25 @@ export const Info = Schema.Struct({
   written: Schema.Array(PermissionV1.Rule).annotate({ description: "The session's own rules" }),
   forms: Schema.Record(Schema.String, OperatorPermissionRules.PatternForm),
   known: Schema.Array(Schema.String),
+  locked: Schema.Array(PermissionV1.Rule).annotate({
+    description:
+      "The agent's rules the session may not override (with its parent's, for a subagent that inherits them)",
+  }),
+  allLocked: Schema.Boolean.annotate({ description: "Every rule of the agent's list is locked: nothing to change" }),
 }).annotate({ identifier: "OperatorSessionPermissions" })
 export type Info = typeof Info.Type
 
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("OperatorSessionPermissionsNotFound", {
   message: Schema.String,
 }) {}
+export class LockedError extends Schema.TaggedErrorClass<LockedError>()("OperatorSessionPermissionsLocked", {
+  message: Schema.String,
+}) {}
 
 export interface Interface {
   readonly get: (sessionID: string) => Effect.Effect<Info, NotFoundError>
   /** Replaces the session's own rules (Reset to agent: none). */
-  readonly save: (sessionID: string, rules: ReadonlyArray<Rule>) => Effect.Effect<Info, NotFoundError>
+  readonly save: (sessionID: string, rules: ReadonlyArray<Rule>) => Effect.Effect<Info, NotFoundError | LockedError>
   /** Adds rules after the session's own (Allow for session), with where they came from. */
   readonly add: (sessionID: string, rules: ReadonlyArray<Rule>, origin: Origin) => Effect.Effect<void, NotFoundError>
 }
@@ -116,6 +127,7 @@ const layer = Layer.effect(
     const agentPermissions = yield* OperatorAgentPermissions.Service
     const config = yield* Config.Service
     const agents = yield* Agent.Service
+    const locks = yield* OperatorPermissionLocks.Service
 
     // A session deleted for good takes its record with it.
     const onEvent = (event: GlobalEvent) => {
@@ -132,11 +144,14 @@ const layer = Layer.effect(
     // are recorded, each with where it came from (permission/index.ts and session/prompt.ts call these).
     const always = (input: { sessionID: string; rules: ReadonlyArray<Rule> }) =>
       Effect.gen(function* () {
-        if (!input.rules.length) return
+        // A rule the agent locks is not kept: the lock decides anyway.
+        const locked = yield* locks.sessionRules(input.sessionID)
+        const kept = input.rules.filter((rule) => !locked.some((lock) => sameKey(lock, rule)))
+        if (!kept.length) return
         const id = SessionID.make(input.sessionID)
         const current = yield* sessions.get(id)
-        yield* sessions.setPermission({ sessionID: id, permission: [...(current.permission ?? []), ...input.rules] })
-        yield* Effect.promise(() => record(input.sessionID, input.rules, "always"))
+        yield* sessions.setPermission({ sessionID: id, permission: [...(current.permission ?? []), ...kept] })
+        yield* Effect.promise(() => record(input.sessionID, kept, "always"))
       }).pipe(Effect.catchCause(() => Effect.void))
     const switched = (input: { sessionID: string; rules: ReadonlyArray<Rule> }) =>
       Effect.promise(() => record(input.sessionID, input.rules, "client")).pipe(Effect.catchCause(() => Effect.void))
@@ -175,6 +190,8 @@ const layer = Layer.effect(
         primaryTools: cfg.experimental?.primary_tools ?? [],
         recorded: yield* Effect.promise(() => recorded(sessionID)),
       })
+      const locked = yield* locks.sessionRules(sessionID)
+      const keys = (yield* locks.get(agent)).locks
       return {
         sessionID,
         agent,
@@ -184,6 +201,8 @@ const layer = Layer.effect(
         written: own,
         forms: editor.forms,
         known: editor.known,
+        locked,
+        allLocked: labelled.rows.length > 0 && labelled.rows.every((row) => keys.some((lock) => sameKey(lock, row))),
       }
     })
 
@@ -194,6 +213,13 @@ const layer = Layer.effect(
         pattern: rule.pattern.trim() || "*",
         action: rule.action,
       }))
+      // A session rule may not change a rule the agent locks.
+      const locked = yield* locks.sessionRules(sessionID)
+      const clash = list.find((rule) => locked.some((lock) => sameKey(lock, rule) && lock.action !== rule.action))
+      if (clash)
+        return yield* new LockedError({
+          message: `The agent locks ${clash.permission} ${clash.pattern}: sessions may not override it.`,
+        })
       yield* Effect.promise(() => replace(sessionID, list, "user"))
       // Approvals kept in memory for the session stop applying: its rules are what you saved.
       OperatorPermissionHook.reset(sessionID)
@@ -223,5 +249,12 @@ const layer = Layer.effect(
 export const node = LayerNode.make({
   service: Service,
   layer,
-  deps: [Session.node, OperatorPermissionRules.node, OperatorAgentPermissions.node, Config.node, Agent.node],
+  deps: [
+    Session.node,
+    OperatorPermissionRules.node,
+    OperatorAgentPermissions.node,
+    Config.node,
+    Agent.node,
+    OperatorPermissionLocks.node,
+  ],
 })

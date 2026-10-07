@@ -1,4 +1,5 @@
 import { OperatorAgentPermissions } from "@/operator/agent-permissions"
+import { OperatorPermissionLocks } from "@/operator/permission-locks"
 import { OperatorConfig } from "@/operator/config"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Schema } from "effect"
@@ -14,6 +15,7 @@ import { described } from "@/server/routes/instance/httpapi/groups/metadata"
 // Under /operator/agent (the API's agent routes), never the app's /operator/agents pages.
 export const OperatorAgentPermissionPaths = {
   agent: "/operator/agent/:name/permissions",
+  locks: "/operator/agent/:name/permission-locks",
 } as const
 
 const permissionError = <Name extends string, Status extends number>(name: Name, status: Status) =>
@@ -68,7 +70,32 @@ export const OperatorAgentPermissionApi = HttpApi.make("operator-agent-permissio
             identifier: "operator.agentPermissions.save",
             summary: "Save an agent's own permission rules",
             description:
-              "Write the agent's own rules, in order, to its agent file or its `agent.<name>` config entry at the scope (a built-in agent gets an entry). A permission + pattern pair written twice is refused, and so is an order that saving grouped by permission would change the result of, unless confirmed. The project reloads.",
+              "Write the agent's own rules, in order, to its agent file or its `agent.<name>` config entry at the scope (a built-in agent gets an entry). A permission + pattern pair written twice is refused, and so is an order that saving grouped by permission would change the result of, unless confirmed. They apply to the agent's sessions at once; the project reloads to read them when none of its sessions is running.",
+          }),
+        ),
+        HttpApiEndpoint.get("locks", OperatorAgentPermissionPaths.locks, {
+          params: { name: Schema.String },
+          query: WorkspaceRoutingQuery,
+          success: described(OperatorPermissionLocks.Info, "The agent's locked rules"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.agentPermissions.locks",
+            summary: "An agent's locked rules",
+            description:
+              "The rules of the agent's list its sessions may not override (by permission and pattern), and, for a subagent, whether it also checks its parent session's agent's locks.",
+          }),
+        ),
+        HttpApiEndpoint.put("saveLocks", OperatorAgentPermissionPaths.locks, {
+          params: { name: Schema.String },
+          query: WorkspaceRoutingQuery,
+          payload: OperatorPermissionLocks.Info,
+          success: described(OperatorPermissionLocks.Info, "The agent's locked rules"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.agentPermissions.saveLocks",
+            summary: "Lock or unlock an agent's rules",
+            description:
+              "Set which of the agent's rules its sessions may not override. For every request a locked rule matches, the agent's rule decides, whatever the session's rules say; it applies at once.",
           }),
         ),
       )

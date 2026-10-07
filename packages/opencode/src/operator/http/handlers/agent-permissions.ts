@@ -2,6 +2,7 @@ import { Global } from "@opencode-ai/core/global"
 import { InstanceState } from "@/effect/instance-state"
 import { OperatorAgentPermissions } from "@/operator/agent-permissions"
 import { OperatorPermissionLive } from "@/operator/permission-live"
+import { OperatorPermissionLocks } from "@/operator/permission-locks"
 import { OperatorReloadWhenIdle } from "@/operator/reload-when-idle"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
 import { Effect } from "effect"
@@ -15,6 +16,7 @@ export const operatorAgentPermissionsHandlers = HttpApiBuilder.group(
     Effect.gen(function* () {
       const permissions = yield* OperatorAgentPermissions.Service
       const live = yield* OperatorPermissionLive.Service
+      const locks = yield* OperatorPermissionLocks.Service
       const reloads = yield* OperatorReloadWhenIdle.Service
       const apiError = (error: OperatorAgentPermissions.NotFoundError | OperatorAgentPermissions.InvalidError) =>
         error._tag === "OperatorAgentPermissionsNotFound"
@@ -66,5 +68,7 @@ export const operatorAgentPermissionsHandlers = HttpApiBuilder.group(
               Effect.mapError(apiError),
             ),
         )
+        .handle("locks", (ctx) => locks.get(ctx.params.name))
+        .handle("saveLocks", (ctx) => locks.save(ctx.params.name, ctx.payload))
     }),
 )

@@ -18,6 +18,8 @@ import { useOriginText } from "../ui/permission-origin"
 import { orderCheck, type Rule } from "../ui/rules"
 import { requestError } from "./config-helpers"
 import { useOverlayParams } from "../ui/overlay-nav"
+import { CheckboxV2 } from "@opencode-ai/ui/v2/checkbox-v2"
+import { useAgentLocks } from "../ui/permission-locks"
 
 type Scope = "project" | "global"
 
@@ -75,6 +77,10 @@ export function AgentPermissions(props: { agent: string; directory: string }) {
   )
   const origin = useOriginText()
   const changedText = useChangedText()
+  const locks = useAgentLocks(
+    () => props.agent,
+    () => props.directory,
+  )
   const shown = (rule: { permission: string }) =>
     !params.aperm || rule.permission === params.aperm || rule.permission.includes("*")
   // A line's origin: the agent's change on a rule from elsewhere, else where its rule comes from.
@@ -106,10 +112,35 @@ export function AgentPermissions(props: { agent: string; directory: string }) {
           fallback={
             <>
               <div class="flex items-center justify-between gap-2 flex-wrap">
-                <p data-slot="operator-note">{language.t("operator.permissionEditor.order")}</p>
-                <ButtonV2 size="small" variant="outline" onClick={() => setParams({ aedit: "1" })}>
-                  {language.t("operator.agentPermissions.edit")}
-                </ButtonV2>
+                <p data-slot="operator-note">
+                  {language.t("operator.permissionEditor.order")} {language.t("operator.locks.precedence")}
+                </p>
+                <span class="flex items-center gap-2">
+                  <ButtonV2
+                    size="small"
+                    variant="ghost"
+                    data-action="lock-all"
+                    onClick={() =>
+                      void locks.all(
+                        savedLines(data().rows, data().own).map((line) => line.rule),
+                        true,
+                      )
+                    }
+                  >
+                    {language.t("operator.locks.lockAll")}
+                  </ButtonV2>
+                  <ButtonV2
+                    size="small"
+                    variant="ghost"
+                    data-action="unlock-all"
+                    onClick={() => void locks.all([], false)}
+                  >
+                    {language.t("operator.locks.unlockAll")}
+                  </ButtonV2>
+                  <ButtonV2 size="small" variant="outline" onClick={() => setParams({ aedit: "1" })}>
+                    {language.t("operator.agentPermissions.edit")}
+                  </ButtonV2>
+                </span>
               </div>
               <Show when={params.aperm}>
                 <p data-slot="operator-note">
@@ -154,6 +185,22 @@ export function AgentPermissions(props: { agent: string; directory: string }) {
                       </Tag>
                     ),
                     value: (line) => line.rule.action,
+                  },
+                  {
+                    id: "override",
+                    header: language.t("operator.locks.column"),
+                    help: language.t("operator.help.ruleLock"),
+                    cell: (line) => (
+                      <CheckboxV2
+                        hideLabel
+                        label={language.t("operator.locks.mayOverride", {
+                          rule: `${line.rule.permission} ${line.rule.pattern}`,
+                        })}
+                        checked={!locks.locked(line.rule)}
+                        onChange={(override: boolean) => void locks.set(line.rule, !override)}
+                      />
+                    ),
+                    value: (line) => (locks.locked(line.rule) ? 0 : 1),
                   },
                   {
                     id: "from",

@@ -2271,6 +2271,7 @@ export type OperatorPendingPermission = {
     namespace: string
   }
   askedBy?: OperatorPermissionRow
+  lockedBy?: PermissionRule
   agentTarget?: {
     /**
      * OpenCode's built-in agent: Allow for agent is not offered
@@ -4521,6 +4522,19 @@ export type OperatorAgentPermissionsInvalidError = {
   }
 }
 
+export type OperatorPermissionLock = {
+  permission: string
+  pattern: string
+}
+
+export type OperatorPermissionLocks = {
+  locks: Array<OperatorPermissionLock>
+  /**
+   * A subagent's locks: its own (default), or its own and its parent session's agent's
+   */
+  inherit: "own" | "parent"
+}
+
 export type OperatorSessionPermissions = {
   sessionID: string
   agent: string
@@ -4547,10 +4561,25 @@ export type OperatorSessionPermissions = {
     [key: string]: OperatorPermissionPatternForm
   }
   known: Array<string>
+  /**
+   * The agent's rules the session may not override (with its parent's, for a subagent that inherits them)
+   */
+  locked: Array<PermissionRule>
+  /**
+   * Every rule of the agent's list is locked: nothing to change
+   */
+  allLocked: boolean
 }
 
 export type OperatorSessionPermissionsNotFoundError = {
   name: "OperatorSessionPermissionsNotFoundError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorSessionPermissionsLockedError = {
+  name: "OperatorSessionPermissionsLockedError"
   data: {
     message: string
   }
@@ -15952,6 +15981,70 @@ export type OperatorAgentPermissionsSaveResponses = {
 export type OperatorAgentPermissionsSaveResponse =
   OperatorAgentPermissionsSaveResponses[keyof OperatorAgentPermissionsSaveResponses]
 
+export type OperatorAgentPermissionsLocksData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/agent/{name}/permission-locks"
+}
+
+export type OperatorAgentPermissionsLocksErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorAgentPermissionsLocksError =
+  OperatorAgentPermissionsLocksErrors[keyof OperatorAgentPermissionsLocksErrors]
+
+export type OperatorAgentPermissionsLocksResponses = {
+  /**
+   * The agent's locked rules
+   */
+  200: OperatorPermissionLocks
+}
+
+export type OperatorAgentPermissionsLocksResponse =
+  OperatorAgentPermissionsLocksResponses[keyof OperatorAgentPermissionsLocksResponses]
+
+export type OperatorAgentPermissionsSaveLocksData = {
+  body?: OperatorPermissionLocks
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/agent/{name}/permission-locks"
+}
+
+export type OperatorAgentPermissionsSaveLocksErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorAgentPermissionsSaveLocksError =
+  OperatorAgentPermissionsSaveLocksErrors[keyof OperatorAgentPermissionsSaveLocksErrors]
+
+export type OperatorAgentPermissionsSaveLocksResponses = {
+  /**
+   * The agent's locked rules
+   */
+  200: OperatorPermissionLocks
+}
+
+export type OperatorAgentPermissionsSaveLocksResponse =
+  OperatorAgentPermissionsSaveLocksResponses[keyof OperatorAgentPermissionsSaveLocksResponses]
+
 export type OperatorSessionPermissionsGetData = {
   body?: never
   path: {
@@ -16004,9 +16097,9 @@ export type OperatorSessionPermissionsSaveData = {
 
 export type OperatorSessionPermissionsSaveErrors = {
   /**
-   * Bad request
+   * OperatorSessionPermissionsLockedError | InvalidRequestError
    */
-  400: BadRequestError
+  400: OperatorSessionPermissionsLockedError | InvalidRequestError
   /**
    * OperatorSessionPermissionsNotFoundError
    */

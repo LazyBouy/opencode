@@ -1,5 +1,6 @@
 import { useParams } from "@solidjs/router"
 import { type JSX, Show } from "solid-js"
+import { SessionMenuItems } from "./session-menu"
 import { SessionPicker } from "./session-picker"
 import { TranscriptView } from "./transcript"
 import { UserExtras } from "./user-extras"
@@ -41,4 +42,10 @@ export function sessionPicker(
   session: () => { id: string; agent?: string; directory: string; parentID?: string } | undefined,
 ): JSX.Element {
   return <Show when={session()}>{(info) => <SessionPicker session={info()} />}</Show>
+}
+
+// The fork's items in the chat's "…" menu (one fork line in each of message-timeline.tsx's menus,
+// before the separator): Session permissions.
+export function menuItems(sessionID: string, kind: "v1" | "v2"): JSX.Element {
+  return <SessionMenuItems sessionID={sessionID} kind={kind} />
 }

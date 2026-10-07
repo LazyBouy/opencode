@@ -25,6 +25,7 @@ import { requestError } from "./config-helpers"
 import { usePromptCatalog, useProfileNames } from "./profile-data"
 import { OPENCODE } from "./profile-model"
 import { useProjectSettings } from "./project-prompt"
+import { useAgentLocks } from "../ui/permission-locks"
 
 // Create a new agent (an agent file or a config entry) or edit an existing one.
 export default function AgentFormPage() {
@@ -55,9 +56,17 @@ export default function AgentFormPage() {
     format: "file" as "file" | "config",
     form: formFromSettings("", {}),
     rules: [] as Rule[],
+    // A subagent's locks: its own, or its own and its parent session's agent's (fixes_spec §4.2).
+    inherit: undefined as "own" | "parent" | undefined,
     error: "",
     saving: false,
   })
+  const locks = useAgentLocks(
+    () => existing()?.name ?? "",
+    () => directory() ?? "",
+  )
+  const inherit = () => store.inherit ?? locks.current().inherit
+  const subagent = () => store.form.mode === "subagent" || store.form.mode === "all"
 
   // Fill the form from the agent's own settings once they load.
   createEffect(
@@ -121,6 +130,18 @@ export default function AgentFormPage() {
               directory: directory(),
               profile: chosen.id,
             })
+          : undefined,
+      )
+      .then(() =>
+        subagent() && inherit() !== locks.current().inherit
+          ? client.operator.agentPermissions.saveLocks(
+              {
+                name: store.form.name.trim(),
+                directory: directory(),
+                operatorPermissionLocks: { locks: locks.current().locks, inherit: inherit() },
+              },
+              { throwOnError: true },
+            )
           : undefined,
       )
       .then(() => {
@@ -241,6 +262,21 @@ export default function AgentFormPage() {
               <SegmentedControlItemV2 value="all">{language.t("operator.agents.mode.all")}</SegmentedControlItemV2>
             </SegmentedControlV2>
           </Field>
+          <Show when={subagent()}>
+            <Field group label={language.t("operator.locks.inherit")} hint={language.t("operator.help.lockInherit")}>
+              <SegmentedControlV2
+                class="operator-segmented-wide"
+                value={inherit()}
+                onChange={(value) => value && setStore("inherit", value as "own" | "parent")}
+                aria-label={language.t("operator.locks.inherit")}
+              >
+                <SegmentedControlItemV2 value="own">{language.t("operator.locks.inheritOwn")}</SegmentedControlItemV2>
+                <SegmentedControlItemV2 value="parent">
+                  {language.t("operator.locks.inheritParent")}
+                </SegmentedControlItemV2>
+              </SegmentedControlV2>
+            </Field>
+          </Show>
           <Field label={language.t("operator.column.model")} hint={language.t("operator.agentForm.modelHint")}>
             <TextInputV2
               appearance="base"
