@@ -47,3 +47,20 @@ test("a project's record has the same two pickers", async ({ page }) => {
   await expect(pickers.locator('[data-component="select-v2-root"]')).toHaveCount(2)
   await expect(pickers).toContainText("OpenCode's own choice")
 })
+
+test("the table follows the namespace picker: a namespace's projects, under its name when all are shown", async ({
+  page,
+}) => {
+  const state = await mockOperator(page)
+  state.prompt.namespaces.push({ id: "acme", name: "Acme", purpose: "", createdAt: 1, updatedAt: 1 })
+  await page.goto(`/operator/models?ns=*`)
+  const table = page.getByTestId("models-per-project")
+  await expect(table.getByTestId("models-namespace")).toHaveText(["OpenCode", "Acme"])
+  await expect(table).toContainText("Acme has no projects yet.")
+  await expect(table.locator(`[data-testid="models-row"][data-project="${directory}"]`)).toBeVisible()
+
+  await page.goto(`/operator/models?ns=acme`)
+  await expect(table.getByTestId("models-namespace")).toHaveCount(0)
+  await expect(table.locator('[data-testid="models-row"]')).toHaveCount(0)
+  await expect(page.getByTestId("models-listed-from")).toContainText("the namespace has no project yet")
+})

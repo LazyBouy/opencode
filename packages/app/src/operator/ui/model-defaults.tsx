@@ -1,5 +1,5 @@
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
-import type { OperatorModelSource } from "@opencode-ai/sdk/v2/client"
+import type { OperatorModelSource, OperatorNamespaceSummary } from "@opencode-ai/sdk/v2/client"
 import { useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createMemo, For, type JSX, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
@@ -195,10 +195,13 @@ export function ProjectModelPickers(props: { directory: string }) {
   )
 }
 
-// The table on Providers & Models: All projects (global), then every project.
-export function ModelsPerProject() {
+// The table on Providers & Models: All projects (global), then the projects of the namespaces in
+// scope, under each namespace's name when there are several.
+export function ModelsPerProject(props: { namespaces: ReadonlyArray<OperatorNamespaceSummary>; grouped: boolean }) {
   const language = useLanguage()
   const projects = useOperatorProjects()
+  const labelOf = (key: string) =>
+    projects().find((project) => project.directory === key)?.label ?? key.split(/[\\/]/).filter(Boolean).at(-1) ?? key
   return (
     <section data-component="operator-panel" data-testid="models-per-project">
       <h2 data-slot="operator-panel-title">
@@ -220,7 +223,33 @@ export function ModelsPerProject() {
         </thead>
         <tbody>
           <GlobalRow />
-          <For each={projects()}>{(project) => <ProjectRow directory={project.directory} label={project.label} />}</For>
+          <For each={props.namespaces}>
+            {(item) => (
+              <>
+                <Show when={props.grouped}>
+                  <tr data-testid="models-namespace">
+                    <th scope="colgroup" colSpan={5}>
+                      {item.namespace.name}
+                    </th>
+                  </tr>
+                </Show>
+                <For
+                  each={item.projects}
+                  fallback={
+                    <tr>
+                      <td colSpan={5}>
+                        <span data-slot="operator-note">
+                          {language.t("operator.modelDefaults.noProjects", { namespace: item.namespace.name })}
+                        </span>
+                      </td>
+                    </tr>
+                  }
+                >
+                  {(key) => <ProjectRow directory={key} label={labelOf(key)} />}
+                </For>
+              </>
+            )}
+          </For>
         </tbody>
       </table>
     </section>

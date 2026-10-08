@@ -246,25 +246,23 @@ test("the models page lists the catalog with limits and prices", async ({ page }
   const row = page.getByRole("row", { name: /Claude Opus 4.6/ })
   await expect(row).toContainText("200K")
   await expect(row).toContainText("$15.00")
-  await expect(row).toContainText("Default")
 })
 
-test("Providers & Models shows the default and small model with where they come from, and sets them", async ({
+test("Providers & Models: a namespace picker, the models of its default project, and Use as writes the global config", async ({
   page,
 }) => {
   const state = await mockOperator(page)
   await page.goto(`/operator/models${dir}`)
-  const defaults = page.getByTestId("model-defaults")
-  await expect(defaults).toContainText("opencode/claude-opus-4-6")
-  await expect(defaults).toContainText("Not set: OpenCode's own choice")
-  await expect(defaults).toContainText("opencode/claude-haiku-4-5")
+  // The namespace picker replaces the project picker; the single default/small panel is gone.
+  await expect(page.locator('[data-component="select-v2-root"][aria-label="Project"]')).toHaveCount(0)
+  await expect(page.getByTestId("model-defaults")).toHaveCount(0)
+  await expect(page.getByTestId("models-listed-from")).toContainText("the namespace's default project")
   await page.getByRole("row", { name: /Claude Opus 4.6/ }).click()
   const overlay = page.getByRole("dialog")
-  await expect(overlay.getByRole("button", { name: "Use as default model" })).toBeDisabled()
-  await overlay.getByRole("button", { name: "Use as small model" }).click()
+  await expect(overlay.locator('[data-component="operator-scope-switch"]')).toHaveCount(0)
+  await overlay.getByRole("button", { name: "Use as small model (global)" }).click()
   await expect.poll(() => state.writes.length).toBe(1)
-  // A project is in context: This project.
-  expect(new URL(state.writes[0]!.url).searchParams.get("scope")).toBe("project")
+  expect(new URL(state.writes[0]!.url).searchParams.get("scope")).toBe("global")
   expect(state.writes[0]!.body).toEqual({ small_model: "opencode/claude-opus-4-6" })
 })
 

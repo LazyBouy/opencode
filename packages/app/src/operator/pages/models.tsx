@@ -10,15 +10,11 @@ import { createStore } from "solid-js/store"
 import { useSettingsDialog } from "@/components/settings-dialog"
 import { useLanguage } from "@/context/language"
 import { useOperatorClient } from "../data"
-import { formatCost, formatCount } from "../format"
-import { useScopedProject } from "../project"
+import { formatCost, formatCount, shortPath } from "../format"
 import { type Column, DataTable } from "../ui/data-table"
-import { FieldHelp } from "../ui/field-help"
 import { PageHeader } from "../ui/page-header"
 import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOverlay } from "../ui/record-overlay"
-import { ScopePicker } from "../ui/scope-picker"
-import { type Scope, ScopeSwitch } from "../ui/scope-switch"
-import { ModelWithSource } from "../ui/prompt-trace"
+import { NamespacePicker, useNamespaceScope } from "../ui/namespace-picker"
 import { showToast } from "@/utils/toast"
 import { requestError } from "./config-helpers"
 import { useOverlayParams } from "../ui/overlay-nav"
@@ -26,13 +22,16 @@ import { ModelsPerProject } from "../ui/model-defaults"
 
 type Row = Model & { providerName: string; isDefault: boolean; isSmall: boolean }
 
-// The project's providers and their models, and its default and small model with where they are set.
+// The providers and models the page lists are those of the namespace's default project (with every
+// namespace in scope, OpenCode's), or the server's own when the namespace has no project. Default and
+// Small mark the models the global config sets, which "Use as" changes.
 function useModels() {
   const api = useOperatorClient()
-  const directory = useScopedProject()
+  const scope = useNamespaceScope()
+  const namespace = () => (scope.all() ? scope.namespaces()[0] : scope.scoped()[0])
+  const directory = () => namespace()?.defaultProject
   const defaults = useQuery(() => ({
     queryKey: api.key("model-defaults", directory()),
-    enabled: !!directory(),
     queryFn: () =>
       api
         .client()
@@ -52,23 +51,24 @@ function useModels() {
       Object.values(provider.models).map((model) => ({
         ...model,
         providerName: provider.name,
-        isDefault: defaults.data?.model.model === `${provider.id}/${model.id}`,
-        isSmall: defaults.data?.small.model === `${provider.id}/${model.id}`,
+        isDefault: defaults.data?.global?.model === `${provider.id}/${model.id}`,
+        isSmall: defaults.data?.global?.small === `${provider.id}/${model.id}`,
       })),
     ),
   )
-  return { providers, rows, defaults, directory }
+  return { providers, rows, defaults, directory, scope, namespace }
 }
 
-// Makes a model the default or the small model: config `model` / `small_model` at a scope.
+// Makes a model the default or the small model of every project: config `model` / `small_model` in
+// the global config. One project's models are set in Models per project.
 function useSetModel() {
   const language = useLanguage()
   const api = useOperatorClient()
   const queryClient = useQueryClient()
-  return async (directory: string | undefined, scope: Scope, key: "model" | "small_model", model: string) =>
+  return async (key: "model" | "small_model", model: string) =>
     api
       .client()
-      .operator.config.update({ directory, scope, body: { [key]: model } }, { throwOnError: true })
+      .operator.config.update({ scope: "global", body: { [key]: model } }, { throwOnError: true })
       .then(async () => {
         showToast({
           title: language.t(key === "model" ? "operator.models.defaultSet" : "operator.models.smallSet", { model }),
@@ -86,7 +86,7 @@ export default function ModelsPage() {
   const connect = useSettingsDialog("providers")
   const choose = useSettingsDialog("models")
   const [filter, setFilter] = createStore({ text: "" })
-  const { providers, rows, defaults } = useModels()
+  const { providers, rows, directory, scope } = useModels()
   const [params, setParams] = useSearchParams<{ model?: string }>()
   useRecordOverlay(
     () => !!params.model,
@@ -196,7 +196,7 @@ export default function ModelsPage() {
         description={language.t("operator.page.models.description")}
         actions={
           <>
-            <ScopePicker />
+            <NamespacePicker />
             <ButtonV2 size="small" variant="outline" onClick={() => choose()}>
               {language.t("operator.models.choose")}
             </ButtonV2>
@@ -206,35 +206,7 @@ export default function ModelsPage() {
           </>
         }
       />
-      <section data-component="operator-panel" data-testid="model-defaults">
-        <dl data-component="operator-facts" data-layout="stacked">
-          <div data-slot="operator-fact">
-            <dt>
-              {language.t("operator.models.defaultModel")}
-              <FieldHelp
-                field={language.t("operator.models.defaultModel")}
-                text={language.t("operator.help.defaultModel")}
-              />
-            </dt>
-            <dd>
-              <ModelWithSource source={defaults.data?.model} />
-            </dd>
-          </div>
-          <div data-slot="operator-fact">
-            <dt>
-              {language.t("operator.models.smallModel")}
-              <FieldHelp
-                field={language.t("operator.models.smallModel")}
-                text={language.t("operator.help.smallModel")}
-              />
-            </dt>
-            <dd>
-              <ModelWithSource source={defaults.data?.small} />
-            </dd>
-          </div>
-        </dl>
-      </section>
-      <ModelsPerProject />
+      <ModelsPerProject namespaces={scope.scoped()} grouped={scope.all() && scope.namespaces().length > 1} />
       <div data-slot="operator-tiles">
         <For each={providers.data?.providers ?? []}>
           {(provider) => (
@@ -253,7 +225,12 @@ export default function ModelsPage() {
           )}
         </For>
       </div>
-      <p data-slot="operator-note">{language.t("operator.models.priceNote")}</p>
+      <p data-slot="operator-note" data-testid="models-listed-from">
+        {directory()
+          ? language.t("operator.models.listedFrom", { project: shortPath(directory()!) })
+          : language.t("operator.models.listedFromServer")}{" "}
+        {language.t("operator.models.priceNote")}
+      </p>
       <div data-slot="operator-toolbar">
         <TextInputV2
           type="search"
@@ -283,13 +260,12 @@ export default function ModelsPage() {
 // The overlay a model opens in: the providers on the left, a model's limits, prices and capabilities.
 function ModelOverlay() {
   const language = useLanguage()
-  const { providers, rows, directory } = useModels()
+  const { providers, rows } = useModels()
   const setModel = useSetModel()
-  // This project when a project is in context, else Global.
-  const [scope, setScope] = createStore({ value: (directory() ? "project" : "global") as Scope, busy: false })
+  const [state, setState] = createStore({ busy: false })
   const use = async (key: "model" | "small_model", model: string) => {
-    setScope("busy", true)
-    await setModel(directory(), scope.value, key, model).finally(() => setScope("busy", false))
+    setState("busy", true)
+    await setModel(key, model).finally(() => setState("busy", false))
   }
   const [params, setParams] = useOverlayParams<{ model?: string }>()
   const locale = () => language.intl()
@@ -335,17 +311,16 @@ function ModelOverlay() {
             }
             actions={
               <>
-                <ScopeSwitch value={scope.value} onChange={(value) => setScope("value", value)} />
                 <ButtonV2
                   variant="outline"
-                  disabled={scope.busy || found().isDefault}
+                  disabled={state.busy || found().isDefault}
                   onClick={() => void use("model", keyOf(found()))}
                 >
                   {language.t("operator.models.useDefault")}
                 </ButtonV2>
                 <ButtonV2
                   variant="outline"
-                  disabled={scope.busy || found().isSmall}
+                  disabled={state.busy || found().isSmall}
                   onClick={() => void use("small_model", keyOf(found()))}
                 >
                   {language.t("operator.models.useSmall")}
