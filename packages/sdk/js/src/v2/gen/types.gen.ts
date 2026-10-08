@@ -2327,6 +2327,8 @@ export type OperatorNamespace = {
    */
   purpose: string
   defaultProfile?: string
+  folder?: string
+  defaultProject?: string
   createdAt: number
   updatedAt: number
 }
@@ -2337,6 +2339,8 @@ export type OperatorNamespaceSummary = {
    * Keys of the namespace's projects
    */
   projects: Array<string>
+  defaultProject?: string
+  firstProject?: string
 }
 
 export type OperatorProfileInvalidError = {
@@ -9758,6 +9762,10 @@ export type OperatorNamespaceCreateData = {
   body?: {
     name: string
     purpose?: string
+    /**
+     * An absolute folder inside the workspace roots; it is created if missing
+     */
+    folder: string
   }
   path?: never
   query?: never
@@ -9853,6 +9861,8 @@ export type OperatorNamespaceUpdateData = {
     name?: string
     purpose?: string
     defaultProfile?: string
+    folder?: string
+    defaultProject?: string
   }
   path: {
     ns: string

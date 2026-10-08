@@ -1186,7 +1186,7 @@
             }
           }
         },
-        "description": "Create a namespace as a copy of OpenCode: it gets its own copies of OpenCode's built-in layers, groups and profiles (built-ins belong to OpenCode), and of OpenCode's own types, layers, groups and profiles. It starts with no projects.",
+        "description": "Create a namespace as a copy of OpenCode: it gets its own copies of OpenCode's built-in layers, groups and profiles (built-ins belong to OpenCode), and of OpenCode's own types, layers, groups and profiles. It starts with no projects, in its own folder.",
         "summary": "Create a namespace",
         "requestBody": {
           "content": {
@@ -1199,9 +1199,13 @@
                   },
                   "purpose": {
                     "type": "string"
+                  },
+                  "folder": {
+                    "type": "string",
+                    "description": "An absolute folder inside the workspace roots; it is created if missing"
                   }
                 },
-                "required": ["name"],
+                "required": ["name", "folder"],
                 "additionalProperties": false
               }
             }
@@ -1329,7 +1333,7 @@
             }
           }
         },
-        "description": "Change a namespace's name, its org purpose (sent first in every agent's prompt) or its default profile.",
+        "description": "Change a namespace's name, its org purpose (sent first in every agent's prompt), its default profile, its folder or its default project.",
         "summary": "Change a namespace",
         "requestBody": {
           "content": {
@@ -1344,6 +1348,12 @@
                     "type": "string"
                   },
                   "defaultProfile": {
+                    "type": "string"
+                  },
+                  "folder": {
+                    "type": "string"
+                  },
+                  "defaultProject": {
                     "type": "string"
                   }
                 },
@@ -29188,6 +29198,12 @@
           "defaultProfile": {
             "type": "string"
           },
+          "folder": {
+            "type": "string"
+          },
+          "defaultProject": {
+            "type": "string"
+          },
           "createdAt": {
             "type": "number"
           },
@@ -29210,6 +29226,12 @@
               "type": "string"
             },
             "description": "Keys of the namespace's projects"
+          },
+          "defaultProject": {
+            "type": "string"
+          },
+          "firstProject": {
+            "type": "string"
           }
         },
         "required": ["namespace", "projects"],

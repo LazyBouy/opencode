@@ -159,6 +159,12 @@ export const Namespace = Schema.Struct({
   name: Schema.String,
   purpose: Schema.String.annotate({ description: "The org purpose, sent first in every agent's prompt" }),
   defaultProfile: Schema.optional(Schema.String),
+  folder: Schema.optional(Schema.String).annotate({
+    description: "The namespace's folder: its projects are created in it, and it holds the namespace's memory",
+  }),
+  defaultProject: Schema.optional(Schema.String).annotate({
+    description: "The project chosen as the namespace's default; without one, its first project is the default",
+  }),
   createdAt: Schema.Finite,
   updatedAt: Schema.Finite,
 }).annotate({ identifier: "OperatorNamespace" })

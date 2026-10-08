@@ -1,5 +1,7 @@
 // Route scenarios for this fork's endpoints (merge, operator console). Kept out of index.ts so
 // upstream changes to the shared scenario list merge without conflicts.
+import os from "os"
+import path from "path"
 import { Effect } from "effect"
 import { array, boolean, check, isRecord, object } from "./assertions"
 import { http, route } from "./dsl"
@@ -8,6 +10,9 @@ import { type Scenario } from "./types"
 // The fork's session guard refuses sessions outside projects; the shared scenarios start sessions in
 // plain temporary folders, so the exerciser runs with it off (session-guard.test.ts covers it).
 process.env.OPENCODE_PROJECT_GUARD ??= "off"
+// Namespace folders must be inside the workspace roots; the exerciser creates them in the temp folder.
+process.env.OPENCODE_WORKSPACE_ROOTS ??= os.tmpdir()
+const namespaceFolder = path.join(os.tmpdir(), `opencode-httpapi-namespace-${process.pid}`)
 
 export const operatorScenarios: Scenario[] = [
   http.protected
@@ -606,13 +611,14 @@ export const operatorScenarios: Scenario[] = [
     .at((ctx) => ({
       path: "/operator/namespaces",
       headers: ctx.headers(),
-      body: { name: "HttpApi team", purpose: "Test." },
+      body: { name: "HttpApi team", purpose: "Test.", folder: namespaceFolder },
     }))
     .json(
       200,
       (body) => {
         object(body)
         check(body.id === "httpapi-team" && body.purpose === "Test.", "the namespace should be created")
+        check(typeof body.folder === "string" && body.folder.length > 0, "the namespace should have its folder")
       },
       "status",
     ),
@@ -629,9 +635,17 @@ export const operatorScenarios: Scenario[] = [
     .at((ctx) => ({
       path: route("/operator/namespaces/{ns}", { ns: "opencode" }),
       headers: ctx.headers(),
-      body: { purpose: "" },
+      body: { purpose: "", defaultProject: "" },
     }))
-    .json(200, (body) => check(isRecord(body) && body.purpose === "", "the purpose should be saved"), "status"),
+    .json(
+      200,
+      (body) =>
+        check(
+          isRecord(body) && body.purpose === "" && body.defaultProject === undefined,
+          "the purpose should be saved",
+        ),
+      "status",
+    ),
   http.protected
     .delete("/operator/namespaces/{ns}", "operator.namespace.remove")
     .at((ctx) => ({ path: route("/operator/namespaces/{ns}", { ns: "opencode" }), headers: ctx.headers() }))

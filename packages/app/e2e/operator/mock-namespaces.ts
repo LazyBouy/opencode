@@ -24,6 +24,8 @@ type Namespace = {
   name: string
   purpose: string
   defaultProfile?: string
+  folder?: string
+  defaultProject?: string
   createdAt: number
   updatedAt: number
 }
@@ -227,12 +229,20 @@ export function createPromptMock(
     }
     return next(1)
   }
-  const summary = (namespace: Namespace) => ({
-    namespace,
-    projects: Object.entries(state.projects)
+  // Projects in the order they were added; the chosen default while it is there, else the first.
+  const summary = (namespace: Namespace) => {
+    const keys = Object.entries(state.projects)
       .filter(([, setting]) => setting.namespace === namespace.id)
-      .map(([key]) => key),
-  })
+      .map(([key]) => key)
+    const chosen =
+      namespace.defaultProject && keys.includes(namespace.defaultProject) ? namespace.defaultProject : keys[0]
+    return {
+      namespace,
+      projects: keys,
+      ...(chosen ? { defaultProject: chosen } : {}),
+      ...(keys[0] ? { firstProject: keys[0] } : {}),
+    }
+  }
   // Built-ins belong to OpenCode; another namespace has its own copies ("<id>" for "opencode:<id>").
   const own = (id: string) => (id.startsWith(PREFIX) ? id.slice(PREFIX.length) : id)
   const versionId = (ns: string, id: string) => (ns === "opencode" ? id : own(id))
@@ -563,10 +573,13 @@ export function createPromptMock(
     if (parts.length === 0) {
       if (method === "GET") return json(route, state.namespaces.map(summary))
       const name = String(body?.name ?? "")
+      const folder = String(body?.folder ?? "")
+      if (!folder.startsWith("/")) return invalid(route, "A namespace needs a folder")
       const namespace = {
         id: free(state.namespaces, name),
         name,
         purpose: String(body?.purpose ?? ""),
+        folder,
         createdAt: 1,
         updatedAt: 1,
       }
@@ -586,6 +599,8 @@ export function createPromptMock(
         return json(route, true)
       }
       Object.assign(namespace, body)
+      // An empty string clears a choice.
+      if (namespace.defaultProject === "") delete namespace.defaultProject
       return json(route, namespace)
     }
     if (kind === "catalog") return json(route, catalog(ns))

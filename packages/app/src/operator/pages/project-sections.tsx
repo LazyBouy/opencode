@@ -143,7 +143,6 @@ export function ProjectPromptSection(props: {
   nsName: string
   purpose: string
   profile: string
-  added: boolean
   editing: boolean
   onEditing: (editing: boolean) => void
 }) {
@@ -151,7 +150,7 @@ export function ProjectPromptSection(props: {
   return (
     <Show
       when={!props.editing}
-      fallback={<ProjectPromptForm project={props.setting} added={props.added} onDone={() => props.onEditing(false)} />}
+      fallback={<ProjectPromptForm project={props.setting} onDone={() => props.onEditing(false)} />}
     >
       <RecordView
         title={props.name}

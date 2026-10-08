@@ -78,14 +78,16 @@ containers. See `FORK.md`.
 
 Override in the shell or in `docker/dev/.env`:
 
-| Variable                                                                                                             | Default          | Purpose                                        |
-| -------------------------------------------------------------------------------------------------------------------- | ---------------- | ---------------------------------------------- |
-| `WORKSPACE`                                                                                                          | `/root/projects` | host folder mounted into the server, same path |
-| `OPENCODE_SERVER_PORT`                                                                                               | `4096`           | API port on the host (127.0.0.1 only)          |
-| `OPENCODE_WEB_PORT`                                                                                                  | `4444`           | web UI port on the host (127.0.0.1 only)       |
-| `OPENCODE_SERVER_PASSWORD`                                                                                           | unset            | require basic auth on the API                  |
-| `SERVER_CPUS` / `SERVER_MEMORY`, `WEB_CPUS` / `WEB_MEMORY`, `TOOLS_CPUS` / `TOOLS_MEMORY`, `E2E_CPUS` / `E2E_MEMORY` | see table        | resource limits                                |
-| `E2E_WORKERS`                                                                                                        | `2`              | Playwright workers                             |
+| Variable                                                                                                             | Default                                            | Purpose                                                      |
+| -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------ |
+| `WORKSPACE`                                                                                                          | `/root/projects`                                   | host folder mounted into the server, same path               |
+| `OPENCODE_SERVER_PORT`                                                                                               | `4096`                                             | API port on the host (127.0.0.1 only)                        |
+| `OPENCODE_WEB_PORT`                                                                                                  | `4444`                                             | web UI port on the host (127.0.0.1 only)                     |
+| `OPENCODE_SERVER_PASSWORD`                                                                                           | unset                                              | require basic auth on the API                                |
+| `OPENCODE_NAMESPACE_FOLDER`                                                                                          | `/root/projects/agent-harnesses/opencode`          | the OpenCode namespace's folder, set on first start          |
+| `OPENCODE_DEFAULT_PROJECT`                                                                                           | `/root/projects/agent-harnesses/opencode/opencode` | the OpenCode namespace's default project, set on first start |
+| `SERVER_CPUS` / `SERVER_MEMORY`, `WEB_CPUS` / `WEB_MEMORY`, `TOOLS_CPUS` / `TOOLS_MEMORY`, `E2E_CPUS` / `E2E_MEMORY` | see table                                          | resource limits                                              |
+| `E2E_WORKERS`                                                                                                        | `2`                                                | Playwright workers                                           |
 
 ## Stop
 

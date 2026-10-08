@@ -68,26 +68,33 @@ export function rootOf(roots: ReadonlyArray<string>, folder: string) {
 
 const NAME = /^(?!\.{1,2}$)[^/\\\0]{1,255}$/
 
+// Symlinks are followed before the check, so a link inside a root cannot reach outside it. A
+// folder that does not exist yet is checked through its parent.
+const real = (folder: string): Promise<string> =>
+  fs.realpath(folder).catch(() => {
+    const parent = path.dirname(folder)
+    return parent === folder ? folder : real(parent).then((dir) => path.join(dir, path.basename(folder)))
+  })
+
+// A folder, resolved, with the workspace root it is in (none when it is outside them all).
+export async function locate(folder: string) {
+  const roots = await Promise.all(workspaceRoots().map(real))
+  const resolved = await real(path.resolve(folder))
+  return { resolved, root: rootOf(roots, resolved), roots }
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
 
-    // Symlinks are followed before the check, so a link inside a root cannot reach outside it. A
-    // folder that does not exist yet is checked through its parent.
-    const real = (folder: string): Promise<string> =>
-      fs.realpath(folder).catch(() => {
-        const parent = path.dirname(folder)
-        return parent === folder ? folder : real(parent).then((dir) => path.join(dir, path.basename(folder)))
-      })
-
     const inside = Effect.fnUntraced(function* (folder: string) {
-      const roots = yield* Effect.promise(() => Promise.all(workspaceRoots().map(real)))
-      const resolved = yield* Effect.promise(() => real(path.resolve(folder)))
-      const root = rootOf(roots, resolved)
-      if (!root)
-        return yield* new OutsideError({ message: `${resolved} is outside the workspace (${roots.join(", ")})` })
-      return { resolved, root }
+      const found = yield* Effect.promise(() => locate(folder))
+      if (!found.root)
+        return yield* new OutsideError({
+          message: `${found.resolved} is outside the workspace (${found.roots.join(", ")})`,
+        })
+      return { resolved: found.resolved, root: found.root }
     })
 
     const isRepository = (folder: string) =>

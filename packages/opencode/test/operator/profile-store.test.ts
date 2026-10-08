@@ -14,20 +14,28 @@ const P = OperatorProfile.PREFIX
 const model = { providerID: "test", api: { id: "test-model" } }
 const parts = { environment: ["<env/>"], instructions: [] }
 
+// A folder for a new namespace, inside the test project.
+const folderFor = (name: string) =>
+  TestInstance.pipe(Effect.map((instance) => path.join(instance.directory, "namespaces", name.toLowerCase())))
+
 // Points the global config folder inside the test project for the duration of a test.
 const withGlobal = <A, E, R>(body: (dir: string) => Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
     const dir = path.join((yield* TestInstance).directory, "global-config")
     return yield* Effect.acquireUseRelease(
       Effect.sync(() => {
-        const previous = Global.Path.config
+        const previous = { config: Global.Path.config, roots: process.env.OPENCODE_WORKSPACE_ROOTS }
         ;(Global.Path as { config: string }).config = dir
+        // Namespace folders must be inside the workspace roots: the test project is one.
+        process.env.OPENCODE_WORKSPACE_ROOTS = path.dirname(dir)
         return previous
       }),
       () => body(dir),
       (previous) =>
         Effect.sync(() => {
-          ;(Global.Path as { config: string }).config = previous
+          ;(Global.Path as { config: string }).config = previous.config
+          if (previous.roots === undefined) delete process.env.OPENCODE_WORKSPACE_ROOTS
+          else process.env.OPENCODE_WORKSPACE_ROOTS = previous.roots
         }),
     )
   })
@@ -110,7 +118,11 @@ it.instance("a new namespace gets its own copies of OpenCode's built-ins and of 
     Effect.gen(function* () {
       const items = yield* seed()
       yield* items.store.updateNamespace("opencode", { defaultProfile: items.profile.id })
-      const team = yield* items.store.createNamespace({ name: "Team", purpose: "We build editors." })
+      const team = yield* items.store.createNamespace({
+        name: "Team",
+        folder: yield* folderFor("Team"),
+        purpose: "We build editors.",
+      })
       const catalog = yield* items.store.catalog(team.id)
       expect(catalog.namespace).toMatchObject({
         name: "Team",
@@ -152,7 +164,7 @@ it.instance("Copy to namespace brings what is missing and renames a clash", () =
   withGlobal(() =>
     Effect.gen(function* () {
       const items = yield* seed()
-      const empty = yield* items.store.createNamespace({ name: "Empty" })
+      const empty = yield* items.store.createNamespace({ name: "Empty", folder: yield* folderFor("Empty") })
       // Empty starts as a copy; remove its items so the copy has to bring them.
       for (const kind of ["profile", "group", "layer", "layer", "type"] as const) {
         const ids = {
@@ -195,7 +207,7 @@ it.instance("moving a project copies what it uses and keeps its prompt the same"
           parts,
         }).system
 
-      const target = yield* items.store.createNamespace({ name: "Moved" })
+      const target = yield* items.store.createNamespace({ name: "Moved", folder: yield* folderFor("Moved") })
       // The new namespace starts as a copy; take out what the move has to bring.
       yield* items.store.remove(target.id, "profile", items.profile.id)
       yield* items.store.remove(target.id, "layer", purpose.id)
@@ -241,7 +253,7 @@ it.instance("copying a project gives the new one its prompt settings; another na
       expect((yield* items.store.agent("/work/copy", "build")).profile).toBe(items.profile.id)
 
       // Another namespace: what the project uses is copied there and the links point at the copies.
-      const target = yield* items.store.createNamespace({ name: "Other" })
+      const target = yield* items.store.createNamespace({ name: "Other", folder: yield* folderFor("Other") })
       yield* items.store.remove(target.id, "profile", items.profile.id)
       yield* items.store.remove(target.id, "layer", purpose.id)
       const other = yield* items.store.copyProject(source, "/work/other", { namespace: target.id })
@@ -273,7 +285,7 @@ it.instance("items in use cannot be deleted, and the error says by what", () =>
       )
       expect(yield* refused(items.store.removeNamespace("opencode"))).toContain("cannot be deleted")
 
-      const team = yield* items.store.createNamespace({ name: "Team" })
+      const team = yield* items.store.createNamespace({ name: "Team", folder: yield* folderFor("Team") })
       yield* items.store.setProject(key, { namespace: team.id })
       expect(yield* refused(items.store.removeNamespace(team.id))).toContain("still has projects")
       yield* items.store.setProject(key, { namespace: "opencode" })
@@ -372,7 +384,7 @@ it.instance("copies of a built-in OpenCode no longer has: its own copy is not re
   withGlobal(() =>
     Effect.gen(function* () {
       const store = yield* OperatorProfileStore.Service
-      const team = yield* store.createNamespace({ name: "Team" })
+      const team = yield* store.createNamespace({ name: "Team", folder: yield* folderFor("Team") })
       const layers = path.join(OperatorProfileStore.root(), team.id, "layers")
       const copy = (id: string, name: string) =>
         `---\nid: ${id}\nname: ${name}\ntype: identity\nsection: agent\nreplaces: ${P}agent.gone\norigin: user\n---\nOld text.\n`
@@ -392,7 +404,7 @@ it.instance("a copy of OpenCode's text whose original changed is marked, and tak
   withGlobal(() =>
     Effect.gen(function* () {
       const store = yield* OperatorProfileStore.Service
-      const team = yield* store.createNamespace({ name: "Team" })
+      const team = yield* store.createNamespace({ name: "Team", folder: yield* folderFor("Team") })
       const file = path.join(OperatorProfileStore.root(), team.id, "layers", "base.default.md")
       // As if OpenCode's text changed since the copy was made: its fingerprint no longer matches.
       yield* Effect.promise(async () =>
@@ -404,6 +416,76 @@ it.instance("a copy of OpenCode's text whose original changed is marked, and tak
       expect(
         (yield* store.catalog(team.id)).layers.find((item) => item.id === "base.default")?.outdated,
       ).toBeUndefined()
+    }),
+  ),
+)
+
+it.instance("a namespace has a folder inside the workspace, created if missing", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      const store = yield* OperatorProfileStore.Service
+      const folder = yield* folderFor("Acme")
+      expect(yield* refused(store.createNamespace({ name: "Acme", folder: "" }))).toBe("A namespace needs a folder")
+      expect(yield* refused(store.createNamespace({ name: "Acme", folder: "acme" }))).toContain("absolute path")
+      expect(yield* refused(store.createNamespace({ name: "Acme", folder: "/elsewhere/acme" }))).toContain(
+        "outside the workspace",
+      )
+      const acme = yield* store.createNamespace({ name: "Acme", folder })
+      expect(acme.folder).toBe(folder)
+      expect((yield* Effect.promise(() => fs.stat(folder))).isDirectory()).toBe(true)
+      const moved = yield* store.updateNamespace(acme.id, { folder: `${folder}-2` })
+      expect(moved.folder).toBe(`${folder}-2`)
+      expect(yield* refused(store.updateNamespace(acme.id, { folder: "/elsewhere" }))).toContain(
+        "outside the workspace",
+      )
+    }),
+  ),
+)
+
+it.instance("a namespace's default project is the chosen one while it is there, else its first project", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      const store = yield* OperatorProfileStore.Service
+      const team = yield* store.createNamespace({ name: "Team", folder: yield* folderFor("Team") })
+      const summary = () =>
+        store.namespaces().pipe(Effect.map((list) => list.find((item) => item.namespace.id === team.id)))
+      expect((yield* summary())?.defaultProject).toBeUndefined()
+      // Folders outside git count in the order they were added.
+      yield* store.setProject("/work/zeta", { namespace: team.id })
+      yield* store.setProject("/work/alpha", { namespace: team.id })
+      expect((yield* summary())?.defaultProject).toBe("/work/zeta")
+      expect(yield* store.defaultProject(team.id)).toBe("/work/zeta")
+      expect(yield* refused(store.updateNamespace(team.id, { defaultProject: "/work/other" }))).toContain(
+        "is not a project of Team",
+      )
+      yield* store.updateNamespace(team.id, { defaultProject: "/work/alpha" })
+      expect(yield* summary()).toMatchObject({ defaultProject: "/work/alpha", firstProject: "/work/zeta" })
+      // The chosen project leaves the namespace: the first one is the default again.
+      yield* store.setProject("/work/alpha", { namespace: "opencode" })
+      expect((yield* summary())?.defaultProject).toBe("/work/zeta")
+      yield* store.setProject("/work/alpha", { namespace: team.id })
+      expect((yield* summary())?.defaultProject).toBe("/work/alpha")
+      yield* store.updateNamespace(team.id, { defaultProject: "" })
+      expect((yield* summary())?.defaultProject).toBe("/work/zeta")
+    }),
+  ),
+)
+
+it.instance("OpenCode's folder and default project come from the server's environment on first start", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      const env = {
+        OPENCODE_OPERATOR_NAMESPACE_FOLDER: "/work",
+        OPENCODE_OPERATOR_DEFAULT_PROJECT: "/work/opencode",
+      }
+      yield* Effect.promise(() => OperatorProfileStore.ensure(env))
+      const store = yield* OperatorProfileStore.Service
+      const opencode = (yield* store.namespaces())[0]!
+      expect(opencode.namespace).toMatchObject({ id: "opencode", folder: "/work", defaultProject: "/work/opencode" })
+      // Set once: a later change is kept.
+      yield* store.updateNamespace("opencode", { defaultProject: "" })
+      yield* Effect.promise(() => OperatorProfileStore.ensure(env))
+      expect((yield* store.namespaces())[0]!.namespace.defaultProject).toBeUndefined()
     }),
   ),
 )

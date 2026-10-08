@@ -47,19 +47,27 @@ const write = (file: string, text: string) =>
   })
 
 // Points the global config folder (where namespaces/ lives) inside the test project for one test.
+// A folder for a new namespace, inside the test project.
+const folderFor = (name: string) =>
+  TestInstance.pipe(Effect.map((instance) => path.join(instance.directory, "namespaces", name.toLowerCase())))
+
 const withGlobal = <A, E, R>(body: (dir: string) => Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
     const dir = path.join((yield* TestInstance).directory, "global-config")
     return yield* Effect.acquireUseRelease(
       Effect.sync(() => {
-        const previous = Global.Path.config
+        const previous = { config: Global.Path.config, roots: process.env.OPENCODE_WORKSPACE_ROOTS }
         ;(Global.Path as { config: string }).config = dir
+        // Namespace folders must be inside the workspace roots: the test project is one.
+        process.env.OPENCODE_WORKSPACE_ROOTS = path.dirname(dir)
         return previous
       }),
       () => body(dir),
       (previous) =>
         Effect.sync(() => {
-          ;(Global.Path as { config: string }).config = previous
+          ;(Global.Path as { config: string }).config = previous.config
+          if (previous.roots === undefined) delete process.env.OPENCODE_WORKSPACE_ROOTS
+          else process.env.OPENCODE_WORKSPACE_ROOTS = previous.roots
           promptAudit.listen = undefined
         }),
     )
@@ -465,7 +473,7 @@ unix("a project in another namespace sends OpenCode's prompt from that namespace
       const store = yield* OperatorProfileStore.Service
       const prompts = yield* OperatorPrompts.Service
       const before = yield* prompts.preview({ agent: "build" })
-      const acme = yield* store.createNamespace({ name: "Acme" })
+      const acme = yield* store.createNamespace({ name: "Acme", folder: yield* folderFor("Acme") })
       yield* store.setProject(before.project.key, { namespace: acme.id })
       const after = yield* prompts.preview({ agent: "build" })
       expect(after.namespace.id).toBe(acme.id)

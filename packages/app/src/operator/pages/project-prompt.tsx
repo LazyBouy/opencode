@@ -11,7 +11,7 @@ import { Field } from "../ui/field"
 import { RecordView } from "../ui/record-overlay"
 import { requestError } from "./config-helpers"
 import { useNamespaces, useProfileNames } from "./profile-data"
-import { isHelper, namespaceDefault, OPENCODE } from "./profile-model"
+import { isHelper, namespaceDefault } from "./profile-model"
 
 // The option that means "no link" (not a possible layer or profile id).
 const NONE = "@none"
@@ -31,8 +31,8 @@ export function useProjectSettings() {
 
 // A project's prompt settings in edit mode (the project overlay's Edit): its namespace, Project
 // Purpose and default profile. Moving to another namespace first lists what it copies there, then
-// waits for a second click. `added` words it for a project just added (it starts in OpenCode).
-export function ProjectPromptForm(props: { project: OperatorPromptProject; added?: boolean; onDone: () => void }) {
+// waits for a second click.
+export function ProjectPromptForm(props: { project: OperatorPromptProject; onDone: () => void }) {
   const language = useLanguage()
   const navigate = useNavigate()
   const names = useProfileNames()
@@ -115,17 +115,11 @@ export function ProjectPromptForm(props: { project: OperatorPromptProject; added
 
   return (
     <RecordView
-      title={
-        props.added
-          ? language.t("operator.projects.addedTitle", { name: props.project.name })
-          : language.t("operator.profile.editing", { name: props.project.name })
-      }
+      title={language.t("operator.profile.editing", { name: props.project.name })}
       actions={
         <>
           <ButtonV2 variant="neutral" onClick={props.onDone}>
-            {props.added && store.namespace === OPENCODE
-              ? language.t("operator.projects.keep")
-              : language.t("common.cancel")}
+            {language.t("common.cancel")}
           </ButtonV2>
           <ButtonV2 variant="contrast" disabled={store.busy} onClick={() => void save()}>
             {moving()
@@ -138,9 +132,6 @@ export function ProjectPromptForm(props: { project: OperatorPromptProject; added
       }
     >
       <div data-component="operator-form">
-        <Show when={props.added}>
-          <p data-slot="operator-note">{language.t("operator.projects.addedHint")}</p>
-        </Show>
         <Field
           group
           label={language.t("operator.column.namespace")}

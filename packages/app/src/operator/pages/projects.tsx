@@ -16,7 +16,7 @@ import { formatAgo, formatCost, formatCount, shortPath } from "../format"
 import { DataTable } from "../ui/data-table"
 import { Field } from "../ui/field"
 import { useFolderBrowser } from "../ui/folder-browser"
-import { NamespacePicker, useNamespaceScope } from "../ui/namespace-picker"
+import { NamespaceAction, NamespacePicker, useNamespaceScope } from "../ui/namespace-picker"
 import { PageHeader } from "../ui/page-header"
 import { type DetailSection, DetailOverlay } from "../ui/detail-overlay"
 import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOverlay } from "../ui/record-overlay"
@@ -143,6 +143,7 @@ function useProjectRows() {
     // The rows of the namespaces in scope.
     rows: createMemo(() => all().filter((row) => scope.all() || row.ns === scope.ns())),
     nsName: (ns: string) => scope.name(ns),
+    nsFolder: (ns: string) => scope.namespaces().find((item) => item.namespace.id === ns)?.namespace.folder,
     purposeName: (row: Row) => {
       if (!row.registered) return ""
       const setting = settingOf(row.key)
@@ -160,6 +161,10 @@ function useProjectRows() {
     },
   }
 }
+
+// Whether a folder is `parent` or inside it.
+const within = (parent: string, folder: string) =>
+  folder === parent || folder.startsWith(parent.endsWith("/") ? parent : `${parent}/`)
 
 // The registered folder a folder outside git is in (itself, or the nearest one above it).
 function registeredRoot(folder: string, registered: ReadonlyArray<string>) {
@@ -207,33 +212,44 @@ export default function ProjectsPage() {
     ["project", "block", "edit", "psec"],
   )
 
-  // Opens the folder in this browser and loads it on the server, which records it as a project.
-  const add = (directory: string) => {
+  // Opens the folder in this browser and loads it on the server, which records it as a project. A new
+  // project joins the namespace it was added from (it uses nothing yet, so nothing is copied); a
+  // folder that already was a project keeps its namespace.
+  const add = (directory: string, ns: string) => {
     const conn = server.current
     if (!conn) return
     global.ensureServerCtx(conn).projects.open(directory)
+    const before = new Set(data.all().map((row) => row.key))
     void api
       .client()
       .project.current({ directory })
       .then(async (result) => {
         const worktree = result.data?.worktree
         const key = !worktree || worktree === "/" ? directory : worktree
+        if (ns !== OPENCODE && !before.has(key))
+          await api.client().operator.projectSettings.update({ key, namespace: ns })
         await Promise.all(
-          ["project-summaries", "projects", "project-settings"].map((item) =>
+          ["project-summaries", "projects", "project-settings", "namespaces"].map((item) =>
             queryClient.invalidateQueries({ queryKey: api.key(item) }),
           ),
         )
-        // A new project goes to OpenCode unless another namespace is chosen.
-        if (data.scope.namespaces().length > 1) setParams({ project: key, block: undefined, edit: "added" })
       })
       .catch((error: unknown) =>
         showToast({ title: language.t("operator.projects.addFailed"), description: requestError(error) }),
       )
   }
-  // Any folder in the server's workspace, including new ones created in the browser.
-  const choose = async () => {
-    const directory = await browse()
-    if (directory) add(directory)
+  // Any folder in the server's workspace, including new ones created in the browser. The browser
+  // starts in the namespace's folder, where its new projects go.
+  const choose = async (ns: string) => {
+    const folder = data.scope.namespaces().find((item) => item.namespace.id === ns)?.namespace.folder
+    const directory = await browse({ start: folder })
+    if (directory) add(directory, ns)
+  }
+  // One namespace in scope (or only one at all): Add project adds there; else it asks which.
+  const addIn = () => {
+    const all = data.scope.namespaces()
+    if (all.length <= 1) return OPENCODE
+    return data.scope.all() ? undefined : data.scope.ns()
   }
 
   return (
@@ -244,9 +260,14 @@ export default function ProjectsPage() {
         actions={
           <span class="flex items-center gap-2">
             <NamespacePicker />
-            <ButtonV2 size="small" variant="contrast" onClick={() => void choose()}>
-              {language.t("operator.projects.add")}
-            </ButtonV2>
+            <NamespaceAction
+              label={language.t("operator.projects.add")}
+              ns={addIn()}
+              namespaces={data.scope.namespaces()}
+              size="small"
+              variant="contrast"
+              run={(ns) => void choose(ns)}
+            />
           </span>
         }
       />
@@ -331,14 +352,14 @@ function ProjectOverlay() {
   const [params, setParams] = useOverlayParams<Params>()
   // Kept here, not in the project's view: a move to another namespace switches the pane (and the view
   // with it) while the edit finishes.
-  const [editing, setEditing] = createSignal(params.edit === "added")
+  const [editing, setEditing] = createSignal(false)
   const [copying, setCopying] = createSignal(false)
   const [dirty, setDirty] = createSignal(false)
   createEffect(
     on(
       () => params.project,
       () => {
-        setEditing(params.edit === "added")
+        setEditing(false)
         setCopying(false)
         setDirty(false)
       },
@@ -373,17 +394,13 @@ function ProjectOverlay() {
       icon: SECTION_ICONS[id],
     })),
   )
-  // A project just added opens on its prompt settings, to choose its namespace.
   const section = (): ProjectSection =>
     (PROJECT_SECTIONS as ReadonlyArray<string>).includes(params.psec ?? "")
       ? (params.psec as ProjectSection)
-      : params.edit === "added"
-        ? "prompt"
-        : "overview"
+      : "overview"
   const onEditing = (on: boolean) => {
     setEditing(on)
-    // A project just added stays on its prompt settings once they are saved.
-    if (!on) setParams({ edit: undefined, ...(params.edit === "added" && !params.psec ? { psec: "prompt" } : {}) })
+    if (!on) setParams({ edit: undefined })
   }
 
   return (
@@ -430,6 +447,7 @@ function ProjectOverlay() {
                     setting={data.settingOf(found().key)}
                     profile={data.profileName(found())}
                     nsName={data.nsName(found().ns)}
+                    nsFolder={data.nsFolder(found().ns)}
                     editing={editing()}
                     onEditing={onEditing}
                     copying={copying()}
@@ -456,7 +474,6 @@ function ProjectOverlay() {
                     nsName={data.nsName(found().ns)}
                     purpose={data.purposeName(found())}
                     profile={data.profileName(found())}
-                    added={params.edit === "added"}
                     editing={editing()}
                     onEditing={onEditing}
                   />
@@ -503,6 +520,7 @@ function ProjectRecord(props: {
   setting: OperatorPromptProject
   profile: string
   nsName: string
+  nsFolder: string | undefined
   editing: boolean
   onEditing: (editing: boolean) => void
   copying: boolean
@@ -598,7 +616,14 @@ function ProjectRecord(props: {
               label={language.t("operator.projects.folderLabel")}
               help={language.t("operator.help.projectFolder")}
             >
-              {props.row.worktree}
+              <span class="inline-flex items-center gap-2 flex-wrap">
+                {props.row.worktree}
+                <Show when={props.nsFolder && !within(props.nsFolder, props.row.key)}>
+                  <Tag title={language.t("operator.projects.outsideFolderHint", { folder: props.nsFolder! })}>
+                    {language.t("operator.projects.outsideFolder")}
+                  </Tag>
+                </Show>
+              </span>
             </RecordField>
             <RecordField
               label={language.t("operator.column.namespace")}

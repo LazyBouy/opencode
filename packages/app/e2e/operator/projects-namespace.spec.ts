@@ -28,7 +28,14 @@ const pick = async (page: Page, label: string, option: string) => {
 }
 
 const acme = (state: Awaited<ReturnType<typeof mockOperator>>) => {
-  state.prompt.namespaces.push({ id: "acme", name: "Acme", purpose: "Build tools.", createdAt: 1, updatedAt: 1 })
+  state.prompt.namespaces.push({
+    id: "acme",
+    name: "Acme",
+    purpose: "Build tools.",
+    folder: `${workspace}/apps`,
+    createdAt: 1,
+    updatedAt: 1,
+  })
   state.prompt.items.acme = {
     types: [],
     layers: [{ id: "ship", name: "Ship tools", type: "purpose", section: "purpose", text: "Ship.", origin: "user" }],
@@ -126,24 +133,37 @@ test("a folder outside git is its own row in OpenCode, marked when it is not a p
   await expect(overlay.getByRole("tab", { name: "Config", exact: true })).toHaveCount(0)
 })
 
-test("an added project stays in OpenCode unless another namespace is chosen", async ({ page }) => {
+test("Add project asks for the namespace, starts in its folder and puts the new project there", async ({ page }) => {
   const state = await mockOperator(page)
   acme(state)
   await page.goto("/operator/projects")
   await page.getByRole("button", { name: "Add project" }).click()
+  await page
+    .locator('[data-component="menu-v2-item"]')
+    .filter({ hasText: /^Acme$/ })
+    .click()
   const browser = page.getByRole("dialog")
-  await browser.getByRole("list", { name: "Folders" }).getByRole("button", { name: "site" }).click()
+  // Acme's folder is where its new projects go.
+  await expect(browser.getByRole("navigation", { name: "Folder path" })).toContainText("apps")
+  await browser.getByRole("textbox", { name: "New folder name" }).fill("tool")
+  await browser.getByRole("button", { name: "Create folder" }).click()
+  await expect(browser.getByRole("navigation", { name: "Folder path" })).toContainText("tool")
   await browser.getByRole("button", { name: "Use this folder" }).click()
+  await expect.poll(() => state.prompt.projects[`${workspace}/apps/tool`]).toEqual({ namespace: "acme" })
+})
 
+test("a project outside its namespace's folder says so on its record", async ({ page }) => {
+  const state = await mockOperator(page)
+  acme(state)
+  state.prompt.projects[directory] = { namespace: "acme" }
+  await page.goto("/operator/projects")
+  await page.getByRole("row", { name: /smoke-project/ }).click()
   const overlay = page.getByRole("dialog")
-  await expect(overlay.getByRole("heading", { name: "Namespace for site" })).toBeVisible()
-  await expect(overlay).toContainText("A new project goes to OpenCode")
-  await pick(page, "Namespace", "Acme")
-  await overlay.getByRole("button", { name: "Check the move" }).click()
-  await expect(overlay.getByRole("status")).toContainText("Acme already has everything")
-  await overlay.getByRole("button", { name: "Move", exact: true }).click()
-  await expect(overlay.getByRole("button", { name: "Prompt settings", exact: true })).toBeVisible()
-  expect(state.prompt.projects[`${workspace}/site`]).toEqual({ namespace: "acme" })
+  await expect(overlay).toContainText("outside the namespace folder")
+  state.prompt.namespaces.find((item) => item.id === "acme")!.folder = directory
+  await page.reload()
+  await expect(page.getByRole("dialog")).toContainText("Folder")
+  await expect(page.getByRole("dialog")).not.toContainText("outside the namespace folder")
 })
 
 test("a project's record: goal, description, status, members, manager and groups", async ({ page }) => {
@@ -186,4 +206,28 @@ test("a project's record: goal, description, status, members, manager and groups
   // The goal was changed in its layer.
   expect(state.prompt.items.opencode!.layers.find((layer) => layer.id === "goal")?.text).toBe("Release the parser.")
   await expect(overlay.getByTestId("project-members")).toContainText("build, reviewer")
+})
+
+test("a namespace's default project is its first project until another is chosen", async ({ page }) => {
+  const state = await mockOperator(page)
+  state.prompt.projects[`${workspace}/site`] = { namespace: "opencode" }
+  await page.goto("/operator")
+  await page.getByRole("navigation", { name: "Operator" }).getByRole("button", { name: "Settings" }).click()
+  const settings = page.locator(".settings-v2-dialog")
+  await settings.getByRole("tab", { name: "Namespaces" }).click()
+  await settings.locator('[data-slot="settings-namespace"]', { hasText: "OpenCode" }).click()
+  const record = page.getByRole("dialog").last()
+  await expect(record.getByTestId("namespace-default-project")).toHaveText("First project (SmokeProject)")
+
+  await record.getByRole("button", { name: "Edit", exact: true }).click()
+  await record
+    .locator('[data-component="select-v2-root"][aria-label="Default project"] [data-component="select-v2"]')
+    .click()
+  await page
+    .locator('[data-component="menu-v2-item"]')
+    .filter({ hasText: /^site$/ })
+    .click()
+  await record.getByRole("button", { name: "Save", exact: true }).click()
+  await expect.poll(() => state.prompt.namespaces[0]!.defaultProject).toBe(`${workspace}/site`)
+  await expect(record.getByTestId("namespace-default-project")).toHaveText("site")
 })

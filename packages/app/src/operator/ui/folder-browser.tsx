@@ -15,20 +15,23 @@ import { crumbs } from "../format"
 import { requestError } from "../pages/config-helpers"
 import { FieldHelp } from "./field-help"
 
-// Opens a dialog to browse the server's workspace roots, create folders in them and pick one as a
-// project. Resolves with the chosen folder, or undefined when dismissed.
+// Opens a dialog to browse the server's workspace roots, create folders in them and pick one (a
+// project, a namespace's folder). It starts in `start` when that folder can be listed, else in the
+// first root. `over` opens it over the dialog it is called from (which stays open). Resolves with the
+// chosen folder, or undefined when dismissed.
 export function useFolderBrowser() {
   const dialog = useDialog()
   const language = useLanguage()
   const api = useOperatorClient()
-  return () =>
+  return (options?: { start?: string; over?: boolean }) =>
     new Promise<string | undefined>((resolve) => {
       const finish = (path: string | undefined) => {
         resolve(path)
         dialog.close()
       }
-      void dialog.show(
-        () => <FolderBrowser language={language} client={api.client} onDone={finish} />,
+      const open = options?.over ? dialog.push : dialog.show
+      void open(
+        () => <FolderBrowser language={language} client={api.client} start={options?.start} onDone={finish} />,
         () => resolve(undefined),
       )
     })
@@ -37,6 +40,7 @@ export function useFolderBrowser() {
 function FolderBrowser(props: {
   language: ReturnType<typeof useLanguage>
   client: ReturnType<typeof useOperatorClient>["client"]
+  start?: string
   onDone: (path: string | undefined) => void
 }) {
   const t = props.language.t
@@ -50,13 +54,13 @@ function FolderBrowser(props: {
     busy: false,
   })
 
-  const open = async (path?: string) => {
+  const open = async (path?: string, fallback = false) => {
     setStore({ loading: true, error: "" })
     await props
       .client()
       .operator.folder.list({ path })
       .then((result) => setStore("listing", result.data))
-      .catch((error: unknown) => setStore("error", requestError(error)))
+      .catch((error: unknown) => (fallback ? open() : setStore("error", requestError(error))))
       .finally(() => setStore("loading", false))
   }
 
@@ -66,7 +70,7 @@ function FolderBrowser(props: {
       .operator.folder.roots()
       .then((result) => setStore("roots", result.data ?? []))
       .catch(() => undefined)
-    void open()
+    void open(props.start, !!props.start)
   })
 
   const create = async () => {

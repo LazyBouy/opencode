@@ -2,6 +2,7 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
+import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import type { OperatorNamespaceSummary } from "@opencode-ai/sdk/v2/client"
 import { type Component, createEffect, createMemo, createResource, createUniqueId, For, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -15,11 +16,23 @@ import { shortPath } from "../format"
 import { requestError } from "../pages/config-helpers"
 import { PurposeDraft } from "../pages/purpose-draft"
 import { FieldHelp } from "../ui/field-help"
+import { useFolderBrowser } from "../ui/folder-browser"
 import { RecordField } from "../ui/record-overlay"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
 
 const OPENCODE = "opencode"
+// The Default project choice that means "the namespace's first project".
+const FIRST = "@first"
+
+const projectName = (key: string) => key.split("/").filter(Boolean).at(-1) ?? key
+
+// What the namespace record says about its default project: the chosen one, else its first.
+function defaultProjectText(item: OperatorNamespaceSummary, t: ReturnType<typeof useLanguage>["t"]) {
+  if (!item.defaultProject) return t("settings.namespaces.noDefaultProject")
+  if (item.namespace.defaultProject === item.defaultProject) return projectName(item.defaultProject)
+  return t("settings.namespaces.firstProject", { name: projectName(item.defaultProject) })
+}
 
 // Settings → Organization → Namespaces: the namespaces (organizations), each with its org purpose, which
 // is sent first in every agent's prompt in it. A namespace opens in an overlay over Settings; a new one
@@ -127,11 +140,14 @@ function NamespaceRecord(props: {
   const id = createUniqueId()
   const serverSdk = useServerSDK()
   const client = () => serverSdk().client.operator.namespace
+  const browse = useFolderBrowser()
   const [store, setStore] = createStore({
     selected: props.selected,
     editing: props.selected === "new",
     name: "",
     purpose: "",
+    folder: "",
+    defaultProject: FIRST,
     busy: false,
     confirming: false,
   })
@@ -150,7 +166,17 @@ function NamespaceRecord(props: {
   createEffect(
     on([() => store.selected, current], () => {
       const found = current()
-      setStore({ name: found?.namespace.name ?? "", purpose: found?.namespace.purpose ?? "", confirming: false })
+      setStore({
+        name: found?.namespace.name ?? "",
+        purpose: found?.namespace.purpose ?? "",
+        folder: found?.namespace.folder ?? "",
+        // A chosen project that left the namespace is no longer a choice.
+        defaultProject:
+          found?.namespace.defaultProject && found.projects.includes(found.namespace.defaultProject)
+            ? found.namespace.defaultProject
+            : FIRST,
+        confirming: false,
+      })
     }),
   )
 
@@ -159,10 +185,17 @@ function NamespaceRecord(props: {
 
   const save = async () => {
     setStore("busy", true)
+    const folder = store.folder.trim()
     const request =
       store.selected === "new"
-        ? client().create({ name: store.name.trim(), purpose: store.purpose })
-        : client().update({ ns: store.selected, name: store.name.trim(), purpose: store.purpose })
+        ? client().create({ name: store.name.trim(), purpose: store.purpose, folder })
+        : client().update({
+            ns: store.selected,
+            name: store.name.trim(),
+            purpose: store.purpose,
+            ...(folder && folder !== current()?.namespace.folder ? { folder } : {}),
+            defaultProject: store.defaultProject === FIRST ? "" : store.defaultProject,
+          })
     await request
       .then(async (result) => {
         await refetch()
@@ -227,6 +260,22 @@ function NamespaceRecord(props: {
                 >
                   {found().projects.map(shortPath).join(", ") || language.t("settings.namespaces.noProjects")}
                 </RecordField>
+                <RecordField
+                  label={language.t("settings.namespaces.folder")}
+                  help={language.t("operator.help.namespaceFolder")}
+                >
+                  <span data-testid="namespace-folder">
+                    {found().namespace.folder ?? language.t("settings.namespaces.noFolder")}
+                  </span>
+                </RecordField>
+                <RecordField
+                  label={language.t("settings.namespaces.defaultProject")}
+                  help={language.t("operator.help.namespaceDefaultProject")}
+                >
+                  <span data-testid="namespace-default-project" title={found().defaultProject}>
+                    {defaultProjectText(found(), language.t)}
+                  </span>
+                </RecordField>
               </dl>
               <div class="flex items-center justify-end gap-2">
                 <ButtonV2 variant="contrast" onClick={() => setStore("editing", true)}>
@@ -264,6 +313,37 @@ function NamespaceRecord(props: {
             value={store.name}
             onInput={(event) => setStore("name", event.currentTarget.value)}
           />
+        </div>
+        <div class="flex flex-col gap-1">
+          <div class="flex items-center">
+            <label class="text-12-medium" for={`${id}-folder`}>
+              {language.t("settings.namespaces.folder")}
+            </label>
+            <FieldHelp
+              field={language.t("settings.namespaces.folder")}
+              text={language.t("operator.help.namespaceFolder")}
+            />
+          </div>
+          <div class="flex items-center gap-2">
+            <TextInputV2
+              id={`${id}-folder`}
+              class="flex-1"
+              appearance="base"
+              value={store.folder}
+              placeholder="/"
+              onInput={(event) => setStore("folder", event.currentTarget.value)}
+            />
+            <ButtonV2
+              variant="outline"
+              onClick={() =>
+                void browse({ start: store.folder.trim() || undefined, over: true }).then(
+                  (folder) => folder && setStore("folder", folder),
+                )
+              }
+            >
+              {language.t("settings.namespaces.chooseFolder")}
+            </ButtonV2>
+          </div>
         </div>
         <div class="flex flex-col gap-1">
           <div class="flex items-center">
@@ -310,6 +390,42 @@ function NamespaceRecord(props: {
             </div>
           )}
         </Show>
+        <Show when={current()}>
+          {(found) => (
+            <div class="flex flex-col gap-1">
+              <div class="flex items-center">
+                <span class="text-12-medium">{language.t("settings.namespaces.defaultProject")}</span>
+                <FieldHelp
+                  field={language.t("settings.namespaces.defaultProject")}
+                  text={language.t("operator.help.namespaceDefaultProject")}
+                />
+              </div>
+              <Show
+                when={found().projects.length}
+                fallback={
+                  <span class="text-12-regular text-v2-text-text-muted">
+                    {language.t("settings.namespaces.noDefaultProject")}
+                  </span>
+                }
+              >
+                <SelectV2<string>
+                  appearance="base"
+                  aria-label={language.t("settings.namespaces.defaultProject")}
+                  options={[FIRST, ...found().projects]}
+                  current={store.defaultProject}
+                  label={(key) =>
+                    key === FIRST
+                      ? language.t("settings.namespaces.firstProject", {
+                          name: projectName(found().firstProject ?? ""),
+                        })
+                      : projectName(key)
+                  }
+                  onSelect={(key) => key && setStore("defaultProject", key)}
+                />
+              </Show>
+            </div>
+          )}
+        </Show>
         <div class="flex items-center justify-end gap-2 flex-wrap">
           <Show when={current()}>
             <Show
@@ -346,7 +462,12 @@ function NamespaceRecord(props: {
           >
             {language.t("common.cancel")}
           </ButtonV2>
-          <ButtonV2 variant="contrast" disabled={store.busy || !store.name.trim()} onClick={() => void save()}>
+          <ButtonV2
+            variant="contrast"
+            disabled={store.busy || !store.name.trim() || (!store.folder.trim() && store.selected === "new")}
+            title={!store.folder.trim() ? language.t("settings.namespaces.folderRequired") : undefined}
+            onClick={() => void save()}
+          >
             {store.selected === "new"
               ? language.t("settings.namespaces.create")
               : language.t("settings.namespaces.save")}

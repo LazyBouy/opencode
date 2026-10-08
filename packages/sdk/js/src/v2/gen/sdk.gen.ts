@@ -2419,12 +2419,13 @@ export class Namespace extends HeyApiClient {
   /**
    * Create a namespace
    *
-   * Create a namespace as a copy of OpenCode: it gets its own copies of OpenCode's built-in layers, groups and profiles (built-ins belong to OpenCode), and of OpenCode's own types, layers, groups and profiles. It starts with no projects.
+   * Create a namespace as a copy of OpenCode: it gets its own copies of OpenCode's built-in layers, groups and profiles (built-ins belong to OpenCode), and of OpenCode's own types, layers, groups and profiles. It starts with no projects, in its own folder.
    */
   public create<ThrowOnError extends boolean = false>(
     parameters?: {
       name?: string
       purpose?: string
+      folder?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2435,6 +2436,7 @@ export class Namespace extends HeyApiClient {
           args: [
             { in: "body", key: "name" },
             { in: "body", key: "purpose" },
+            { in: "body", key: "folder" },
           ],
         },
       ],
@@ -2504,7 +2506,7 @@ export class Namespace extends HeyApiClient {
   /**
    * Change a namespace
    *
-   * Change a namespace's name, its org purpose (sent first in every agent's prompt) or its default profile.
+   * Change a namespace's name, its org purpose (sent first in every agent's prompt), its default profile, its folder or its default project.
    */
   public update<ThrowOnError extends boolean = false>(
     parameters: {
@@ -2512,6 +2514,8 @@ export class Namespace extends HeyApiClient {
       name?: string
       purpose?: string
       defaultProfile?: string
+      folder?: string
+      defaultProject?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2524,6 +2528,8 @@ export class Namespace extends HeyApiClient {
             { in: "body", key: "name" },
             { in: "body", key: "purpose" },
             { in: "body", key: "defaultProfile" },
+            { in: "body", key: "folder" },
+            { in: "body", key: "defaultProject" },
           ],
         },
       ],

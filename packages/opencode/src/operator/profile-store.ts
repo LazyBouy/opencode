@@ -9,12 +9,13 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Global } from "@opencode-ai/core/global"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { Glob } from "@opencode-ai/core/util/glob"
+import { OperatorFolders } from "./folders"
 import { OperatorProfile } from "./profile"
 import { OperatorTrashFiles } from "./trash-files"
 
 // Prompt profile data is server-wide, in the global config folder; nothing goes into a project:
 //
-//   namespaces/<ns>/namespace.json      { id, name, purpose, defaultProfile?, createdAt, updatedAt }
+//   namespaces/<ns>/namespace.json      { id, name, purpose, defaultProfile?, folder?, defaultProject?, createdAt, updatedAt }
 //   namespaces/<ns>/types/<id>.json     { id, name, description }
 //   namespaces/<ns>/layers/<id>.md      frontmatter { id, name, type, section, replaces? }; body: the text
 //   namespaces/<ns>/groups/<id>.json    { id, name, types }
@@ -70,6 +71,13 @@ export type AgentPrompt = typeof AgentPrompt.Type
 export const NamespaceSummary = Schema.Struct({
   namespace: OperatorProfile.Namespace,
   projects: Schema.Array(Schema.String).annotate({ description: "Keys of the namespace's projects" }),
+  defaultProject: Schema.optional(Schema.String).annotate({
+    description:
+      "The namespace's default project: the one chosen while it is still in the namespace, else its first project",
+  }),
+  firstProject: Schema.optional(Schema.String).annotate({
+    description: "The namespace's first project (the earliest added), its default when none is chosen",
+  }),
 }).annotate({ identifier: "OperatorNamespaceSummary" })
 
 export const CatalogInfo = Schema.Struct({
@@ -93,14 +101,19 @@ type Failure = InvalidError | NotFoundError
 
 export interface Interface {
   readonly namespaces: () => Effect.Effect<ReadonlyArray<typeof NamespaceSummary.Type>>
+  /** A new namespace needs a folder inside the workspace roots; it is created if missing. */
   readonly createNamespace: (input: {
     name: string
     purpose?: string
+    folder: string
   }) => Effect.Effect<OperatorProfile.Namespace, Failure>
+  /** An empty `defaultProject` clears the choice, so the first project is the default. */
   readonly updateNamespace: (
     id: string,
-    input: { name?: string; purpose?: string; defaultProfile?: string },
+    input: { name?: string; purpose?: string; defaultProfile?: string; folder?: string; defaultProject?: string },
   ) => Effect.Effect<OperatorProfile.Namespace, Failure>
+  /** The namespace's default project (see NamespaceSummary), if it has any project. */
+  readonly defaultProject: (ns: string) => Effect.Effect<string | undefined>
   readonly removeNamespace: (id: string) => Effect.Effect<void, Failure>
   readonly catalog: (ns: string) => Effect.Effect<CatalogInfo, Failure>
   readonly saveType: (
@@ -386,30 +399,73 @@ export async function restoreProject(key: string, settings: { project?: unknown;
     await writeJson(path.join(root(), "agents.json"), { ...(await readAgents()), [key]: settings.agents })
 }
 
-// The OpenCode namespace exists from the first start, with its record only.
-export async function ensure() {
+// The OpenCode namespace exists from the first start, with its record only. This installation's
+// folder and default project for it come from the server's environment
+// (OPENCODE_OPERATOR_NAMESPACE_FOLDER, OPENCODE_OPERATOR_DEFAULT_PROJECT) and are set once, while
+// the record has no folder.
+const settled = new Set<string>()
+export async function ensure(env: NodeJS.ProcessEnv = process.env) {
   const file = path.join(root(), OperatorProfile.OPENCODE, "namespace.json")
-  if (await Bun.file(file).exists()) return
-  const now = Date.now()
-  await writeJson(file, {
-    id: OperatorProfile.OPENCODE,
-    name: "OpenCode",
-    purpose: "",
-    createdAt: now,
-    updatedAt: now,
+  if (!(await Bun.file(file).exists())) {
+    const now = Date.now()
+    await writeJson(file, {
+      id: OperatorProfile.OPENCODE,
+      name: "OpenCode",
+      purpose: "",
+      createdAt: now,
+      updatedAt: now,
+    }).catch(() => undefined)
+  }
+  if (settled.has(file)) return
+  settled.add(file)
+  const folder = env.OPENCODE_OPERATOR_NAMESPACE_FOLDER?.trim()
+  const project = env.OPENCODE_OPERATOR_DEFAULT_PROJECT?.trim()
+  if (!folder || !path.isAbsolute(folder)) return
+  const current = await readNamespaceRecord(OperatorProfile.OPENCODE)
+  if (!current || current.folder) return
+  await writeNamespace({
+    ...current,
+    folder: path.resolve(folder),
+    ...(project && path.isAbsolute(project) && !current.defaultProject
+      ? { defaultProject: path.resolve(project) }
+      : {}),
   }).catch(() => undefined)
+}
+
+// The namespace's default project among its projects (in the order they were added): the chosen
+// one while it is still there, else the first.
+export function defaultProjectOf(namespace: OperatorProfile.Namespace, projects: ReadonlyArray<string>) {
+  if (namespace.defaultProject && projects.includes(namespace.defaultProject)) return namespace.defaultProject
+  return projects[0]
+}
+
+// A namespace's folder: absolute, inside the workspace roots, created if missing.
+async function namespaceFolder(folder: string) {
+  const given = folder.trim()
+  if (!given) return { error: "A namespace needs a folder" }
+  if (!path.isAbsolute(given)) return { error: `The namespace folder must be an absolute path: ${given}` }
+  const found = await OperatorFolders.locate(given)
+  if (!found.root) return { error: `${found.resolved} is outside the workspace (${found.roots.join(", ")})` }
+  const made = await fs
+    .mkdir(found.resolved, { recursive: true })
+    .then(() => undefined)
+    .catch((cause: NodeJS.ErrnoException) => `${found.resolved} cannot be created: ${cause.code ?? String(cause)}`)
+  if (made) return { error: made }
+  const stat = await fs.stat(found.resolved).catch(() => undefined)
+  if (!stat?.isDirectory()) return { error: `${found.resolved} is not a folder` }
+  return { folder: found.resolved }
 }
 
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const db = (yield* Database.Service).db
-    yield* Effect.promise(ensure)
+    yield* Effect.promise(() => ensure())
 
     const refuse = (message: string | undefined) => (message ? Effect.fail(new InvalidError({ message })) : Effect.void)
 
     const load = Effect.fnUntraced(function* (ns: string) {
-      yield* Effect.promise(ensure)
+      yield* Effect.promise(() => ensure())
       const found = yield* Effect.promise(() => readNamespace(ns))
       if (!found) return yield* new NotFoundError({ message: `No namespace "${ns}"` })
       return found
@@ -417,8 +473,14 @@ const layer = Layer.effect(
 
     // Every project the server knows (git projects), and every project with project or agent settings.
     const known = Effect.fnUntraced(function* () {
+      return (yield* inventory()).projects
+    })
+
+    // The projects, and the order they were added in: git projects by when OpenCode first saw them,
+    // then folders outside git in the order they were registered.
+    const inventory = Effect.fnUntraced(function* () {
       const rows = yield* db
-        .select({ worktree: ProjectTable.worktree, name: ProjectTable.name })
+        .select({ worktree: ProjectTable.worktree, name: ProjectTable.name, created: ProjectTable.time_created })
         .from(ProjectTable)
         .all()
         .pipe(Effect.orDie)
@@ -434,7 +496,7 @@ const layer = Layer.effect(
       const keys = [...new Set([...names.keys(), ...Object.keys(settings), ...Object.keys(agents)])].filter(
         (key) => !trashed.has(key),
       )
-      return keys
+      const projects: ProjectInfo[] = keys
         .map((key) => ({
           key,
           name: names.get(key) ?? path.basename(key),
@@ -442,6 +504,15 @@ const layer = Layer.effect(
           registered: names.has(key) || key in settings,
         }))
         .toSorted((a, b) => a.name.localeCompare(b.name))
+      const created = new Map(rows.map((row) => [String(row.worktree), Number(row.created)]))
+      const registeredAt = [...Object.keys(settings), ...Object.keys(agents)]
+      const added = keys.toSorted(
+        (a, b) =>
+          (created.get(a) ?? Infinity) - (created.get(b) ?? Infinity) ||
+          registeredAt.indexOf(a) - registeredAt.indexOf(b) ||
+          a.localeCompare(b),
+      )
+      return { projects, added }
     })
 
     // What uses an item, in words, or undefined when nothing does.
@@ -494,27 +565,41 @@ const layer = Layer.effect(
     })
 
     const namespaces = Effect.fn("OperatorProfileStore.namespaces")(function* () {
-      yield* Effect.promise(ensure)
+      yield* Effect.promise(() => ensure())
       const ids = yield* Effect.promise(() => fs.readdir(root()).catch(() => [] as string[]))
       const records = yield* Effect.promise(() => Promise.all(ids.map(readNamespaceRecord)))
-      const projects = yield* known()
+      const { projects, added } = yield* inventory()
       return records
         .filter((item): item is OperatorProfile.Namespace => item !== undefined)
         .toSorted((a, b) =>
           a.id === OperatorProfile.OPENCODE ? -1 : b.id === OperatorProfile.OPENCODE ? 1 : a.name.localeCompare(b.name),
         )
-        .map((namespace) => ({
-          namespace,
-          projects: projects.filter((item) => item.namespace === namespace.id).map((item) => item.key),
-        }))
+        .map((namespace) => {
+          const own = new Set(projects.filter((item) => item.namespace === namespace.id).map((item) => item.key))
+          const order = added.filter((key) => own.has(key))
+          const chosen = defaultProjectOf(namespace, order)
+          return {
+            namespace,
+            projects: projects.filter((item) => own.has(item.key)).map((item) => item.key),
+            ...(chosen ? { defaultProject: chosen } : {}),
+            ...(order[0] ? { firstProject: order[0] } : {}),
+          }
+        })
+    })
+
+    const defaultProject = Effect.fn("OperatorProfileStore.defaultProject")(function* (ns: string) {
+      return (yield* namespaces()).find((item) => item.namespace.id === ns)?.defaultProject
     })
 
     // A new namespace is a copy of OpenCode: its own items are copied, built-ins stay shared.
     const createNamespace = Effect.fn("OperatorProfileStore.createNamespace")(function* (input: {
       name: string
       purpose?: string
+      folder: string
     }) {
       yield* refuse(input.name.trim() ? undefined : "A namespace needs a name")
+      const folder = yield* Effect.promise(() => namespaceFolder(input.folder))
+      yield* refuse(folder.error)
       const source = yield* load(OperatorProfile.OPENCODE)
       const id = yield* Effect.promise(() => freeId(root(), input.name, ""))
       const now = Date.now()
@@ -523,6 +608,7 @@ const layer = Layer.effect(
         name: input.name.trim(),
         purpose: input.purpose ?? "",
         ...(source.namespace.defaultProfile ? { defaultProfile: source.namespace.defaultProfile } : {}),
+        folder: folder.folder,
         createdAt: now,
         updatedAt: now,
       }
@@ -541,10 +627,21 @@ const layer = Layer.effect(
 
     const updateNamespace = Effect.fn("OperatorProfileStore.updateNamespace")(function* (
       id: string,
-      input: { name?: string; purpose?: string; defaultProfile?: string },
+      input: { name?: string; purpose?: string; defaultProfile?: string; folder?: string; defaultProject?: string },
     ) {
       const catalog = yield* load(id)
       if (input.name !== undefined) yield* refuse(input.name.trim() ? undefined : "A namespace needs a name")
+      const folder =
+        input.folder === undefined ? undefined : yield* Effect.promise(() => namespaceFolder(input.folder!))
+      yield* refuse(folder?.error)
+      if (input.defaultProject) {
+        const own = (yield* known()).filter((item) => item.namespace === id).map((item) => item.key)
+        yield* refuse(
+          own.includes(input.defaultProject)
+            ? undefined
+            : `${input.defaultProject} is not a project of ${catalog.namespace.name}`,
+        )
+      }
       if (input.defaultProfile && !OperatorProfile.profiles(catalog).some((item) => item.id === input.defaultProfile))
         yield* refuse(`No profile "${input.defaultProfile}" in ${catalog.namespace.name}`)
       yield* refuse(helperDefault(catalog, input.defaultProfile))
@@ -553,10 +650,16 @@ const layer = Layer.effect(
         ...(input.name !== undefined ? { name: input.name.trim() } : {}),
         ...(input.purpose !== undefined ? { purpose: input.purpose } : {}),
         ...(input.defaultProfile !== undefined ? { defaultProfile: input.defaultProfile || undefined } : {}),
+        ...(folder?.folder ? { folder: folder.folder } : {}),
+        ...(input.defaultProject !== undefined ? { defaultProject: input.defaultProject || undefined } : {}),
         updatedAt: Date.now(),
       }
-      yield* Effect.promise(() => writeNamespace(next))
-      return next
+      // A cleared choice leaves no key behind (the response would carry it as null).
+      const record = Object.fromEntries(
+        Object.entries(next).filter((pair) => pair[1] !== undefined),
+      ) as OperatorProfile.Namespace
+      yield* Effect.promise(() => writeNamespace(record))
+      return record
     })
 
     const removeNamespace = Effect.fn("OperatorProfileStore.removeNamespace")(function* (id: string) {
@@ -949,6 +1052,7 @@ const layer = Layer.effect(
     return Service.of({
       copyProject,
       namespaces,
+      defaultProject,
       createNamespace,
       updateNamespace,
       removeNamespace,
@@ -1196,6 +1300,8 @@ async function readNamespaceRecord(id: string): Promise<OperatorProfile.Namespac
     name: typeof data.name === "string" ? data.name : id,
     purpose: typeof data.purpose === "string" ? data.purpose : "",
     ...(typeof data.defaultProfile === "string" ? { defaultProfile: data.defaultProfile } : {}),
+    ...(typeof data.folder === "string" && data.folder ? { folder: data.folder } : {}),
+    ...(typeof data.defaultProject === "string" && data.defaultProject ? { defaultProject: data.defaultProject } : {}),
     createdAt: typeof data.createdAt === "number" ? data.createdAt : 0,
     updatedAt: typeof data.updatedAt === "number" ? data.updatedAt : 0,
   }

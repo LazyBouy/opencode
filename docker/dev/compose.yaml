@@ -24,6 +24,9 @@ services:
       OPENCODE_DISABLE_AUTOUPDATE: "1"
       # Operator → Projects → Add project browses and creates folders only inside these roots.
       OPENCODE_WORKSPACE_ROOTS: ${WORKSPACE:-/root/projects}
+      # The OpenCode namespace's folder and default project, set on first start while it has no folder.
+      OPENCODE_OPERATOR_NAMESPACE_FOLDER: ${OPENCODE_NAMESPACE_FOLDER:-/root/projects/agent-harnesses/opencode}
+      OPENCODE_OPERATOR_DEFAULT_PROJECT: ${OPENCODE_DEFAULT_PROJECT:-/root/projects/agent-harnesses/opencode/opencode}
     volumes:
       # Projects are mounted at the same path as on the host, so paths shown in the UI and the
       # Claude sessions created by `/merge claude` match the host.

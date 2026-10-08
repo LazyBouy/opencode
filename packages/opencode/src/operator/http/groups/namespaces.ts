@@ -97,14 +97,20 @@ export const OperatorNamespaceGroup = HttpApiGroup.make("operatorNamespace")
       ),
     ),
     HttpApiEndpoint.post("create", OperatorNamespacePaths.namespaces, {
-      payload: Schema.Struct({ name: Schema.String, purpose: Schema.optional(Schema.String) }),
+      payload: Schema.Struct({
+        name: Schema.String,
+        purpose: Schema.optional(Schema.String),
+        folder: Schema.String.annotate({
+          description: "An absolute folder inside the workspace roots; it is created if missing",
+        }),
+      }),
       success: described(OperatorProfile.Namespace, "The new namespace"),
       error: errors,
     }).annotateMerge(
       doc(
         "operator.namespace.create",
         "Create a namespace",
-        "Create a namespace as a copy of OpenCode: it gets its own copies of OpenCode's built-in layers, groups and profiles (built-ins belong to OpenCode), and of OpenCode's own types, layers, groups and profiles. It starts with no projects.",
+        "Create a namespace as a copy of OpenCode: it gets its own copies of OpenCode's built-in layers, groups and profiles (built-ins belong to OpenCode), and of OpenCode's own types, layers, groups and profiles. It starts with no projects, in its own folder.",
       ),
     ),
     HttpApiEndpoint.get("get", OperatorNamespacePaths.namespace, {
@@ -118,6 +124,13 @@ export const OperatorNamespaceGroup = HttpApiGroup.make("operatorNamespace")
         name: Schema.optional(Schema.String),
         purpose: Schema.optional(Schema.String).annotate({ description: "The org purpose" }),
         defaultProfile: Schema.optional(Schema.String).annotate({ description: "An empty string clears it" }),
+        folder: Schema.optional(Schema.String).annotate({
+          description: "An absolute folder inside the workspace roots; it is created if missing",
+        }),
+        defaultProject: Schema.optional(Schema.String).annotate({
+          description:
+            "One of the namespace's projects; an empty string clears it, so the first project is the default",
+        }),
       }),
       success: described(OperatorProfile.Namespace, "The namespace"),
       error: errors,
@@ -125,7 +138,7 @@ export const OperatorNamespaceGroup = HttpApiGroup.make("operatorNamespace")
       doc(
         "operator.namespace.update",
         "Change a namespace",
-        "Change a namespace's name, its org purpose (sent first in every agent's prompt) or its default profile.",
+        "Change a namespace's name, its org purpose (sent first in every agent's prompt), its default profile, its folder or its default project.",
       ),
     ),
     HttpApiEndpoint.delete("remove", OperatorNamespacePaths.namespace, {

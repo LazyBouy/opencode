@@ -37,6 +37,13 @@ export const dict = {
   "settings.namespaces.purposeHint": "Sent first in every agent's prompt in this namespace",
   "settings.namespaces.projectsLabel": "Projects",
   "settings.namespaces.noProjects": "None",
+  "settings.namespaces.folder": "Folder",
+  "settings.namespaces.noFolder": "Not set yet: choose one with Edit",
+  "settings.namespaces.chooseFolder": "Choose folder…",
+  "settings.namespaces.folderRequired": "Choose the namespace's folder",
+  "settings.namespaces.defaultProject": "Default project",
+  "settings.namespaces.firstProject": "First project ({{name}})",
+  "settings.namespaces.noDefaultProject": "None: the namespace has no projects yet",
   "settings.namespaces.create": "Create namespace",
   "settings.namespaces.save": "Save",
   "settings.namespaces.delete": "Delete",
@@ -283,6 +290,10 @@ export const dict = {
   "operator.help.profileName": "A name for this profile, shown wherever agents, projects and the namespace choose one.",
   "operator.help.namespaceName": "A name for this organization, shown in namespace pickers.",
   "operator.help.namespaceProjects": "The projects in this namespace. Move a project on the Projects page.",
+  "operator.help.namespaceFolder":
+    "The namespace's own folder, inside the server's workspace. New projects of the namespace are created in it, and it holds the namespace's memory. It is created if it doesn't exist. Projects already elsewhere stay where they are.",
+  "operator.help.namespaceDefaultProject":
+    "The project a new agent of this namespace is saved in unless you choose another. Without a choice, it is the namespace's first project (the earliest added); if the chosen project leaves the namespace, the first project is the default again.",
   "operator.table.columnsOf": "Columns of {{table}}",
   "operator.table.optionalColumns": "Optional columns",
   "operator.scope.label": "Where to save",
@@ -1136,6 +1147,9 @@ export const dict = {
   "operator.profile.preview": "Preview",
 
   "operator.projects.add": "Add project",
+  "operator.projects.outsideFolder": "outside the namespace folder",
+  "operator.projects.outsideFolderHint":
+    "The project works normally. New projects of this namespace are created in its folder, {{folder}}.",
   "operator.projects.addFailed": "Couldn't add the project",
   "operator.projects.hint":
     "Each project has its own agents and settings in its .opencode folder. Global and built-in agents are available in every project, and a project can change or turn them off. Each project is in one namespace; its agents use that namespace's prompt profiles.",
@@ -1207,8 +1221,6 @@ export const dict = {
   "operator.projects.prompt": "Prompt settings",
   "operator.projects.promptFor": "Prompt settings of {{name}}",
   "operator.projects.promptTitle": "Prompt settings: {{name}}",
-  "operator.projects.addedTitle": "Namespace for {{name}}",
-  "operator.projects.addedHint": "A new project goes to OpenCode unless you choose another namespace.",
   "operator.projects.editProject": "Edit project",
   "operator.projects.allProjects": "All projects",
   "operator.projects.section.overview": "Overview",
@@ -1261,7 +1273,6 @@ export const dict = {
   "operator.projectRecord.newGroup": "New group",
   "operator.projectRecord.addGroup": "Add group",
   "operator.projectRecord.removeGroup": "Remove group",
-  "operator.projects.keep": "Keep in OpenCode",
   "operator.projects.noPurpose": "None",
   "operator.projects.purposeHint": "Sent after the org purpose in every agent's prompt in this project.",
   "operator.projects.namespaceDefault": "Namespace default ({{name}})",
