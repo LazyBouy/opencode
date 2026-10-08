@@ -3733,6 +3733,11 @@ export type OperatorToolAppended = {
   subagents?: Array<OperatorToolSubagent>
 }
 
+export type OperatorToolNote = {
+  text: string
+  size: number
+}
+
 export type OperatorToolSizes = {
   description: number
   schema: number
@@ -3756,6 +3761,7 @@ export type OperatorToolSent = {
    */
   versionText: string
   appended?: OperatorToolAppended
+  note?: OperatorToolNote
   /**
    * The description as sent
    */

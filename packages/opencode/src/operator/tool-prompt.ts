@@ -99,6 +99,12 @@ export const Sent = Schema.Struct({
   version: Version,
   versionText: Schema.String.annotate({ description: "The description's own text, before OpenCode's additions" }),
   appended: Schema.optional(Appended),
+  note: Schema.optional(
+    Schema.Struct({ text: Schema.String, size: Schema.Finite }).annotate({ identifier: "OperatorToolNote" }),
+  ).annotate({
+    description:
+      "Added by the fork: allowed inputs. The line appended to a tool that can be allowed only for some inputs",
+  }),
   description: Schema.String.annotate({ description: "The description as sent" }),
   schema: Schema.Unknown.annotate({ description: "The input schema as sent (after the provider's rewrite)" }),
   rewrite: Schema.optional(Schema.String).annotate({ description: "The provider rewrite that changed the schema" }),
@@ -625,13 +631,20 @@ const layer = Layer.effect(
       // What is sent: `strict: false` for OpenAI-family providers, Copilot's `_noop`, sorted by name.
       const strict = STRICT_NPM.includes(model.api.npm)
       const kept = candidates.filter((item) => !disabled.has(item.name))
-      const sent: Sent[] = kept.map((item) => ({
-        ...item,
-        permission: OperatorPermissionRules.permissionOf(item.name),
-        ...(strict ? { strict: false } : {}),
-        sizes: sizes(item.description, item.schema),
-        rules: rulesOf(item.name),
-      }))
+      // A tool that can be allowed only for some inputs says which (request.ts appends the same note).
+      const sent: Sent[] = kept.map((item) => {
+        const note = OperatorPermissionEffective.noteOf(item.name, lines)
+        const description = note ? `${item.description}\n\n${note}` : item.description
+        return {
+          ...item,
+          permission: OperatorPermissionRules.permissionOf(item.name),
+          ...(note ? { note: { text: note, size: note.length + 2 } } : {}),
+          description,
+          ...(strict ? { strict: false } : {}),
+          sizes: sizes(description, item.schema),
+          rules: rulesOf(item.name),
+        }
+      })
       if (model.providerID.includes("github-copilot") && sent.length === 0 && session) {
         const messages = yield* sessions
           .messages({ sessionID: session.id })

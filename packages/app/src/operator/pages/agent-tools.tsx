@@ -696,6 +696,22 @@ function ToolOverlay(props: {
             )}
           </Show>
 
+          <Show when={props.tool.note}>
+            {(note) => (
+              <section data-component="operator-panel" data-testid="tool-overlay-note">
+                <h3 data-slot="operator-panel-title">
+                  {language.t("operator.toolPrompt.part.note")}
+                  <span data-slot="operator-note">
+                    {" "}
+                    {language.t("operator.prompts.chars", { count: number(note().size) })}
+                  </span>
+                </h3>
+                <p data-slot="operator-note">{language.t("operator.toolPrompt.noteHint")}</p>
+                <pre data-component="operator-code">{note().text}</pre>
+              </section>
+            )}
+          </Show>
+
           <section data-component="operator-panel">
             <h3 data-slot="operator-panel-title">
               {language.t("operator.toolPrompt.part.schema")}

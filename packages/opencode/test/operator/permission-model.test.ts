@@ -225,3 +225,63 @@ describe("reachability and exact rules", () => {
       ).toBe(Model.decide(lines, permission, input).action)
   })
 })
+
+describe("the allowed-only-for note", () => {
+  const noteOf = (lines: ReturnType<typeof levels>, permission = "bash") =>
+    Model.note(lines, Model.reach(lines, permission))
+
+  test("bash allowed only for `git *` says so; with asks too", () => {
+    expect(noteOf(levels({ [PROJECT]: [line("*", "*", "deny"), line("bash", "git *", "allow")] }))).toBe(
+      "Allowed only for: `git *`. Other inputs are refused.",
+    )
+    expect(
+      noteOf(
+        levels({
+          [PROJECT]: [line("bash", "*", "deny"), line("bash", "git *", "allow"), line("bash", "git push *", "ask")],
+        }),
+      ),
+    ).toBe("Allowed only for: `git *`. Needs your approval for: `git push *`. Other inputs are refused.")
+  })
+
+  test("no note when nothing is refused, when a line allows everything else, or when it is long", () => {
+    // OpenCode's defaults: nothing refused.
+    expect(noteOf(levels({ [OPENCODE]: [line("*", "*", "allow"), line("read", "*.env", "ask")] }), "read")).toBe(
+      undefined,
+    )
+    // Allowed except `rm *`: not "allowed only for".
+    expect(noteOf(levels({ [OPENCODE]: [line("*", "*", "allow")], [AGENT]: [line("bash", "rm *", "deny")] }))).toBe(
+      undefined,
+    )
+    // Six patterns: no note.
+    const six = ["a *", "b *", "c *", "d *", "e *", "f *"].map((pattern) => line("bash", pattern, "allow"))
+    expect(noteOf(levels({ [PROJECT]: [line("*", "*", "deny"), ...six] }))).toBe(undefined)
+    // Nothing can be allowed: the tool isn't listed, so no note.
+    expect(noteOf(levels({ [PROJECT]: [line("*", "*", "deny")] }))).toBe(undefined)
+  })
+})
+
+describe("verbs", () => {
+  test("memory with WRITE and FORGET denied keeps only READ; with every verb denied, none", () => {
+    const lines = levels({
+      [NAMESPACE]: [line("memory", "*", "ask")],
+      [PROJECT]: [line("memory", "WRITE(*)", "deny"), line("memory", "FORGET(*)", "deny")],
+    })
+    expect(Model.verbs(lines, "memory", ["READ", "WRITE", "FORGET"])).toEqual(["READ"])
+    const none = levels({
+      [NAMESPACE]: [line("memory", "*", "allow")],
+      [PROJECT]: [
+        line("memory", "READ(*)", "deny"),
+        line("memory", "WRITE(*)", "deny"),
+        line("memory", "FORGET(*)", "deny"),
+      ],
+    })
+    expect(Model.verbs(none, "memory", ["READ", "WRITE", "FORGET"])).toEqual([])
+    // The permission alone still has inputs no verb covers: verbs decide whether the tool is listed.
+    expect(Model.reach(none, "memory").reachable).toBe(true)
+    // A verb allowed only for one target is still a verb that can be allowed.
+    const project = levels({
+      [NAMESPACE]: [line("memory", "*", "deny"), line("memory", "READ(project/*)", "ask")],
+    })
+    expect(Model.verbs(project, "memory", ["READ", "WRITE"])).toEqual(["READ"])
+  })
+})

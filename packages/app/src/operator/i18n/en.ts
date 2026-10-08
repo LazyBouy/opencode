@@ -1882,6 +1882,9 @@ export const dict = {
   "operator.toolPrompt.notInLast": "This tool was not in the last request.",
   "operator.toolPrompt.part.text": "Description",
   "operator.toolPrompt.part.appended": "Added by OpenCode",
+  "operator.toolPrompt.part.note": "Added by the fork: allowed inputs",
+  "operator.toolPrompt.noteHint":
+    "This tool can be allowed only for some inputs, so its description says which. It is added after the description and OpenCode's additions, only when short (at most 5 patterns and 300 characters).",
   "operator.toolPrompt.part.schema": "Schema",
   "operator.toolPrompt.step.opencode": "OpenCode's text",
   "operator.toolPrompt.step.template": "Filled in from the template {{path}} with {{values}}",

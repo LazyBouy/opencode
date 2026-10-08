@@ -277,3 +277,33 @@ unix(
       ).toBe(false)
     }),
 )
+
+unix("a tool allowed only for some inputs says which, in the request and the Tool Prompt; defaults add nothing", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* configure({
+      agent: {
+        gitonly: { mode: "primary", permission: { bash: { "*": "deny", "git *": "allow", "git push *": "ask" } } },
+      },
+    })
+    const sessions = yield* Session.Service
+    const prompts = yield* OperatorToolPrompt.Service
+    yield* llm.text("ok")
+    yield* llm.text("ok")
+    type Described = { tools?: Array<{ function: { name: string; description: string } }> }
+    const describe = (body: unknown, name: string) =>
+      ((body as Described).tools ?? []).find((tool) => tool.function.name === name)?.function.description ?? ""
+
+    yield* send((yield* sessions.create({ title: "Git", agent: "gitonly" })).id, "hello", "gitonly")
+    const note = "Allowed only for: `git *`. Needs your approval for: `git push *`. Other inputs are refused."
+    expect(describe((yield* llm.inputs).at(-1), "bash")).toEndWith(`\n\n${note}`)
+    const bash = (yield* prompts.build({ agent: "gitonly" })).sent.find((item) => item.name === "bash")!
+    expect(bash.note).toEqual({ text: note, size: note.length + 2 })
+    expect(bash.description).toBe(describe((yield* llm.inputs).at(-1), "bash"))
+
+    // OpenCode's own permissions: no tool gets a note.
+    yield* send((yield* sessions.create({ title: "Build" })).id, "hello", "build")
+    const build = yield* prompts.build({ agent: "build" })
+    expect(build.sent.filter((item) => item.note)).toEqual([])
+    expect(JSON.stringify((yield* llm.inputs).at(-1))).not.toContain("Other inputs are refused.")
+  }),
+)

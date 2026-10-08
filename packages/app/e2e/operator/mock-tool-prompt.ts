@@ -80,7 +80,10 @@ export function toolPromptFor(directory: string, agent: string, runsAs: string |
         template: { file: "packages/opencode/src/tool/shell/shell.txt", values: { os: "linux", shell: "bash" } },
       },
     }),
-    tool("read", "Reads a file."),
+    // A tool allowed only for some inputs carries the fork's note (here only in its trace).
+    tool("read", "Reads a file.", {
+      note: { text: "Allowed only for: `src/*`. Other inputs are refused.", size: 52 },
+    }),
     ...(subagent
       ? []
       : [

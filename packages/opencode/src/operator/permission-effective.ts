@@ -126,7 +126,28 @@ export function reachOf<T>(permission: string, lines: ReadonlyArray<Model.Line<T
   }
 }
 
-function reachable(permission: string, effective: Effective) {
+// Tools that declare verbs (§5): the fork's own (memory, helper) and custom tools that export them. Their
+// inputs look like `VERB(<target>)`; such a tool is listed if at least one verb can be allowed, and builds
+// its description and parameters from the verbs that can (`liveVerbs`).
+export const verbTools = new Map<string, ReadonlyArray<string>>()
+export function declareVerbs(tool: string, verbs: ReadonlyArray<string>) {
+  verbTools.set(tool, verbs)
+}
+export function liveVerbs(tool: string, lines: ReadonlyArray<Model.Line<unknown>>) {
+  const verbs = verbTools.get(tool) ?? []
+  const permission = permissionOf(tool)
+  const applicable = lines.filter((line) => OperatorPermissionReach.applies(permission, line))
+  const key = JSON.stringify([
+    "verbs",
+    permission,
+    verbs,
+    applicable.map((line) => [line.permission, line.pattern, line.action, line.level, line.lockedAt ?? null]),
+  ])
+  return remember(key, () => Model.verbs(applicable, permission, verbs))
+}
+
+function reachable(permission: string, effective: Effective, tool?: string) {
+  if (effective.lines && tool && verbTools.has(tool)) return liveVerbs(tool, effective.lines).length > 0
   if (effective.lines) return reachOf(permission, effective.lines).reachable
   const rules = effective.rules
   const key = JSON.stringify([
@@ -139,5 +160,28 @@ function reachable(permission: string, effective: Effective) {
 
 // The tools no call could ever be allowed or asked for (§4): dropped from the list.
 export function unreachable(tools: ReadonlyArray<string>, effective: Effective) {
-  return new Set(tools.filter((tool) => !reachable(permissionOf(tool), effective)))
+  return new Set(tools.filter((tool) => !reachable(permissionOf(tool), effective, tool)))
+}
+
+// The "allowed only for" note of a tool's permission (permission-model.ts `note`), if it gets one.
+export function noteOf(tool: string, lines: ReadonlyArray<Model.Line<unknown>>) {
+  const permission = permissionOf(tool)
+  return Model.note(lines, reachOf(permission, lines))
+}
+
+// The tools a request sends, each that can be allowed only for some inputs with that note appended to its
+// description (§6). Without the fork's lines, unchanged.
+export function noted<T>(tools: Record<string, T>, effective?: Effective): Record<string, T> {
+  const lines = effective?.lines
+  if (!lines) return tools
+  return Object.fromEntries(
+    Object.entries(tools).map(([id, tool]) => {
+      const text = noteOf(id, lines)
+      const description = (tool as { description?: unknown }).description
+      return [
+        id,
+        text && typeof description === "string" ? { ...tool, description: `${description}\n\n${text}` } : tool,
+      ]
+    }),
+  )
 }

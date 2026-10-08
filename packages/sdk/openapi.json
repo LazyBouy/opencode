@@ -33980,6 +33980,19 @@
         "required": ["kind", "text"],
         "additionalProperties": false
       },
+      "OperatorToolNote": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "size": {
+            "type": "number"
+          }
+        },
+        "required": ["text", "size"],
+        "additionalProperties": false
+      },
       "OperatorToolSizes": {
         "type": "object",
         "properties": {
@@ -34022,6 +34035,9 @@
           },
           "appended": {
             "$ref": "#/components/schemas/OperatorToolAppended"
+          },
+          "note": {
+            "$ref": "#/components/schemas/OperatorToolNote"
           },
           "description": {
             "type": "string",

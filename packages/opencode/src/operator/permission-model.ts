@@ -216,15 +216,27 @@ export type Reachability<T = {}> = {
 export function reach<T>(
   lines: ReadonlyArray<Line<T>>,
   permission: string,
-  fallback: Action = "deny",
-  limit = 20000,
+  options: {
+    fallback?: Action
+    limit?: number
+    /** Only the inputs this pattern matches (a verb's: `READ(*)`). */
+    within?: string
+  } = {},
 ): Reachability<T> {
+  const fallback = options.fallback ?? "deny"
+  const limit = options.limit ?? 20000
   const applicable = lines.filter((line) => Wildcard.match(permission, line.permission))
   const machines = applicable.map((line) => automaton(line.pattern))
-  const alphabet = Reach.alphabetOf(machines)
-  type Node = { states: ReadonlySet<number>[]; text: string }
-  const start: Node = { states: machines.map((machine) => Reach.close(machine, new Set([0]))), text: "" }
-  const id = (node: Node) => JSON.stringify(node.states.map((set) => [...set].sort()))
+  const within = options.within === undefined ? undefined : automaton(options.within)
+  const alphabet = Reach.alphabetOf([...machines, within])
+  type Node = { states: ReadonlySet<number>[]; scope?: ReadonlySet<number>; text: string }
+  const start: Node = {
+    states: machines.map((machine) => Reach.close(machine, new Set([0]))),
+    ...(within ? { scope: Reach.close(within, new Set([0])) } : {}),
+    text: "",
+  }
+  const id = (node: Node) =>
+    JSON.stringify([node.states.map((set) => [...set].sort()), node.scope ? [...node.scope].sort() : null])
   const seen = new Set([id(start)])
   const queue = [start]
   const live: Live<T>[] = []
@@ -236,18 +248,25 @@ export function reach<T>(
       break
     }
     const node = queue.shift()!
-    const decision = resolve(
-      applicable.filter((_, index) => Reach.accepts(machines[index]!, node.states[index]!)),
-      fallback,
-    )
-    const key = `${decision.line ? applicable.indexOf(decision.line) : -1}:${decision.lock ? applicable.indexOf(decision.lock) : -1}:${decision.action}`
-    if (!found.has(key)) {
-      found.add(key)
-      live.push({ ...decision, example: node.text })
+    // Inputs outside `within` don't count; they lead on to ones that may.
+    if (!within || Reach.accepts(within, node.scope!)) {
+      const decision = resolve(
+        applicable.filter((_, index) => Reach.accepts(machines[index]!, node.states[index]!)),
+        fallback,
+      )
+      const key = `${decision.line ? applicable.indexOf(decision.line) : -1}:${decision.lock ? applicable.indexOf(decision.lock) : -1}:${decision.action}`
+      if (!found.has(key)) {
+        found.add(key)
+        live.push({ ...decision, example: node.text })
+      }
     }
     for (const symbol of alphabet) {
+      const scope = within ? Reach.step(within, node.scope!, symbol) : undefined
+      // Nothing longer can be in `within`.
+      if (scope && !scope.size) continue
       const next: Node = {
         states: machines.map((machine, index) => Reach.step(machine, node.states[index]!, symbol)),
+        ...(scope ? { scope } : {}),
         text: node.text + Reach.textOf(symbol),
       }
       const nextId = id(next)
@@ -262,6 +281,12 @@ export function reach<T>(
     live,
     complete,
   }
+}
+
+// A tool's verbs (tool_prompt_from_permission.md §5; the Permission pattern field, memory_spec.md §9):
+// its inputs look like `READ(<target>)`. A verb can be allowed if some input `VERB(…)` gets allow or ask.
+export function verbs<T>(lines: ReadonlyArray<Line<T>>, permission: string, names: ReadonlyArray<string>) {
+  return names.filter((name) => reach(lines, permission, { within: `${name}(*)` }).reachable)
 }
 
 // Whether `a` must come after `b` in an ordered list for last-match checking to pick it where both match.
@@ -347,4 +372,37 @@ export function exact<T>(
     order.push(decided[next]!)
   }
   return order
+}
+
+// The "allowed only for" note (tool_prompt_from_permission.md §6): for a listed tool that can be allowed
+// only for some inputs, the patterns of the lines that allow it and of those that ask, in the lines'
+// order. None when no input is refused, when a line that allows or asks matches everything (the tool is
+// allowed except for some inputs), when the search stopped early, or when it would be long (more than 5
+// patterns, or more than 300 characters). The same lines always give the same note.
+export const NOTE_PATTERNS = 5
+export const NOTE_LENGTH = 300
+export function note<T>(lines: ReadonlyArray<Line<T>>, found: Reachability<T>): string | undefined {
+  if (!found.complete || !found.reachable) return undefined
+  if (!found.live.some((item) => item.action === "deny")) return undefined
+  const open = found.live.filter((item) => item.action !== "deny")
+  if (open.some((item) => !item.line || contains(item.line.pattern, "*"))) return undefined
+  const ordered = (action: Action) => [
+    ...new Set(
+      open
+        .filter((item) => item.action === action)
+        .map((item) => item.line!)
+        .toSorted((a, b) => lines.indexOf(a) - lines.indexOf(b))
+        .map((line) => line.pattern),
+    ),
+  ]
+  const allow = ordered("allow")
+  const ask = ordered("ask")
+  if (allow.length + ask.length > NOTE_PATTERNS) return undefined
+  const list = (patterns: ReadonlyArray<string>) => patterns.map((pattern) => `\`${pattern}\``).join(", ")
+  const text = [
+    ...(allow.length ? [`Allowed only for: ${list(allow)}.`] : []),
+    ...(ask.length ? [`Needs your approval for: ${list(ask)}.`] : []),
+    "Other inputs are refused.",
+  ].join(" ")
+  return text.length > NOTE_LENGTH ? undefined : text
 }

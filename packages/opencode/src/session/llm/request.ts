@@ -241,7 +241,8 @@ function resolveTools(
   const disabled = effective
     ? OperatorPermissionEffective.unreachable(Object.keys(input.tools), effective)
     : Permission.disabled(Object.keys(input.tools), Permission.merge(input.agent.permission, input.permission ?? []))
-  return Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k))
+  const offered = Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k))
+  return OperatorPermissionEffective.noted(offered, effective) // fork: "allowed only for" notes
 }
 
 export function hasToolCalls(messages: ModelMessage[]): boolean {

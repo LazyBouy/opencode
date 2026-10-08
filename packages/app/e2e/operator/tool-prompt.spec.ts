@@ -62,6 +62,12 @@ test("Tool Prompt lists the tools sent and not sent, and a tool opens with its t
   await expect(overlay).toHaveCount(0)
   await expect(page.getByRole("tab", { name: "Tool Prompt" })).toHaveAttribute("aria-selected", "true")
 
+  // A tool allowed only for some inputs shows the note the fork adds.
+  await sent.getByRole("row", { name: /^read/ }).click()
+  await expect(page.getByTestId("tool-overlay-note")).toContainText("Added by the fork: allowed inputs")
+  await expect(page.getByTestId("tool-overlay-note")).toContainText("Allowed only for: `src/*`.")
+  await page.keyboard.press("Escape")
+
   // bash's text is filled in from a template, with the values used.
   await sent.getByRole("row", { name: /bash/ }).click()
   await expect(page.getByTestId("tool-trace")).toContainText(
