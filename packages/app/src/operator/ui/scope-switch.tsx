@@ -44,10 +44,14 @@ export function WriteScopeSwitch(props: {
       }}
     >
       <SegmentedControlItemV2 value="global">{language.t("operator.scope.global")}</SegmentedControlItemV2>
-      <SegmentedControlItemV2 value="namespace" disabled={props.namespaceDisabled}>
-        {language.t("operator.scope.namespace", { name: props.namespace })}
+      <SegmentedControlItemV2
+        value="namespace"
+        disabled={props.namespaceDisabled}
+        title={language.t("operator.scope.namespace", { name: props.namespace })}
+      >
+        {language.t("operator.scope.namespaceShort")}
       </SegmentedControlItemV2>
-      <SegmentedControlItemV2 value="project">{language.t("operator.scope.project")}</SegmentedControlItemV2>
+      <SegmentedControlItemV2 value="project">{language.t("operator.scope.projectShort")}</SegmentedControlItemV2>
     </SegmentedControlV2>
   )
 }

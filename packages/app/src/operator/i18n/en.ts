@@ -307,6 +307,8 @@ export const dict = {
   "operator.scope.global": "Global",
   "operator.scope.project": "This project",
   "operator.scope.namespace": "Namespace ({{name}})",
+  "operator.scope.namespaceShort": "Namespace",
+  "operator.scope.projectShort": "Project",
   "operator.scope.all": "All projects",
   "operator.scope.picker": "Project",
   "operator.live.on": "Live",

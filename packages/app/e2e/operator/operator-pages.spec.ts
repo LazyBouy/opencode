@@ -232,7 +232,7 @@ test("the config page edits the namespace's config too, and says where each sett
   await expect(page.locator('[data-component="operator-sources"]')).toContainText("Namespace")
   await expect(page.getByTestId("config-origins")).toContainText("model")
   await expect(page.getByTestId("config-origins")).toContainText("Namespace")
-  await page.getByRole("button", { name: "Namespace (OpenCode)", exact: true }).click()
+  await page.getByRole("button", { name: "Namespace", exact: true }).click()
   const editor = page.getByRole("textbox", { name: "Edit settings" })
   await expect(editor).toHaveValue('{ "model": "opencode/big" }')
   await editor.fill('{ "model": "opencode/small" }')

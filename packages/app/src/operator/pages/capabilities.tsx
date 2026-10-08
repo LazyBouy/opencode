@@ -110,7 +110,10 @@ function useCapabilities() {
           : kind === "commands"
             ? (commands.data ?? []).map((command) => ({
                 name: command.name,
-                item: itemOf(own, "command", command.name),
+                // A skill also runs as a command: it shows the skill's scope.
+                item:
+                  itemOf(own, "command", command.name) ??
+                  (command.source === "skill" ? itemOf(items(), "skill", command.name) : undefined),
                 description: command.description,
                 detail: command.source,
               }))
