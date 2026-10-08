@@ -38,6 +38,8 @@ type RunsAs = "primary" | "subagent" | "session"
 type View = "would" | "last"
 
 // The model option that means "whatever the agent uses".
+// "Started from": a new session, with no rules of its own.
+const NEW_PARENT = "@new"
 const AGENT_MODEL = "agent"
 
 // The Tool Prompt tab: the tools list an agent's requests send, each tool with its description and
@@ -60,6 +62,7 @@ export function AgentToolPrompt(props: {
     model: AGENT_MODEL,
     runsAs: (props.mode === "subagent" ? "subagent" : "primary") as RunsAs,
     session: undefined as string | undefined,
+    parent: NEW_PARENT,
     view: "would" as View,
   })
   const number = (value: number) => exact(language, value)
@@ -88,9 +91,20 @@ export function AgentToolPrompt(props: {
         .then((result) => result.data ?? []),
   }))
   const session = () => (store.runsAs === "session" ? (store.session ?? sessions.data?.[0]?.id) : undefined)
+  // Runs as Subagent: the session that starts it (any agent's, in this project), or a new one.
+  const parents = useQuery(() => ({
+    queryKey: api.key("sessions", "project", props.directory),
+    enabled: store.runsAs === "subagent",
+    queryFn: () =>
+      api
+        .client()
+        .operator.session.list({ within: props.directory, limit: "100" })
+        .then((result) => (result.data ?? []).filter((item) => !item.parentID)),
+  }))
+  const parent = () => (store.runsAs === "subagent" && store.parent !== NEW_PARENT ? store.parent : undefined)
 
   const prompt = useQuery(() => ({
-    queryKey: api.key("tool-prompt", props.directory, props.agent, store.model, store.runsAs, session()),
+    queryKey: api.key("tool-prompt", props.directory, props.agent, store.model, store.runsAs, session(), parent()),
     enabled: store.runsAs !== "session" || !!session(),
     queryFn: () =>
       api
@@ -100,6 +114,7 @@ export function AgentToolPrompt(props: {
           directory: props.directory,
           ...(store.model === AGENT_MODEL ? {} : { model: store.model }),
           ...(store.runsAs === "session" ? { session: session() } : { runsAs: store.runsAs }),
+          ...(parent() ? { parent: parent() } : {}),
         })
         .then((result) => result.data!),
   }))
@@ -214,7 +229,26 @@ export function AgentToolPrompt(props: {
           </Show>
         </Show>
         <Show when={store.runsAs === "subagent"}>
-          <p data-slot="operator-note">{language.t("operator.toolPrompt.subagentNote")}</p>
+          <Field
+            group
+            label={language.t("operator.toolPrompt.startedFrom")}
+            hint={language.t("operator.toolPrompt.subagentNote")}
+          >
+            <SelectV2<string>
+              appearance="base"
+              aria-label={language.t("operator.toolPrompt.startedFrom")}
+              options={[NEW_PARENT, ...(parents.data ?? []).map((item) => item.id)]}
+              current={store.parent}
+              label={(id) => {
+                if (id === NEW_PARENT) return language.t("operator.toolPrompt.startedFromNew")
+                const found = parents.data?.find((item) => item.id === id)
+                return found
+                  ? `${found.title || id} · ${found.agent ?? ""} · ${formatAgo(found.time.updated, language.intl())}`
+                  : id
+              }}
+              onSelect={(id) => id && setStore("parent", id)}
+            />
+          </Field>
         </Show>
         <Show when={!last.data?.captured && !last.isPending}>
           <p data-slot="operator-note" data-testid="tool-prompt-not-captured">

@@ -14,6 +14,7 @@ import { Effect, Record } from "effect"
 import { jsonSchema, tool as aiTool, type ModelMessage, type Tool } from "ai"
 import type { Plugin } from "@/plugin"
 import { mergeDeep } from "remeda"
+import { OperatorPermissionEffective } from "@/operator/permission-effective"
 
 const USER_AGENT = `opencode/${InstallationVersion}`
 
@@ -171,7 +172,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     },
   )
 
-  const tools = resolveTools(input)
+  const tools = resolveTools(input, yield* OperatorPermissionEffective.forRequest(input))
   // Codex parity: OpenAI Responses-family providers hardcode `strict: false`
   // on every function tool so MCP-sourced and dynamic schemas that don't
   // satisfy OpenAI's structured-outputs constraints still register.
@@ -233,11 +234,13 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   }
 })
 
-function resolveTools(input: Pick<PrepareInput, "tools" | "agent" | "permission" | "user">) {
-  const disabled = Permission.disabled(
-    Object.keys(input.tools),
-    Permission.merge(input.agent.permission, input.permission ?? []),
-  )
+function resolveTools(
+  input: Pick<PrepareInput, "tools" | "agent" | "permission" | "user">,
+  effective?: PermissionV1.Ruleset,
+) {
+  const disabled = effective
+    ? OperatorPermissionEffective.unreachable(Object.keys(input.tools), effective)
+    : Permission.disabled(Object.keys(input.tools), Permission.merge(input.agent.permission, input.permission ?? []))
   return Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k))
 }
 

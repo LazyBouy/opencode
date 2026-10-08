@@ -2228,7 +2228,7 @@ export type PermissionRequest = {
 
 export type OperatorPermissionOrigin = {
   /**
-   * opencode-default / opencode-agent: OpenCode's code (its defaults, its definition of the agent); config-permission / config-tools: a config file's `permission` or legacy `tools` key; agent: the agent's own `permission` (its agent file or config entry); truncation: OpenCode's truncation folder allow; session-*: the session's own rules, set by you, by Always allow (a client's Always), by Allow for session (the fork's reply card), added by `task` for a subagent, by a client's tool switch, or by OpenCode
+   * opencode-default / opencode-agent: OpenCode's code (its defaults, its definition of the agent); config-permission / config-tools: a config file's `permission` or legacy `tools` key; agent: the agent's own `permission` (its agent file or config entry); truncation: OpenCode's truncation folder allow; session-*: the session's own rules, set by you, by Always allow (a client's Always), by Allow for session (the fork's reply card), added by `task` for a subagent, by a client's tool switch, or by OpenCode; agent-written: the agent's own rules saved since its project loaded (applied at once); lock: a locked rule, applied again last
    */
   kind:
     | "opencode-default"
@@ -2243,6 +2243,8 @@ export type OperatorPermissionOrigin = {
     | "session-task"
     | "session-client"
     | "session-opencode"
+    | "agent-written"
+    | "lock"
   path?: string
   agent?: string
   time?: number
@@ -3790,8 +3792,9 @@ export type OperatorToolPrompt = {
   modelSource?: OperatorModelSource
   runsAs: OperatorToolRunsAs
   sessionID?: string
+  parentSessionID?: string
   /**
-   * The rules that apply (the agent's, then the session's), in evaluation order
+   * The effective list R, in evaluation order: the agent's rules as loaded, its rules saved since, the session's (or those `task` gives a subagent), then the locked rules
    */
   rows: Array<OperatorPermissionRow>
   sent: Array<OperatorToolSent>
@@ -3848,8 +3851,9 @@ export type OperatorToolPromptDraft = {
   modelSource?: OperatorModelSource
   runsAs: OperatorToolRunsAs
   sessionID?: string
+  parentSessionID?: string
   /**
-   * The rules that apply (the agent's, then the session's), in evaluation order
+   * The effective list R, in evaluation order: the agent's rules as loaded, its rules saved since, the session's (or those `task` gives a subagent), then the locked rules
    */
   rows: Array<OperatorPermissionRow>
   sent: Array<OperatorToolSent>
@@ -15744,6 +15748,7 @@ export type OperatorToolPromptGetData = {
     workspace?: string
     model?: string
     runsAs?: OperatorToolRunsAs
+    parent?: string
     session?: string
   }
   url: "/operator/agent/{name}/tool-prompt"
@@ -15775,6 +15780,7 @@ export type OperatorToolPromptDraftData = {
   body?: {
     model?: string
     runsAs?: OperatorToolRunsAs
+    parent?: string
     agentRules?: PermissionRuleset
     sessionID?: string
     sessionRules?: PermissionRuleset

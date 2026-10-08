@@ -21,6 +21,9 @@ import { SessionID } from "@/session/schema"
 import { ToolJsonSchema } from "@/tool/json-schema"
 import { ToolRegistry } from "@/tool/registry"
 import { OperatorModels } from "./models"
+import { OperatorPermissionEffective } from "./permission-effective"
+import { OperatorPermissionLive } from "./permission-live"
+import { OperatorPermissionReach } from "./permission-reach"
 import { OperatorPermissionRules } from "./permission-rules"
 import { OperatorProfile } from "./profile"
 import { OperatorProfileStore } from "./profile-store"
@@ -131,8 +134,12 @@ export const ToolPrompt = Schema.Struct({
   modelSource: Schema.optional(OperatorModels.Source),
   runsAs: RunsAs,
   sessionID: Schema.optional(Schema.String),
+  parentSessionID: Schema.optional(Schema.String).annotate({
+    description: "Runs as Subagent: the session that starts it",
+  }),
   rows: Schema.Array(OperatorPermissionRules.Row).annotate({
-    description: "The rules that apply (the agent's, then the session's), in evaluation order",
+    description:
+      "The effective list R, in evaluation order: the agent's rules as loaded, its rules saved since, the session's (or those `task` gives a subagent), then the locked rules",
   }),
   sent: Schema.Array(Sent),
   notSent: Schema.Array(NotSent),
@@ -171,6 +178,8 @@ export type Input = {
   model?: string
   runsAs?: RunsAs
   sessionID?: string
+  /** Runs as Subagent: the session that starts it (its rules pass to the subagent, as `task` passes them). */
+  parentSessionID?: string
   /** Replaces the agent's own rules (as saving them would). */
   agentRules?: ReadonlyArray<Rule>
   /** Replaces the session's own rules. */
@@ -295,6 +304,7 @@ const layer = Layer.effect(
     const rules = yield* OperatorPermissionRules.Service
     const tools = yield* OperatorTools.Service
     const models = yield* OperatorModels.Service
+    const live = yield* OperatorPermissionLive.Service
 
     const missing = (message: string) => new NotFoundError({ message })
 
@@ -325,28 +335,66 @@ const layer = Layer.effect(
               .get(SessionID.make(input.sessionID))
               .pipe(Effect.mapError(() => missing(`No session ${input.sessionID}`)))
           : undefined
+      // A subagent started from a session gets that session's deny and external_directory rules.
+      const parent =
+        runsAs === "subagent" && input.parentSessionID
+          ? yield* sessions
+              .get(SessionID.make(input.parentSessionID))
+              .pipe(Effect.mapError(() => missing(`No session ${input.parentSessionID}`)))
+          : undefined
       const sessionRules: Rule[] =
         runsAs === "session"
           ? [...(input.sessionRules ?? session?.permission ?? [])]
           : runsAs === "subagent"
-            ? OperatorPermissionRules.subagentRules({ agent, primaryTools })
+            ? OperatorPermissionRules.subagentRules({ agent, primaryTools, parent: parent?.permission ?? [] })
             : []
-      const rows = [
+      // R (permission-effective.ts): the agent's loaded rules, its rules saved since load (unless a draft
+      // stands in for them), the session's, then the locked rules, applied last.
+      const ctx = yield* InstanceState.context
+      const pending = input.agentRules ? [] : live.pending(ctx.directory, agent.name)
+      const locked = OperatorPermissionLive.locks.of
+        ? yield* OperatorPermissionLive.locks.of({
+            directory: session?.directory ?? ctx.directory,
+            agent: agent.name,
+            ...((session?.parentID ?? parent?.id) ? { parentID: session?.parentID ?? parent!.id } : {}),
+          })
+        : []
+      const base = [
         ...labelled.rows,
+        ...pending.map((rule, index) => ({
+          ...rule,
+          index: labelled.rows.length + index + 1,
+          part: "agent" as const,
+          from: { kind: "agent-written" as const },
+        })),
+      ]
+      const sessionPart = [
         ...(runsAs === "subagent"
           ? sessionRules.map((rule, index) => ({
               ...rule,
-              index: labelled.rows.length + index + 1,
+              index: base.length + index + 1,
               part: "session" as const,
               from: { kind: "session-task" as const },
             }))
           : OperatorPermissionRules.sessionRows({
               rules: sessionRules,
-              start: labelled.rows.length,
+              start: base.length,
               parent: !!session?.parentID,
               primaryTools,
               recorded: session ? yield* Effect.promise(() => OperatorSessionPermissions.recorded(session.id)) : [],
             })),
+      ]
+      const rows = [
+        ...base,
+        ...sessionPart,
+        ...locked.map((rule, index) => ({
+          permission: rule.permission,
+          pattern: rule.pattern,
+          action: rule.action,
+          index: base.length + sessionPart.length + index + 1,
+          part: "agent" as const,
+          from: { kind: "lock" as const },
+        })),
       ]
       const agentList: Rule[] = labelled.rows.map(({ permission, pattern, action }) => ({
         permission,
@@ -371,7 +419,6 @@ const layer = Layer.effect(
       }
 
       // Versions: the profile's copy, the namespace's version, else OpenCode's text.
-      const ctx = yield* InstanceState.context
       const key = yield* Effect.promise(() => OperatorProjects.keyOf(ctx))
       const loaded = yield* Effect.promise(() => OperatorProfileStore.forProject(key))
       const shellName = Shell.name(Shell.acceptable(cfg.shell))
@@ -425,20 +472,17 @@ const layer = Layer.effect(
         }
       }
 
-      // `task`'s subagent list: the non-primary agents, minus those its `task` rules deny.
+      // `task`'s subagent list: the non-primary agents, minus those R's `task` rules deny (registry.ts).
       const subagents = (yield* agents.list())
         .filter((item) => item.mode !== "primary")
         .toSorted((a, b) => a.name.localeCompare(b.name))
         .map((item) => {
           const decisive = rows.findLast(
-            (row, index) =>
-              index < labelled.rows.length &&
-              Wildcard.match("task", row.permission) &&
-              Wildcard.match(item.name, row.pattern),
+            (row) => Wildcard.match("task", row.permission) && Wildcard.match(item.name, row.pattern),
           )
           return {
             name: item.name,
-            kept: Permission.evaluate("task", item.name, agentList).action !== "deny",
+            kept: Permission.evaluate("task", item.name, ruleset).action !== "deny",
             ...(decisive ? { rule: decisive.index } : {}),
           }
         })
@@ -519,9 +563,10 @@ const layer = Layer.effect(
           })
         }
 
-      // The permission filter (resolveTools): the last rule for a tool's permission, if `*` deny,
-      // removes it.
-      const disabled = Permission.disabled(
+      // The permission filter (resolveTools on R): a tool is offered only if some call to it could be
+      // allowed or asked (permission-reach.ts). The rule named is the last one that still decides an
+      // input: a deny that comes after every allow.
+      const disabled = OperatorPermissionEffective.unreachable(
         candidates.map((item) => item.name),
         ruleset,
       )
@@ -529,7 +574,13 @@ const layer = Layer.effect(
       for (const item of candidates) {
         if (!disabled.has(item.name)) continue
         const permission = OperatorPermissionRules.permissionOf(item.name)
-        const decisive = rows.findLast((row) => Wildcard.match(permission, row.permission))
+        const deciding = OperatorPermissionReach.reach(permission, ruleset).live.find(
+          (found) => found.index !== undefined,
+        )
+        const decisive =
+          deciding?.index !== undefined
+            ? rows[deciding.index]
+            : rows.findLast((row) => Wildcard.match(permission, row.permission))
         notSent.push({
           name: item.name,
           permission,
@@ -641,6 +692,7 @@ const layer = Layer.effect(
         ...(modelSource ? { modelSource } : {}),
         runsAs,
         ...(session ? { sessionID: session.id } : {}),
+        ...(parent ? { parentSessionID: parent.id } : {}),
         rows,
         sent,
         notSent,
@@ -703,5 +755,6 @@ export const node = LayerNode.make({
     OperatorPermissionRules.node,
     OperatorTools.node,
     OperatorModels.node,
+    OperatorPermissionLive.node,
   ],
 })

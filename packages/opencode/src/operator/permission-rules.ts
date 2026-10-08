@@ -36,9 +36,11 @@ export const Origin = Schema.Struct({
     "session-task",
     "session-client",
     "session-opencode",
+    "agent-written",
+    "lock",
   ]).annotate({
     description:
-      "opencode-default / opencode-agent: OpenCode's code (its defaults, its definition of the agent); config-permission / config-tools: a config file's `permission` or legacy `tools` key; agent: the agent's own `permission` (its agent file or config entry); truncation: OpenCode's truncation folder allow; session-*: the session's own rules, set by you, by Always allow (a client's Always), by Allow for session (the fork's reply card), added by `task` for a subagent, by a client's tool switch, or by OpenCode",
+      "opencode-default / opencode-agent: OpenCode's code (its defaults, its definition of the agent); config-permission / config-tools: a config file's `permission` or legacy `tools` key; agent: the agent's own `permission` (its agent file or config entry); truncation: OpenCode's truncation folder allow; session-*: the session's own rules, set by you, by Always allow (a client's Always), by Allow for session (the fork's reply card), added by `task` for a subagent, by a client's tool switch, or by OpenCode; agent-written: the agent's own rules saved since its project loaded (applied at once); lock: a locked rule, applied again last",
   }),
   path: Schema.optional(Schema.String).annotate({ description: "The file the rule is written in" }),
   agent: Schema.optional(Schema.String).annotate({ description: "opencode-agent: the agent whose definition it is" }),

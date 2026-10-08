@@ -30,6 +30,10 @@ export class ApiToolPromptNotFoundError extends Schema.ErrorClass<{
 const Context = {
   model: Schema.optional(Schema.String).annotate({ description: "provider/model; the agent's model by default" }),
   runsAs: Schema.optional(OperatorToolPrompt.RunsAs),
+  parent: Schema.optional(Schema.String).annotate({
+    description:
+      "Runs as Subagent: the session that starts it. Its deny and external_directory rules pass to the subagent, as `task` passes them, and its agent's locks apply when the subagent inherits them",
+  }),
 }
 
 export const OperatorToolPromptApi = HttpApi.make("operator-tool-prompt")

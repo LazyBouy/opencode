@@ -24,6 +24,7 @@ import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/l
 import { Reference } from "@opencode-ai/core/reference"
 import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { OperatorPermissionEffective } from "@/operator/permission-effective"
 
 export function provider(model: Provider.Model) {
   if (model.api.id.includes("muse")) {
@@ -105,6 +106,7 @@ const layer = Layer.effect(
       }),
 
       skills: Effect.fn("SystemPrompt.skills")(function* (agent: Agent.Info) {
+        agent = yield* OperatorPermissionEffective.withEffective(agent) // fork: the session's effective rules
         if (Permission.disabled(["skill"], agent.permission).has("skill")) return
 
         const list = yield* skill.available(agent)
@@ -119,7 +121,7 @@ const layer = Layer.effect(
       }),
 
       mcp: Effect.fn("SystemPrompt.mcp")(function* (agent: Agent.Info, permission?: PermissionV1.Ruleset) {
-        const ruleset = Permission.merge(agent.permission, permission ?? [])
+        const ruleset = (yield* OperatorPermissionEffective.withEffective(agent, permission)).permission // fork
         const instructions = (yield* mcp.instructions()).filter(
           (item) => item.tools.length === 0 || Permission.disabled(item.tools, ruleset).size < item.tools.length,
         )

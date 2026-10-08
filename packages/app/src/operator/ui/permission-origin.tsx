@@ -4,7 +4,8 @@ import { formatDateTime, shortPath } from "../format"
 
 // Where a permission rule comes from, as a short label: OpenCode's code (its defaults, its definition
 // of the agent, the truncation folder), a config file's `permission` or legacy `tools`, the agent's own
-// rules (its file or config entry), or the session's own rules with who added them and when.
+// rules (its file or config entry, or saved since the project loaded), the session's own rules with who
+// added them and when, or a locked rule.
 export function useOriginText() {
   const language = useLanguage()
   return (origin: OperatorPermissionOrigin) => {
@@ -41,6 +42,10 @@ export function useOriginText() {
           : language.t("operator.origin.sessionClient")
       case "session-opencode":
         return language.t("operator.origin.sessionOpencode")
+      case "agent-written":
+        return language.t("operator.origin.agentWritten")
+      case "lock":
+        return language.t("operator.origin.lock")
     }
   }
 }

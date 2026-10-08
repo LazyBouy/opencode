@@ -14,7 +14,11 @@ type Rule = { permission: string; pattern: string; action: "allow" | "ask" | "de
 export const handlers: {
   always?: (input: { sessionID: string; rules: ReadonlyArray<Rule> }) => Effect.Effect<void>
   switched?: (input: { sessionID: string; rules: ReadonlyArray<Rule> }) => Effect.Effect<void>
-  rules?: (input: { sessionID: string; permission: string }) => Effect.Effect<ReadonlyArray<Rule>>
+  rules?: (input: {
+    sessionID: string
+    permission: string
+    given: ReadonlyArray<Rule>
+  }) => Effect.Effect<ReadonlyArray<Rule>>
 } = {}
 
 // The list an "Always" approval is kept in: the session's own (upstream kept one list for every session
@@ -38,8 +42,8 @@ export const switched = (sessionID: string, rules: ReadonlyArray<Rule>) =>
     Effect.catchCause(() => Effect.void),
   )
 
-// The rules an ask checks after its own and the session's approvals (none without a handler).
-export const rules = (sessionID: string, permission: string) =>
-  Effect.suspend(() => handlers.rules?.({ sessionID, permission }) ?? Effect.succeed<ReadonlyArray<Rule>>([])).pipe(
-    Effect.catchCause(() => Effect.succeed<ReadonlyArray<Rule>>([])),
-  )
+// The rules an ask checks after its own (`given`) and the session's approvals (none without a handler).
+export const rules = (sessionID: string, permission: string, given: ReadonlyArray<Rule>) =>
+  Effect.suspend(
+    () => handlers.rules?.({ sessionID, permission, given }) ?? Effect.succeed<ReadonlyArray<Rule>>([]),
+  ).pipe(Effect.catchCause(() => Effect.succeed<ReadonlyArray<Rule>>([])))

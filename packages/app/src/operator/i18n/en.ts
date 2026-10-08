@@ -1702,6 +1702,8 @@ export const dict = {
   "operator.origin.sessionClient": "Session · client tool switch",
   "operator.origin.sessionClientAt": "Session · client tool switch ({{time}})",
   "operator.origin.sessionOpencode": "Session · added by OpenCode",
+  "operator.origin.agentWritten": "Agent's own rules · saved, applied before the project reloads",
+  "operator.origin.lock": "Locked · applied last, sessions can't override",
 
   "operator.toolPrompt.modelHint":
     'Which model to show the list for. The model matters: GPT models get apply_patch instead of edit and write, and some providers need the tool definitions adjusted. "The agent\'s model" is the one this agent really uses.',
@@ -1716,7 +1718,9 @@ export const dict = {
     "Shows the tools this session's next request would get, including the rules you set for this session only.",
   "operator.toolPrompt.noSessions": "This agent has no sessions in this project yet.",
   "operator.toolPrompt.subagentNote":
-    "When another agent starts this one, the rules that block tools for that other agent apply here too. They depend on which agent starts it, so they aren't shown.",
+    "When a session starts this agent (with task), that session's deny rules and external folder rules pass to it, and its agent's locks apply when this agent inherits them. Pick the session to include them.",
+  "operator.toolPrompt.startedFrom": "Started from",
+  "operator.toolPrompt.startedFromNew": "A new session (no rules of its own)",
   "operator.toolPrompt.view": "View",
   "operator.toolPrompt.viewHint":
     "Would be sent: worked out now from the current settings. Last sent: the tools that went out with this agent's most recent real request in this project.",

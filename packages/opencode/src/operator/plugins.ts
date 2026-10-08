@@ -1,6 +1,7 @@
 import type { Plugin } from "@opencode-ai/plugin"
 import { Context, Fiber } from "effect"
 import { InstanceRef } from "@/effect/instance-ref"
+import { OperatorPermissionEffective } from "./permission-effective"
 import { OperatorProfile } from "./profile"
 import { OperatorProfileStore } from "./profile-store"
 import { OperatorProjects } from "./projects"
@@ -105,6 +106,8 @@ const PromptPlugin: Plugin = async (input) => {
       const last = output.messages.findLast((message) => message.info.role === "user")?.info
       const agent = last?.role === "user" ? last.agent : undefined
       if (fiber && agent) OperatorPromptText.loopAgents.set(fiber, agent)
+      // The step's session, for the lists upstream builds from the agent alone (permission-effective.ts).
+      if (fiber && last) OperatorPermissionEffective.loopSessions.set(fiber, last.sessionID)
       const found = await slots(agent)
       const versions = new Map(
         OperatorPromptText.BUILTINS.filter((item) => item.kind === "reminder").flatMap((item) => {

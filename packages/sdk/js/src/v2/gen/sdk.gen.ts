@@ -3975,6 +3975,7 @@ export class ToolPrompt extends HeyApiClient {
       workspace?: string
       model?: string
       runsAs?: OperatorToolRunsAs
+      parent?: string
       session?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -3989,6 +3990,7 @@ export class ToolPrompt extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "query", key: "model" },
             { in: "query", key: "runsAs" },
+            { in: "query", key: "parent" },
             { in: "query", key: "session" },
           ],
         },
@@ -4017,6 +4019,7 @@ export class ToolPrompt extends HeyApiClient {
       workspace?: string
       model?: string
       runsAs?: OperatorToolRunsAs
+      parent?: string
       agentRules?: PermissionRuleset
       sessionID?: string
       sessionRules?: PermissionRuleset
@@ -4033,6 +4036,7 @@ export class ToolPrompt extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "body", key: "model" },
             { in: "body", key: "runsAs" },
+            { in: "body", key: "parent" },
             { in: "body", key: "agentRules" },
             { in: "body", key: "sessionID" },
             { in: "body", key: "sessionRules" },

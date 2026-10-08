@@ -14878,6 +14878,14 @@
             "required": false
           },
           {
+            "name": "parent",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
             "name": "session",
             "in": "query",
             "schema": {
@@ -15003,6 +15011,9 @@
                   },
                   "runsAs": {
                     "$ref": "#/components/schemas/OperatorToolRunsAs"
+                  },
+                  "parent": {
+                    "type": "string"
                   },
                   "agentRules": {
                     "$ref": "#/components/schemas/PermissionRuleset"
@@ -29936,9 +29947,11 @@
               "session-allow",
               "session-task",
               "session-client",
-              "session-opencode"
+              "session-opencode",
+              "agent-written",
+              "lock"
             ],
-            "description": "opencode-default / opencode-agent: OpenCode's code (its defaults, its definition of the agent); config-permission / config-tools: a config file's `permission` or legacy `tools` key; agent: the agent's own `permission` (its agent file or config entry); truncation: OpenCode's truncation folder allow; session-*: the session's own rules, set by you, by Always allow (a client's Always), by Allow for session (the fork's reply card), added by `task` for a subagent, by a client's tool switch, or by OpenCode"
+            "description": "opencode-default / opencode-agent: OpenCode's code (its defaults, its definition of the agent); config-permission / config-tools: a config file's `permission` or legacy `tools` key; agent: the agent's own `permission` (its agent file or config entry); truncation: OpenCode's truncation folder allow; session-*: the session's own rules, set by you, by Always allow (a client's Always), by Allow for session (the fork's reply card), added by `task` for a subagent, by a client's tool switch, or by OpenCode; agent-written: the agent's own rules saved since its project loaded (applied at once); lock: a locked rule, applied again last"
           },
           "path": {
             "type": "string"
@@ -33913,12 +33926,15 @@
           "sessionID": {
             "type": "string"
           },
+          "parentSessionID": {
+            "type": "string"
+          },
           "rows": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/OperatorPermissionRow"
             },
-            "description": "The rules that apply (the agent's, then the session's), in evaluation order"
+            "description": "The effective list R, in evaluation order: the agent's rules as loaded, its rules saved since, the session's (or those `task` gives a subagent), then the locked rules"
           },
           "sent": {
             "type": "array",
@@ -34068,12 +34084,15 @@
           "sessionID": {
             "type": "string"
           },
+          "parentSessionID": {
+            "type": "string"
+          },
           "rows": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/OperatorPermissionRow"
             },
-            "description": "The rules that apply (the agent's, then the session's), in evaluation order"
+            "description": "The effective list R, in evaluation order: the agent's rules as loaded, its rules saved since, the session's (or those `task` gives a subagent), then the locked rules"
           },
           "sent": {
             "type": "array",

@@ -77,6 +77,18 @@ test("Tool Prompt lists the tools sent and not sent, and a tool opens with its t
     "added when build is started by task, because build's own rules do not mention task",
   )
   expect(state.toolPromptQueries.some((query) => query.get("runsAs") === "subagent")).toBe(true)
+
+  // Started from a session: its rules pass to the subagent, so the prompt is asked for with it.
+  const startedFrom = page.locator(
+    '[data-component="select-v2-root"][aria-label="Started from"] [data-component="select-v2"]',
+  )
+  await expect(startedFrom).toContainText("A new session (no rules of its own)")
+  await startedFrom.click()
+  await page
+    .locator('[data-component="menu-v2-item"]')
+    .filter({ hasText: /^Fix the parser/ })
+    .click()
+  await expect.poll(() => state.toolPromptQueries.some((query) => query.get("parent") === "ses_op_1")).toBe(true)
 })
 
 test("Last sent shows the tools of the agent's last request, exactly as sent", async ({ page }) => {

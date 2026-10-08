@@ -123,6 +123,11 @@ function exclusive(own: Automaton | undefined, later: ReadonlyArray<Automaton>) 
   return undefined
 }
 
+// Whether a rule applies to a permission (its `permission` matches it).
+export function applies(permission: string, rule: Rule) {
+  return Wildcard.match(permission, rule.permission)
+}
+
 export type Live = {
   /** The rule's index in the ruleset; undefined for "no rule matches" (OpenCode asks). */
   readonly index: number | undefined
