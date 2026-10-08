@@ -66,7 +66,7 @@ test("a skill and a session move to Trash", async ({ page }) => {
   await page.getByRole("button", { name: "Yes, move to Trash" }).click()
   await expect.poll(() => state.trashWrites.length).toBe(1)
   expect(state.trashWrites[0]).toMatchObject({
-    path: "/operator/trash/item",
+    path: "/operator/capability/remove",
     body: { kind: "skill", name: "release-notes" },
   })
   // The record is gone from the address, so its overlay closes.

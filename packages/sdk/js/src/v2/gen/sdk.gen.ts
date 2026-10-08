@@ -156,15 +156,26 @@ import type {
   OperatorCallRecountResponses,
   OperatorCallTokenizersErrors,
   OperatorCallTokenizersResponses,
+  OperatorCapabilityCopyErrors,
+  OperatorCapabilityCopyResponses,
+  OperatorCapabilityCreate,
+  OperatorCapabilityCreateErrors,
+  OperatorCapabilityCreateResponses,
   OperatorCapabilityDisableErrors,
   OperatorCapabilityDisableResponses,
+  OperatorCapabilityEditErrors,
+  OperatorCapabilityEditResponses,
   OperatorCapabilityKind,
   OperatorCapabilityListErrors,
   OperatorCapabilityListResponses,
   OperatorCapabilityOverrideErrors,
   OperatorCapabilityOverrideResponses,
+  OperatorCapabilityRemoveErrors,
+  OperatorCapabilityRemoveResponses,
   OperatorCapabilityRevertErrors,
   OperatorCapabilityRevertResponses,
+  OperatorCapabilitySourceErrors,
+  OperatorCapabilitySourceResponses,
   OperatorConfigLayersErrors,
   OperatorConfigLayersResponses,
   OperatorConfigSchemaErrors,
@@ -174,6 +185,7 @@ import type {
   OperatorConfigUpdateResponses,
   OperatorConfigWriteErrors,
   OperatorConfigWriteResponses,
+  OperatorConfigWriteScope,
   OperatorFolderCreateErrors,
   OperatorFolderCreateResponses,
   OperatorFolderInitErrors,
@@ -3090,12 +3102,13 @@ export class Config2 extends HeyApiClient {
   /**
    * List config layers
    *
-   * List the config files that apply to this project, in load order, and the file a global or project write goes to.
+   * List the config files that apply to this project, in load order, and the file a global, namespace or project write goes to. The namespace scope is the project's namespace unless `namespace` names another.
    */
   public layers<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
       workspace?: string
+      namespace?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3106,6 +3119,7 @@ export class Config2 extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "namespace" },
           ],
         },
       ],
@@ -3124,13 +3138,14 @@ export class Config2 extends HeyApiClient {
   /**
    * Update config at a scope
    *
-   * Merge a patch into the global or project config file, keeping comments. A null value removes the key so the inherited value applies. The result is validated before it is written.
+   * Merge a patch into the global, namespace or project config file, keeping comments. A null value removes the key so the inherited value applies. The result is validated before it is written.
    */
   public update<ThrowOnError extends boolean = false>(
     parameters: {
       directory?: string
       workspace?: string
-      scope: OperatorConfigScope
+      scope: OperatorConfigWriteScope
+      namespace?: string
       body?: {
         [key: string]: unknown
       }
@@ -3145,6 +3160,7 @@ export class Config2 extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "query", key: "scope" },
+            { in: "query", key: "namespace" },
             { key: "body", map: "body" },
           ],
         },
@@ -3169,13 +3185,14 @@ export class Config2 extends HeyApiClient {
   /**
    * Replace a config file
    *
-   * Replace the global or project config file with the given JSONC text. The text is validated before it is written.
+   * Replace the global, namespace or project config file with the given JSONC text. The text is validated before it is written.
    */
   public write<ThrowOnError extends boolean = false>(
     parameters: {
       directory?: string
       workspace?: string
-      scope: OperatorConfigScope
+      scope: OperatorConfigWriteScope
+      namespace?: string
       text?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -3188,6 +3205,7 @@ export class Config2 extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "query", key: "scope" },
+            { in: "query", key: "namespace" },
             { in: "body", key: "text" },
           ],
         },
@@ -4877,7 +4895,7 @@ export class Capability extends HeyApiClient {
       OperatorCapabilityListErrors,
       ThrowOnError
     >({
-      url: "/operator/capabilities",
+      url: "/operator/capability",
       ...options,
       ...params,
     })
@@ -4894,6 +4912,7 @@ export class Capability extends HeyApiClient {
       workspace?: string
       kind?: OperatorCapabilityKind
       name?: string
+      namespace?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4906,6 +4925,7 @@ export class Capability extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "body", key: "kind" },
             { in: "body", key: "name" },
+            { in: "body", key: "namespace" },
           ],
         },
       ],
@@ -4915,7 +4935,7 @@ export class Capability extends HeyApiClient {
       OperatorCapabilityOverrideErrors,
       ThrowOnError
     >({
-      url: "/operator/capabilities/override",
+      url: "/operator/capability/override",
       ...options,
       ...params,
       headers: {
@@ -4937,6 +4957,7 @@ export class Capability extends HeyApiClient {
       workspace?: string
       kind?: OperatorCapabilityKind
       name?: string
+      namespace?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4949,6 +4970,7 @@ export class Capability extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "body", key: "kind" },
             { in: "body", key: "name" },
+            { in: "body", key: "namespace" },
           ],
         },
       ],
@@ -4958,7 +4980,7 @@ export class Capability extends HeyApiClient {
       OperatorCapabilityDisableErrors,
       ThrowOnError
     >({
-      url: "/operator/capabilities/disable",
+      url: "/operator/capability/disable",
       ...options,
       ...params,
       headers: {
@@ -4980,6 +5002,7 @@ export class Capability extends HeyApiClient {
       workspace?: string
       kind?: OperatorCapabilityKind
       name?: string
+      namespace?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4992,6 +5015,7 @@ export class Capability extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "body", key: "kind" },
             { in: "body", key: "name" },
+            { in: "body", key: "namespace" },
           ],
         },
       ],
@@ -5001,7 +5025,227 @@ export class Capability extends HeyApiClient {
       OperatorCapabilityRevertErrors,
       ThrowOnError
     >({
-      url: "/operator/capabilities/revert",
+      url: "/operator/capability/revert",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Delete a capability defined at the scope
+   *
+   * Move a capability the project (or the namespace) defines itself to Trash: its file or folder, or its config entry. OpenCode's built-ins and capabilities from farther scopes can't be deleted here; disable them instead.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      kind?: OperatorCapabilityKind
+      name?: string
+      namespace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "kind" },
+            { in: "body", key: "name" },
+            { in: "body", key: "namespace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorCapabilityRemoveResponses,
+      OperatorCapabilityRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/operator/capability/remove",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Copy a namespace's capability to another namespace
+   *
+   * Copy a capability of a namespace (its file, or its config entry) into another namespace's layer, as that namespace's own. The copies are independent.
+   */
+  public copy<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      kind?: OperatorCapabilityKind
+      name?: string
+      namespace?: string
+      to?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "kind" },
+            { in: "body", key: "name" },
+            { in: "body", key: "namespace" },
+            { in: "body", key: "to" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorCapabilityCopyResponses,
+      OperatorCapabilityCopyErrors,
+      ThrowOnError
+    >({
+      url: "/operator/capability/copy",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Read a capability's definition
+   *
+   * The text of a capability the project (or the namespace) defines itself, to edit: its file, or its config entry as JSON.
+   */
+  public source<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      kind: OperatorCapabilityKind
+      name: string
+      namespace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "kind" },
+            { in: "query", key: "name" },
+            { in: "query", key: "namespace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorCapabilitySourceResponses,
+      OperatorCapabilitySourceErrors,
+      ThrowOnError
+    >({
+      url: "/operator/capability/source",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Edit a capability's definition
+   *
+   * Replace the file (or the config entry) of a capability the project (or the namespace) defines itself.
+   */
+  public edit<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      kind?: OperatorCapabilityKind
+      name?: string
+      namespace?: string
+      text?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "kind" },
+            { in: "body", key: "name" },
+            { in: "body", key: "namespace" },
+            { in: "body", key: "text" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorCapabilityEditResponses,
+      OperatorCapabilityEditErrors,
+      ThrowOnError
+    >({
+      url: "/operator/capability/source",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Create a capability at a scope
+   *
+   * Write a new command, skill, tool or plugin file under the project's (or the namespace's) .opencode, or an MCP server entry into its config. Agents are created with the agent form.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      operatorCapabilityCreate?: OperatorCapabilityCreate
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "operatorCapabilityCreate", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorCapabilityCreateResponses,
+      OperatorCapabilityCreateErrors,
+      ThrowOnError
+    >({
+      url: "/operator/capability/create",
       ...options,
       ...params,
       headers: {

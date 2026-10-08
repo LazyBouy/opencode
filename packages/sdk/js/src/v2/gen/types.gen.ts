@@ -3262,7 +3262,7 @@ export type WorkspaceWarpError = {
 }
 
 export type OperatorConfigSource = {
-  kind: "global" | "custom" | "project" | "directory" | "env"
+  kind: "global" | "namespace" | "custom" | "project" | "directory" | "env"
   path: string
   text: string
 }
@@ -3278,6 +3278,7 @@ export type OperatorConfigLayers = {
   targets: {
     global: string
     project: string
+    namespace?: string
   }
   /**
    * The folder that holds agent, command and skill files at each scope
@@ -3285,10 +3286,21 @@ export type OperatorConfigLayers = {
   folders: {
     global: string
     project: string
+    namespace?: string
+  }
+  /**
+   * The namespace the namespace scope stands for
+   */
+  namespace: string
+  /**
+   * For each top-level key, the kind of source that sets it last (the one in effect)
+   */
+  origins: {
+    [key: string]: "global" | "namespace" | "custom" | "project" | "directory" | "env"
   }
 }
 
-export type OperatorConfigScope = "global" | "project"
+export type OperatorConfigWriteScope = "global" | "namespace" | "project"
 
 export type OperatorConfigUpdateResult = {
   path: string
@@ -3376,6 +3388,8 @@ export type OperatorAgent = {
 }
 
 export type OperatorAgentFormat = "file" | "config"
+
+export type OperatorConfigScope = "global" | "project"
 
 export type OperatorAgentWritten = {
   path: string
@@ -4724,6 +4738,20 @@ export type OperatorCapabilityError = {
   name: "OperatorCapabilityError"
   data: {
     message: string
+  }
+}
+
+export type OperatorCapabilityCreate = {
+  kind: OperatorCapabilityKind
+  name: string
+  namespace?: string
+  description?: string
+  text?: string
+  agent?: string
+  model?: string
+  subtask?: boolean
+  mcp?: {
+    [key: string]: unknown
   }
 }
 
@@ -14936,6 +14964,7 @@ export type OperatorConfigLayersData = {
   query?: {
     directory?: string
     workspace?: string
+    namespace?: string
   }
   url: "/operator/config/layer"
 }
@@ -14966,7 +14995,8 @@ export type OperatorConfigUpdateData = {
   query: {
     directory?: string
     workspace?: string
-    scope: OperatorConfigScope
+    scope: OperatorConfigWriteScope
+    namespace?: string
   }
   url: "/operator/config"
 }
@@ -14997,7 +15027,8 @@ export type OperatorConfigWriteData = {
   query: {
     directory?: string
     workspace?: string
-    scope: OperatorConfigScope
+    scope: OperatorConfigWriteScope
+    namespace?: string
   }
   url: "/operator/config/raw"
 }
@@ -16490,7 +16521,7 @@ export type OperatorCapabilityListData = {
     workspace?: string
     namespace?: string
   }
-  url: "/operator/capabilities"
+  url: "/operator/capability"
 }
 
 export type OperatorCapabilityListErrors = {
@@ -16515,13 +16546,14 @@ export type OperatorCapabilityOverrideData = {
   body?: {
     kind: OperatorCapabilityKind
     name: string
+    namespace?: string
   }
   path?: never
   query?: {
     directory?: string
     workspace?: string
   }
-  url: "/operator/capabilities/override"
+  url: "/operator/capability/override"
 }
 
 export type OperatorCapabilityOverrideErrors = {
@@ -16547,13 +16579,14 @@ export type OperatorCapabilityDisableData = {
   body?: {
     kind: OperatorCapabilityKind
     name: string
+    namespace?: string
   }
   path?: never
   query?: {
     directory?: string
     workspace?: string
   }
-  url: "/operator/capabilities/disable"
+  url: "/operator/capability/disable"
 }
 
 export type OperatorCapabilityDisableErrors = {
@@ -16579,13 +16612,14 @@ export type OperatorCapabilityRevertData = {
   body?: {
     kind: OperatorCapabilityKind
     name: string
+    namespace?: string
   }
   path?: never
   query?: {
     directory?: string
     workspace?: string
   }
-  url: "/operator/capabilities/revert"
+  url: "/operator/capability/revert"
 }
 
 export type OperatorCapabilityRevertErrors = {
@@ -16606,6 +16640,172 @@ export type OperatorCapabilityRevertResponses = {
 
 export type OperatorCapabilityRevertResponse =
   OperatorCapabilityRevertResponses[keyof OperatorCapabilityRevertResponses]
+
+export type OperatorCapabilityRemoveData = {
+  body?: {
+    kind: OperatorCapabilityKind
+    name: string
+    namespace?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/capability/remove"
+}
+
+export type OperatorCapabilityRemoveErrors = {
+  /**
+   * OperatorCapabilityError | InvalidRequestError
+   */
+  400: OperatorCapabilityError | InvalidRequestError
+}
+
+export type OperatorCapabilityRemoveError = OperatorCapabilityRemoveErrors[keyof OperatorCapabilityRemoveErrors]
+
+export type OperatorCapabilityRemoveResponses = {
+  /**
+   * Moved to Trash
+   */
+  200: boolean
+}
+
+export type OperatorCapabilityRemoveResponse =
+  OperatorCapabilityRemoveResponses[keyof OperatorCapabilityRemoveResponses]
+
+export type OperatorCapabilityCopyData = {
+  body?: {
+    kind: OperatorCapabilityKind
+    name: string
+    namespace: string
+    /**
+     * The namespace that gets the copy
+     */
+    to: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/capability/copy"
+}
+
+export type OperatorCapabilityCopyErrors = {
+  /**
+   * OperatorCapabilityError | InvalidRequestError
+   */
+  400: OperatorCapabilityError | InvalidRequestError
+}
+
+export type OperatorCapabilityCopyError = OperatorCapabilityCopyErrors[keyof OperatorCapabilityCopyErrors]
+
+export type OperatorCapabilityCopyResponses = {
+  /**
+   * The copy, in the other namespace
+   */
+  200: OperatorCapability
+}
+
+export type OperatorCapabilityCopyResponse = OperatorCapabilityCopyResponses[keyof OperatorCapabilityCopyResponses]
+
+export type OperatorCapabilitySourceData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    kind: OperatorCapabilityKind
+    name: string
+    namespace?: string
+  }
+  url: "/operator/capability/source"
+}
+
+export type OperatorCapabilitySourceErrors = {
+  /**
+   * OperatorCapabilityError | InvalidRequestError
+   */
+  400: OperatorCapabilityError | InvalidRequestError
+}
+
+export type OperatorCapabilitySourceError = OperatorCapabilitySourceErrors[keyof OperatorCapabilitySourceErrors]
+
+export type OperatorCapabilitySourceResponses = {
+  /**
+   * Its file's text, or its config entry as JSON
+   */
+  200: {
+    location: string
+    text: string
+  }
+}
+
+export type OperatorCapabilitySourceResponse =
+  OperatorCapabilitySourceResponses[keyof OperatorCapabilitySourceResponses]
+
+export type OperatorCapabilityEditData = {
+  body?: {
+    kind: OperatorCapabilityKind
+    name: string
+    namespace?: string
+    text: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/capability/source"
+}
+
+export type OperatorCapabilityEditErrors = {
+  /**
+   * OperatorCapabilityError | InvalidRequestError
+   */
+  400: OperatorCapabilityError | InvalidRequestError
+}
+
+export type OperatorCapabilityEditError = OperatorCapabilityEditErrors[keyof OperatorCapabilityEditErrors]
+
+export type OperatorCapabilityEditResponses = {
+  /**
+   * The capability
+   */
+  200: OperatorCapability
+}
+
+export type OperatorCapabilityEditResponse = OperatorCapabilityEditResponses[keyof OperatorCapabilityEditResponses]
+
+export type OperatorCapabilityCreateData = {
+  body?: OperatorCapabilityCreate
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/capability/create"
+}
+
+export type OperatorCapabilityCreateErrors = {
+  /**
+   * OperatorCapabilityError | InvalidRequestError
+   */
+  400: OperatorCapabilityError | InvalidRequestError
+}
+
+export type OperatorCapabilityCreateError = OperatorCapabilityCreateErrors[keyof OperatorCapabilityCreateErrors]
+
+export type OperatorCapabilityCreateResponses = {
+  /**
+   * The new capability
+   */
+  200: OperatorCapability
+}
+
+export type OperatorCapabilityCreateResponse =
+  OperatorCapabilityCreateResponses[keyof OperatorCapabilityCreateResponses]
 
 export type V2HealthGetData = {
   body?: never

@@ -213,6 +213,17 @@ export const memoryOverview = {
   ],
 }
 
+export type CapabilityItem = {
+  kind: string
+  name: string
+  description?: string
+  origin: string
+  location: string
+  state: string
+  hides: Array<{ origin: string; location: string }>
+  disabledAt?: { origin: string; location: string }
+}
+
 export interface OperatorMock {
   readonly replies: Array<{ url: string; body: unknown }>
   readonly writes: Array<{ url: string; body: unknown }>
@@ -245,6 +256,9 @@ export interface OperatorMock {
   trashWrites: Array<{ method: string; path: string; body: unknown; directory?: string }>
   // A reason the next move to Trash fails with.
   trashFail?: string
+  // The capabilities by scope (/operator/capability) and the actions taken on them.
+  capabilities: CapabilityItem[]
+  capabilityWrites: Array<{ action: string; body: Record<string, unknown>; directory?: string }>
   toolPromptQueries: URLSearchParams[]
   permissionWrites: Array<{ agent: string; body: { scope: string; rules: Array<Record<string, string>> } }>
   ownRules: Record<string, Array<{ permission: string; pattern: string; action: "allow" | "ask" | "deny" }>>
@@ -289,6 +303,54 @@ export async function mockOperator(page: Page) {
     decisions: [],
     trash: [],
     trashWrites: [],
+    capabilities: [
+      { kind: "tool", name: "read", origin: "opencode", location: "<built-in>", state: "inherited", hides: [] },
+      {
+        kind: "tool",
+        name: "hello",
+        origin: "project",
+        location: `${directory}/.opencode/tools/hello.ts`,
+        state: "local",
+        hides: [],
+      },
+      {
+        kind: "skill",
+        name: "release-notes",
+        description: "Write release notes",
+        origin: "project",
+        location: `${directory}/.opencode/skills/release-notes/SKILL.md`,
+        state: "local",
+        hides: [],
+      },
+      { kind: "command", name: "review", origin: "opencode", location: "<built-in>", state: "inherited", hides: [] },
+      {
+        kind: "command",
+        name: "deploy",
+        description: "Ship it",
+        origin: "namespace",
+        location: `${workspace}/.opencode/commands/deploy.md`,
+        state: "inherited",
+        hides: [],
+      },
+      {
+        kind: "mcp",
+        name: "docs",
+        origin: "global",
+        location: "/home/me/.config/opencode/opencode.jsonc#mcp.docs",
+        state: "inherited",
+        hides: [],
+      },
+      { kind: "agent", name: "build", origin: "opencode", location: "<built-in>", state: "inherited", hides: [] },
+      {
+        kind: "plugin",
+        name: "opencode-wakatime",
+        origin: "global",
+        location: "/home/me/.config/opencode/opencode.jsonc#plugin.opencode-wakatime",
+        state: "inherited",
+        hides: [],
+      },
+    ],
+    capabilityWrites: [],
     toolPromptQueries: [],
     permissionWrites: [],
     ownRules: {},
@@ -632,6 +694,72 @@ export async function mockOperator(page: Page) {
       return json(route, { path: `${directory}/.opencode/agents/new.md` })
     }
     if (url.pathname === "/operator/agent") return json(route, agents)
+    if (url.pathname === "/operator/capability") {
+      const ns = url.searchParams.get("namespace") ?? undefined
+      return json(route, {
+        scope: ns ? "namespace" : "project",
+        namespace: ns ?? "opencode",
+        inheritGlobal: true,
+        items: ns ? state.capabilities.filter((item) => item.origin !== "project") : state.capabilities,
+      })
+    }
+    if (url.pathname === "/operator/capability/source") {
+      if (method === "GET")
+        return json(route, {
+          location: `${workspace}/.opencode/commands/${url.searchParams.get("name")}.md`,
+          text: "---\ndescription: Ship it\n---\nDeploy $ARGUMENTS\n",
+        })
+      state.capabilityWrites.push({ action: "edit", body: route.request().postDataJSON() as Record<string, unknown> })
+      const edited = state.capabilities.find((item) => item.kind === "command")
+      return json(route, edited)
+    }
+    if (url.pathname.startsWith("/operator/capability/")) {
+      const action = url.pathname.slice("/operator/capability/".length)
+      const raw = route.request().postDataJSON() as Record<string, unknown>
+      const body = (action === "create" ? (raw.operatorCapabilityCreate ?? raw) : raw) as Record<string, unknown>
+      state.capabilityWrites.push({
+        action,
+        body,
+        ...(url.searchParams.get("directory") ? { directory: url.searchParams.get("directory")! } : {}),
+      })
+      const here = body.namespace ? "namespace" : "project"
+      const index = state.capabilities.findIndex((item) => item.kind === body.kind && item.name === body.name)
+      const item = state.capabilities[index]
+      if (action === "create") {
+        const created: CapabilityItem = {
+          kind: String(body.kind),
+          name: String(body.name),
+          origin: here,
+          location: `${directory}/.opencode/${String(body.kind)}s/${String(body.name)}`,
+          state: "local",
+          hides: [],
+        }
+        state.capabilities.push(created)
+        return json(route, created)
+      }
+      if (!item) return json(route, { name: "OperatorCapabilityError", data: { message: "No such capability" } }, 400)
+      if (action === "copy") return json(route, { ...item, origin: "namespace", state: "local", hides: [] })
+      if (action === "remove") {
+        state.capabilities.splice(index, 1)
+        state.trashWrites.push({ method: "POST", path: url.pathname, body })
+        return json(route, true)
+      }
+      const next: CapabilityItem =
+        action === "override"
+          ? { ...item, origin: here, state: "overridden", hides: [{ origin: item.origin, location: item.location }] }
+          : action === "disable"
+            ? { ...item, state: "disabled", disabledAt: { origin: here, location: "opencode.jsonc" } }
+            : {
+                ...item,
+                origin: item.hides[0]?.origin ?? item.origin,
+                location: item.hides[0]?.location ?? item.location,
+                state: "inherited",
+                hides: [],
+                disabledAt: undefined,
+              }
+      state.capabilities[index] = next
+      return json(route, next)
+    }
     if (url.pathname === "/operator/tool")
       return json(route, [
         { id: "read", description: "Read a file", origin: "builtin" },
@@ -642,13 +770,21 @@ export async function mockOperator(page: Page) {
       return json(route, {
         sources: [
           { kind: "global", path: "/home/me/.config/opencode/opencode.jsonc", text: '{ "theme": "iphi" }' },
+          { kind: "namespace", path: `${workspace}/.opencode/opencode.jsonc`, text: '{ "model": "opencode/big" }' },
           { kind: "directory", path: `${directory}/.opencode/opencode.jsonc`, text: '{\n  "username": "me"\n}\n' },
         ],
         targets: {
           global: "/home/me/.config/opencode/opencode.jsonc",
           project: `${directory}/.opencode/opencode.jsonc`,
+          namespace: `${workspace}/.opencode/opencode.jsonc`,
         },
-        folders: { global: "/home/me/.config/opencode", project: `${directory}/.opencode` },
+        folders: {
+          global: "/home/me/.config/opencode",
+          project: `${directory}/.opencode`,
+          namespace: `${workspace}/.opencode`,
+        },
+        namespace: "opencode",
+        origins: { theme: "global", model: "namespace", username: "directory" },
       })
     if (url.pathname === "/operator/config/raw" && method === "PUT") {
       state.writes.push({ url: url.toString(), body: route.request().postDataJSON() })

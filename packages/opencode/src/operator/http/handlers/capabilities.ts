@@ -15,5 +15,14 @@ export const operatorCapabilityHandlers = HttpApiBuilder.group(InstanceHttpApi, 
       .handle("override", (ctx) => capabilities.override(ctx.payload).pipe(Effect.mapError(apiError)))
       .handle("disable", (ctx) => capabilities.disable(ctx.payload).pipe(Effect.mapError(apiError)))
       .handle("revert", (ctx) => capabilities.revert(ctx.payload).pipe(Effect.mapError(apiError)))
+      .handle("remove", (ctx) => capabilities.remove(ctx.payload).pipe(Effect.mapError(apiError)))
+      .handle("create", (ctx) => capabilities.create(ctx.payload).pipe(Effect.mapError(apiError)))
+      .handle("copy", (ctx) => capabilities.copyTo(ctx.payload).pipe(Effect.mapError(apiError)))
+      .handle("source", (ctx) =>
+        capabilities
+          .read({ kind: ctx.query.kind, name: ctx.query.name, namespace: ctx.query.namespace })
+          .pipe(Effect.mapError(apiError)),
+      )
+      .handle("edit", (ctx) => capabilities.write(ctx.payload).pipe(Effect.mapError(apiError)))
   }),
 )

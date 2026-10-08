@@ -8,19 +8,20 @@ import { useLanguage } from "@/context/language"
 import { showToast } from "@/utils/toast"
 import { ready, useOperatorClient } from "../data"
 import { FieldHelp } from "../ui/field-help"
-import { type Scope, ScopeSwitch } from "../ui/scope-switch"
+import { type WriteScope, WriteScopeSwitch } from "../ui/scope-switch"
+import { useNamespaces } from "./profile-data"
 import { maskSecrets, requestError } from "./config-helpers"
 
 // One project's config (the Config page, and the project record's Config section): where it comes
-// from, the raw JSONC of the global or project file to edit, and the effective config with secrets
-// masked.
+// from, the raw JSONC of the global, namespace or project file to edit, and the effective config with
+// secrets masked and each setting's origin.
 export function ConfigEditor(props: { directory: string; onDirty?: (dirty: boolean) => void }) {
   const language = useLanguage()
   const api = useOperatorClient()
   const queryClient = useQueryClient()
   const directory = () => props.directory
   const [store, setStore] = createStore({
-    scope: "project" as Scope,
+    scope: "project" as WriteScope,
     text: "",
     error: "",
     saving: false,
@@ -46,6 +47,11 @@ export function ConfigEditor(props: { directory: string; onDirty?: (dirty: boole
         .then((result) => result.data!),
   }))
 
+  const namespaces = useNamespaces()
+  const namespaceName = () => {
+    const id = ready(layers)?.namespace ?? ""
+    return ready(namespaces)?.find((item) => item.namespace.id === id)?.namespace.name ?? id
+  }
   const target = createMemo(() => ready(layers)?.targets[store.scope])
   const saved = createMemo(() => ready(layers)?.sources.find((source) => source.path === target())?.text ?? "")
   // Load the target file into the editor whenever the scope, project or file changes.
@@ -81,7 +87,13 @@ export function ConfigEditor(props: { directory: string; onDirty?: (dirty: boole
               <li>
                 <details>
                   <summary>
-                    <Tag variant={source.kind === "project" || source.kind === "directory" ? "accent" : "neutral"}>
+                    <Tag
+                      variant={
+                        source.kind === "project" || source.kind === "directory" || source.kind === "namespace"
+                          ? "accent"
+                          : "neutral"
+                      }
+                    >
                       {language.t(`operator.config.kind.${source.kind}`)}
                     </Tag>
                     <code>{source.path}</code>
@@ -98,7 +110,12 @@ export function ConfigEditor(props: { directory: string; onDirty?: (dirty: boole
         <div data-slot="operator-panel-head">
           <h2 data-slot="operator-panel-title">{language.t("operator.config.edit")}</h2>
           <span class="inline-flex items-center">
-            <ScopeSwitch value={store.scope} onChange={(scope) => setStore("scope", scope)} />
+            <WriteScopeSwitch
+              value={store.scope}
+              onChange={(scope) => setStore("scope", scope)}
+              namespace={namespaceName()}
+              namespaceDisabled={!ready(layers)?.targets.namespace}
+            />
             <FieldHelp field={language.t("operator.config.edit")} text={language.t("operator.help.configScope")} />
           </span>
         </div>
@@ -135,6 +152,23 @@ export function ConfigEditor(props: { directory: string; onDirty?: (dirty: boole
         <h2 data-slot="operator-panel-title">{language.t("operator.config.effective")}</h2>
         <p data-slot="operator-note">{language.t("operator.config.effectiveHint")}</p>
         <pre data-component="operator-code">{JSON.stringify(maskSecrets(ready(effective) ?? {}), null, 2)}</pre>
+        <h3 data-slot="operator-panel-title">{language.t("operator.config.origins")}</h3>
+        <dl data-component="record-fields" data-testid="config-origins">
+          <For each={Object.entries(ready(layers)?.origins ?? {}).toSorted((a, b) => a[0].localeCompare(b[0]))}>
+            {([key, kind]) => (
+              <>
+                <dt>
+                  <code>{key}</code>
+                </dt>
+                <dd>
+                  <Tag variant={kind === "namespace" ? "accent" : "neutral"}>
+                    {language.t(`operator.config.kind.${kind}`)}
+                  </Tag>
+                </dd>
+              </>
+            )}
+          </For>
+        </dl>
       </section>
     </div>
   )

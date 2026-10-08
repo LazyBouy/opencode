@@ -828,7 +828,7 @@ export const operatorScenarios: Scenario[] = [
     .post("/operator/trash/item", "operator.trash.item")
     .at((ctx) => ({ path: "/operator/trash/item", headers: ctx.headers(), body: { kind: "skill", name: "missing" } }))
     .status(400),
-  http.protected.get("/operator/capabilities", "operator.capability.list").json(200, (body) => {
+  http.protected.get("/operator/capability", "operator.capability.list").json(200, (body) => {
     object(body)
     array(body.items)
     check(
@@ -839,28 +839,67 @@ export const operatorScenarios: Scenario[] = [
     )
   }),
   http.protected
-    .post("/operator/capabilities/override", "operator.capability.override")
+    .post("/operator/capability/override", "operator.capability.override")
     .at((ctx) => ({
-      path: "/operator/capabilities/override",
+      path: "/operator/capability/override",
       headers: ctx.headers(),
       body: { kind: "agent", name: "build" },
     }))
     .status(400),
   http.protected
-    .post("/operator/capabilities/disable", "operator.capability.disable")
+    .post("/operator/capability/disable", "operator.capability.disable")
     .mutating()
     .at((ctx) => ({
-      path: "/operator/capabilities/disable",
+      path: "/operator/capability/disable",
       headers: ctx.headers(),
       body: { kind: "tool", name: "webfetch" },
     }))
     .json(200, (body) => check(isRecord(body) && body.state === "disabled", "webfetch should be turned off"), "status"),
   http.protected
-    .post("/operator/capabilities/revert", "operator.capability.revert")
+    .post("/operator/capability/revert", "operator.capability.revert")
     .at((ctx) => ({
-      path: "/operator/capabilities/revert",
+      path: "/operator/capability/revert",
       headers: ctx.headers(),
       body: { kind: "command", name: "missing" },
+    }))
+    .status(400),
+  http.protected
+    .post("/operator/capability/remove", "operator.capability.remove")
+    .at((ctx) => ({
+      path: "/operator/capability/remove",
+      headers: ctx.headers(),
+      body: { kind: "tool", name: "read" },
+    }))
+    .status(400),
+  http.protected
+    .post("/operator/capability/copy", "operator.capability.copy")
+    .at((ctx) => ({
+      path: "/operator/capability/copy",
+      headers: ctx.headers(),
+      body: { kind: "command", name: "missing", namespace: "opencode", to: "opencode" },
+    }))
+    .status(400),
+  http.protected
+    .get("/operator/capability/source", "operator.capability.source")
+    .at((ctx) => ({
+      path: "/operator/capability/source?kind=tool&name=read",
+      headers: ctx.headers(),
+    }))
+    .status(400),
+  http.protected
+    .put("/operator/capability/source", "operator.capability.edit")
+    .at((ctx) => ({
+      path: "/operator/capability/source",
+      headers: ctx.headers(),
+      body: { kind: "tool", name: "read", text: "x" },
+    }))
+    .status(400),
+  http.protected
+    .post("/operator/capability/create", "operator.capability.create")
+    .at((ctx) => ({
+      path: "/operator/capability/create",
+      headers: ctx.headers(),
+      body: { kind: "agent", name: "helper" },
     }))
     .status(400),
   http.protected

@@ -1,5 +1,6 @@
 import { InstanceState } from "@/effect/instance-state"
 import { OperatorConfig } from "@/operator/config"
+import { OperatorNamespaceScope } from "@/operator/namespace-scope"
 import { OperatorReloadWhenIdle } from "@/operator/reload-when-idle"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
 import { Effect } from "effect"
@@ -12,8 +13,9 @@ export const operatorConfigHandlers = HttpApiBuilder.group(InstanceHttpApi, "ope
     const reloads = yield* OperatorReloadWhenIdle.Service
 
     const apply = Effect.fnUntraced(function* (
-      scope: OperatorConfig.Scope,
+      scope: OperatorConfig.WriteScope,
       write: Effect.Effect<typeof OperatorConfig.UpdateResult.Type, OperatorConfig.InvalidError>,
+      namespace?: string,
     ) {
       const result = yield* write.pipe(
         Effect.mapError(
@@ -24,18 +26,37 @@ export const operatorConfigHandlers = HttpApiBuilder.group(InstanceHttpApi, "ope
             }),
         ),
       )
-      // The project (every project, for global config) reloads to read it when none of its sessions is
-      // running.
+      // The project (every project, for global config; the namespace's loaded projects, for its config)
+      // reloads to read it when none of its sessions is running.
       if (!result.changed) return result
       const directory = (yield* InstanceState.context).directory
+      if (scope === "namespace") {
+        const id = yield* operatorConfig.namespaceOf(namespace)
+        const reloaded = yield* Effect.forEach(OperatorNamespaceScope.instancesOf({ namespace: id }), (item) =>
+          reloads.want({ directory: item }),
+        )
+        return { ...result, reload: reloaded.includes("when-idle") ? ("when-idle" as const) : ("now" as const) }
+      }
       const reload = yield* reloads.want(scope === "global" ? "global" : { directory })
       return { ...result, reload }
     })
 
     return handlers
-      .handle("layers", () => operatorConfig.layers())
-      .handle("update", (ctx) => apply(ctx.query.scope, operatorConfig.update(ctx.query.scope, ctx.payload)))
-      .handle("write", (ctx) => apply(ctx.query.scope, operatorConfig.write(ctx.query.scope, ctx.payload.text)))
+      .handle("layers", (ctx) => operatorConfig.layers(ctx.query.namespace))
+      .handle("update", (ctx) =>
+        apply(
+          ctx.query.scope,
+          operatorConfig.update(ctx.query.scope, ctx.payload, ctx.query.namespace),
+          ctx.query.namespace,
+        ),
+      )
+      .handle("write", (ctx) =>
+        apply(
+          ctx.query.scope,
+          operatorConfig.write(ctx.query.scope, ctx.payload.text, ctx.query.namespace),
+          ctx.query.namespace,
+        ),
+      )
       .handle("schema", () => Effect.sync(() => OperatorConfig.jsonSchema()))
   }),
 )

@@ -55,11 +55,11 @@ type Item = {
 }
 const where = (directory: string) => `?directory=${encodeURIComponent(directory)}`
 const inventory = async (directory: string) =>
-  ((await (await app().request(`/operator/capabilities${where(directory)}`)).json()) as { items: Item[] }).items
+  ((await (await app().request(`/operator/capability${where(directory)}`)).json()) as { items: Item[] }).items
 const find = async (directory: string, kind: string, name: string) =>
   (await inventory(directory)).find((item) => item.kind === kind && item.name === name)
 const act = async (action: string, directory: string, kind: string, name: string) => {
-  const response = await app().request(`/operator/capabilities/${action}${where(directory)}`, {
+  const response = await app().request(`/operator/capability/${action}${where(directory)}`, {
     method: "POST",
     headers: json,
     body: JSON.stringify({ kind, name }),
@@ -99,7 +99,7 @@ describe("capabilities by scope", () => {
     expect(await find(own.path, "tool", "read")).toMatchObject({ origin: "opencode" })
 
     // The namespace's own view: its layer over Global and OpenCode.
-    const view = (await (await app().request(`/operator/capabilities${where(own.path)}&namespace=acme`)).json()) as {
+    const view = (await (await app().request(`/operator/capability${where(own.path)}&namespace=acme`)).json()) as {
       items: Item[]
     }
     expect(view.items.find((item) => item.kind === "command" && item.name === "hello")).toMatchObject({
@@ -183,7 +183,11 @@ describe("capabilities by scope", () => {
       ["tool", "webfetch"],
     ] as const)
       expect((await act("revert", own.path, kind, name)).body.state).toBe("inherited")
-    await settle(async () => (await names("/command", own.path)).includes("acme-only"))
+    await settle(
+      async () =>
+        (await names("/command", own.path)).includes("acme-only") &&
+        (await names("/agent", own.path)).includes("helperx"),
+    )
     expect(await names("/command", own.path)).toContain("acme-only")
     expect(await names("/agent", own.path)).toContain("helperx")
 
@@ -201,6 +205,135 @@ describe("capabilities by scope", () => {
     await using own = await tmpdir({ git: true })
     expect((await act("disable", own.path, "command", "merge")).status).toBe(400)
     expect((await act("override", own.path, "agent", "build")).status).toBe(400)
+  })
+})
+
+describe("a namespace's own capabilities", () => {
+  test("create, disable an inherited global one, and delete, all in the namespace's folder", async () => {
+    await using folder = await tmpdir()
+    await using own = await tmpdir({ git: true })
+    const global = path.join(Global.Path.config, "commands", "ghello.md")
+    await write(global, command("Global hello"))
+    written.push(global)
+    await acme(folder.path, [own.path])
+    const post = async (action: string, body: object) => {
+      const response = await app().request(`/operator/capability/${action}${where(own.path)}`, {
+        method: "POST",
+        headers: json,
+        body: JSON.stringify(body),
+      })
+      return { status: response.status, body: (await response.json()) as Item }
+    }
+
+    // Created in Acme's .opencode (made on the first write).
+    const created = await post("create", {
+      namespace: "acme",
+      kind: "command",
+      name: "deploy",
+      description: "Ships it",
+      text: "Deploy $ARGUMENTS",
+    })
+    expect(created.status).toBe(200)
+    expect(created.body).toMatchObject({ origin: "namespace", state: "local" })
+    const file = path.join(folder.path, ".opencode", "commands", "deploy.md")
+    expect(await fs.readFile(file, "utf8")).toBe('---\ndescription: "Ships it"\n---\nDeploy $ARGUMENTS\n')
+    await settle(async () => (await names("/command", own.path)).includes("deploy"))
+    expect(await names("/command", own.path)).toContain("deploy")
+
+    // A global command turned off for the whole namespace, in its config.
+    expect((await post("disable", { namespace: "acme", kind: "command", name: "ghello" })).body).toMatchObject({
+      state: "disabled",
+    })
+    const config = parse(await fs.readFile(path.join(folder.path, ".opencode", "opencode.jsonc"), "utf8"))
+    expect(OperatorCapabilitySwitches.disabledList(config, "commands")).toEqual(["ghello"])
+    expect(await find(own.path, "command", "ghello")).toMatchObject({
+      state: "disabled",
+      disabledAt: { origin: "namespace" },
+    })
+    // The project can't revert the namespace's switch: it's not its own.
+    expect((await act("revert", own.path, "command", "ghello")).status).toBe(400)
+    expect((await post("revert", { namespace: "acme", kind: "command", name: "ghello" })).body.state).toBe("inherited")
+
+    // Delete: only what the namespace defines itself.
+    expect((await post("remove", { namespace: "acme", kind: "command", name: "ghello" })).status).toBe(400)
+    expect((await post("remove", { namespace: "acme", kind: "command", name: "deploy" })).status).toBe(200)
+    expect(await fs.stat(file).catch(() => undefined)).toBeUndefined()
+  })
+
+  test("a namespace's own command is edited in place and copied to another namespace", async () => {
+    await using folder = await tmpdir()
+    await using other = await tmpdir()
+    await using own = await tmpdir({ git: true })
+    await acme(folder.path, [own.path])
+    await write(
+      path.join(store(), "beta", "namespace.json"),
+      JSON.stringify({ id: "beta", name: "Beta", purpose: "", folder: other.path, createdAt: 1, updatedAt: 1 }),
+    )
+    try {
+      const file = path.join(folder.path, ".opencode", "commands", "deploy.md")
+      await write(file, command("Deploy"))
+      const query = `${where(own.path)}&kind=command&name=deploy&namespace=acme`
+      const source = (await (await app().request(`/operator/capability/source${query}`)).json()) as {
+        location: string
+        text: string
+      }
+      expect(source).toEqual({ location: file, text: command("Deploy") })
+      const edited = await app().request(`/operator/capability/source${where(own.path)}`, {
+        method: "PUT",
+        headers: json,
+        body: JSON.stringify({ kind: "command", name: "deploy", namespace: "acme", text: command("Deploy now") }),
+      })
+      expect(edited.status).toBe(200)
+      expect(await fs.readFile(file, "utf8")).toBe(command("Deploy now"))
+
+      const copied = await app().request(`/operator/capability/copy${where(own.path)}`, {
+        method: "POST",
+        headers: json,
+        body: JSON.stringify({ kind: "command", name: "deploy", namespace: "acme", to: "beta" }),
+      })
+      expect(copied.status).toBe(200)
+      expect(await fs.readFile(path.join(other.path, ".opencode", "commands", "deploy.md"), "utf8")).toBe(
+        command("Deploy now"),
+      )
+      // Independent copies: editing Acme's leaves Beta's.
+      await fs.writeFile(file, command("Changed"))
+      expect(await fs.readFile(path.join(other.path, ".opencode", "commands", "deploy.md"), "utf8")).toBe(
+        command("Deploy now"),
+      )
+    } finally {
+      await fs.rm(path.join(store(), "beta"), { recursive: true, force: true })
+    }
+  })
+
+  test("the Config page's namespace scope reads and writes the namespace folder's config", async () => {
+    await using folder = await tmpdir()
+    await using own = await tmpdir({ git: true })
+    await acme(folder.path, [own.path])
+    const layers = async () =>
+      (await (await app().request(`/operator/config/layer${where(own.path)}`)).json()) as {
+        namespace: string
+        targets: { namespace?: string }
+        sources: Array<{ kind: string; path: string }>
+      }
+    expect(await layers()).toMatchObject({
+      namespace: "acme",
+      targets: { namespace: path.join(folder.path, ".opencode", "opencode.jsonc") },
+    })
+    const written = await app().request(`/operator/config${where(own.path)}&scope=namespace`, {
+      method: "PATCH",
+      headers: json,
+      body: JSON.stringify({ username: "acme-user" }),
+    })
+    expect(written.status).toBe(200)
+    expect((await layers()).sources.map((item) => item.kind)).toContain("namespace")
+    await settle(
+      async () =>
+        ((await (await app().request(`/config${where(own.path)}`)).json()) as { username?: string }).username ===
+        "acme-user",
+    )
+    expect(((await (await app().request(`/config${where(own.path)}`)).json()) as { username?: string }).username).toBe(
+      "acme-user",
+    )
   })
 })
 

@@ -1,7 +1,7 @@
 export * as OperatorConfig from "./config"
 
 import path from "path"
-import { applyEdits, modify } from "jsonc-parser"
+import { applyEdits, modify, parse } from "jsonc-parser"
 import { Context, Effect, Layer, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Flag } from "@opencode-ai/core/flag/flag"
@@ -13,12 +13,20 @@ import { ConfigPaths } from "@/config/paths"
 import { ConfigV2Compat } from "@/config/v2-compat"
 import { InstanceState } from "@/effect/instance-state"
 import { isRecord } from "@/util/record"
+import { OperatorNamespaceScope } from "./namespace-scope"
 
 export const Scope = Schema.Literals(["global", "project"]).annotate({ identifier: "OperatorConfigScope" })
 export type Scope = typeof Scope.Type
 
+// Where a config write goes: the user's global config, the namespace folder's .opencode/opencode.jsonc,
+// or the project's.
+export const WriteScope = Schema.Literals(["global", "namespace", "project"]).annotate({
+  identifier: "OperatorConfigWriteScope",
+})
+export type WriteScope = typeof WriteScope.Type
+
 export const Source = Schema.Struct({
-  kind: Schema.Literals(["global", "custom", "project", "directory", "env"]),
+  kind: Schema.Literals(["global", "namespace", "custom", "project", "directory", "env"]),
   path: Schema.String,
   text: Schema.String,
 }).annotate({ identifier: "OperatorConfigSource" })
@@ -31,11 +39,17 @@ export const Layers = Schema.Struct({
   targets: Schema.Struct({
     global: Schema.String,
     project: Schema.String,
+    namespace: Schema.optional(Schema.String).annotate({ description: "Absent when the namespace has no folder" }),
   }).annotate({ description: "The file a write at each scope goes to. It is created if missing." }),
   folders: Schema.Struct({
     global: Schema.String,
     project: Schema.String,
+    namespace: Schema.optional(Schema.String),
   }).annotate({ description: "The folder that holds agent, command and skill files at each scope" }),
+  namespace: Schema.String.annotate({ description: "The namespace the namespace scope stands for" }),
+  origins: Schema.Record(Schema.String, Source.fields.kind).annotate({
+    description: "For each top-level key, the kind of source that sets it last (the one in effect)",
+  }),
 }).annotate({ identifier: "OperatorConfigLayers" })
 export type Layers = typeof Layers.Type
 
@@ -53,14 +67,22 @@ export class InvalidError extends Schema.TaggedErrorClass<InvalidError>()("Opera
   message: Schema.String,
 }) {}
 
+// The namespace scope is the project's namespace unless `namespace` names another.
 export interface Interface {
-  readonly layers: () => Effect.Effect<Layers>
+  readonly layers: (namespace?: string) => Effect.Effect<Layers>
   readonly update: (
-    scope: Scope,
+    scope: WriteScope,
     patch: Record<string, unknown>,
+    namespace?: string,
   ) => Effect.Effect<typeof UpdateResult.Type, InvalidError>
   /** Replaces the scope's config file with `text` after validating it, for raw JSONC editing. */
-  readonly write: (scope: Scope, text: string) => Effect.Effect<typeof UpdateResult.Type, InvalidError>
+  readonly write: (
+    scope: WriteScope,
+    text: string,
+    namespace?: string,
+  ) => Effect.Effect<typeof UpdateResult.Type, InvalidError>
+  /** The namespace the namespace scope stands for: `namespace`, else the project's. */
+  readonly namespaceOf: (namespace?: string) => Effect.Effect<string>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorConfig") {}
@@ -76,35 +98,58 @@ const layer = Layer.effect(
         Effect.map((text) => (text === undefined ? [] : [{ kind, path: file, text }])),
       )
 
-    // Mirrors the load order in Config.loadInstanceState so the last project source is the effective one.
-    const sources = Effect.fnUntraced(
-      function* () {
-        const ctx = yield* InstanceState.context
-        const global = yield* Effect.forEach(["config.json", "opencode.json", "opencode.jsonc"], (name) =>
-          read("global", path.join(Global.Path.config, name)),
-        )
-        const custom = Flag.OPENCODE_CONFIG ? yield* read("custom", Flag.OPENCODE_CONFIG) : []
-        const project = Flag.OPENCODE_DISABLE_PROJECT_CONFIG
-          ? []
-          : yield* Effect.forEach(
-              yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie),
-              (file) => read("project", file),
-            )
-        const directories = (yield* ConfigPaths.directories(ctx.directory, ctx.worktree).pipe(Effect.orDie)).filter(
-          (dir) => dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR,
-        )
-        const directory = yield* Effect.forEach(directories, (dir) =>
-          Effect.forEach(["opencode.json", "opencode.jsonc"], (name) => read("directory", path.join(dir, name))),
-        )
-        const env = Flag.OPENCODE_CONFIG_CONTENT
-          ? [{ kind: "env" as const, path: "OPENCODE_CONFIG_CONTENT", text: Flag.OPENCODE_CONFIG_CONTENT }]
-          : []
-        return [...global.flat(), ...custom, ...project.flat(), ...directory.flat(2), ...env]
-      },
-      Effect.provideService(FSUtil.Service, fs),
-    )
+    // The namespace the namespace scope stands for, and its folder's config file (an existing
+    // opencode.json, else opencode.jsonc, created on the first write).
+    const namespaceOf = Effect.fn("OperatorConfig.namespaceOf")(function* (namespace?: string) {
+      if (namespace) return namespace
+      const ctx = yield* InstanceState.context
+      return (yield* Effect.promise(() => OperatorNamespaceScope.layerOf(ctx.directory, ctx.worktree))).namespace
+    })
+    const namespaceFile = Effect.fnUntraced(function* (namespace?: string) {
+      const id = yield* namespaceOf(namespace)
+      const layer = yield* Effect.promise(() => OperatorNamespaceScope.namespaceLayer(id))
+      if (!layer.target) return { id, dir: undefined, file: undefined }
+      const existing = yield* Effect.forEach(["opencode.jsonc", "opencode.json"], (name) =>
+        fs.existsSafe(path.join(layer.target!, name)).pipe(Effect.map((found) => (found ? name : undefined))),
+      )
+      const name = existing.find((item) => item !== undefined) ?? "opencode.jsonc"
+      return { id, dir: layer.target, file: path.join(layer.target, name) }
+    })
 
-    const targets = Effect.fnUntraced(function* (list: ReadonlyArray<Source>) {
+    // Mirrors the load order in Config.loadInstanceState so the last project source is the effective one:
+    // the global files, the namespace's, a custom file, the project's, then the config folders'.
+    const collect = Effect.fnUntraced(function* (namespace?: string) {
+      const ctx = yield* InstanceState.context
+      const global = yield* Effect.forEach(["config.json", "opencode.json", "opencode.jsonc"], (name) =>
+        read("global", path.join(Global.Path.config, name)),
+      )
+      const own = yield* namespaceFile(namespace)
+      const ns = own.dir
+        ? yield* Effect.forEach(["opencode.json", "opencode.jsonc"], (name) =>
+            read("namespace", path.join(own.dir!, name)),
+          )
+        : []
+      const custom = Flag.OPENCODE_CONFIG ? yield* read("custom", Flag.OPENCODE_CONFIG) : []
+      const project = Flag.OPENCODE_DISABLE_PROJECT_CONFIG
+        ? []
+        : yield* Effect.forEach(
+            yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie),
+            (file) => read("project", file),
+          )
+      const directories = (yield* ConfigPaths.directories(ctx.directory, ctx.worktree).pipe(Effect.orDie)).filter(
+        (dir) => (dir.endsWith(".opencode") && !OperatorNamespaceScope.owns(dir)) || dir === Flag.OPENCODE_CONFIG_DIR,
+      )
+      const directory = yield* Effect.forEach(directories, (dir) =>
+        Effect.forEach(["opencode.json", "opencode.jsonc"], (name) => read("directory", path.join(dir, name))),
+      )
+      const env = Flag.OPENCODE_CONFIG_CONTENT
+        ? [{ kind: "env" as const, path: "OPENCODE_CONFIG_CONTENT", text: Flag.OPENCODE_CONFIG_CONTENT }]
+        : []
+      return [...global.flat(), ...ns.flat(), ...custom, ...project.flat(), ...directory.flat(2), ...env]
+    })
+    const sources = (namespace?: string) => collect(namespace).pipe(Effect.provideService(FSUtil.Service, fs))
+
+    const targets = Effect.fnUntraced(function* (list: ReadonlyArray<Source>, namespace?: string) {
       const root = projectRoot(yield* InstanceState.context)
       const global =
         ["opencode.jsonc", "opencode.json", "config.json"]
@@ -115,17 +160,45 @@ const layer = Layer.effect(
         list.findLast(
           (source) => (source.kind === "project" || source.kind === "directory") && FSUtil.contains(root, source.path),
         )?.path ?? path.join(root, ".opencode", "opencode.jsonc")
-      return { global, project }
+      const own = yield* namespaceFile(namespace)
+      return { global, project, ...(own.file ? { namespace: own.file } : {}) }
     })
 
-    const layers = Effect.fn("OperatorConfig.layers")(function* () {
-      const list = yield* sources()
+    const layers = Effect.fn("OperatorConfig.layers")(function* (namespace?: string) {
+      const list = yield* sources(namespace)
       const ctx = yield* InstanceState.context
+      const own = yield* namespaceFile(namespace)
       return {
         sources: list,
-        targets: yield* targets(list),
-        folders: { global: scopeDirectory("global", ctx), project: scopeDirectory("project", ctx) },
+        targets: yield* targets(list, namespace),
+        folders: {
+          global: scopeDirectory("global", ctx),
+          project: scopeDirectory("project", ctx),
+          ...(own.dir ? { namespace: own.dir } : {}),
+        },
+        namespace: own.id,
+        origins: Object.fromEntries(
+          list.flatMap((source) => {
+            const value = parse(source.text) as unknown
+            return isRecord(value)
+              ? Object.keys(value)
+                  .filter((key) => key !== "$schema")
+                  .map((key) => [key, source.kind] as const)
+              : []
+          }),
+        ),
       }
+    })
+
+    // The file a write at the scope goes to; the namespace scope needs a namespace with a folder.
+    const target = Effect.fnUntraced(function* (scope: WriteScope, namespace?: string) {
+      const file = (yield* targets(yield* sources(namespace), namespace))[scope]
+      if (file) return file
+      const id = yield* namespaceOf(namespace)
+      return yield* new InvalidError({
+        path: "",
+        message: `The namespace ${id} has no folder; set one in Settings → Namespaces`,
+      })
     })
 
     const save = Effect.fnUntraced(function* (file: string, before: string, after: string) {
@@ -143,18 +216,22 @@ const layer = Layer.effect(
       return yield* fs.readFileStringSafe(file).pipe(Effect.orElseSucceed(() => undefined))
     })
 
-    const update = Effect.fn("OperatorConfig.update")(function* (scope: Scope, patch: Record<string, unknown>) {
-      const file = (yield* targets(yield* sources()))[scope]
+    const update = Effect.fn("OperatorConfig.update")(function* (
+      scope: WriteScope,
+      patch: Record<string, unknown>,
+      namespace?: string,
+    ) {
+      const file = yield* target(scope, namespace)
       const before = (yield* current(file)) ?? "{}"
       return yield* save(file, before, patchJsonc(before, patch))
     })
 
-    const write = Effect.fn("OperatorConfig.write")(function* (scope: Scope, text: string) {
-      const file = (yield* targets(yield* sources()))[scope]
+    const write = Effect.fn("OperatorConfig.write")(function* (scope: WriteScope, text: string, namespace?: string) {
+      const file = yield* target(scope, namespace)
       return yield* save(file, (yield* current(file)) ?? "", text)
     })
 
-    return Service.of({ layers, update, write })
+    return Service.of({ layers, update, write, namespaceOf })
   }),
 )
 
@@ -167,7 +244,7 @@ export function projectRoot(ctx: { directory: string; worktree: string }) {
 }
 
 // The folder that holds config-like files (agents, identity layers) at a scope.
-export function scopeDirectory(scope: Scope, ctx: { directory: string; worktree: string }) {
+export function scopeDirectory(scope: "global" | "project", ctx: { directory: string; worktree: string }) {
   return scope === "global" ? Global.Path.config : path.join(projectRoot(ctx), ".opencode")
 }
 

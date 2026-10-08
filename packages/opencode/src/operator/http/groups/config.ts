@@ -32,18 +32,22 @@ export const OperatorConfigApi = HttpApi.make("operator-config")
     HttpApiGroup.make("operatorConfig")
       .add(
         HttpApiEndpoint.get("layers", OperatorConfigPaths.layers, {
-          query: WorkspaceRoutingQuery,
+          query: Schema.Struct({ ...WorkspaceRoutingQueryFields, namespace: Schema.optional(Schema.String) }),
           success: described(OperatorConfig.Layers, "Config sources and write targets"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "operator.config.layers",
             summary: "List config layers",
             description:
-              "List the config files that apply to this project, in load order, and the file a global or project write goes to.",
+              "List the config files that apply to this project, in load order, and the file a global, namespace or project write goes to. The namespace scope is the project's namespace unless `namespace` names another.",
           }),
         ),
         HttpApiEndpoint.patch("update", OperatorConfigPaths.update, {
-          query: Schema.Struct({ ...WorkspaceRoutingQueryFields, scope: OperatorConfig.Scope }),
+          query: Schema.Struct({
+            ...WorkspaceRoutingQueryFields,
+            scope: OperatorConfig.WriteScope,
+            namespace: Schema.optional(Schema.String),
+          }),
           payload: Schema.Record(Schema.String, Schema.Unknown),
           success: described(OperatorConfig.UpdateResult, "Written file"),
           error: ApiOperatorConfigInvalidError,
@@ -52,11 +56,15 @@ export const OperatorConfigApi = HttpApi.make("operator-config")
             identifier: "operator.config.update",
             summary: "Update config at a scope",
             description:
-              "Merge a patch into the global or project config file, keeping comments. A null value removes the key so the inherited value applies. The result is validated before it is written.",
+              "Merge a patch into the global, namespace or project config file, keeping comments. A null value removes the key so the inherited value applies. The result is validated before it is written.",
           }),
         ),
         HttpApiEndpoint.put("write", OperatorConfigPaths.write, {
-          query: Schema.Struct({ ...WorkspaceRoutingQueryFields, scope: OperatorConfig.Scope }),
+          query: Schema.Struct({
+            ...WorkspaceRoutingQueryFields,
+            scope: OperatorConfig.WriteScope,
+            namespace: Schema.optional(Schema.String),
+          }),
           payload: Schema.Struct({ text: Schema.String }),
           success: described(OperatorConfig.UpdateResult, "Written file"),
           error: ApiOperatorConfigInvalidError,
@@ -65,7 +73,7 @@ export const OperatorConfigApi = HttpApi.make("operator-config")
             identifier: "operator.config.write",
             summary: "Replace a config file",
             description:
-              "Replace the global or project config file with the given JSONC text. The text is validated before it is written.",
+              "Replace the global, namespace or project config file with the given JSONC text. The text is validated before it is written.",
           }),
         ),
         HttpApiEndpoint.get("schema", OperatorConfigPaths.schema, {

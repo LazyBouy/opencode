@@ -13091,6 +13091,14 @@
               "type": "string"
             },
             "required": false
+          },
+          {
+            "name": "namespace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -13115,7 +13123,7 @@
             }
           }
         },
-        "description": "List the config files that apply to this project, in load order, and the file a global or project write goes to.",
+        "description": "List the config files that apply to this project, in load order, and the file a global, namespace or project write goes to. The namespace scope is the project's namespace unless `namespace` names another.",
         "summary": "List config layers",
         "x-codeSamples": [
           {
@@ -13150,9 +13158,17 @@
             "name": "scope",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/OperatorConfigScope"
+              "$ref": "#/components/schemas/OperatorConfigWriteScope"
             },
             "required": true
+          },
+          {
+            "name": "namespace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -13184,7 +13200,7 @@
             }
           }
         },
-        "description": "Merge a patch into the global or project config file, keeping comments. A null value removes the key so the inherited value applies. The result is validated before it is written.",
+        "description": "Merge a patch into the global, namespace or project config file, keeping comments. A null value removes the key so the inherited value applies. The result is validated before it is written.",
         "summary": "Update config at a scope",
         "requestBody": {
           "content": {
@@ -13228,9 +13244,17 @@
             "name": "scope",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/OperatorConfigScope"
+              "$ref": "#/components/schemas/OperatorConfigWriteScope"
             },
             "required": true
+          },
+          {
+            "name": "namespace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -13262,7 +13286,7 @@
             }
           }
         },
-        "description": "Replace the global or project config file with the given JSONC text. The text is validated before it is written.",
+        "description": "Replace the global, namespace or project config file with the given JSONC text. The text is validated before it is written.",
         "summary": "Replace a config file",
         "requestBody": {
           "content": {
@@ -16655,7 +16679,7 @@
         ]
       }
     },
-    "/operator/capabilities": {
+    "/operator/capability": {
       "get": {
         "tags": ["operator capabilities"],
         "operationId": "operator.capability.list",
@@ -16717,7 +16741,7 @@
         ]
       }
     },
-    "/operator/capabilities/override": {
+    "/operator/capability/override": {
       "post": {
         "tags": ["operator capabilities"],
         "operationId": "operator.capability.override",
@@ -16781,6 +16805,9 @@
                   },
                   "name": {
                     "type": "string"
+                  },
+                  "namespace": {
+                    "type": "string"
                   }
                 },
                 "required": ["kind", "name"],
@@ -16797,7 +16824,7 @@
         ]
       }
     },
-    "/operator/capabilities/disable": {
+    "/operator/capability/disable": {
       "post": {
         "tags": ["operator capabilities"],
         "operationId": "operator.capability.disable",
@@ -16861,6 +16888,9 @@
                   },
                   "name": {
                     "type": "string"
+                  },
+                  "namespace": {
+                    "type": "string"
                   }
                 },
                 "required": ["kind", "name"],
@@ -16877,7 +16907,7 @@
         ]
       }
     },
-    "/operator/capabilities/revert": {
+    "/operator/capability/revert": {
       "post": {
         "tags": ["operator capabilities"],
         "operationId": "operator.capability.revert",
@@ -16941,6 +16971,9 @@
                   },
                   "name": {
                     "type": "string"
+                  },
+                  "namespace": {
+                    "type": "string"
                   }
                 },
                 "required": ["kind", "name"],
@@ -16953,6 +16986,427 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.capability.revert({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/capability/remove": {
+      "post": {
+        "tags": ["operator capabilities"],
+        "operationId": "operator.capability.remove",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Moved to Trash",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Moved to Trash"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorCapabilityError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorCapabilityError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Move a capability the project (or the namespace) defines itself to Trash: its file or folder, or its config entry. OpenCode's built-ins and capabilities from farther scopes can't be deleted here; disable them instead.",
+        "summary": "Delete a capability defined at the scope",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "$ref": "#/components/schemas/OperatorCapabilityKind"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "namespace": {
+                    "type": "string"
+                  }
+                },
+                "required": ["kind", "name"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.capability.remove({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/capability/copy": {
+      "post": {
+        "tags": ["operator capabilities"],
+        "operationId": "operator.capability.copy",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The copy, in the other namespace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorCapability"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorCapabilityError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorCapabilityError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Copy a capability of a namespace (its file, or its config entry) into another namespace's layer, as that namespace's own. The copies are independent.",
+        "summary": "Copy a namespace's capability to another namespace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "$ref": "#/components/schemas/OperatorCapabilityKind"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "namespace": {
+                    "type": "string"
+                  },
+                  "to": {
+                    "type": "string",
+                    "description": "The namespace that gets the copy"
+                  }
+                },
+                "required": ["kind", "name", "namespace", "to"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.capability.copy({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/capability/source": {
+      "get": {
+        "tags": ["operator capabilities"],
+        "operationId": "operator.capability.source",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/OperatorCapabilityKind"
+            },
+            "required": true
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "namespace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Its file's text, or its config entry as JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["location", "text"],
+                  "additionalProperties": false,
+                  "description": "Its file's text, or its config entry as JSON"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorCapabilityError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorCapabilityError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "The text of a capability the project (or the namespace) defines itself, to edit: its file, or its config entry as JSON.",
+        "summary": "Read a capability's definition",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.capability.source({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "tags": ["operator capabilities"],
+        "operationId": "operator.capability.edit",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The capability",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorCapability"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorCapabilityError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorCapabilityError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Replace the file (or the config entry) of a capability the project (or the namespace) defines itself.",
+        "summary": "Edit a capability's definition",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "$ref": "#/components/schemas/OperatorCapabilityKind"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "namespace": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": ["kind", "name", "text"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.capability.edit({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/capability/create": {
+      "post": {
+        "tags": ["operator capabilities"],
+        "operationId": "operator.capability.create",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The new capability",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorCapability"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorCapabilityError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorCapabilityError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Write a new command, skill, tool or plugin file under the project's (or the namespace's) .opencode, or an MCP server entry into its config. Agents are created with the agent form.",
+        "summary": "Create a capability at a scope",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperatorCapabilityCreate"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.capability.create({\n  ...\n})"
           }
         ]
       }
@@ -32096,7 +32550,7 @@
         "properties": {
           "kind": {
             "type": "string",
-            "enum": ["global", "custom", "project", "directory", "env"]
+            "enum": ["global", "namespace", "custom", "project", "directory", "env"]
           },
           "path": {
             "type": "string"
@@ -32126,6 +32580,9 @@
               },
               "project": {
                 "type": "string"
+              },
+              "namespace": {
+                "type": "string"
               }
             },
             "required": ["global", "project"],
@@ -32140,19 +32597,34 @@
               },
               "project": {
                 "type": "string"
+              },
+              "namespace": {
+                "type": "string"
               }
             },
             "required": ["global", "project"],
             "additionalProperties": false,
             "description": "The folder that holds agent, command and skill files at each scope"
+          },
+          "namespace": {
+            "type": "string",
+            "description": "The namespace the namespace scope stands for"
+          },
+          "origins": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "enum": ["global", "namespace", "custom", "project", "directory", "env"]
+            },
+            "description": "For each top-level key, the kind of source that sets it last (the one in effect)"
           }
         },
-        "required": ["sources", "targets", "folders"],
+        "required": ["sources", "targets", "folders", "namespace", "origins"],
         "additionalProperties": false
       },
-      "OperatorConfigScope": {
+      "OperatorConfigWriteScope": {
         "type": "string",
-        "enum": ["global", "project"]
+        "enum": ["global", "namespace", "project"]
       },
       "OperatorConfigUpdateResult": {
         "type": "object",
@@ -32349,6 +32821,10 @@
       "OperatorAgentFormat": {
         "type": "string",
         "enum": ["file", "config"]
+      },
+      "OperatorConfigScope": {
+        "type": "string",
+        "enum": ["global", "project"]
       },
       "OperatorAgentWritten": {
         "type": "object",
@@ -35568,6 +36044,40 @@
           }
         },
         "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorCapabilityCreate": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/OperatorCapabilityKind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "subtask": {
+            "type": "boolean"
+          },
+          "mcp": {
+            "type": "object"
+          }
+        },
+        "required": ["kind", "name"],
         "additionalProperties": false
       },
       "UnauthorizedError": {

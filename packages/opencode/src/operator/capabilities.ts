@@ -89,13 +89,56 @@ export class ActionError extends Schema.TaggedErrorClass<ActionError>()("Operato
 export interface Interface {
   /** The capabilities of the project in context, or of a namespace on its own. */
   readonly inventory: (input: { namespace?: string }) => Effect.Effect<Inventory>
-  /** Copies an inherited capability into the project, to edit there. */
-  readonly override: (input: { kind: Kind; name: string }) => Effect.Effect<Item, ActionError>
-  /** Turns an inherited capability off in the project. */
-  readonly disable: (input: { kind: Kind; name: string }) => Effect.Effect<Item, ActionError>
+  /** Copies an inherited capability into the project (or the namespace), to edit there. */
+  readonly override: (input: { kind: Kind; name: string; namespace?: string }) => Effect.Effect<Item, ActionError>
+  /** Turns an inherited capability off in the project (or the namespace). */
+  readonly disable: (input: { kind: Kind; name: string; namespace?: string }) => Effect.Effect<Item, ActionError>
   /** Removes the project's override (to Trash) or its disable, so the inherited capability applies. */
-  readonly revert: (input: { kind: Kind; name: string }) => Effect.Effect<Item, ActionError>
+  readonly revert: (input: { kind: Kind; name: string; namespace?: string }) => Effect.Effect<Item, ActionError>
+  /** Deletes a capability defined at the scope (to Trash). */
+  readonly remove: (input: { kind: Kind; name: string; namespace?: string }) => Effect.Effect<boolean, ActionError>
+  /** Creates a capability at the scope. */
+  readonly create: (input: CreateInput) => Effect.Effect<Item, ActionError>
+  /** Copies a namespace's capability into another namespace's layer. */
+  readonly copyTo: (input: {
+    kind: Kind
+    name: string
+    namespace: string
+    to: string
+  }) => Effect.Effect<Item, ActionError>
+  /** The text of a definition the scope owns: its file, or its config entry as JSON. */
+  readonly read: (input: {
+    kind: Kind
+    name: string
+    namespace?: string
+  }) => Effect.Effect<{ location: string; text: string }, ActionError>
+  /** Replaces a definition the scope owns. */
+  readonly write: (input: {
+    kind: Kind
+    name: string
+    namespace?: string
+    text: string
+  }) => Effect.Effect<Item, ActionError>
 }
+
+export const CreateInput = Schema.Struct({
+  kind: Kind,
+  name: Schema.String,
+  namespace: Schema.optional(Schema.String).annotate({
+    description: "Create it in this namespace's layer instead of the project",
+  }),
+  description: Schema.optional(Schema.String),
+  text: Schema.optional(Schema.String).annotate({
+    description: "A command's template, a skill's SKILL.md body, a tool's or plugin's source",
+  }),
+  agent: Schema.optional(Schema.String).annotate({ description: "The agent a command runs with" }),
+  model: Schema.optional(Schema.String).annotate({ description: "The model a command runs with" }),
+  subtask: Schema.optional(Schema.Boolean).annotate({ description: "Whether a command runs as a subtask" }),
+  mcp: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)).annotate({
+    description: "An MCP server's settings (type local with command, or remote with url)",
+  }),
+}).annotate({ identifier: "OperatorCapabilityCreate" })
+export type CreateInput = typeof CreateInput.Type
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorCapabilities") {}
 
@@ -418,10 +461,12 @@ const layer = Layer.effect(
       ...found.filter((item) => item.kind !== "skill"),
     ]
 
-    const inventory = Effect.fn("OperatorCapabilities.inventory")(function* (input: { namespace?: string }) {
+    // Every definition and switch in view: the project's (its effective set), or a namespace's own
+    // layer over Global (when it inherits it) and OpenCode.
+    const gather = Effect.fnUntraced(function* (namespace?: string) {
       const builtin = yield* builtins()
-      if (input.namespace) {
-        const scope = yield* Effect.promise(() => OperatorNamespaceScope.namespaceLayer(input.namespace!))
+      if (namespace) {
+        const scope = yield* Effect.promise(() => OperatorNamespaceScope.namespaceLayer(namespace))
         const sources: Source[] = [
           ...(scope.inherit
             ? [
@@ -444,105 +489,220 @@ const layer = Layer.effect(
             )).flat()
           : []
         return {
-          scope: "namespace" as const,
-          namespace: input.namespace,
-          inheritGlobal: scope.inherit,
-          items: items("namespace", ordered(read.found, { before: home, after: [] }, builtin), read.off),
+          view: "namespace" as const,
+          namespace,
+          inherit: scope.inherit,
+          found: ordered(read.found, { before: home, after: [] }, builtin),
+          off: read.off,
         }
       }
       const { ctx, scope, sources } = yield* projectSources()
       const read = yield* collect(sources)
       const external = yield* externalSkills(ctx, scope.inherit)
       return {
-        scope: "project" as const,
+        view: "project" as const,
         namespace: scope.namespace,
-        inheritGlobal: scope.inherit,
-        items: items("project", ordered(read.found, external, builtin), read.off),
+        inherit: scope.inherit,
+        found: ordered(read.found, external, builtin),
+        off: read.off,
       }
     })
 
-    // The item and every definition of it, for the project in context.
-    const lookup = Effect.fnUntraced(function* (input: { kind: Kind; name: string }) {
-      const { ctx, scope, sources } = yield* projectSources()
-      const read = yield* collect(sources)
-      const external = yield* externalSkills(ctx, scope.inherit)
-      const all = ordered(read.found, external, yield* builtins())
-      const item = items("project", all, read.off).find(
+    const inventory = Effect.fn("OperatorCapabilities.inventory")(function* (input: { namespace?: string }) {
+      const all = yield* gather(input.namespace)
+      return {
+        scope: all.view,
+        namespace: all.namespace,
+        inheritGlobal: all.inherit,
+        items: items(all.view, all.found, all.off),
+      }
+    })
+
+    // Where an action writes: the project's .opencode and config, or the namespace's.
+    type Target = {
+      view: Scope
+      namespace?: string
+      dir: string
+      patch: (body: Record<string, unknown>) => Effect.Effect<unknown, ActionError>
+      config: () => Effect.Effect<Record<string, unknown>>
+      reload: () => Effect.Effect<void>
+      project?: string
+    }
+    const targetOf = Effect.fnUntraced(function* (namespace?: string) {
+      if (namespace) {
+        const layers = yield* operatorConfig.layers(namespace)
+        const dir = layers.folders.namespace
+        if (!dir) return yield* fail(`The namespace ${namespace} has no folder; set one in Settings → Namespaces`)
+        return {
+          view: "namespace" as const,
+          namespace,
+          dir,
+          patch: (body: Record<string, unknown>) =>
+            operatorConfig.update("namespace", body, namespace).pipe(Effect.mapError((error) => fail(error.message))),
+          config: () => fileConfig(layers.targets.namespace),
+          reload: () =>
+            Effect.forEach(
+              OperatorNamespaceScope.instancesOf({ namespace }),
+              (directory) => reloads.want({ directory }),
+              {
+                discard: true,
+              },
+            ),
+        } satisfies Target
+      }
+      const ctx = yield* InstanceState.context
+      const scope = yield* Effect.promise(() => OperatorNamespaceScope.layerOf(ctx.directory, ctx.worktree))
+      return {
+        view: "project" as const,
+        dir: OperatorConfig.scopeDirectory("project", ctx),
+        patch: (body: Record<string, unknown>) =>
+          operatorConfig.update("project", body).pipe(Effect.mapError((error) => fail(error.message))),
+        config: () => operatorConfig.layers().pipe(Effect.flatMap((layers) => fileConfig(layers.targets.project))),
+        reload: () =>
+          Effect.forEach(
+            OperatorNamespaceScope.instancesOf({ project: scope.project }),
+            (directory) => reloads.want({ directory }),
+            { discard: true },
+          ),
+        project: ctx.directory,
+      } satisfies Target
+    })
+
+    // A config file's contents, as written (for lists that are replaced whole).
+    const fileConfig = (file: string | undefined) =>
+      Effect.promise(async () => (file ? ((await readConfig(file)) ?? {}) : {}))
+
+    // The item and every definition of it, in the target's view.
+    const lookup = Effect.fnUntraced(function* (input: { kind: Kind; name: string; namespace?: string }) {
+      const all = yield* gather(input.namespace)
+      const item = items(all.view, all.found, all.off).find(
         (found) => found.kind === input.kind && found.name === input.name,
       )
       if (!item) return yield* fail(`No ${input.kind} named ${input.name} here`)
-      const definitions = all.filter((found) => found.kind === input.kind && found.name === input.name)
-      const off = read.off.filter((found) => found.kind === input.kind && found.name === input.name)
-      return { ctx, scope, item, definitions, off }
+      const definitions = all.found.filter((found) => found.kind === input.kind && found.name === input.name)
+      const off = all.off.filter((found) => found.kind === input.kind && found.name === input.name)
+      return { item, definitions, off, target: yield* targetOf(input.namespace) }
     })
 
-    const reload = Effect.fnUntraced(function* (project: string) {
-      for (const directory of OperatorNamespaceScope.instancesOf({ project })) yield* reloads.want({ directory })
+    const after = Effect.fnUntraced(function* (
+      input: { kind: Kind; name: string; namespace?: string },
+      target: Target,
+    ) {
+      yield* target.reload()
+      return (yield* inventory({ namespace: input.namespace })).items.find(
+        (item) => item.kind === input.kind && item.name === input.name,
+      )!
     })
 
-    const patch = (body: Record<string, unknown>) =>
-      operatorConfig.update("project", body).pipe(Effect.mapError((error) => fail(error.message)))
-
-    // The project's own config, as written (for lists that are replaced whole).
-    const projectConfig = Effect.fnUntraced(function* () {
-      const layers = yield* operatorConfig.layers()
-      const source = layers.sources.find((item) => item.path === layers.targets.project)
-      const value = source ? (parse(source.text) as unknown) : undefined
-      return isRecord(value) ? value : {}
-    })
-
-    const after = Effect.fnUntraced(function* (input: { kind: Kind; name: string }, project: string) {
-      yield* reload(project)
-      return (yield* inventory({})).items.find((item) => item.kind === input.kind && item.name === input.name)!
-    })
-
-    const override = Effect.fn("OperatorCapabilities.override")(function* (input: { kind: Kind; name: string }) {
-      const { ctx, scope, item, definitions } = yield* lookup(input)
-      if (item.origin === "project") return yield* fail(`${input.name} is already this project's own`)
-      const source = definitions.at(-1)!
-      const own = OperatorConfig.scopeDirectory("project", ctx)
+    // Copies a definition into a target's layer: its file (a skill with its folder) to the same place
+    // under the target's .opencode, or its config entry into the target's config. OpenCode's own
+    // commands go with their text; its agents, tools and skill are code and can't be copied.
+    const copyInto = Effect.fnUntraced(function* (input: { kind: Kind; name: string }, source: Found, target: Target) {
       if (source.location === BUILTIN) {
-        // OpenCode's own commands can be copied with their text; its agents, tools and skill are code.
         if (input.kind !== "command" || input.name === Command.Default.MERGE)
           return yield* fail(`OpenCode's ${input.kind} ${input.name} can't be copied; disable it, or define your own`)
         const command = yield* commands.get(input.name)
         const template = command ? yield* Effect.promise(async () => String(await command.template)) : ""
-        const file = path.join(own, "commands", `${input.name}.md`)
+        const file = path.join(target.dir, "commands", `${input.name}.md`)
         if (yield* Effect.promise(() => exists(file))) return yield* fail(`${file} exists already`)
         yield* fsys
           .writeWithDirs(file, `---\ndescription: ${JSON.stringify(command?.description ?? "")}\n---\n${template}\n`)
           .pipe(Effect.orDie)
-        return yield* after(input, scope.project)
+        return
       }
       if (source.root) {
-        // A file (or a skill's folder) goes to the same place under the project's .opencode.
         const from = input.kind === "skill" ? path.dirname(source.location) : source.location
-        const to = path.join(own, path.relative(source.root, from))
+        const to = path.join(target.dir, path.relative(source.root, from))
         if (yield* Effect.promise(() => exists(to))) return yield* fail(`${to} exists already`)
         yield* Effect.promise(() => fs.cp(from, to, { recursive: true }))
-        return yield* after(input, scope.project)
+        return
       }
       if (input.kind === "plugin") {
-        const current = yield* projectConfig()
+        const current = yield* target.config()
         const list = Array.isArray(current.plugin) ? current.plugin : []
-        yield* patch({ plugin: OperatorConfig.whole([...list, source.value]) })
-        return yield* after(input, scope.project)
+        yield* target.patch({ plugin: OperatorConfig.whole([...list, source.value]) })
+        return
       }
       const section = source.location.slice(source.location.lastIndexOf("#") + 1).split(".")[0]!
-      yield* patch({ [section]: { [input.name]: source.value } })
-      return yield* after(input, scope.project)
+      yield* target.patch({ [section]: { [input.name]: source.value } })
     })
 
-    const disable = Effect.fn("OperatorCapabilities.disable")(function* (input: { kind: Kind; name: string }) {
-      const { scope, item } = yield* lookup(input)
+    const override = Effect.fn("OperatorCapabilities.override")(function* (input: {
+      kind: Kind
+      name: string
+      namespace?: string
+    }) {
+      const { item, definitions, target } = yield* lookup(input)
+      if (item.origin === target.view) return yield* fail(`${input.name} is already defined here`)
+      yield* copyInto(input, definitions.at(-1)!, target)
+      return yield* after(input, target)
+    })
+
+    // A namespace's capability copied into another namespace's layer, as that one's own.
+    const copyTo = Effect.fn("OperatorCapabilities.copyTo")(function* (input: {
+      kind: Kind
+      name: string
+      namespace: string
+      to: string
+    }) {
+      if (input.to === input.namespace) return yield* fail("Choose another namespace")
+      const { definitions } = yield* lookup(input)
+      const target = yield* targetOf(input.to)
+      yield* copyInto(input, definitions.at(-1)!, target)
+      return yield* after({ kind: input.kind, name: input.name, namespace: input.to }, target)
+    })
+
+    // The text of a definition the scope owns, to edit: its file, or its config entry as JSON.
+    const read = Effect.fn("OperatorCapabilities.read")(function* (input: {
+      kind: Kind
+      name: string
+      namespace?: string
+    }) {
+      const { item, definitions, target } = yield* lookup(input)
+      if (item.origin !== target.view) return yield* fail(`${input.name} isn't defined here; override it to edit it`)
+      const own = definitions.at(-1)!
+      if (own.root)
+        return { location: own.location, text: yield* Effect.promise(() => fs.readFile(own.location, "utf8")) }
+      return { location: own.location, text: `${JSON.stringify(own.value, null, 2)}\n` }
+    })
+
+    const write = Effect.fn("OperatorCapabilities.write")(function* (input: {
+      kind: Kind
+      name: string
+      namespace?: string
+      text: string
+    }) {
+      const { item, definitions, target } = yield* lookup(input)
+      if (item.origin !== target.view) return yield* fail(`${input.name} isn't defined here; override it to edit it`)
+      const own = definitions.at(-1)!
+      if (own.root) yield* fsys.writeWithDirs(own.location, input.text).pipe(Effect.orDie)
+      else {
+        const value = yield* Effect.try({
+          try: () => JSON.parse(input.text) as unknown,
+          catch: () => fail("The entry must be valid JSON"),
+        })
+        if (input.kind === "plugin") return yield* fail("Edit a plugin entry in the Config page")
+        const section = own.location.slice(own.location.lastIndexOf("#") + 1).split(".")[0]!
+        yield* target.patch({ [section]: { [input.name]: OperatorConfig.whole(value) } })
+      }
+      return yield* after(input, target)
+    })
+
+    const disable = Effect.fn("OperatorCapabilities.disable")(function* (input: {
+      kind: Kind
+      name: string
+      namespace?: string
+    }) {
+      const { item, target } = yield* lookup(input)
       if (item.state === "disabled") return yield* fail(`${input.name} is turned off already`)
+      if (item.origin === target.view) return yield* fail(`${input.name} is defined here: delete it instead`)
       if (input.kind === "command" && input.name === Command.Default.MERGE)
         return yield* fail("/merge is reserved and can't be turned off")
-      if (input.kind === "mcp") yield* patch({ mcp: { [input.name]: { enabled: false } } })
-      if (input.kind === "agent") yield* patch({ agent: { [input.name]: { disable: true } } })
-      if (input.kind === "tool") yield* patch({ permission: { [input.name]: "deny" } })
+      if (input.kind === "mcp") yield* target.patch({ mcp: { [input.name]: { enabled: false } } })
+      if (input.kind === "agent") yield* target.patch({ agent: { [input.name]: { disable: true } } })
+      if (input.kind === "tool") yield* target.patch({ permission: { [input.name]: "deny" } })
       if (input.kind === "skill") {
-        const current = yield* projectConfig()
+        const current = yield* target.config()
         const permission = isRecord(current.permission) ? current.permission : {}
         const skill = permission.skill
         const next = isRecord(skill)
@@ -550,76 +710,150 @@ const layer = Layer.effect(
           : typeof skill === "string"
             ? { "*": skill, [input.name]: "deny" }
             : { [input.name]: "deny" }
-        yield* patch({ permission: { skill: OperatorConfig.whole(next) } })
+        yield* target.patch({ permission: { skill: OperatorConfig.whole(next) } })
       }
       if (input.kind === "command" || input.kind === "plugin") {
         const list = input.kind === "command" ? "commands" : "plugins"
-        const current = OperatorCapabilitySwitches.disabledList(yield* projectConfig(), list)
-        yield* patch({ capabilities: { disabled: { [list]: OperatorConfig.whole([...current, input.name]) } } })
+        const current = OperatorCapabilitySwitches.disabledList(yield* target.config(), list)
+        yield* target.patch({ capabilities: { disabled: { [list]: OperatorConfig.whole([...current, input.name]) } } })
       }
-      return yield* after(input, scope.project)
+      return yield* after(input, target)
     })
 
-    const revert = Effect.fn("OperatorCapabilities.revert")(function* (input: { kind: Kind; name: string }) {
-      const { ctx, scope, item, definitions, off } = yield* lookup(input)
-      const own = off.findLast((found) => found.origin === "project")
-      if (own) {
-        // The project's switch goes; anything else in the entry stays.
-        // An entry that only held the switch goes with it.
-        const entry = (section: "mcp" | "agent", key: string) =>
-          Effect.gen(function* () {
-            const current = yield* projectConfig()
-            const value = isRecord(current[section]) ? current[section][input.name] : undefined
-            const only = isRecord(value) && Object.keys(value).every((item) => item === key)
-            yield* patch({ [section]: { [input.name]: only ? null : { [key]: null } } })
-          })
-        if (input.kind === "mcp") yield* entry("mcp", "enabled")
-        if (input.kind === "agent") yield* entry("agent", "disable")
-        if (input.kind === "tool") yield* patch({ permission: { [input.name]: null } })
-        if (input.kind === "skill") yield* patch({ permission: { skill: { [input.name]: null } } })
-        if (input.kind === "command" || input.kind === "plugin") {
-          const list = input.kind === "command" ? "commands" : "plugins"
-          const current = OperatorCapabilitySwitches.disabledList(yield* projectConfig(), list).filter(
-            (name) => name !== input.name,
-          )
-          yield* patch({
-            capabilities: { disabled: { [list]: current.length ? OperatorConfig.whole(current) : null } },
-          })
-        }
-        return yield* after(input, scope.project)
-      }
-      if (item.state !== "overridden") return yield* fail(`${input.name} has no override or switch in this project`)
-      const copy = definitions.at(-1)!
-      if (copy.root) {
-        const target = input.kind === "skill" ? path.dirname(copy.location) : copy.location
+    // Moves the target's own definition to Trash: a file or folder, or a config entry kept to write back.
+    const trashOwn = Effect.fnUntraced(function* (input: { kind: Kind; name: string }, own: Found, target: Target) {
+      const trashKind = input.kind
+      if (own.root) {
+        const file = input.kind === "skill" ? path.dirname(own.location) : own.location
         yield* Effect.promise(() =>
-          OperatorTrashFiles.put({ kind: input.kind, name: input.name, project: ctx.directory, paths: [target] }),
+          OperatorTrashFiles.put({
+            kind: trashKind,
+            name: input.name,
+            ...(target.project ? { project: target.project } : {}),
+            ...(target.namespace ? { namespace: target.namespace } : {}),
+            paths: [file],
+          }),
         )
-        return yield* after(input, scope.project)
+        return
       }
       if (input.kind === "plugin") {
-        const current = yield* projectConfig()
+        const current = yield* target.config()
         const list = (Array.isArray(current.plugin) ? current.plugin : []).filter((entry) => {
           const spec = typeof entry === "string" ? entry : Array.isArray(entry) ? entry[0] : undefined
           return typeof spec !== "string" || OperatorCapabilitySwitches.pluginName(spec) !== input.name
         })
-        yield* patch({ plugin: list.length ? OperatorConfig.whole(list) : null })
-        return yield* after(input, scope.project)
+        yield* target.patch({ plugin: list.length ? OperatorConfig.whole(list) : null })
+        return
       }
-      const section = copy.location.slice(copy.location.lastIndexOf("#") + 1).split(".")[0]!
+      const section = own.location.slice(own.location.lastIndexOf("#") + 1).split(".")[0]!
       yield* Effect.promise(() =>
         OperatorTrashFiles.put({
-          kind: input.kind,
+          kind: trashKind,
           name: input.name,
-          project: ctx.directory,
-          config: { scope: "project", key: [section, input.name], value: copy.value },
+          ...(target.project ? { project: target.project } : {}),
+          ...(target.namespace ? { namespace: target.namespace } : {}),
+          config: {
+            scope: target.view === "namespace" ? "global" : "project",
+            key: [section, input.name],
+            value: own.value,
+          },
         }),
       )
-      yield* patch({ [section]: { [input.name]: null } })
-      return yield* after(input, scope.project)
+      yield* target.patch({ [section]: { [input.name]: null } })
     })
 
-    return Service.of({ inventory, override, disable, revert })
+    const revert = Effect.fn("OperatorCapabilities.revert")(function* (input: {
+      kind: Kind
+      name: string
+      namespace?: string
+    }) {
+      const { item, definitions, off, target } = yield* lookup(input)
+      const own = off.findLast((found) => found.origin === target.view)
+      if (own) {
+        // The switch goes; anything else in the entry stays. An entry that only held it goes with it.
+        const entry = (section: "mcp" | "agent", key: string) =>
+          Effect.gen(function* () {
+            const current = yield* target.config()
+            const value = isRecord(current[section]) ? current[section][input.name] : undefined
+            const only = isRecord(value) && Object.keys(value).every((item) => item === key)
+            yield* target.patch({ [section]: { [input.name]: only ? null : { [key]: null } } })
+          })
+        if (input.kind === "mcp") yield* entry("mcp", "enabled")
+        if (input.kind === "agent") yield* entry("agent", "disable")
+        if (input.kind === "tool") yield* target.patch({ permission: { [input.name]: null } })
+        if (input.kind === "skill") yield* target.patch({ permission: { skill: { [input.name]: null } } })
+        if (input.kind === "command" || input.kind === "plugin") {
+          const list = input.kind === "command" ? "commands" : "plugins"
+          const current = OperatorCapabilitySwitches.disabledList(yield* target.config(), list).filter(
+            (name) => name !== input.name,
+          )
+          yield* target.patch({
+            capabilities: { disabled: { [list]: current.length ? OperatorConfig.whole(current) : null } },
+          })
+        }
+        return yield* after(input, target)
+      }
+      if (item.state !== "overridden") return yield* fail(`${input.name} has no override or switch here`)
+      yield* trashOwn(input, definitions.at(-1)!, target)
+      return yield* after(input, target)
+    })
+
+    // Deletes the target's own definition (to Trash). OpenCode's built-ins and farther scopes' items
+    // can't be deleted here: they can be disabled.
+    const remove = Effect.fn("OperatorCapabilities.remove")(function* (input: {
+      kind: Kind
+      name: string
+      namespace?: string
+    }) {
+      const { item, definitions, target } = yield* lookup(input)
+      if (item.origin !== target.view)
+        return yield* fail(
+          item.origin === "opencode"
+            ? `${input.name} is OpenCode's own and can't be deleted`
+            : `${input.name} comes from the ${item.origin} scope; disable it here instead`,
+        )
+      yield* trashOwn(input, definitions.at(-1)!, target)
+      yield* target.reload()
+      return true
+    })
+
+    // A new capability at the target scope: a file under its .opencode, or an MCP server entry.
+    const create = Effect.fn("OperatorCapabilities.create")(function* (input: CreateInput) {
+      const target = yield* targetOf(input.namespace)
+      const name = input.name.trim()
+      if (!/^[\w][\w.-]*(\/[\w][\w.-]*)*$/.test(name)) return yield* fail(`"${input.name}" is not a valid name`)
+      const front = (fields: Record<string, unknown>) =>
+        `---\n${Object.entries(fields)
+          .filter((pair) => pair[1] !== undefined && pair[1] !== "")
+          .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
+          .join("\n")}\n---\n`
+      const files: Record<Exclude<Kind, "mcp" | "agent">, () => { file: string; text: string }> = {
+        command: () => ({
+          file: path.join(target.dir, "commands", `${name}.md`),
+          text: `${front({ description: input.description, agent: input.agent, model: input.model, subtask: input.subtask })}${input.text ?? ""}\n`,
+        }),
+        skill: () => ({
+          file: path.join(target.dir, "skills", name, "SKILL.md"),
+          text: `${front({ name, description: input.description })}${input.text ?? ""}\n`,
+        }),
+        tool: () => ({ file: path.join(target.dir, "tools", `${name}.ts`), text: input.text ?? "" }),
+        plugin: () => ({ file: path.join(target.dir, "plugins", `${name}.ts`), text: input.text ?? "" }),
+      }
+      if (input.kind === "agent") return yield* fail("Agents are created with the agent form")
+      if (input.kind === "mcp") {
+        if (!input.mcp) return yield* fail("An MCP server needs its settings")
+        const current = yield* target.config()
+        if (isRecord(current.mcp) && name in current.mcp) return yield* fail(`${name} is defined here already`)
+        yield* target.patch({ mcp: { [name]: input.mcp } })
+        return yield* after({ kind: "mcp", name, namespace: input.namespace }, target)
+      }
+      const { file, text } = files[input.kind]()
+      if (yield* Effect.promise(() => exists(file))) return yield* fail(`${file} exists already`)
+      yield* fsys.writeWithDirs(file, text).pipe(Effect.orDie)
+      return yield* after({ kind: input.kind, name, namespace: input.namespace }, target)
+    })
+
+    return Service.of({ inventory, override, disable, revert, remove, create, copyTo, read, write })
   }),
 )
 

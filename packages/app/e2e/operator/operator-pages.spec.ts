@@ -226,6 +226,21 @@ test("the config page saves the project file and shows validation errors", async
   expect(write.body).toEqual({ text: '{ "share": "sometimes" }' })
 })
 
+test("the config page edits the namespace's config too, and says where each setting comes from", async ({ page }) => {
+  const state = await mockOperator(page)
+  await page.goto(`/operator/config${dir}`)
+  await expect(page.locator('[data-component="operator-sources"]')).toContainText("Namespace")
+  await expect(page.getByTestId("config-origins")).toContainText("model")
+  await expect(page.getByTestId("config-origins")).toContainText("Namespace")
+  await page.getByRole("button", { name: "Namespace (OpenCode)", exact: true }).click()
+  const editor = page.getByRole("textbox", { name: "Edit settings" })
+  await expect(editor).toHaveValue('{ "model": "opencode/big" }')
+  await editor.fill('{ "model": "opencode/small" }')
+  await page.getByRole("button", { name: "Save" }).click()
+  await expect.poll(() => state.writes.length).toBe(1)
+  expect(new URL(state.writes[0]!.url).searchParams.get("scope")).toBe("namespace")
+})
+
 test("capabilities list tools by origin and connect an MCP server", async ({ page }) => {
   const state = await mockOperator(page)
   await page.goto(`/operator/capabilities${dir}`)
