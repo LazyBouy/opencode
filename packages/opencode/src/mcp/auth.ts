@@ -5,6 +5,7 @@ import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Context, Option, Schema } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
+import { OperatorMcpAuthScope } from "@/operator/mcp-auth-scope"
 
 export const Tokens = Schema.Struct({
   accessToken: Schema.mutableKey(Schema.String),
@@ -155,7 +156,7 @@ const layer = Layer.effect(
       getOAuthState,
       clearOAuthState,
     })
-  }),
+  }).pipe(Effect.map(OperatorMcpAuthScope.wrap)),
 )
 
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [FSUtil.node, EffectFlock.node] })
