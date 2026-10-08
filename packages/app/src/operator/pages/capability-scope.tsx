@@ -26,6 +26,17 @@ import { requestError } from "./config-helpers"
 // a scope allows: override, disable, revert (project or namespace), delete (its own), create.
 
 export type View = "project" | "namespace"
+
+// OpenCode's built-ins a namespace or project can copy (capability_scopes_spec.md §7).
+export const COPYABLE = new Set([
+  "command:init",
+  "command:review",
+  "agent:build",
+  "agent:plan",
+  "agent:general",
+  "agent:explore",
+  "skill:customize-opencode",
+])
 type Language = ReturnType<typeof useLanguage>
 
 export function useCapabilityScope() {
@@ -129,7 +140,7 @@ export function useCapabilityActions(directory: () => string | undefined, namesp
   const queryClient = useQueryClient()
   const moveToTrash = useMoveToTrash()
   const [state, setState] = createStore({ busy: "" })
-  const run = async (action: "override" | "disable" | "revert", item: OperatorCapability) => {
+  const run = async (action: "override" | "disable" | "revert" | "takeOpenCode", item: OperatorCapability) => {
     setState("busy", `${item.kind}:${item.name}`)
     const body = {
       directory: directory(),
@@ -143,7 +154,9 @@ export function useCapabilityActions(directory: () => string | undefined, namesp
         ? client.override(body, { throwOnError: true })
         : action === "disable"
           ? client.disable(body, { throwOnError: true })
-          : client.revert(body, { throwOnError: true })
+          : action === "takeOpenCode"
+            ? client.takeOpenCode(body, { throwOnError: true })
+            : client.revert(body, { throwOnError: true })
     await request
       .then(async () => {
         showToast({ title: language.t(`operator.capabilities.done.${action}`, { name: item.name }) })
@@ -292,8 +305,8 @@ export function CapabilityActions(props: {
   const here = () => (props.view === "namespace" ? "namespace" : "project")
   const others = () => scope.namespaces().filter((item) => item.namespace.id !== props.namespace())
   const reserved = (item: OperatorCapability) => item.kind === "command" && item.name === "merge"
-  // OpenCode's agents, tools and skill are code: they can be turned off, not copied.
-  const copyable = (item: OperatorCapability) => item.origin !== "opencode" || item.kind === "command"
+  // Of OpenCode's built-ins only these can be copied; its tools (and its other agents) are code.
+  const copyable = (item: OperatorCapability) => item.origin !== "opencode" || COPYABLE.has(`${item.kind}:${item.name}`)
   return (
     <Show when={props.item}>
       {(item) => (
@@ -327,6 +340,15 @@ export function CapabilityActions(props: {
               onClick={() => void actions.run("revert", item())}
             >
               {language.t("operator.capabilities.revert")}
+            </ButtonV2>
+          </Show>
+          <Show when={item().origin === here() && item().basedOn?.changed}>
+            <ButtonV2
+              variant="outline"
+              disabled={actions.busy(item())}
+              onClick={() => void actions.run("takeOpenCode", item())}
+            >
+              {language.t("operator.capabilities.takeOpenCode")}
             </ButtonV2>
           </Show>
           <Show when={item().origin === here() && item().kind !== "plugin"}>

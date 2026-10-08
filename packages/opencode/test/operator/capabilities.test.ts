@@ -201,10 +201,11 @@ describe("capabilities by scope", () => {
     ).toEqual(sourceFiles)
   })
 
-  test("/merge can't be turned off, and OpenCode's agents can't be copied", async () => {
+  test("/merge can't be turned off, and OpenCode's tools can't be copied", async () => {
     await using own = await tmpdir({ git: true })
     expect((await act("disable", own.path, "command", "merge")).status).toBe(400)
-    expect((await act("override", own.path, "agent", "build")).status).toBe(400)
+    expect((await act("override", own.path, "tool", "read")).status).toBe(400)
+    expect((await act("override", own.path, "command", "merge")).status).toBe(400)
   })
 })
 
@@ -334,6 +335,116 @@ describe("a namespace's own capabilities", () => {
     expect(((await (await app().request(`/config${where(own.path)}`)).json()) as { username?: string }).username).toBe(
       "acme-user",
     )
+  })
+})
+
+describe("a new namespace's starting capabilities", () => {
+  test("from OpenCode: its init, review, four agents and customize-opencode as files, not merge; copies track OpenCode's text", async () => {
+    await using folder = await tmpdir()
+    await using own = await tmpdir({ git: true })
+    await acme(folder.path, [])
+    const items = [
+      { kind: "command", name: "init" },
+      { kind: "command", name: "review" },
+      { kind: "agent", name: "build" },
+      { kind: "agent", name: "plan" },
+      { kind: "agent", name: "general" },
+      { kind: "agent", name: "explore" },
+      { kind: "skill", name: "customize-opencode" },
+    ]
+    const seeded = await app().request(`/operator/capability/seed${where(own.path)}`, {
+      method: "POST",
+      headers: json,
+      body: JSON.stringify({ from: "opencode", to: "acme", items }),
+    })
+    expect(seeded.status).toBe(200)
+    const layer = path.join(folder.path, ".opencode")
+    for (const file of [
+      "commands/init.md",
+      "commands/review.md",
+      "agents/build.md",
+      "agents/plan.md",
+      "agents/general.md",
+      "agents/explore.md",
+      "skills/customize-opencode/SKILL.md",
+    ])
+      expect(await fs.readFile(path.join(layer, file), "utf8")).toContain("basedOn:")
+    expect(await fs.stat(path.join(layer, "commands", "merge.md")).catch(() => undefined)).toBeUndefined()
+
+    const view = async () =>
+      (
+        (await (await app().request(`/operator/capability${where(own.path)}&namespace=acme`)).json()) as {
+          items: Item[]
+        }
+      ).items
+    const init = (list: Item[]) =>
+      list.find((item) => item.kind === "command" && item.name === "init") as Item & {
+        basedOn?: { changed: boolean }
+      }
+    expect(init(await view())).toMatchObject({ origin: "namespace", state: "overridden", basedOn: { changed: false } })
+
+    // A later OpenCode text: the copy says so, and takes it on request.
+    const file = path.join(layer, "commands", "init.md")
+    await fs.writeFile(file, (await fs.readFile(file, "utf8")).replace(/#[0-9a-f]{12}/, "#000000000000"))
+    expect(init(await view()).basedOn).toMatchObject({ changed: true })
+    const taken = await app().request(`/operator/capability/take-opencode${where(own.path)}`, {
+      method: "POST",
+      headers: json,
+      body: JSON.stringify({ kind: "command", name: "init", namespace: "acme" }),
+    })
+    expect(taken.status).toBe(200)
+    expect(init(await view()).basedOn).toMatchObject({ changed: false })
+  })
+
+  test("from another namespace: its own items and the chosen config keys", async () => {
+    await using folder = await tmpdir()
+    await using other = await tmpdir()
+    await using own = await tmpdir({ git: true })
+    await acme(folder.path, [])
+    await write(
+      path.join(store(), "beta", "namespace.json"),
+      JSON.stringify({ id: "beta", name: "Beta", purpose: "", folder: other.path, createdAt: 1, updatedAt: 1 }),
+    )
+    try {
+      await write(path.join(folder.path, ".opencode", "commands", "deploy.md"), command("Deploy"))
+      await write(
+        path.join(folder.path, ".opencode", "opencode.jsonc"),
+        JSON.stringify({
+          instructions: ["RULES.md"],
+          username: "acme",
+          mcp: { docs: { type: "remote", url: "https://x" } },
+        }),
+      )
+      const listed = (await (await app().request(`/operator/capability${where(own.path)}&namespace=acme`)).json()) as {
+        config?: string[]
+      }
+      expect(listed.config?.toSorted()).toEqual(["instructions", "username"])
+      const seeded = await app().request(`/operator/capability/seed${where(own.path)}`, {
+        method: "POST",
+        headers: json,
+        body: JSON.stringify({
+          from: "acme",
+          to: "beta",
+          items: [
+            { kind: "command", name: "deploy" },
+            { kind: "mcp", name: "docs" },
+          ],
+          config: ["instructions"],
+        }),
+      })
+      expect(seeded.status).toBe(200)
+      expect(await fs.readFile(path.join(other.path, ".opencode", "commands", "deploy.md"), "utf8")).toBe(
+        command("Deploy"),
+      )
+      const copied = parse(await fs.readFile(path.join(other.path, ".opencode", "opencode.jsonc"), "utf8")) as Record<
+        string,
+        unknown
+      >
+      expect(copied).toMatchObject({ instructions: ["RULES.md"], mcp: { docs: { type: "remote", url: "https://x" } } })
+      expect(copied.username).toBeUndefined()
+    } finally {
+      await fs.rm(path.join(store(), "beta"), { recursive: true, force: true })
+    }
   })
 })
 

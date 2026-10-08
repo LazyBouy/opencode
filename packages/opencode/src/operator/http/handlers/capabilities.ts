@@ -24,5 +24,7 @@ export const operatorCapabilityHandlers = HttpApiBuilder.group(InstanceHttpApi, 
           .pipe(Effect.mapError(apiError)),
       )
       .handle("edit", (ctx) => capabilities.write(ctx.payload).pipe(Effect.mapError(apiError)))
+      .handle("takeOpenCode", (ctx) => capabilities.takeOpenCode(ctx.payload).pipe(Effect.mapError(apiError)))
+      .handle("seed", (ctx) => capabilities.seed(ctx.payload).pipe(Effect.mapError(apiError)))
   }),
 )

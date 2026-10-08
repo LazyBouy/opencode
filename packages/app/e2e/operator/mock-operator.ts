@@ -701,6 +701,7 @@ export async function mockOperator(page: Page) {
         namespace: ns ?? "opencode",
         inheritGlobal: true,
         items: ns ? state.capabilities.filter((item) => item.origin !== "project") : state.capabilities,
+        ...(ns ? { config: ["instructions"] } : {}),
       })
     }
     if (url.pathname === "/operator/capability/source") {
@@ -723,6 +724,7 @@ export async function mockOperator(page: Page) {
         ...(url.searchParams.get("directory") ? { directory: url.searchParams.get("directory")! } : {}),
       })
       const here = body.namespace ? "namespace" : "project"
+      if (action === "seed") return json(route, [])
       const index = state.capabilities.findIndex((item) => item.kind === body.kind && item.name === body.name)
       const item = state.capabilities[index]
       if (action === "create") {

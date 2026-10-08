@@ -4725,6 +4725,16 @@ export type OperatorCapability = {
    */
   hides: Array<OperatorCapabilityDefinition>
   disabledAt?: OperatorCapabilityDefinition
+  basedOn?: {
+    /**
+     * The OpenCode version it was copied from
+     */
+    version: string
+    /**
+     * OpenCode's own text has changed since
+     */
+    changed: boolean
+  }
 }
 
 export type OperatorCapabilities = {
@@ -4732,6 +4742,7 @@ export type OperatorCapabilities = {
   namespace: string
   inheritGlobal: boolean
   items: Array<OperatorCapability>
+  config?: Array<string>
 }
 
 export type OperatorCapabilityError = {
@@ -4739,6 +4750,22 @@ export type OperatorCapabilityError = {
   data: {
     message: string
   }
+}
+
+export type OperatorCapabilitySeed = {
+  /**
+   * The source namespace (OpenCode: its layer and its built-ins)
+   */
+  from: string
+  /**
+   * The new namespace
+   */
+  to: string
+  items: Array<{
+    kind: OperatorCapabilityKind
+    name: string
+  }>
+  config?: Array<string>
 }
 
 export type OperatorCapabilityCreate = {
@@ -16777,6 +16804,68 @@ export type OperatorCapabilityEditResponses = {
 }
 
 export type OperatorCapabilityEditResponse = OperatorCapabilityEditResponses[keyof OperatorCapabilityEditResponses]
+
+export type OperatorCapabilityTakeOpenCodeData = {
+  body?: {
+    kind: OperatorCapabilityKind
+    name: string
+    namespace?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/capability/take-opencode"
+}
+
+export type OperatorCapabilityTakeOpenCodeErrors = {
+  /**
+   * OperatorCapabilityError | InvalidRequestError
+   */
+  400: OperatorCapabilityError | InvalidRequestError
+}
+
+export type OperatorCapabilityTakeOpenCodeError =
+  OperatorCapabilityTakeOpenCodeErrors[keyof OperatorCapabilityTakeOpenCodeErrors]
+
+export type OperatorCapabilityTakeOpenCodeResponses = {
+  /**
+   * The copy, with OpenCode's current text
+   */
+  200: OperatorCapability
+}
+
+export type OperatorCapabilityTakeOpenCodeResponse =
+  OperatorCapabilityTakeOpenCodeResponses[keyof OperatorCapabilityTakeOpenCodeResponses]
+
+export type OperatorCapabilitySeedData = {
+  body?: OperatorCapabilitySeed
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/capability/seed"
+}
+
+export type OperatorCapabilitySeedErrors = {
+  /**
+   * OperatorCapabilityError | InvalidRequestError
+   */
+  400: OperatorCapabilityError | InvalidRequestError
+}
+
+export type OperatorCapabilitySeedError = OperatorCapabilitySeedErrors[keyof OperatorCapabilitySeedErrors]
+
+export type OperatorCapabilitySeedResponses = {
+  /**
+   * The copies
+   */
+  200: Array<OperatorCapability>
+}
+
+export type OperatorCapabilitySeedResponse = OperatorCapabilitySeedResponses[keyof OperatorCapabilitySeedResponses]
 
 export type OperatorCapabilityCreateData = {
   body?: OperatorCapabilityCreate

@@ -174,8 +174,13 @@ import type {
   OperatorCapabilityRemoveResponses,
   OperatorCapabilityRevertErrors,
   OperatorCapabilityRevertResponses,
+  OperatorCapabilitySeed,
+  OperatorCapabilitySeedErrors,
+  OperatorCapabilitySeedResponses,
   OperatorCapabilitySourceErrors,
   OperatorCapabilitySourceResponses,
+  OperatorCapabilityTakeOpenCodeErrors,
+  OperatorCapabilityTakeOpenCodeResponses,
   OperatorConfigLayersErrors,
   OperatorConfigLayersResponses,
   OperatorConfigSchemaErrors,
@@ -5205,6 +5210,92 @@ export class Capability extends HeyApiClient {
       ThrowOnError
     >({
       url: "/operator/capability/source",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Take OpenCode's version of a copied built-in
+   *
+   * A copy of one of OpenCode's built-ins (init, review, build, plan, general, explore, customize-opencode) takes OpenCode's current text, when an OpenCode release changed it.
+   */
+  public takeOpenCode<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      kind?: OperatorCapabilityKind
+      name?: string
+      namespace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "kind" },
+            { in: "body", key: "name" },
+            { in: "body", key: "namespace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorCapabilityTakeOpenCodeResponses,
+      OperatorCapabilityTakeOpenCodeErrors,
+      ThrowOnError
+    >({
+      url: "/operator/capability/take-opencode",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Give a new namespace its starting capabilities
+   *
+   * Copy the chosen capabilities of a source namespace's own layer (with OpenCode's copyable built-ins when the source is OpenCode) and the chosen keys of its config into another namespace's layer. MCP logins are not copied.
+   */
+  public seed<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      operatorCapabilitySeed?: OperatorCapabilitySeed
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "operatorCapabilitySeed", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorCapabilitySeedResponses,
+      OperatorCapabilitySeedErrors,
+      ThrowOnError
+    >({
+      url: "/operator/capability/seed",
       ...options,
       ...params,
       headers: {

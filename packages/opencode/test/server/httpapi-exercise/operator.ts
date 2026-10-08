@@ -843,7 +843,7 @@ export const operatorScenarios: Scenario[] = [
     .at((ctx) => ({
       path: "/operator/capability/override",
       headers: ctx.headers(),
-      body: { kind: "agent", name: "build" },
+      body: { kind: "tool", name: "read" },
     }))
     .status(400),
   http.protected
@@ -892,6 +892,22 @@ export const operatorScenarios: Scenario[] = [
       path: "/operator/capability/source",
       headers: ctx.headers(),
       body: { kind: "tool", name: "read", text: "x" },
+    }))
+    .status(400),
+  http.protected
+    .post("/operator/capability/take-opencode", "operator.capability.takeOpenCode")
+    .at((ctx) => ({
+      path: "/operator/capability/take-opencode",
+      headers: ctx.headers(),
+      body: { kind: "command", name: "init" },
+    }))
+    .status(400),
+  http.protected
+    .post("/operator/capability/seed", "operator.capability.seed")
+    .at((ctx) => ({
+      path: "/operator/capability/seed",
+      headers: ctx.headers(),
+      body: { from: "opencode", to: "missing", items: [] },
     }))
     .status(400),
   http.protected

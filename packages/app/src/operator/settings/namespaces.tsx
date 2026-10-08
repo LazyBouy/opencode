@@ -18,6 +18,7 @@ import { requestError } from "../pages/config-helpers"
 import { PurposeDraft } from "../pages/purpose-draft"
 import { FieldHelp } from "../ui/field-help"
 import { useFolderBrowser } from "../ui/folder-browser"
+import { NamespaceStart, type Start } from "./namespace-start"
 import { RecordField } from "../ui/record-overlay"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
@@ -198,6 +199,20 @@ function NamespaceRecord(props: {
     ),
   )
 
+  // What a new namespace starts with (its Capabilities step).
+  let start: Start = { from: undefined, items: [], config: [] }
+  const seed = async (id: string) => {
+    if (!start.from || (!start.items.length && !start.config.length)) return
+    await serverSdk()
+      .client.operator.capability.seed(
+        { operatorCapabilitySeed: { from: start.from, to: id, items: start.items, config: start.config } },
+        { throwOnError: true },
+      )
+      .catch((error: unknown) =>
+        showToast({ title: language.t("settings.namespaces.seedFailed"), description: requestError(error) }),
+      )
+  }
+
   const save = async () => {
     setStore("busy", true)
     const folder = store.folder.trim()
@@ -219,6 +234,7 @@ function NamespaceRecord(props: {
           })
     await request
       .then(async (result) => {
+        if (store.selected === "new" && result.data) await seed(result.data.id)
         await refetch()
         if (result.data) setStore({ selected: result.data.id, editing: false })
         showToast({ title: language.t("settings.namespaces.saved", { name: store.name.trim() }) })
@@ -394,6 +410,15 @@ function NamespaceRecord(props: {
             text={language.t("operator.help.namespaceInheritGlobal")}
           />
         </span>
+        <Show when={store.selected === "new"}>
+          <NamespaceStart
+            namespaces={props.list()}
+            folder={store.folder.trim()}
+            onChange={(next) => {
+              start = next
+            }}
+          />
+        </Show>
         <div class="flex flex-col gap-1">
           <div class="flex items-center">
             <label class="text-12-medium" for={`${id}-purpose`}>

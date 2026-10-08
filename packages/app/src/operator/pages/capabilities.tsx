@@ -523,6 +523,34 @@ function CapabilityOverlay() {
                   </ul>
                 </RecordField>
               </Show>
+              <Show when={found().item?.basedOn}>
+                {(based) => (
+                  <RecordField
+                    label={language.t("operator.capabilities.basedOn")}
+                    help={language.t("operator.help.capabilityBasedOn")}
+                  >
+                    <span data-testid="capability-based-on">
+                      {language.t(
+                        based().changed ? "operator.capabilities.basedOnChanged" : "operator.capabilities.basedOnSame",
+                        { version: based().version },
+                      )}
+                    </span>
+                  </RecordField>
+                )}
+              </Show>
+              <Show
+                when={
+                  kind() === "commands" &&
+                  found().name === "init" &&
+                  found().item &&
+                  found().item!.origin !== "opencode" &&
+                  data.inventory.data?.namespace !== "opencode"
+                }
+              >
+                <p data-slot="operator-note" data-warning="" data-testid="capability-init-hint">
+                  {language.t("operator.capabilities.initHint")}
+                </p>
+              </Show>
               <Show when={found().item?.disabledAt}>
                 {(at) => (
                   <RecordField

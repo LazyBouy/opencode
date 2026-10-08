@@ -18,6 +18,8 @@ export const OperatorCapabilityPaths = {
   create: "/operator/capability/create",
   copy: "/operator/capability/copy",
   source: "/operator/capability/source",
+  take: "/operator/capability/take-opencode",
+  seed: "/operator/capability/seed",
 } as const
 
 export class ApiCapabilityError extends Schema.ErrorClass<{
@@ -160,6 +162,30 @@ export const OperatorCapabilityApi = HttpApi.make("operator-capabilities")
             "operator.capability.edit",
             "Edit a capability's definition",
             "Replace the file (or the config entry) of a capability the project (or the namespace) defines itself.",
+          ),
+        ),
+        HttpApiEndpoint.post("takeOpenCode", OperatorCapabilityPaths.take, {
+          query: WorkspaceRoutingQuery,
+          payload: target,
+          success: described(OperatorCapabilities.Item, "The copy, with OpenCode's current text"),
+          error: ApiCapabilityError,
+        }).annotateMerge(
+          doc(
+            "operator.capability.takeOpenCode",
+            "Take OpenCode's version of a copied built-in",
+            "A copy of one of OpenCode's built-ins (init, review, build, plan, general, explore, customize-opencode) takes OpenCode's current text, when an OpenCode release changed it.",
+          ),
+        ),
+        HttpApiEndpoint.post("seed", OperatorCapabilityPaths.seed, {
+          query: WorkspaceRoutingQuery,
+          payload: OperatorCapabilities.SeedInput,
+          success: described(Schema.Array(OperatorCapabilities.Item), "The copies"),
+          error: ApiCapabilityError,
+        }).annotateMerge(
+          doc(
+            "operator.capability.seed",
+            "Give a new namespace its starting capabilities",
+            "Copy the chosen capabilities of a source namespace's own layer (with OpenCode's copyable built-ins when the source is OpenCode) and the chosen keys of its config into another namespace's layer. MCP logins are not copied.",
           ),
         ),
         HttpApiEndpoint.post("create", OperatorCapabilityPaths.create, {

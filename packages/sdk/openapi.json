@@ -17341,6 +17341,163 @@
         ]
       }
     },
+    "/operator/capability/take-opencode": {
+      "post": {
+        "tags": ["operator capabilities"],
+        "operationId": "operator.capability.takeOpenCode",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The copy, with OpenCode's current text",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorCapability"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorCapabilityError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorCapabilityError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "A copy of one of OpenCode's built-ins (init, review, build, plan, general, explore, customize-opencode) takes OpenCode's current text, when an OpenCode release changed it.",
+        "summary": "Take OpenCode's version of a copied built-in",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "$ref": "#/components/schemas/OperatorCapabilityKind"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "namespace": {
+                    "type": "string"
+                  }
+                },
+                "required": ["kind", "name"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.capability.takeOpenCode({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/capability/seed": {
+      "post": {
+        "tags": ["operator capabilities"],
+        "operationId": "operator.capability.seed",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The copies",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorCapability"
+                  },
+                  "description": "The copies"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorCapabilityError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorCapabilityError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Copy the chosen capabilities of a source namespace's own layer (with OpenCode's copyable built-ins when the source is OpenCode) and the chosen keys of its config into another namespace's layer. MCP logins are not copied.",
+        "summary": "Give a new namespace its starting capabilities",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperatorCapabilitySeed"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.capability.seed({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/operator/capability/create": {
       "post": {
         "tags": ["operator capabilities"],
@@ -35997,6 +36154,21 @@
           },
           "disabledAt": {
             "$ref": "#/components/schemas/OperatorCapabilityDefinition"
+          },
+          "basedOn": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string",
+                "description": "The OpenCode version it was copied from"
+              },
+              "changed": {
+                "type": "boolean",
+                "description": "OpenCode's own text has changed since"
+              }
+            },
+            "required": ["version", "changed"],
+            "additionalProperties": false
           }
         },
         "required": ["kind", "name", "origin", "location", "state", "hides"],
@@ -36019,6 +36191,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/OperatorCapability"
+            }
+          },
+          "config": {
+            "type": "array",
+            "items": {
+              "type": "string"
             }
           }
         },
@@ -36044,6 +36222,43 @@
           }
         },
         "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorCapabilitySeed": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "The source namespace (OpenCode: its layer and its built-ins)"
+          },
+          "to": {
+            "type": "string",
+            "description": "The new namespace"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "$ref": "#/components/schemas/OperatorCapabilityKind"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": ["kind", "name"],
+              "additionalProperties": false
+            }
+          },
+          "config": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["from", "to", "items"],
         "additionalProperties": false
       },
       "OperatorCapabilityCreate": {

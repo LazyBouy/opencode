@@ -262,3 +262,39 @@ test("a new namespace can leave out the global capabilities; OpenCode always get
   await expect.poll(() => state.prompt.namespaces.find((item) => item.id === "plain")?.inheritGlobal).toBe(false)
   await expect(created.getByTestId("namespace-inherit-global")).toContainText("No: only OpenCode's built-ins")
 })
+
+test("a new namespace starts with the capabilities ticked in its Capabilities step", async ({ page }) => {
+  const state = await mockOperator(page)
+  await page.goto("/operator")
+  await page.getByRole("navigation", { name: "Operator" }).getByRole("button", { name: "Settings" }).click()
+  const settings = page.locator(".settings-v2-dialog")
+  await settings.getByRole("tab", { name: "Namespaces" }).click()
+  await settings.getByRole("button", { name: "New namespace" }).click()
+  const record = page.getByRole("dialog").last()
+  await record.getByLabel("Name", { exact: true }).fill("Acme")
+  await record.getByLabel("Folder", { exact: true }).fill(`${workspace}/acme`)
+  const items = record.getByTestId("namespace-start-items")
+  // From OpenCode: its own layer's items and its copyable built-ins, all ticked, and its settings.
+  await expect(items.getByRole("checkbox", { name: "/deploy" })).toBeChecked()
+  await expect(items.getByRole("checkbox", { name: "/review" })).toBeChecked()
+  await expect(items.getByRole("checkbox", { name: "build" })).toBeChecked()
+  await expect(items.getByRole("checkbox", { name: "instructions" })).toBeChecked()
+  await expect(items.getByRole("checkbox", { name: "read" })).toHaveCount(0)
+  await items
+    .locator('[data-slot="checkbox-v2"]', { hasText: "/review" })
+    .locator('[data-slot="checkbox-v2-control"]')
+    .click()
+  await expect(record.getByTestId("namespace-start-summary")).toContainText(`Copies 3 into ${workspace}/acme/.opencode`)
+  await record.getByRole("button", { name: "Create namespace" }).click()
+  await expect
+    .poll(() => state.capabilityWrites.find((write) => write.action === "seed")?.body)
+    .toEqual({
+      from: "opencode",
+      to: "acme",
+      items: [
+        { kind: "command", name: "deploy" },
+        { kind: "agent", name: "build" },
+      ],
+      config: ["instructions"],
+    })
+})

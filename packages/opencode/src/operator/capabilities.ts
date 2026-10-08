@@ -1,5 +1,6 @@
 export * as OperatorCapabilities from "./capabilities"
 
+import { createHash } from "crypto"
 import fs from "fs/promises"
 import path from "path"
 import { parse } from "jsonc-parser"
@@ -8,6 +9,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Glob } from "@opencode-ai/core/util/glob"
 import { Agent } from "@/agent/agent"
 import { Command } from "@/command"
@@ -17,6 +19,7 @@ import { ConfigMarkdown } from "@/config/markdown"
 import { ConfigPaths } from "@/config/paths"
 import { InstanceState } from "@/effect/instance-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { Skill } from "@/skill"
 import { isRecord } from "@/util/record"
 import { OperatorCapabilitySwitches } from "./capability-switches"
 import { OperatorConfig } from "./config"
@@ -71,6 +74,12 @@ export const Item = Schema.Struct({
   state: State,
   hides: Schema.Array(Definition).annotate({ description: "Farther definitions of the same name this one replaces" }),
   disabledAt: Schema.optional(Definition).annotate({ description: "Where it is turned off" }),
+  basedOn: Schema.optional(
+    Schema.Struct({
+      version: Schema.String.annotate({ description: "The OpenCode version it was copied from" }),
+      changed: Schema.Boolean.annotate({ description: "OpenCode's own text has changed since" }),
+    }),
+  ).annotate({ description: "For a copy of one of OpenCode's built-ins" }),
 }).annotate({ identifier: "OperatorCapability" })
 export type Item = typeof Item.Type
 
@@ -79,6 +88,9 @@ export const Inventory = Schema.Struct({
   namespace: Schema.String,
   inheritGlobal: Schema.Boolean,
   items: Schema.Array(Item),
+  config: Schema.optional(Schema.Array(Schema.String)).annotate({
+    description: "Namespace view: the top-level keys its own config sets, besides its capability entries",
+  }),
 }).annotate({ identifier: "OperatorCapabilities" })
 export type Inventory = typeof Inventory.Type
 
@@ -119,7 +131,21 @@ export interface Interface {
     namespace?: string
     text: string
   }) => Effect.Effect<Item, ActionError>
+  /** A copy of an OpenCode built-in takes OpenCode's current text. */
+  readonly takeOpenCode: (input: { kind: Kind; name: string; namespace?: string }) => Effect.Effect<Item, ActionError>
+  /** Copies a source namespace's chosen capabilities and config keys into a new namespace. */
+  readonly seed: (input: SeedInput) => Effect.Effect<Item[], ActionError>
 }
+
+export const SeedInput = Schema.Struct({
+  from: Schema.String.annotate({ description: "The source namespace (OpenCode: its layer and its built-ins)" }),
+  to: Schema.String.annotate({ description: "The new namespace" }),
+  items: Schema.Array(Schema.Struct({ kind: Kind, name: Schema.String })),
+  config: Schema.optional(Schema.Array(Schema.String)).annotate({
+    description: "Top-level keys of the source namespace's config to copy",
+  }),
+}).annotate({ identifier: "OperatorCapabilitySeed" })
+export type SeedInput = typeof SeedInput.Type
 
 export const CreateInput = Schema.Struct({
   kind: Kind,
@@ -146,7 +172,14 @@ type Scope = "global" | "namespace" | "project"
 // A place definitions are read from, in load order: a config file, or a config folder.
 type Source = { scope: Scope; json?: string; dir?: string }
 // A definition found, with what override needs to copy it.
-type Found = Definition & { kind: Kind; name: string; root?: string; value?: unknown; description?: string }
+type Found = Definition & {
+  kind: Kind
+  name: string
+  root?: string
+  value?: unknown
+  description?: string
+  basedOn?: string
+}
 type Off = Definition & { kind: Kind; name: string }
 
 const BUILTIN = "<built-in>"
@@ -246,19 +279,20 @@ function fromConfig(source: Source & { json: string }, data: Record<string, unkn
 async function fromFolder(source: Source & { dir: string }) {
   const found: Found[] = []
   const dir = source.dir
-  const file = (kind: Kind, name: string, location: string, description?: string): Found => ({
+  const file = (kind: Kind, name: string, location: string, data?: Record<string, unknown>): Found => ({
     kind,
     name,
     origin: source.scope,
     location,
     root: dir,
-    ...(description ? { description } : {}),
+    ...(typeof data?.description === "string" ? { description: data.description } : {}),
+    ...(typeof data?.basedOn === "string" ? { basedOn: data.basedOn } : {}),
   })
   for (const item of await scan("{command,commands}/**/*.md", dir)) {
     const md = await ConfigMarkdown.parse(item).catch(() => undefined)
     if (!md) continue
     const name = configEntryNameFromPath(path.relative(dir, item), ["command/", "commands/"])
-    found.push(file("command", name, item, typeof md.data.description === "string" ? md.data.description : undefined))
+    found.push(file("command", name, item, md.data))
   }
   for (const [pattern, prefixes] of [
     ["{agent,agents}/**/*.md", ["agent/", "agents/"]],
@@ -268,7 +302,7 @@ async function fromFolder(source: Source & { dir: string }) {
       const md = await ConfigMarkdown.parse(item).catch(() => undefined)
       if (!md) continue
       const name = configEntryNameFromPath(path.relative(dir, item), [...prefixes])
-      found.push(file("agent", name, item, typeof md.data.description === "string" ? md.data.description : undefined))
+      found.push(file("agent", name, item, md.data))
     }
   }
   for (const item of await scan("{tool,tools}/*.{js,ts}", dir))
@@ -292,6 +326,7 @@ async function skills(scope: Scope, dir: string, pattern: string): Promise<Found
       location: item,
       root: dir,
       ...(typeof md.data.description === "string" ? { description: md.data.description } : {}),
+      ...(typeof md.data.basedOn === "string" ? { basedOn: md.data.basedOn } : {}),
     })
   }
   return found
@@ -327,6 +362,7 @@ function items(view: Scope, found: ReadonlyArray<Found>, off: ReadonlyArray<Off>
         state,
         hides,
         ...(disabled ? { disabledAt: { origin: disabled.origin, location: disabled.location } } : {}),
+        ...(effective.basedOn ? { basedOn: { version: effective.basedOn, changed: false } } : {}),
       }
     })
     .toSorted((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name))
@@ -343,7 +379,71 @@ const layer = Layer.effect(
     const operatorConfig = yield* OperatorConfig.Service
     const reloads = yield* OperatorReloadWhenIdle.Service
     const runtime = yield* RuntimeFlags.Service
+    const skillService = yield* Skill.Service
     const fail = (message: string) => new ActionError({ message })
+
+    // A copy of one of OpenCode's built-ins, as a file of the same kind (capability_scopes_spec.md §7):
+    // its `init` and `review` commands with their templates, its `build`, `plan`, `general` and `explore`
+    // agents with their settings and prompts, and its `customize-opencode` skill. `basedOn` records the
+    // OpenCode version and a fingerprint of its text, so a later OpenCode release that changes it shows.
+    const builtinCopy = Effect.fnUntraced(function* (kind: Kind, name: string) {
+      const front = (fields: Record<string, unknown>) =>
+        `---\n${Object.entries(fields)
+          .filter((pair) => pair[1] !== undefined && pair[1] !== "")
+          .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
+          .join("\n")}\n---\n`
+      const body = yield* Effect.gen(function* () {
+        if (kind === "command" && (name === Command.Default.INIT || name === Command.Default.REVIEW)) {
+          const command = yield* commands.get(name)
+          if (!command) return undefined
+          const template = yield* Effect.promise(async () => String(await command.template))
+          return {
+            file: path.join("commands", `${name}.md`),
+            fields: { description: command.description, ...(command.subtask ? { subtask: true } : {}) },
+            text: template,
+          }
+        }
+        if (kind === "agent" && ["build", "plan", "general", "explore"].includes(name)) {
+          const agent = yield* agents.get(name)
+          if (!agent) return undefined
+          return {
+            file: path.join("agents", `${name}.md`),
+            fields: { description: agent.description, mode: agent.mode },
+            text: agent.prompt ?? "",
+          }
+        }
+        if (kind === "skill" && name === "customize-opencode") {
+          const skill = yield* skillService.get(name)
+          if (!skill) return undefined
+          return {
+            file: path.join("skills", name, "SKILL.md"),
+            fields: { name, description: skill.description },
+            text: skill.content,
+          }
+        }
+        return undefined
+      })
+      if (!body) return undefined
+      const hash = createHash("sha256")
+        .update(JSON.stringify([body.fields, body.text]))
+        .digest("hex")
+        .slice(0, 12)
+      const basedOn = `opencode@${InstallationVersion}#${hash}`
+      return { file: body.file, hash, text: `${front({ ...body.fields, basedOn })}${body.text}\n` }
+    })
+
+    // A copy's `basedOn` against OpenCode's text now.
+    const withBasedOn = Effect.fnUntraced(function* (list: Item[]) {
+      return yield* Effect.forEach(list, (item) =>
+        Effect.gen(function* () {
+          if (!item.basedOn) return item
+          const match = item.basedOn.version.match(/^opencode@([^#]*)#(.+)$/)
+          if (!match) return item
+          const current = yield* builtinCopy(item.kind, item.name)
+          return { ...item, basedOn: { version: match[1]!, changed: !!current && current.hash !== match[2] } }
+        }),
+      )
+    })
 
     // OpenCode's own: its built-in commands, agents, tools and skill.
     const builtins = Effect.fnUntraced(function* () {
@@ -488,12 +588,24 @@ const layer = Layer.effect(
               Effect.promise(() => skills("global", path.join(Global.Path.home, name), "skills/**/SKILL.md")),
             )).flat()
           : []
+        const own = scope.dir
+          ? yield* Effect.promise(async () => {
+              for (const name of [...JSON_NAMES].reverse()) {
+                const data = await readConfig(path.join(scope.dir!, name))
+                if (data) return data
+              }
+              return {}
+            })
+          : {}
         return {
           view: "namespace" as const,
           namespace,
           inherit: scope.inherit,
           found: ordered(read.found, { before: home, after: [] }, builtin),
           off: read.off,
+          config: Object.keys(own).filter(
+            (key) => !["$schema", "command", "agent", "mode", "mcp", "plugin"].includes(key),
+          ),
         }
       }
       const { ctx, scope, sources } = yield* projectSources()
@@ -505,6 +617,7 @@ const layer = Layer.effect(
         inherit: scope.inherit,
         found: ordered(read.found, external, builtin),
         off: read.off,
+        config: undefined,
       }
     })
 
@@ -514,7 +627,8 @@ const layer = Layer.effect(
         scope: all.view,
         namespace: all.namespace,
         inheritGlobal: all.inherit,
-        items: items(all.view, all.found, all.off),
+        items: yield* withBasedOn(items(all.view, all.found, all.off)),
+        ...(all.config ? { config: all.config } : {}),
       }
     })
 
@@ -599,15 +713,12 @@ const layer = Layer.effect(
     // commands go with their text; its agents, tools and skill are code and can't be copied.
     const copyInto = Effect.fnUntraced(function* (input: { kind: Kind; name: string }, source: Found, target: Target) {
       if (source.location === BUILTIN) {
-        if (input.kind !== "command" || input.name === Command.Default.MERGE)
+        const copy = yield* builtinCopy(input.kind, input.name)
+        if (!copy)
           return yield* fail(`OpenCode's ${input.kind} ${input.name} can't be copied; disable it, or define your own`)
-        const command = yield* commands.get(input.name)
-        const template = command ? yield* Effect.promise(async () => String(await command.template)) : ""
-        const file = path.join(target.dir, "commands", `${input.name}.md`)
+        const file = path.join(target.dir, copy.file)
         if (yield* Effect.promise(() => exists(file))) return yield* fail(`${file} exists already`)
-        yield* fsys
-          .writeWithDirs(file, `---\ndescription: ${JSON.stringify(command?.description ?? "")}\n---\n${template}\n`)
-          .pipe(Effect.orDie)
+        yield* fsys.writeWithDirs(file, copy.text).pipe(Effect.orDie)
         return
       }
       if (source.root) {
@@ -853,7 +964,63 @@ const layer = Layer.effect(
       return yield* after({ kind: input.kind, name, namespace: input.namespace }, target)
     })
 
-    return Service.of({ inventory, override, disable, revert, remove, create, copyTo, read, write })
+    // A copy of an OpenCode built-in takes OpenCode's current text (and a new `basedOn`).
+    const takeOpenCode = Effect.fn("OperatorCapabilities.takeOpenCode")(function* (input: {
+      kind: Kind
+      name: string
+      namespace?: string
+    }) {
+      const { item, definitions, target } = yield* lookup(input)
+      const own = definitions.at(-1)!
+      if (item.origin !== target.view || !own.root || !own.basedOn)
+        return yield* fail(`${input.name} here is not a copy of OpenCode's`)
+      const copy = yield* builtinCopy(input.kind, input.name)
+      if (!copy) return yield* fail(`OpenCode has no ${input.kind} ${input.name} now`)
+      yield* fsys.writeWithDirs(own.location, copy.text).pipe(Effect.orDie)
+      return yield* after(input, target)
+    })
+
+    // A new namespace's starting capabilities (§7): the chosen items of the source namespace's own
+    // layer (with OpenCode's copyable built-ins when the source is OpenCode), and the chosen keys of its
+    // config, copied into the new namespace's layer as its own. MCP logins are never copied.
+    const seed = Effect.fn("OperatorCapabilities.seed")(function* (input: SeedInput) {
+      const target = yield* targetOf(input.to)
+      const all = yield* gather(input.from)
+      for (const wanted of input.items) {
+        const definitions = all.found.filter((found) => found.kind === wanted.kind && found.name === wanted.name)
+        const source = definitions.at(-1)
+        if (!source) return yield* fail(`${input.from} has no ${wanted.kind} ${wanted.name}`)
+        if (source.origin === "global")
+          return yield* fail(`${wanted.name} is a global one: it is inherited, not copied`)
+        yield* copyInto(wanted, source, target)
+      }
+      if (input.config?.length) {
+        const layers = yield* operatorConfig.layers(input.from)
+        const from = yield* fileConfig(layers.targets.namespace)
+        const patch = Object.fromEntries(
+          input.config.filter((key) => key in from).map((key) => [key, OperatorConfig.whole(from[key])]),
+        )
+        if (Object.keys(patch).length) yield* target.patch(patch)
+      }
+      const listed = (yield* inventory({ namespace: input.to })).items
+      return listed.filter((item) =>
+        input.items.some((wanted) => wanted.kind === item.kind && wanted.name === item.name),
+      )
+    })
+
+    return Service.of({
+      inventory,
+      override,
+      disable,
+      revert,
+      remove,
+      create,
+      copyTo,
+      read,
+      write,
+      takeOpenCode,
+      seed,
+    })
   }),
 )
 
@@ -869,5 +1036,6 @@ export const node = LayerNode.make({
     OperatorConfig.node,
     OperatorReloadWhenIdle.node,
     RuntimeFlags.node,
+    Skill.node,
   ],
 })
