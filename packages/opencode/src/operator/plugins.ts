@@ -1,6 +1,7 @@
 import type { Plugin } from "@opencode-ai/plugin"
 import { Context, Fiber } from "effect"
 import { InstanceRef } from "@/effect/instance-ref"
+import { OperatorCapabilitySwitches } from "./capability-switches"
 import { OperatorProfile } from "./profile"
 import { OperatorProfileStore } from "./profile-store"
 import { OperatorProjects } from "./projects"
@@ -42,6 +43,10 @@ const PromptPlugin: Plugin = async (input) => {
   }
 
   return {
+    // Commands a project (or its namespace) turns off with `capabilities.disabled.commands`.
+    config: async (cfg) => {
+      OperatorCapabilitySwitches.removeDisabledCommands(cfg)
+    },
     // Registers the model call for recording (provider-tap.ts): its id goes in a header the provider tap
     // removes before the request leaves. Recording never gets in the way of the request.
     "chat.headers": async (hook, output) => {

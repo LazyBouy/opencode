@@ -37,6 +37,7 @@ import { ConfigV2Compat } from "./v2-compat"
 import { Npm } from "@opencode-ai/core/npm"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { OperatorNamespaceScope } from "@/operator/namespace-scope"
+import { OperatorCapabilitySwitches } from "@/operator/capability-switches"
 
 // Custom merge function that concatenates array fields instead of replacing them
 // Keep remeda's deep conditional merge type out of hot config-loading paths; TS profiling showed it dominates here.
@@ -600,6 +601,7 @@ const layer = Layer.effect(
           result.compaction = { ...result.compaction, prune: false }
         }
 
+        result = OperatorCapabilitySwitches.withoutDisabledPlugins(result)
         return {
           config: result,
           directories,

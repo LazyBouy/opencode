@@ -828,6 +828,41 @@ export const operatorScenarios: Scenario[] = [
     .post("/operator/trash/item", "operator.trash.item")
     .at((ctx) => ({ path: "/operator/trash/item", headers: ctx.headers(), body: { kind: "skill", name: "missing" } }))
     .status(400),
+  http.protected.get("/operator/capabilities", "operator.capability.list").json(200, (body) => {
+    object(body)
+    array(body.items)
+    check(
+      body.items.some(
+        (item) => isRecord(item) && item.kind === "tool" && item.name === "read" && item.origin === "opencode",
+      ),
+      "OpenCode's read tool should be listed as OpenCode's",
+    )
+  }),
+  http.protected
+    .post("/operator/capabilities/override", "operator.capability.override")
+    .at((ctx) => ({
+      path: "/operator/capabilities/override",
+      headers: ctx.headers(),
+      body: { kind: "agent", name: "build" },
+    }))
+    .status(400),
+  http.protected
+    .post("/operator/capabilities/disable", "operator.capability.disable")
+    .mutating()
+    .at((ctx) => ({
+      path: "/operator/capabilities/disable",
+      headers: ctx.headers(),
+      body: { kind: "tool", name: "webfetch" },
+    }))
+    .json(200, (body) => check(isRecord(body) && body.state === "disabled", "webfetch should be turned off"), "status"),
+  http.protected
+    .post("/operator/capabilities/revert", "operator.capability.revert")
+    .at((ctx) => ({
+      path: "/operator/capabilities/revert",
+      headers: ctx.headers(),
+      body: { kind: "command", name: "missing" },
+    }))
+    .status(400),
   http.protected
     .put("/operator/project-settings", "operator.projectSettings.update")
     .at((ctx) => ({

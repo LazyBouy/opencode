@@ -156,6 +156,15 @@ import type {
   OperatorCallRecountResponses,
   OperatorCallTokenizersErrors,
   OperatorCallTokenizersResponses,
+  OperatorCapabilityDisableErrors,
+  OperatorCapabilityDisableResponses,
+  OperatorCapabilityKind,
+  OperatorCapabilityListErrors,
+  OperatorCapabilityListResponses,
+  OperatorCapabilityOverrideErrors,
+  OperatorCapabilityOverrideResponses,
+  OperatorCapabilityRevertErrors,
+  OperatorCapabilityRevertResponses,
   OperatorConfigLayersErrors,
   OperatorConfigLayersResponses,
   OperatorConfigSchemaErrors,
@@ -4837,6 +4846,173 @@ export class Queue extends HeyApiClient {
   }
 }
 
+export class Capability extends HeyApiClient {
+  /**
+   * List capabilities by scope
+   *
+   * The project's commands, skills, tools, MCP servers, agents and plugins, each with the scope its definition comes from (OpenCode, Global, Namespace, Project), the farther definitions it replaces, and whether it is turned off. With `namespace`, that namespace's own instead.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      namespace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "namespace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorCapabilityListResponses,
+      OperatorCapabilityListErrors,
+      ThrowOnError
+    >({
+      url: "/operator/capabilities",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Override an inherited capability in the project
+   *
+   * Copy an inherited capability into the project to edit there: its file into the project's .opencode, or its config entry into the project's config. The copy wins; the source is unchanged.
+   */
+  public override<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      kind?: OperatorCapabilityKind
+      name?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "kind" },
+            { in: "body", key: "name" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorCapabilityOverrideResponses,
+      OperatorCapabilityOverrideErrors,
+      ThrowOnError
+    >({
+      url: "/operator/capabilities/override",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Turn an inherited capability off in the project
+   *
+   * MCP servers get enabled: false, agents disable: true, tools a deny permission, skills a deny skill permission, commands and plugins config capabilities.disabled; all in the project's config.
+   */
+  public disable<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      kind?: OperatorCapabilityKind
+      name?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "kind" },
+            { in: "body", key: "name" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorCapabilityDisableResponses,
+      OperatorCapabilityDisableErrors,
+      ThrowOnError
+    >({
+      url: "/operator/capabilities/disable",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Revert to the inherited capability
+   *
+   * Remove the project's switch, or its override (to Trash), so the inherited capability applies again.
+   */
+  public revert<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      kind?: OperatorCapabilityKind
+      name?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "kind" },
+            { in: "body", key: "name" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorCapabilityRevertResponses,
+      OperatorCapabilityRevertErrors,
+      ThrowOnError
+    >({
+      url: "/operator/capabilities/revert",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Operator extends HeyApiClient {
   /**
    * Get server status
@@ -4988,6 +5164,11 @@ export class Operator extends HeyApiClient {
   private _queue?: Queue
   get queue(): Queue {
     return (this._queue ??= new Queue({ client: this.client }))
+  }
+
+  private _capability?: Capability
+  get capability(): Capability {
+    return (this._capability ??= new Capability({ client: this.client }))
   }
 }
 

@@ -12,6 +12,7 @@ import { OperatorSessionPermissionApi } from "./groups/session-permissions"
 import { OperatorAgentSessionApi } from "./groups/agent-sessions"
 import { OperatorQueueApi } from "./groups/queue"
 import { OperatorTrashItemApi } from "./groups/trash"
+import { OperatorCapabilityApi } from "./groups/capabilities"
 
 export { OperatorRootApi } from "./groups/overview"
 
@@ -33,3 +34,4 @@ export const OperatorApi = HttpApi.make("operator")
   .addHttpApi(OperatorSessionPermissionApi)
   .addHttpApi(OperatorAgentSessionApi)
   .addHttpApi(OperatorQueueApi)
+  .addHttpApi(OperatorCapabilityApi)

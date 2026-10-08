@@ -26,6 +26,23 @@ export const fields = {
   merge: Schema.optional(ConfigMergeV1.Info).annotate({
     description: "Settings for `/merge`, which attaches external agent sessions such as Claude Code",
   }),
+  capabilities: Schema.optional(
+    Schema.Struct({
+      disabled: Schema.optional(
+        Schema.Struct({
+          commands: Schema.optional(Schema.Array(Schema.String)).annotate({
+            description: "Commands hidden here, though a farther scope (the namespace, the global config) defines them",
+          }),
+          plugins: Schema.optional(Schema.Array(Schema.String)).annotate({
+            description: "Plugins (package names or file names) left out here, though a farther scope adds them",
+          }),
+        }),
+      ),
+    }),
+  ).annotate({
+    description:
+      "Capabilities a project (or a namespace) turns off; MCP servers, agents, tools and skills use OpenCode's own switches (enabled: false, disable: true, permission deny)",
+  }),
   operatorRecordCalls: Schema.optional(Schema.Boolean).annotate({
     description:
       "Record every model call (the exact request and the response) for the session's Transcript view (default: true). Kept as long as the session.",

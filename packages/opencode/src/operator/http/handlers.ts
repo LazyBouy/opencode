@@ -16,6 +16,7 @@ import { operatorQueueHandlers } from "./handlers/queue"
 import { operatorTrashHandlers, operatorTrashItemHandlers } from "./handlers/trash"
 import { operatorProjectRecordHandlers } from "./handlers/project-records"
 import { operatorPermissionDecisionHandlers } from "./handlers/permission-decisions"
+import { operatorCapabilityHandlers } from "./handlers/capabilities"
 
 // Handler layers for OperatorApi (per project) and OperatorRootApi (server-wide), provided by
 // upstream's route assembly in one place each.
@@ -33,6 +34,7 @@ export const operatorHandlers = [
   operatorSessionPermissionsHandlers,
   operatorAgentSessionsHandlers,
   operatorQueueHandlers,
+  operatorCapabilityHandlers,
 ] as const
 export const operatorRootHandlers = [
   operatorOverviewHandlers,

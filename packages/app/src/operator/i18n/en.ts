@@ -444,6 +444,7 @@ export const dict = {
   "operator.trash.kind.tool": "Tool",
   "operator.trash.kind.mcp": "MCP server",
   "operator.trash.kind.memory": "Memory file",
+  "operator.trash.kind.plugin": "Plugin",
   "operator.page.trash.title": "Trash",
   "operator.page.trash.description":
     "Everything deleted in these pages, until it is restored or deleted for good. A project's whole folder is kept here, with its sessions archived.",

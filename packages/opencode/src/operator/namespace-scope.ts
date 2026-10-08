@@ -94,6 +94,22 @@ export async function layerOf(directory: string, worktree?: string): Promise<Lay
   return { namespace, project, dir, inherit }
 }
 
+// A namespace's own layer by id (for its Capabilities page, outside any project): its `.opencode`
+// folder when it exists, where it would be, and whether it inherits the global capabilities.
+export async function namespaceLayer(namespace: string) {
+  const record = await readJson(path.join(store(), namespace, "namespace.json"))
+  const folder = typeof record.folder === "string" && record.folder ? record.folder : undefined
+  const target = folder ? path.join(folder, CONFIG_DIR) : undefined
+  const dir = target && (await exists(target)) ? target : undefined
+  if (dir) owned.add(dir)
+  return { namespace, dir, target, inherit: namespace === OPENCODE || record.inheritGlobal !== false }
+}
+
+// The global folders that hold capability files (for telling scopes apart).
+export function isGlobalFolder(dir: string) {
+  return globalFolders().includes(dir)
+}
+
 // The config folders for `directory`: upstream's list with the namespace layer right after the global
 // config folder (first when the namespace leaves out the global folders). A non-git project under its
 // namespace folder would also reach the layer by walking up; it stays once, in the namespace position.

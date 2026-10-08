@@ -16655,6 +16655,308 @@
         ]
       }
     },
+    "/operator/capabilities": {
+      "get": {
+        "tags": ["operator capabilities"],
+        "operationId": "operator.capability.list",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "namespace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The capabilities",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorCapabilities"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The project's commands, skills, tools, MCP servers, agents and plugins, each with the scope its definition comes from (OpenCode, Global, Namespace, Project), the farther definitions it replaces, and whether it is turned off. With `namespace`, that namespace's own instead.",
+        "summary": "List capabilities by scope",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.capability.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/capabilities/override": {
+      "post": {
+        "tags": ["operator capabilities"],
+        "operationId": "operator.capability.override",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The capability, now the project's own",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorCapability"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorCapabilityError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorCapabilityError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Copy an inherited capability into the project to edit there: its file into the project's .opencode, or its config entry into the project's config. The copy wins; the source is unchanged.",
+        "summary": "Override an inherited capability in the project",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "$ref": "#/components/schemas/OperatorCapabilityKind"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": ["kind", "name"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.capability.override({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/capabilities/disable": {
+      "post": {
+        "tags": ["operator capabilities"],
+        "operationId": "operator.capability.disable",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The capability, now turned off",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorCapability"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorCapabilityError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorCapabilityError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "MCP servers get enabled: false, agents disable: true, tools a deny permission, skills a deny skill permission, commands and plugins config capabilities.disabled; all in the project's config.",
+        "summary": "Turn an inherited capability off in the project",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "$ref": "#/components/schemas/OperatorCapabilityKind"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": ["kind", "name"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.capability.disable({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/capabilities/revert": {
+      "post": {
+        "tags": ["operator capabilities"],
+        "operationId": "operator.capability.revert",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The capability as inherited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorCapability"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorCapabilityError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorCapabilityError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Remove the project's switch, or its override (to Trash), so the inherited capability applies again.",
+        "summary": "Revert to the inherited capability",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "$ref": "#/components/schemas/OperatorCapabilityKind"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": ["kind", "name"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.capability.revert({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "tags": ["opencode HttpApi"],
@@ -28543,6 +28845,30 @@
             },
             "additionalProperties": false
           },
+          "capabilities": {
+            "type": "object",
+            "properties": {
+              "disabled": {
+                "type": "object",
+                "properties": {
+                  "commands": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "plugins": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
           "operatorRecordCalls": {
             "type": "boolean"
           }
@@ -29688,7 +30014,8 @@
           "command",
           "tool",
           "mcp",
-          "memory"
+          "memory",
+          "plugin"
         ]
       },
       "OperatorTrashEntry": {
@@ -35123,6 +35450,111 @@
           "name": {
             "type": "string",
             "enum": ["OperatorQueueInvalidError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorCapabilityKind": {
+        "type": "string",
+        "enum": ["command", "skill", "tool", "mcp", "agent", "plugin"]
+      },
+      "OperatorCapabilityOrigin": {
+        "type": "string",
+        "enum": ["opencode", "global", "namespace", "project"]
+      },
+      "OperatorCapabilityState": {
+        "type": "string",
+        "enum": ["local", "inherited", "overridden", "disabled"]
+      },
+      "OperatorCapabilityDefinition": {
+        "type": "object",
+        "properties": {
+          "origin": {
+            "$ref": "#/components/schemas/OperatorCapabilityOrigin"
+          },
+          "location": {
+            "type": "string",
+            "description": "Its file, or `<config file>#<section>.<name>` for a config entry; `<built-in>` for OpenCode's own"
+          }
+        },
+        "required": ["origin", "location"],
+        "additionalProperties": false
+      },
+      "OperatorCapability": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/OperatorCapabilityKind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/OperatorCapabilityOrigin"
+          },
+          "location": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/OperatorCapabilityState"
+          },
+          "hides": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorCapabilityDefinition"
+            },
+            "description": "Farther definitions of the same name this one replaces"
+          },
+          "disabledAt": {
+            "$ref": "#/components/schemas/OperatorCapabilityDefinition"
+          }
+        },
+        "required": ["kind", "name", "origin", "location", "state", "hides"],
+        "additionalProperties": false
+      },
+      "OperatorCapabilities": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": ["project", "namespace"]
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "inheritGlobal": {
+            "type": "boolean"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorCapability"
+            }
+          }
+        },
+        "required": ["scope", "namespace", "inheritGlobal", "items"],
+        "additionalProperties": false
+      },
+      "OperatorCapabilityError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorCapabilityError"]
           },
           "data": {
             "type": "object",
@@ -48838,6 +49270,10 @@
     {
       "name": "operator queue",
       "description": "Agent input queue routes."
+    },
+    {
+      "name": "operator capabilities",
+      "description": "Capability routes."
     },
     {
       "name": "opencode HttpApi",

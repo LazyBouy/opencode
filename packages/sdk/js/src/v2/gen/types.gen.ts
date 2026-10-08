@@ -2064,6 +2064,12 @@ export type Config = {
       }
     }
   }
+  capabilities?: {
+    disabled?: {
+      commands?: Array<string>
+      plugins?: Array<string>
+    }
+  }
   operatorRecordCalls?: boolean
 }
 
@@ -2529,6 +2535,7 @@ export type OperatorTrashKind =
   | "tool"
   | "mcp"
   | "memory"
+  | "plugin"
 
 export type OperatorTrashEntry = {
   id: string
@@ -4673,6 +4680,48 @@ export type OperatorQueueNotFoundError = {
 
 export type OperatorQueueInvalidError = {
   name: "OperatorQueueInvalidError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorCapabilityKind = "command" | "skill" | "tool" | "mcp" | "agent" | "plugin"
+
+export type OperatorCapabilityOrigin = "opencode" | "global" | "namespace" | "project"
+
+export type OperatorCapabilityState = "local" | "inherited" | "overridden" | "disabled"
+
+export type OperatorCapabilityDefinition = {
+  origin: OperatorCapabilityOrigin
+  /**
+   * Its file, or `<config file>#<section>.<name>` for a config entry; `<built-in>` for OpenCode's own
+   */
+  location: string
+}
+
+export type OperatorCapability = {
+  kind: OperatorCapabilityKind
+  name: string
+  description?: string
+  origin: OperatorCapabilityOrigin
+  location: string
+  state: OperatorCapabilityState
+  /**
+   * Farther definitions of the same name this one replaces
+   */
+  hides: Array<OperatorCapabilityDefinition>
+  disabledAt?: OperatorCapabilityDefinition
+}
+
+export type OperatorCapabilities = {
+  scope: "project" | "namespace"
+  namespace: string
+  inheritGlobal: boolean
+  items: Array<OperatorCapability>
+}
+
+export type OperatorCapabilityError = {
+  name: "OperatorCapabilityError"
   data: {
     message: string
   }
@@ -16432,6 +16481,131 @@ export type OperatorQueueCancelResponses = {
 }
 
 export type OperatorQueueCancelResponse = OperatorQueueCancelResponses[keyof OperatorQueueCancelResponses]
+
+export type OperatorCapabilityListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    namespace?: string
+  }
+  url: "/operator/capabilities"
+}
+
+export type OperatorCapabilityListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorCapabilityListError = OperatorCapabilityListErrors[keyof OperatorCapabilityListErrors]
+
+export type OperatorCapabilityListResponses = {
+  /**
+   * The capabilities
+   */
+  200: OperatorCapabilities
+}
+
+export type OperatorCapabilityListResponse = OperatorCapabilityListResponses[keyof OperatorCapabilityListResponses]
+
+export type OperatorCapabilityOverrideData = {
+  body?: {
+    kind: OperatorCapabilityKind
+    name: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/capabilities/override"
+}
+
+export type OperatorCapabilityOverrideErrors = {
+  /**
+   * OperatorCapabilityError | InvalidRequestError
+   */
+  400: OperatorCapabilityError | InvalidRequestError
+}
+
+export type OperatorCapabilityOverrideError = OperatorCapabilityOverrideErrors[keyof OperatorCapabilityOverrideErrors]
+
+export type OperatorCapabilityOverrideResponses = {
+  /**
+   * The capability, now the project's own
+   */
+  200: OperatorCapability
+}
+
+export type OperatorCapabilityOverrideResponse =
+  OperatorCapabilityOverrideResponses[keyof OperatorCapabilityOverrideResponses]
+
+export type OperatorCapabilityDisableData = {
+  body?: {
+    kind: OperatorCapabilityKind
+    name: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/capabilities/disable"
+}
+
+export type OperatorCapabilityDisableErrors = {
+  /**
+   * OperatorCapabilityError | InvalidRequestError
+   */
+  400: OperatorCapabilityError | InvalidRequestError
+}
+
+export type OperatorCapabilityDisableError = OperatorCapabilityDisableErrors[keyof OperatorCapabilityDisableErrors]
+
+export type OperatorCapabilityDisableResponses = {
+  /**
+   * The capability, now turned off
+   */
+  200: OperatorCapability
+}
+
+export type OperatorCapabilityDisableResponse =
+  OperatorCapabilityDisableResponses[keyof OperatorCapabilityDisableResponses]
+
+export type OperatorCapabilityRevertData = {
+  body?: {
+    kind: OperatorCapabilityKind
+    name: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/capabilities/revert"
+}
+
+export type OperatorCapabilityRevertErrors = {
+  /**
+   * OperatorCapabilityError | InvalidRequestError
+   */
+  400: OperatorCapabilityError | InvalidRequestError
+}
+
+export type OperatorCapabilityRevertError = OperatorCapabilityRevertErrors[keyof OperatorCapabilityRevertErrors]
+
+export type OperatorCapabilityRevertResponses = {
+  /**
+   * The capability as inherited
+   */
+  200: OperatorCapability
+}
+
+export type OperatorCapabilityRevertResponse =
+  OperatorCapabilityRevertResponses[keyof OperatorCapabilityRevertResponses]
 
 export type V2HealthGetData = {
   body?: never
