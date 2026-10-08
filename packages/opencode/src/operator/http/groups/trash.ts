@@ -50,6 +50,8 @@ export const OperatorTrashGroup = HttpApiGroup.make("operatorTrash")
       ),
     ),
     HttpApiEndpoint.post("session", OperatorTrashPaths.session, {
+      // The session's folder, so it is archived in its own project's instance.
+      query: WorkspaceRoutingQuery,
       payload: Schema.Struct({ sessionID: Schema.String }),
       success: described(OperatorTrash.Entry, "The Trash entry"),
       error: ApiTrashError,

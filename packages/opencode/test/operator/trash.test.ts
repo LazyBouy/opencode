@@ -118,4 +118,32 @@ describe("Trash", () => {
 
     expect((await item("skill", "nothing-here")).status).toBe(400)
   })
+
+  test("a session goes to Trash with its subagents' sessions as one entry, and comes back with them", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const where = `?directory=${encodeURIComponent(tmp.path)}`
+    const create = async (body: object) => read<{ id: string }>(await call("POST", `/session${where}`, body))
+    const parent = await create({ title: "Parent" })
+    const child = await create({ title: "Subagent", parentID: parent.id })
+    const grandchild = await create({ title: "Its subagent", parentID: child.id })
+    const archived = async (id: string) =>
+      (await read<{ time: { archived?: number } }>(await app().request(`/session/${id}${where}`))).time.archived
+
+    const moved = await call("POST", `/operator/trash/session${where}`, { sessionID: parent.id })
+    expect(moved.status).toBe(200)
+    const entry = await read<Entry & { sessions: string[] }>(moved)
+    expect(entry.kind).toBe("session")
+    expect(entry.sessions.toSorted()).toEqual([parent.id, child.id, grandchild.id].toSorted())
+    for (const id of [parent.id, child.id, grandchild.id]) expect(await archived(id)).toBeNumber()
+    expect((await read<Entry[]>(await app().request("/operator/trash"))).map((item) => item.id)).toContain(entry.id)
+
+    expect((await call("POST", `/operator/trash/${entry.id}/restore`)).status).toBe(200)
+    for (const id of [parent.id, child.id, grandchild.id]) expect(await archived(id)).toBeUndefined()
+  })
+
+  test("a session that doesn't exist is refused with the reason", async () => {
+    const moved = await call("POST", "/operator/trash/session", { sessionID: "ses_missing" })
+    expect(moved.status).toBe(400)
+    expect(JSON.stringify(await moved.json())).toContain("No session ses_missing")
+  })
 })

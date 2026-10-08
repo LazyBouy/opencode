@@ -1945,6 +1945,15 @@ export const dict = {
     "Written by the dynamic generator (a helper agent) from this layer's prompt, the project (its name, the org and project purposes, README, AGENTS.md and manifest) and the session's first message, once per session. The session's next turns and its subagents reuse it.",
   "operator.profile.sampleAgentOption": "{{name}} ({{details}})",
   "operator.profile.cameFrom": "Came from",
+  "operator.chatTrash.menu": "Move to Trash",
+  "operator.chatTrash.running": "It is running; it will be stopped.",
+  "operator.chatTrash.moved": "Moved to Trash",
+  "operator.chatTrash.undo": "Undo",
+  "operator.chatTrash.openTrash": "Open Trash",
+  "operator.chatTrash.failed": "Couldn't move to Trash: {{reason}}",
+  "operator.chatTrash.notFound": "the session wasn't found on the server",
+  "operator.chatTrash.restored": "Restored from Trash",
+  "operator.chatTrash.restoreFailed": "Couldn't restore it",
   // Capabilities → Skills → "How skills reach an agent" (specs/docs/feedbacks/capabilities/skill/
   // skills_rules_note_spec.md §3, word for word; ui/note-text.ts reads the markup). Re-check it against
   // the code after an upstream merge (FORK.md).

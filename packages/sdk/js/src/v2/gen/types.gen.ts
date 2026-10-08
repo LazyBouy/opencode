@@ -10769,7 +10769,10 @@ export type OperatorTrashSessionData = {
     sessionID: string
   }
   path?: never
-  query?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
   url: "/operator/trash/session"
 }
 

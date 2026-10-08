@@ -2893,11 +2893,24 @@ export class Trash extends HeyApiClient {
    */
   public session<ThrowOnError extends boolean = false>(
     parameters?: {
+      directory?: string
+      workspace?: string
       sessionID?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "sessionID" }] }])
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "sessionID" },
+          ],
+        },
+      ],
+    )
     return (options?.client ?? this.client).post<
       OperatorTrashSessionResponses,
       OperatorTrashSessionErrors,

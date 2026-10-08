@@ -1559,9 +1559,14 @@ export function MessageTimeline(props: {
                                 {OperatorSessionViews.menuItems(id, "v1")}
                                 <DropdownMenu.Separator />
                                 <DropdownMenu.Item
-                                  onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id} />)}
+                                  onSelect={() =>
+                                    OperatorSessionViews.trash(id) ??
+                                    dialog.show(() => <DialogDeleteSession sessionID={id} />)
+                                  }
                                 >
-                                  <DropdownMenu.ItemLabel>{language.t("common.delete")}</DropdownMenu.ItemLabel>
+                                  <DropdownMenu.ItemLabel>
+                                    {OperatorSessionViews.trashLabel() ?? language.t("common.delete")}
+                                  </DropdownMenu.ItemLabel>
                                 </DropdownMenu.Item>
                               </DropdownMenu.Content>
                             </DropdownMenu.Portal>
@@ -1633,8 +1638,13 @@ export function MessageTimeline(props: {
                               </MenuV2.Item>
                               {OperatorSessionViews.menuItems(id, "v2")}
                               <MenuV2.Separator />
-                              <MenuV2.Item onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id} />)}>
-                                {language.t("common.delete")}...
+                              <MenuV2.Item
+                                onSelect={() =>
+                                  OperatorSessionViews.trash(id) ??
+                                  dialog.show(() => <DialogDeleteSession sessionID={id} />)
+                                }
+                              >
+                                {OperatorSessionViews.trashLabel() ?? language.t("common.delete")}...
                               </MenuV2.Item>
                             </MenuV2.Content>
                           </MenuV2.Portal>

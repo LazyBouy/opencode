@@ -242,7 +242,9 @@ export interface OperatorMock {
     files: { path: string; stored: string }[]
     project?: string
   }>
-  trashWrites: Array<{ method: string; path: string; body: unknown }>
+  trashWrites: Array<{ method: string; path: string; body: unknown; directory?: string }>
+  // A reason the next move to Trash fails with.
+  trashFail?: string
   toolPromptQueries: URLSearchParams[]
   permissionWrites: Array<{ agent: string; body: { scope: string; rules: Array<Record<string, string>> } }>
   ownRules: Record<string, Array<{ permission: string; pattern: string; action: "allow" | "ask" | "deny" }>>
@@ -403,7 +405,15 @@ export async function mockOperator(page: Page) {
       ])
     if (url.pathname === "/operator/trash" || url.pathname.startsWith("/operator/trash/")) {
       const body = method === "GET" || method === "DELETE" ? null : route.request().postDataJSON()
-      if (method !== "GET") state.trashWrites.push({ method, path: url.pathname, body })
+      if (method !== "GET")
+        state.trashWrites.push({
+          method,
+          path: url.pathname,
+          body,
+          ...(url.searchParams.get("directory") ? { directory: url.searchParams.get("directory")! } : {}),
+        })
+      if (state.trashFail && method === "POST" && !url.pathname.endsWith("/restore"))
+        return json(route, { name: "OperatorTrashError", data: { message: state.trashFail } }, 400)
       if (method === "GET") return json(route, state.trash)
       if (method === "DELETE" && url.pathname === "/operator/trash") {
         const purged = state.trash.length
@@ -425,6 +435,7 @@ export async function mockOperator(page: Page) {
         deletedAt: now,
         files: input.key ? [{ path: input.key, stored: "files/0" }] : [],
         ...(input.key ? { project: input.key } : {}),
+        ...(input.sessionID ? { sessions: [input.sessionID] } : {}),
       }
       state.trash.push(entry)
       return json(route, entry)
