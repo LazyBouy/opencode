@@ -1940,9 +1940,74 @@ export const dict = {
   "operator.layer.source.generated.mcp":
     "The instructions that MCP servers (the mcp key in config) send when they connect, for servers whose tools the agent may use. Empty when no connected server sends any.",
   "operator.layer.source.generated.skills":
-    "The skills the agent may load, each with its name, description and file: OpenCode's own; SKILL.md files under skills/ in ~/.config/opencode/ and the project's .opencode/; under .claude/skills/ and .agents/skills/ in the home folder and the project; and the paths and URLs in the skills key of config. Only those the agent's skill permission allows; nothing when it may not use skills.",
+    "The skills the agent may load, each with its name, description and file. Found in: OpenCode's own; `skill/` or `skills/` in OpenCode's config folders (`~/.config/opencode`, every `.opencode` from the working folder up to the project root, `~/.opencode`, `OPENCODE_CONFIG_DIR`); `.claude/skills` and `.agents/skills` in the home folder and from the working folder up to the project root; and the paths and URLs of the `skills` config key. A skill needs a `name`; one without a `description` is not listed. Only skills the agent's `skill` permission does not deny are listed; none when its last `skill` rule is `*: deny`. See Capabilities → Skills → How skills reach an agent.",
   "operator.layer.source.written":
     "Written by the dynamic generator (a helper agent) from this layer's prompt, the project (its name, the org and project purposes, README, AGENTS.md and manifest) and the session's first message, once per session. The session's next turns and its subagents reuse it.",
   "operator.profile.sampleAgentOption": "{{name}} ({{details}})",
   "operator.profile.cameFrom": "Came from",
+  // Capabilities → Skills → "How skills reach an agent" (specs/docs/feedbacks/capabilities/skill/
+  // skills_rules_note_spec.md §3, word for word; ui/note-text.ts reads the markup). Re-check it against
+  // the code after an upstream merge (FORK.md).
+  "operator.skillsNote.summary":
+    "How skills reach an agent: where OpenCode finds skills, and how to give an agent only some of them",
+  "operator.skillsNote.text": `### Where OpenCode finds skills
+
+A skill is a \`SKILL.md\` file. OpenCode collects skills from:
+
+- **OpenCode's own** \`customize-opencode\` skill. A skill of yours with the same name replaces it.
+- **OpenCode config folders**, in \`skill/\` or \`skills/\` (any depth below):
+  - \`~/.config/opencode/\`;
+  - every \`.opencode/\` folder from the working folder up to the project root;
+  - \`~/.opencode/\`;
+  - the folder in \`OPENCODE_CONFIG_DIR\`.
+- **\`.claude/skills/\` and \`.agents/skills/\`**, in your home folder and in every folder from the working folder up to the project root. Outside a git project, that is all the way up to \`/\`.
+  - \`OPENCODE_DISABLE_EXTERNAL_SKILLS\` turns both off.
+  - \`OPENCODE_DISABLE_CLAUDE_CODE_SKILLS\` (or \`OPENCODE_DISABLE_CLAUDE_CODE\`) turns off only \`.claude\`.
+- **The \`skills\` key in config:** \`paths\` (folders, searched at any depth; relative to the working folder; \`~/\` allowed) and \`urls\` (downloaded skill packs).
+
+A skill **must have a \`name\`** in its frontmatter, or it is ignored. A skill **without a \`description\`** still loads, but it is left out of the list the agent sees; the agent can only load it if it knows the name. If two skills share a name, only one is kept.
+
+### How an agent gets them
+
+Every agent sees the same collected skills, filtered by its **\`skill\` permission**. The pattern of a \`skill\` rule is the **skill's name**; wildcards work, e.g. \`rtl-*\`.
+
+- **Listed for the agent:** every skill whose rule is not \`deny\`. \`ask\` skills are listed too.
+- **Loading a skill** checks the rule again: \`allow\` loads it, \`ask\` asks you, \`deny\` refuses, even if the agent guesses a hidden skill's name.
+- **No skills at all:** when the agent's last \`skill\` rule is \`"*": "deny"\`, the skills list and the \`skill\` tool are both removed.
+
+Rules are checked from the last one up: **the last rule that matches wins.**
+
+### Giving one agent only some skills
+
+In the agent's config entry (or under \`permission:\` in its agent file):
+
+\`\`\`jsonc
+"agent": {
+  "reviewer": {
+    "permission": {
+      "skill": { "*": "deny", "effect": "allow", "rtl-*": "ask" }
+    }
+  }
+}
+\`\`\`
+
+Put \`"*": "deny"\` **first** and the exceptions after it. If \`"*": "deny"\` comes last, it is the last \`skill\` rule, so the agent gets no skills at all, not even \`effect\`.
+
+In the operator: [open the agent's **Permissions** tab](#agent-permissions) and add rules with permission \`skill\`, one pattern per skill name.
+
+To change every agent, use the top-level \`permission\` key in [config](#config). It applies to all agents, before each agent's own rules:
+
+\`\`\`jsonc
+"permission": { "skill": { "*": "allow", "experimental-*": "deny" } }
+\`\`\`
+
+### Good to know
+
+- **OpenCode's built-in agents** \`build\`, \`plan\` and \`general\` start from "allow everything", so they get every skill. **\`explore\`** denies everything it does not list, and \`skill\` is not listed, so it gets **no skills** unless your config allows them.
+- **A session's own permission rules** (from the session's Permissions, or "Allow for session") affect **loading** only. The skills list in the agent's system prompt uses the agent's rules, so a skill denied for one session is still listed, and loading it fails.
+- **The project:** which skills exist can differ per project and per working folder, because the \`.opencode\`, \`.claude\` and \`.agents\` folders are found from the working folder up to the project root.`,
+  "operator.skillsNote.copy": "Copy",
+  "operator.skillsNote.copied": "Copied",
+  "operator.skillsNote.pickAgent": "Open the Permissions of",
+  "operator.skillsNote.noAgents": "No agents in this project",
 }

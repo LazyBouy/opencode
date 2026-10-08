@@ -19,6 +19,7 @@ import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOve
 import { useTrashItem } from "./trash"
 import { ScopePicker } from "../ui/scope-picker"
 import { useOverlayParams } from "../ui/overlay-nav"
+import { SkillsNote } from "./skills-note"
 
 // Where OpenCode's own skills say they live, and OpenCode's own commands (`Default` in
 // command/index.ts; `merge` is the fork's).
@@ -190,6 +191,7 @@ export default function CapabilitiesPage() {
             />
           </TabsV2.Content>
           <TabsV2.Content value="skills">
+            <SkillsNote directory={directory()!} />
             <div data-slot="operator-toolbar">{search}</div>
             <DataTable
               columnsKey="skills"

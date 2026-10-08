@@ -1244,3 +1244,65 @@ details[data-slot="operator-as-sent"] [data-component="operator-code"][data-mode
   align-items: center;
   gap: 8px;
 }
+
+/* Capabilities → Skills: "How skills reach an agent", a note closed by default (pages/skills-note.tsx). */
+[data-component="operator-skills-note"] {
+  border: 1px solid var(--v2-border-border-muted);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--v2-text-text-muted);
+}
+[data-component="operator-skills-note"] > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  list-style: none;
+}
+[data-component="operator-skills-note"] > summary::-webkit-details-marker {
+  display: none;
+}
+[data-component="operator-skills-note"] > summary::after {
+  content: "▸";
+  margin-left: 2px;
+}
+[data-component="operator-skills-note"][open] > summary::after {
+  content: "▾";
+}
+[data-slot="operator-skills-note-body"] {
+  max-width: 80ch;
+  margin-top: 8px;
+  color: var(--v2-text-text-base);
+  line-height: 1.5;
+}
+[data-slot="operator-skills-note-body"] h3 {
+  font-weight: 600;
+  margin: 12px 0 4px;
+}
+[data-slot="operator-skills-note-body"] p {
+  margin: 6px 0;
+}
+[data-slot="operator-skills-note-body"] ul {
+  list-style: disc;
+  padding-left: 20px;
+  margin: 4px 0;
+}
+[data-slot="operator-skills-note-body"] code {
+  font-family: var(--font-family-mono, monospace);
+  font-size: 12px;
+}
+[data-slot="operator-note-code"] {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 6px 0;
+}
+[data-slot="operator-note-code"] pre {
+  flex: 1;
+  overflow-x: auto;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--v2-background-bg-layer-02);
+}

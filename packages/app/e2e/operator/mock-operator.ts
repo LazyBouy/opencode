@@ -762,15 +762,18 @@ export async function mockOperator(page: Page) {
       return route.fallback()
     },
   )
-  await page.route("**/skill*", (route) =>
-    json(route, [
-      {
-        name: "release-notes",
-        description: "Write release notes",
-        location: `${directory}/.opencode/skills/release-notes/SKILL.md`,
-        content: "",
-      },
-    ]),
+  // The API path only: a glob would also catch the app's own modules named skill… (pages/skills-note.tsx).
+  await page.route(
+    (url) => url.pathname === "/skill",
+    (route) =>
+      json(route, [
+        {
+          name: "release-notes",
+          description: "Write release notes",
+          location: `${directory}/.opencode/skills/release-notes/SKILL.md`,
+          content: "",
+        },
+      ]),
   )
   await page.route("**/command*", (route) =>
     new URL(route.request().url()).pathname === "/command"
