@@ -201,6 +201,18 @@ describe("capabilities by scope", () => {
     ).toEqual(sourceFiles)
   })
 
+  test("OpenCode's own /init can be turned off and back on in a project", async () => {
+    await using own = await tmpdir({ git: true })
+    expect(await names("/command", own.path)).toContain("init")
+    expect((await act("disable", own.path, "command", "init")).body).toMatchObject({ state: "disabled" })
+    await settle(async () => !(await names("/command", own.path)).includes("init"))
+    expect(await names("/command", own.path)).not.toContain("init")
+    expect(await names("/command", own.path)).toContain("merge")
+    expect((await act("revert", own.path, "command", "init")).body.state).toBe("inherited")
+    await settle(async () => (await names("/command", own.path)).includes("init"))
+    expect(await names("/command", own.path)).toContain("init")
+  })
+
   test("/merge can't be turned off, and OpenCode's tools can't be copied", async () => {
     await using own = await tmpdir({ git: true })
     expect((await act("disable", own.path, "command", "merge")).status).toBe(400)
@@ -464,5 +476,8 @@ describe("the fork's switches", () => {
     expect(OperatorCapabilitySwitches.withoutDisabledPlugins(config).plugin_origins).toEqual([{ spec: "keep-me" }])
     OperatorCapabilitySwitches.removeDisabledCommands(config)
     expect(Object.keys(config.command)).toEqual(["other"])
+    const reserved = { capabilities: { disabled: { commands: ["merge"] } }, command: { merge: { template: "" } } }
+    OperatorCapabilitySwitches.removeDisabledCommands(reserved, ["merge"])
+    expect(Object.keys(reserved.command)).toEqual(["merge"])
   })
 })

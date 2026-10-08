@@ -10,6 +10,7 @@ import { Skill } from "../skill"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 import { LegacyEvent } from "@opencode-ai/schema/legacy-event"
+import { OperatorCapabilitySwitches } from "@/operator/capability-switches"
 
 type State = {
   commands: Record<string, Info>
@@ -162,6 +163,7 @@ const layer = Layer.effect(
         template: "",
         hints: ["$ARGUMENTS"],
       }
+      OperatorCapabilitySwitches.removeDisabledCommands({ ...cfg, command: commands }, [Default.MERGE])
 
       return {
         commands,

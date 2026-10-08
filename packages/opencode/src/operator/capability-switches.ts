@@ -5,8 +5,9 @@ import { parsePluginSpecifier } from "@/plugin/shared"
 import { isRecord } from "@/util/record"
 
 // The fork's own switches for capabilities OpenCode has none for (capability_scopes_spec.md §5): config
-// `capabilities.disabled.commands` and `.plugins`. Commands are removed through the fork plugin's
-// `config` hook; plugins are left out where Config finishes merging (one line in config/config.ts).
+// `capabilities.disabled.commands` and `.plugins`. Commands are removed where command/index.ts builds
+// its list (one line, so OpenCode's built-ins, MCP prompts and skills go too); plugins are left out
+// where Config finishes merging (one line in config/config.ts).
 // Kept free of service imports: config/config.ts imports it.
 
 // A plugin's name: its package for npm specs, its file name for local files.
@@ -45,8 +46,9 @@ export function withoutDisabledPlugins<T extends { plugin?: unknown[]; plugin_or
   }
 }
 
-// Removes the commands `capabilities.disabled` turns off from a config's `command` entries.
-export function removeDisabledCommands(config: unknown) {
+// Removes the commands `capabilities.disabled` turns off from a command list (config's `command`, or
+// command/index.ts's whole list: built-ins, MCP prompts and skills too), but never the reserved ones.
+export function removeDisabledCommands(config: unknown, reserved: ReadonlyArray<string> = []) {
   if (!isRecord(config) || !isRecord(config.command)) return
-  for (const name of disabledList(config, "commands")) delete config.command[name]
+  for (const name of disabledList(config, "commands")) if (!reserved.includes(name)) delete config.command[name]
 }
