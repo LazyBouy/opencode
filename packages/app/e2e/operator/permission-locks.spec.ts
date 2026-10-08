@@ -13,16 +13,16 @@ test("an agent's rules lock one by one, or all at once", async ({ page }) => {
   const state = await mockOperator(page)
   await page.goto(`/operator/agents/build${dir}&tab=permissions`)
   const table = page.getByRole("table", { name: "Permissions" })
-  await expect(table.getByRole("columnheader", { name: /Sessions may override/ })).toBeVisible()
+  await expect(table.getByRole("columnheader", { name: /Can be overridden below/ })).toBeVisible()
   const webfetch = table.getByRole("row", { name: /webfetch/ })
-  await expect(webfetch.getByRole("checkbox", { name: "Sessions may override webfetch *" })).toBeChecked()
+  await expect(webfetch.getByRole("checkbox", { name: "webfetch * can be overridden below" })).toBeChecked()
   await webfetch.locator('[data-slot="checkbox-v2-control"]').click()
   await expect.poll(() => state.lockWrites.length).toBe(1)
   expect(state.lockWrites[0]).toEqual({
     agent: "build",
     body: { locks: [{ permission: "webfetch", pattern: "*" }], inherit: "own" },
   })
-  await expect(webfetch.getByRole("checkbox", { name: "Sessions may override webfetch *" })).not.toBeChecked()
+  await expect(webfetch.getByRole("checkbox", { name: "webfetch * can be overridden below" })).not.toBeChecked()
 
   await page.getByRole("button", { name: "Lock all", exact: true }).click()
   await expect.poll(() => state.lockWrites.length).toBe(2)
@@ -32,20 +32,17 @@ test("an agent's rules lock one by one, or all at once", async ({ page }) => {
   expect(state.lockWrites[2]!.body).toEqual({ locks: [], inherit: "own" })
 })
 
-test("a session's permissions show the agent's rules it does not override, then its own", async ({ page }) => {
+test("a session's permissions show what it inherits, locked lines marked, and its changes", async ({ page }) => {
   const state = await mockOperator(page)
   state.locks.build = { locks: [{ permission: "webfetch", pattern: "*" }], inherit: "own" }
   state.sessionRules.ses_op_1 = [{ permission: "read", pattern: "*.env", action: "allow", origin: "user" }]
   await page.goto(`/operator/sessions${dir}&session=ses_op_1&stab=permissions`)
-  const agent = page.getByTestId("session-permissions-agent")
-  await expect(agent).toContainText("From the agent (build)")
-  // The agent's `read *.env` is overridden by the session's: it is not listed here.
-  await expect(agent.getByRole("row", { name: /\*\.env/ })).toHaveCount(0)
-  await expect(agent.getByRole("row", { name: /webfetch/ }).getByTestId("rule-locked")).toHaveText("Locked")
-  const own = page.getByTestId("session-permissions-own")
-  await expect(own.getByTestId("session-overrides")).toContainText(
-    "read *.env allow overrides the agent's #3 read *.env ask",
+  const inherited = page.getByTestId("session-permissions-own").getByTestId("level-inherited")
+  await expect(inherited.getByRole("row", { name: /webfetch/ }).getByTestId("locked-above")).toHaveText(
+    "Locked by Agent",
   )
+  // The session changes the agent's `read *.env` on its own line.
+  await expect(inherited.getByRole("row", { name: /\*\.env/ })).toContainText("changed here (was ask)")
 
   // Every rule locked: nothing to change.
   state.locks.build = {
@@ -102,6 +99,6 @@ test("the chat's … menu opens the session's permissions", async ({ page }) => 
   await page.getByRole("button", { name: "More options" }).first().click()
   await page.getByRole("menuitem", { name: /Session permissions/ }).click()
   const dialog = page.getByTestId("session-menu-permissions")
-  await expect(dialog.getByTestId("session-permissions-agent")).toBeVisible()
   await expect(dialog.getByTestId("session-permissions-own")).toBeVisible()
+  await expect(dialog.getByTestId("level-editor")).toBeVisible()
 })

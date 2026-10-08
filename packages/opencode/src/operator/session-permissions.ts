@@ -13,6 +13,7 @@ import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { OperatorAgentPermissions } from "./agent-permissions"
 import { OperatorPermissionHook } from "./permission-hook"
+import { OperatorNamespaceScope } from "./namespace-scope"
 import { OperatorPermissionLive } from "./permission-live"
 import { OperatorPermissionLocks } from "./permission-locks"
 import { OperatorPermissionModel } from "./permission-model"
@@ -136,6 +137,9 @@ export const Info = Schema.Struct({
       "The agent's rules the session may not override (with its parent's, for a subagent that inherits them)",
   }),
   allLocked: Schema.Boolean.annotate({ description: "Every rule of the agent's list is locked: nothing to change" }),
+  canDeleteOpenCode: Schema.Boolean.annotate({
+    description: "OpenCode's own lines can be deleted (not in the OpenCode namespace)",
+  }),
 }).annotate({ identifier: "OperatorSessionPermissions" })
 export type Info = typeof Info.Type
 
@@ -260,6 +264,8 @@ const layer = Layer.effect(
         known: editor.known,
         locked,
         allLocked: labelled.rows.length > 0 && labelled.rows.every((row) => keys.some((lock) => sameKey(lock, row))),
+        canDeleteOpenCode:
+          (yield* Effect.promise(() => OperatorNamespaceScope.layerOf(info.directory))).namespace !== "opencode",
       }
     })
 

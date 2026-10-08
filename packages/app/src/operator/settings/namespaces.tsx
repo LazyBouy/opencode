@@ -19,6 +19,7 @@ import { PurposeDraft } from "../pages/purpose-draft"
 import { FieldHelp } from "../ui/field-help"
 import { useFolderBrowser } from "../ui/folder-browser"
 import { NamespaceStart, type Start } from "./namespace-start"
+import { LevelPermissions } from "../ui/level-permissions"
 import { RecordField } from "../ui/record-overlay"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
@@ -335,6 +336,8 @@ function NamespaceRecord(props: {
                   {language.t("operator.profile.edit")}
                 </ButtonV2>
               </div>
+              <h3 class="settings-v2-tab-title">{language.t("operator.levels.title")}</h3>
+              <LevelPermissions level="namespace" directory={undefined} namespace={found().namespace.id} />
             </div>
           )}
         </Show>

@@ -9,13 +9,10 @@ import { useLanguage } from "@/context/language"
 import { showToast } from "@/utils/toast"
 import { useOperatorClient } from "../data"
 import { shortPath } from "../format"
-import { useConfirm } from "../ui/confirm"
 import { DataTable } from "../ui/data-table"
 import { Field } from "../ui/field"
-import { LineMarks, PermissionEditor, savedLines, useChangedText } from "../ui/permission-editor"
+import { LevelEditor, type LevelValue, useLevelText, useLineFrom } from "../ui/level-editor"
 import { PermissionImpact } from "../ui/permission-impact"
-import { useOriginText } from "../ui/permission-origin"
-import { orderCheck, type Rule } from "../ui/rules"
 import { requestError } from "./config-helpers"
 import { useOverlayParams } from "../ui/overlay-nav"
 import { CheckboxV2 } from "@opencode-ai/ui/v2/checkbox-v2"
@@ -50,21 +47,6 @@ export function useRefreshAgent() {
     )
 }
 
-// Asks before a save that groups rules by permission in a way that changes what they decide.
-export function useConfirmOrder() {
-  const language = useLanguage()
-  const confirm = useConfirm()
-  return (rules: ReadonlyArray<Rule>) => {
-    const check = orderCheck(rules)
-    if (!check.changed.length) return Promise.resolve(false)
-    return confirm({
-      title: language.t("operator.agentPermissions.confirmOrderTitle"),
-      description: language.t("operator.agentPermissions.confirmOrderBody"),
-      confirm: language.t("operator.agentPermissions.confirmOrder"),
-    }).then((ok) => (ok ? true : undefined))
-  }
-}
-
 // The agent's Permissions tab: the full list, each rule with where it comes from; "Edit permissions"
 // turns it into the editor, which changes and saves only the agent's own rules. `aedit` in the URL is
 // edit mode, `aperm` the permission it is filtered to.
@@ -75,25 +57,16 @@ export function AgentPermissions(props: { agent: string; directory: string }) {
     () => props.agent,
     () => props.directory,
   )
-  const origin = useOriginText()
-  const changedText = useChangedText()
+  const from = useLineFrom()
+  const levelText = useLevelText()
   const locks = useAgentLocks(
     () => props.agent,
     () => props.directory,
   )
   const shown = (rule: { permission: string }) =>
     !params.aperm || rule.permission === params.aperm || rule.permission.includes("*")
-  // A line's origin: the agent's change on a rule from elsewhere, else where its rule comes from.
-  const fromOf = (
-    rows: ReadonlyArray<OperatorPermissionRow>,
-    own: { start: number },
-    line: ReturnType<typeof savedLines>[number],
-  ) =>
-    line.kind === "locked"
-      ? line.own !== undefined
-        ? changedText("agent", line.row!, rows[own.start + line.own]!.from)
-        : origin(line.row!.from)
-      : origin(rows[own.start + line.own!]!.from)
+  // A line a level above the agent locked: the agent can't lock or change it.
+  const above = (row: OperatorPermissionRow) => (row.locked && row.locked !== "agent" ? row.locked : undefined)
 
   return (
     <Show
@@ -112,9 +85,7 @@ export function AgentPermissions(props: { agent: string; directory: string }) {
           fallback={
             <>
               <div class="flex items-center justify-between gap-2 flex-wrap">
-                <p data-slot="operator-note">
-                  {language.t("operator.permissionEditor.order")} {language.t("operator.locks.precedence")}
-                </p>
+                <p data-slot="operator-note">{language.t("operator.levels.how")}</p>
                 <span class="flex items-center gap-2">
                   <ButtonV2
                     size="small"
@@ -122,7 +93,7 @@ export function AgentPermissions(props: { agent: string; directory: string }) {
                     data-action="lock-all"
                     onClick={() =>
                       void locks.all(
-                        savedLines(data().rows, data().own).map((line) => line.rule),
+                        data().levelRows.filter((row) => !above(row)),
                         true,
                       )
                     }
@@ -153,66 +124,56 @@ export function AgentPermissions(props: { agent: string; directory: string }) {
               <DataTable
                 columnsKey="agent-permissions"
                 label={language.t("operator.agent.tab.permissions")}
-                rows={savedLines(data().rows, data().own).filter((line) => shown(line.rule))}
+                rows={data().levelRows.filter((row) => shown(row))}
                 empty={language.t("operator.agent.noRules")}
                 columns={[
                   {
-                    id: "index",
-                    header: "#",
-                    help: language.t("operator.help.ruleNumber"),
-                    width: "48px",
-                    cell: (line) => line.number,
-                    value: (line) => line.number,
-                  },
-                  {
                     id: "permission",
                     header: language.t("operator.column.permission"),
-                    cell: (line) => <code>{line.rule.permission}</code>,
-                    value: (line) => line.rule.permission,
+                    cell: (row) => <code>{row.permission}</code>,
+                    value: (row) => row.permission,
                   },
                   {
                     id: "pattern",
                     header: language.t("operator.column.pattern"),
-                    cell: (line) => <code>{line.rule.pattern}</code>,
-                    value: (line) => line.rule.pattern,
+                    cell: (row) => <code>{row.pattern}</code>,
+                    value: (row) => row.pattern,
                   },
                   {
                     id: "action",
                     header: language.t("operator.column.action"),
-                    cell: (line) => (
-                      <Tag variant={line.rule.action === "allow" ? "accent" : "neutral"}>
-                        {language.t(`operator.permission.action.${line.rule.action}`)}
+                    cell: (row) => (
+                      <Tag variant={row.action === "allow" ? "accent" : "neutral"}>
+                        {language.t(`operator.permission.action.${row.action}`)}
                       </Tag>
                     ),
-                    value: (line) => line.rule.action,
+                    value: (row) => row.action,
                   },
                   {
                     id: "override",
-                    header: language.t("operator.locks.column"),
-                    help: language.t("operator.help.ruleLock"),
-                    cell: (line) => (
-                      <CheckboxV2
-                        hideLabel
-                        label={language.t("operator.locks.mayOverride", {
-                          rule: `${line.rule.permission} ${line.rule.pattern}`,
-                        })}
-                        checked={!locks.locked(line.rule)}
-                        onChange={(override: boolean) => void locks.set(line.rule, !override)}
-                      />
+                    header: language.t("operator.levels.overridable"),
+                    help: language.t("operator.levels.overridableHelp"),
+                    cell: (row) => (
+                      <Show
+                        when={!above(row)}
+                        fallback={language.t("operator.levels.lockedBy", { level: levelText(above(row)) })}
+                      >
+                        <CheckboxV2
+                          hideLabel
+                          label={language.t("operator.locks.mayOverride", { rule: `${row.permission} ${row.pattern}` })}
+                          checked={!locks.locked(row)}
+                          onChange={(override: boolean) => void locks.set(row, !override)}
+                        />
+                      </Show>
                     ),
-                    value: (line) => (locks.locked(line.rule) ? 0 : 1),
+                    value: (row) => (above(row) || locks.locked(row) ? 0 : 1),
                   },
                   {
                     id: "from",
                     header: language.t("operator.toolPrompt.column.from"),
-                    help: language.t("operator.help.ruleFrom"),
-                    cell: (line) => (
-                      <span class="inline-flex items-center gap-1 flex-wrap">
-                        {fromOf(data().rows, data().own, line)}
-                        <LineMarks line={line} />
-                      </span>
-                    ),
-                    value: (line) => String(fromOf(data().rows, data().own, line)),
+                    help: language.t("operator.levels.fromHelp"),
+                    cell: (row) => from(row),
+                    value: (row) => from(row),
                   },
                 ]}
               />
@@ -233,7 +194,8 @@ export function AgentPermissions(props: { agent: string; directory: string }) {
   )
 }
 
-// Edit mode: the editor with its impact panel, where it saves, Cancel and Save.
+// Edit mode: the level editor (what the agent inherits, its own lines, its deletions and locks) with its
+// impact panel, where it saves, Cancel and Save.
 function AgentPermissionsEditor(props: {
   agent: string
   directory: string
@@ -245,42 +207,59 @@ function AgentPermissionsEditor(props: {
   const language = useLanguage()
   const api = useOperatorClient()
   const refresh = useRefreshAgent()
-  const confirmOrder = useConfirmOrder()
+  const locks = useAgentLocks(
+    () => props.agent,
+    () => props.directory,
+  )
   const [store, setStore] = createStore({
-    rules: [] as Rule[],
+    value: { lines: [], deleted: [], locks: [] } as LevelValue,
     scope: "project" as Scope,
     saving: false,
     error: "",
   })
-  const saved = createMemo(() => JSON.stringify(props.info.written))
-  createEffect(on(saved, () => setStore("rules", reconcile(props.info.written.map((rule) => ({ ...rule }))))))
-  const dirty = () => JSON.stringify(store.rules) !== saved()
+  const saved = createMemo(() =>
+    JSON.stringify({
+      lines: props.info.written,
+      deleted: locks.current().deleted ?? [],
+      locks: locks.current().locks,
+    }),
+  )
+  createEffect(on(saved, () => setStore("value", reconcile(JSON.parse(saved()) as LevelValue))))
+  const dirty = () => JSON.stringify(store.value) !== saved()
   const target = () => props.info.targets[store.scope]
-  const duplicates = () => orderCheck(store.rules).duplicates.length > 0
   const others = () => props.info.alsoIn.filter((path) => path !== target().path)
 
   const save = async () => {
-    const confirmed = await confirmOrder(store.rules)
-    if (confirmed === undefined) return
     setStore({ saving: true, error: "" })
-    await api
-      .client()
-      .operator.agentPermissions.save({
-        name: props.agent,
-        directory: props.directory,
-        scope: store.scope,
-        rules: store.rules,
-        ...(confirmed ? { confirmOrder: true } : {}),
-      })
-      .then(async (result) => {
-        showToast({
-          title: language.t("operator.agentPermissions.saved", { path: shortPath(result.data?.path ?? "") }),
-        })
-        await refresh(props.directory)
-        props.onDone()
-      })
-      .catch((error: unknown) => setStore("error", requestError(error)))
-      .finally(() => setStore("saving", false))
+    const before = JSON.parse(saved()) as LevelValue
+    const rulesChanged = JSON.stringify(store.value.lines) !== JSON.stringify(before.lines)
+    const marksChanged =
+      JSON.stringify(store.value.deleted) !== JSON.stringify(before.deleted) ||
+      JSON.stringify(store.value.locks) !== JSON.stringify(before.locks)
+    const rules = rulesChanged
+      ? await api
+          .client()
+          .operator.agentPermissions.save(
+            { name: props.agent, directory: props.directory, scope: store.scope, rules: store.value.lines },
+            { throwOnError: true },
+          )
+          .then((result) => result.data)
+          .catch((error: unknown) => {
+            setStore("error", requestError(error))
+            return null
+          })
+      : undefined
+    if (rules === null) return setStore("saving", false)
+    if (marksChanged)
+      await locks.replace({ ...locks.current(), locks: store.value.locks, deleted: store.value.deleted })
+    showToast({
+      title: rules
+        ? language.t("operator.agentPermissions.saved", { path: shortPath(rules.path) })
+        : language.t("operator.levels.saved"),
+    })
+    await refresh(props.directory)
+    setStore("saving", false)
+    props.onDone()
   }
 
   return (
@@ -321,18 +300,25 @@ function AgentPermissionsEditor(props: {
         </p>
       </Show>
       <div data-slot="operator-permission-layout">
-        <PermissionEditor
-          mode="agent"
-          rows={props.info.rows}
-          editable={props.info.own}
-          value={store.rules}
-          onChange={(rules) => setStore("rules", rules)}
+        <LevelEditor
+          level="agent"
+          inherited={props.info.inherited}
+          ownRows={props.info.levelRows.filter((row) => row.level === "agent")}
+          value={store.value}
+          onChange={(value) => setStore("value", reconcile(value))}
+          canDeleteOpenCode={props.info.canDeleteOpenCode}
+          canLock
           forms={props.info.forms}
           known={props.info.known}
           filter={props.filter}
           onClearFilter={props.onClearFilter}
         />
-        <PermissionImpact agent={props.agent} directory={props.directory} agentRules={store.rules} dirty={dirty()} />
+        <PermissionImpact
+          agent={props.agent}
+          directory={props.directory}
+          agentRules={store.value.lines}
+          dirty={dirty()}
+        />
       </div>
       <Show when={store.error}>
         <pre data-slot="operator-error" role="alert">
@@ -343,7 +329,7 @@ function AgentPermissionsEditor(props: {
         <ButtonV2 variant="neutral" onClick={props.onDone}>
           {language.t("common.cancel")}
         </ButtonV2>
-        <ButtonV2 variant="contrast" disabled={store.saving || !dirty() || duplicates()} onClick={() => void save()}>
+        <ButtonV2 variant="contrast" disabled={store.saving || !dirty()} onClick={() => void save()}>
           {language.t("operator.agentPermissions.save")}
         </ButtonV2>
       </div>

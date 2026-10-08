@@ -1119,6 +1119,49 @@ html[data-theme="iphi"] [data-component="operator-inspector"] {
   padding-top: 0;
 }
 
+/* The level editor (level-editor.tsx): what a level inherits, then its own lines, then the add row. */
+[data-component="operator-level-editor"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+[data-component="operator-level-editor"] table {
+  table-layout: fixed;
+  min-width: 620px;
+}
+
+[data-component="operator-level-editor"] td {
+  overflow-wrap: anywhere;
+}
+
+[data-component="operator-level-editor"] td [data-component="tag"] {
+  white-space: nowrap;
+}
+
+[data-component="operator-level-editor"] td [data-component="text-input-v2"] {
+  width: 100%;
+  min-width: 0;
+}
+
+[data-component="operator-level-editor"] tr[data-editable] td,
+[data-component="operator-level-editor"] tr[data-changed] td {
+  padding-block: 4px;
+}
+
+[data-component="operator-level-editor"] tr[data-deleted] td {
+  color: var(--v2-text-text-muted);
+}
+
+[data-component="operator-level-editor"] tr[data-changed] td {
+  background: var(--v2-background-bg-layer-01);
+}
+
+[data-component="operator-level-editor"] [data-slot="operator-panel-title"] {
+  margin: 4px 0 0;
+}
+
 [data-slot="operator-rule-add"] {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(110px, 1fr) auto;
@@ -1172,7 +1215,9 @@ html[data-theme="iphi"] [data-component="operator-inspector"] {
 
 /* Selects in the editor fill their cell (the trigger is 280px wide by default). */
 [data-component="operator-permission-editor"] [data-component="select-v2-root"],
-[data-component="operator-permission-editor"] [data-component="select-v2"] {
+[data-component="operator-permission-editor"] [data-component="select-v2"],
+[data-component="operator-level-editor"] [data-component="select-v2-root"],
+[data-component="operator-level-editor"] [data-component="select-v2"] {
   width: 100%;
   min-width: 96px;
 }

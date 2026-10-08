@@ -151,7 +151,9 @@ test("the projects page lists projects and opens a project's agents", async ({ p
   await expect(page.locator('[data-component="operator-table"]')).toContainText("reviewer")
 })
 
-test("an agent's permission rules are listed in order, each with where it comes from", async ({ page }) => {
+test("an agent's permission lines in force are listed, each with its level and where it comes from", async ({
+  page,
+}) => {
   await mockOperator(page)
   await page.goto(`/operator/agents/build${dir}`)
   const overlay = page.getByRole("dialog")
@@ -161,7 +163,8 @@ test("an agent's permission rules are listed in order, each with where it comes 
   await expect(rows.nth(2)).toContainText("*.env")
   await expect(rows.nth(2)).toContainText("Ask")
   await expect(rows.nth(2)).toContainText("OpenCode default")
-  await expect(rows.nth(4)).toContainText("OpenCode truncation folder")
+  await expect(rows.nth(3)).toContainText("OpenCode truncation folder")
+  await expect(rows.nth(4)).toContainText("Project · Config permission")
 })
 
 test("the sessions page searches on the server and opens a session", async ({ page }) => {

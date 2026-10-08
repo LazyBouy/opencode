@@ -47,6 +47,8 @@ export function useAgentLocks(agent: () => string, directory: () => string) {
     query,
     current,
     locked,
+    // Replaces the agent's locks and deletions (the Permissions editor's save).
+    replace: (next: OperatorPermissionLocks) => save(next),
     // Locks or unlocks one rule.
     set: (rule: { permission: string; pattern: string }, lock: boolean) => {
       const others = current().locks.filter(

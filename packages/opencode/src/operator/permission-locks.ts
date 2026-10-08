@@ -10,7 +10,6 @@ import { Agent } from "@/agent/agent"
 import { InstanceState } from "@/effect/instance-state"
 import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
-import { OperatorAgentPermissions } from "./agent-permissions"
 import { OperatorPermissionLive } from "./permission-live"
 import { OperatorProjects } from "./projects"
 
@@ -111,7 +110,6 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Op
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const agentPermissions = yield* OperatorAgentPermissions.Service
     const sessions = yield* Session.Service
     const agents = yield* Agent.Service
     const live = yield* OperatorPermissionLive.Service
@@ -137,10 +135,11 @@ const layer = Layer.effect(
         if (parent._tag === "None") return { ...own, inherited: [] }
         const parentAgent = parent.value.agent ?? (yield* agents.defaultAgent())
         const above = yield* locked(parent.value.directory, parentAgent, depth + 1, parent.value.parentID)
-        const rows = above.keys.length
-          ? yield* agentPermissions.get(parentAgent).pipe(
-              Effect.map((editor) => editor.rows),
-              Effect.orElseSucceed(() => []),
+        // The parent agent's lines in force (its locks resolve against them).
+        const rows: ReadonlyArray<Rule> = above.keys.length
+          ? yield* live.lines({ agent: parentAgent }).pipe(
+              Effect.map((built) => built.lines),
+              Effect.catchCause(() => Effect.succeed([])),
             )
           : []
         return { ...own, inherited: [...above.inherited, ...lockedRules(rows, above.keys)] }
@@ -175,5 +174,5 @@ const layer = Layer.effect(
 export const node = LayerNode.make({
   service: Service,
   layer,
-  deps: [OperatorAgentPermissions.node, Session.node, Agent.node, OperatorPermissionLive.node],
+  deps: [Session.node, Agent.node, OperatorPermissionLive.node],
 })

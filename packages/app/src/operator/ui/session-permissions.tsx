@@ -1,27 +1,23 @@
-import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import type { OperatorPermissionRow } from "@opencode-ai/sdk/v2/client"
 import { useQuery, useQueryClient } from "@tanstack/solid-query"
-import { createEffect, createMemo, For, on, onCleanup, Show } from "solid-js"
-import { createStore, reconcile } from "solid-js/store"
+import { createEffect, createMemo, on, onCleanup, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
 import { showToast } from "@/utils/toast"
 import { useOperatorClient } from "../data"
 import { requestError } from "../pages/config-helpers"
 import { useConfirm } from "./confirm"
-import { PermissionEditor } from "./permission-editor"
-import { DataTable } from "./data-table"
+import { type Key, LevelEditor } from "./level-editor"
 import { PermissionImpact } from "./permission-impact"
-import { useOriginText } from "./permission-origin"
 import type { Rule } from "./rules"
 
-// A session's permissions, in two blocks (fixes_spec.md §6): From the agent (read-only; the agent's
-// rules this session does not override, locked ones marked) and This session (its own rules, edited
-// here, each overriding the agent's rule with the same permission and pattern). With none, the session
-// is like its agent. Saving replaces the session's own rules; they apply at once. A rule that would
-// change one the agent locks is refused; when the agent locks every rule, nothing can be changed. Used
-// in the session details panel, the session record and the chat's "…" menu.
+// A session's permissions, the lowest level (tool_prompt_from_permission.md §7): what it inherits from
+// every level above (OpenCode, global, namespace, project, agent), each line changeable or deletable
+// here unless a level above locked it, and the session's own lines. With none, the session is like its
+// agent. Saving replaces the session's own lines and deletions; they apply at once. A line inside a
+// locked one is refused; when every line is locked, nothing can be changed. Used in the session details
+// panel, the session record and the chat's "…" menu.
 export function SessionPermissions(props: {
   sessionID: string
   directory: string | undefined
@@ -43,10 +39,14 @@ export function SessionPermissions(props: {
         .operator.sessionPermissions.get({ sessionID: props.sessionID, directory: props.directory })
         .then((result) => result.data!),
   }))
-  const [store, setStore] = createStore({ rules: [] as Rule[], saving: false, error: "" })
-  const saved = createMemo(() => JSON.stringify(info.data?.written ?? []))
-  createEffect(on(saved, () => setStore("rules", reconcile((info.data?.written ?? []).map((rule) => ({ ...rule }))))))
-  const dirty = () => JSON.stringify(store.rules) !== saved()
+  const [store, setStore] = createStore({ rules: [] as Rule[], deleted: [] as Key[], saving: false, error: "" })
+  const saved = createMemo(() => JSON.stringify({ rules: info.data?.written ?? [], deleted: info.data?.deleted ?? [] }))
+  const restore = () => {
+    const value = JSON.parse(saved()) as { rules: Rule[]; deleted: Key[] }
+    setStore({ rules: value.rules, deleted: value.deleted })
+  }
+  createEffect(on(saved, restore))
+  const dirty = () => JSON.stringify({ rules: store.rules, deleted: store.deleted }) !== saved()
 
   // The session changed elsewhere (Always allow, a client, another view): show its rules again.
   const stop = serverSdk().event.listen((event) => {
@@ -57,11 +57,11 @@ export function SessionPermissions(props: {
   })
   onCleanup(stop)
 
-  const write = async (rules: Rule[]) => {
+  const write = async (rules: Rule[], deleted: Key[]) => {
     setStore({ saving: true, error: "" })
     await api
       .client()
-      .operator.sessionPermissions.save({ sessionID: props.sessionID, directory: props.directory, rules })
+      .operator.sessionPermissions.save({ sessionID: props.sessionID, directory: props.directory, rules, deleted })
       .then(async (result) => {
         queryClient.setQueryData(api.key("session-permissions", props.directory, props.sessionID), result.data)
         showToast({ title: language.t("operator.sessionPermissions.saved") })
@@ -81,7 +81,7 @@ export function SessionPermissions(props: {
       confirm: language.t("operator.sessionPermissions.reset"),
       danger: true,
     })
-    if (ok) await write([])
+    if (ok) await write([], [])
   }
 
   return (
@@ -95,40 +95,26 @@ export function SessionPermissions(props: {
         {(data) => (
           <>
             <p data-slot="operator-note">{language.t("operator.sessionPermissions.about", { agent: data().agent })}</p>
-            <p data-slot="operator-note">{language.t("operator.locks.precedence")}</p>
             <div data-slot="operator-permission-layout">
-              <div class="flex flex-col gap-4 min-w-0">
-                <section data-testid="session-permissions-agent">
-                  <h3 data-slot="operator-panel-title">
-                    {language.t("operator.sessionPermissions.fromAgent", { agent: data().agent })}
-                  </h3>
-                  <AgentBlock
-                    rows={data().rows.slice(0, data().editable.start)}
-                    session={store.rules}
-                    locked={data().locked}
+              <div class="flex flex-col gap-4 min-w-0" data-testid="session-permissions-own">
+                <Show
+                  when={!data().allLocked}
+                  fallback={<p data-slot="operator-note">{language.t("operator.locks.allLocked")}</p>}
+                >
+                  <LevelEditor
+                    level="session"
+                    inherited={data().rows.slice(0, data().editable.start)}
+                    ownRows={data().rows.slice(data().editable.start, data().editable.end)}
+                    value={{ lines: store.rules, deleted: store.deleted, locks: [] }}
+                    onChange={(value) => setStore({ rules: value.lines, deleted: value.deleted })}
+                    canDeleteOpenCode={data().canDeleteOpenCode}
+                    canLock={false}
+                    forms={data().forms}
+                    known={data().known}
                     filter={props.filter}
+                    onClearFilter={props.onClearFilter}
                   />
-                </section>
-                <section data-testid="session-permissions-own">
-                  <h3 data-slot="operator-panel-title">{language.t("operator.sessionPermissions.thisSession")}</h3>
-                  <Show
-                    when={!data().allLocked}
-                    fallback={<p data-slot="operator-note">{language.t("operator.locks.allLocked")}</p>}
-                  >
-                    <PermissionEditor
-                      mode="session"
-                      rows={data().rows.slice(data().editable.start, data().editable.end)}
-                      editable={{ start: 0, end: data().editable.end - data().editable.start }}
-                      value={store.rules}
-                      onChange={(rules) => setStore("rules", rules)}
-                      forms={data().forms}
-                      known={data().known}
-                      filter={props.filter}
-                      onClearFilter={props.onClearFilter}
-                    />
-                    <Overrides rows={data().rows.slice(0, data().editable.start)} session={store.rules} />
-                  </Show>
-                </section>
+                </Show>
               </div>
               <PermissionImpact
                 agent={data().agent}
@@ -144,21 +130,21 @@ export function SessionPermissions(props: {
               </pre>
             </Show>
             <div data-slot="operator-actions">
-              <ButtonV2 variant="danger" disabled={store.saving || !data().written.length} onClick={() => void reset()}>
+              <ButtonV2
+                variant="danger"
+                disabled={store.saving || (!data().written.length && !data().deleted.length)}
+                onClick={() => void reset()}
+              >
                 {language.t("operator.sessionPermissions.reset")}
               </ButtonV2>
               <span class="flex-1" />
-              <ButtonV2
-                variant="neutral"
-                disabled={!dirty()}
-                onClick={() => setStore("rules", reconcile(data().written.map((rule) => ({ ...rule }))))}
-              >
+              <ButtonV2 variant="neutral" disabled={!dirty()} onClick={restore}>
                 {language.t("common.cancel")}
               </ButtonV2>
               <ButtonV2
                 variant="contrast"
                 disabled={store.saving || !dirty() || data().allLocked}
-                onClick={() => void write(store.rules)}
+                onClick={() => void write(store.rules, store.deleted)}
               >
                 {language.t("operator.sessionPermissions.save")}
               </ButtonV2>
@@ -167,98 +153,5 @@ export function SessionPermissions(props: {
         )}
       </Show>
     </div>
-  )
-}
-
-const sameKey = (a: { permission: string; pattern: string }, b: { permission: string; pattern: string }) =>
-  a.permission === b.permission && a.pattern === b.pattern
-
-// The agent's rules the session does not override (one with the same permission and pattern in the
-// session's own rules does), read-only, each with where it comes from; locked ones are marked.
-function AgentBlock(props: {
-  rows: ReadonlyArray<OperatorPermissionRow>
-  session: ReadonlyArray<Rule>
-  locked: ReadonlyArray<{ permission: string; pattern: string }>
-  filter?: string
-}) {
-  const language = useLanguage()
-  const origin = useOriginText()
-  const rows = () =>
-    props.rows.filter(
-      (row) =>
-        !props.session.some((rule) => sameKey(rule, row)) &&
-        (!props.filter || row.permission === props.filter || row.permission.includes("*")),
-    )
-  return (
-    <DataTable
-      label={language.t("operator.sessionPermissions.fromAgentLabel")}
-      rows={[...rows()]}
-      empty={language.t("operator.agent.noRules")}
-      columns={[
-        { id: "index", header: "#", width: "48px", cell: (row) => row.index, value: (row) => row.index },
-        {
-          id: "permission",
-          header: language.t("operator.column.permission"),
-          cell: (row) => <code>{row.permission}</code>,
-          value: (row) => row.permission,
-        },
-        {
-          id: "pattern",
-          header: language.t("operator.column.pattern"),
-          cell: (row) => <code>{row.pattern}</code>,
-          value: (row) => row.pattern,
-        },
-        {
-          id: "action",
-          header: language.t("operator.column.action"),
-          cell: (row) => (
-            <span class="inline-flex items-center gap-1">
-              <Tag variant={row.action === "allow" ? "accent" : "neutral"}>
-                {language.t(`operator.permission.action.${row.action}`)}
-              </Tag>
-              <Show when={props.locked.some((lock) => sameKey(lock, row))}>
-                <Tag data-testid="rule-locked" title={language.t("operator.help.ruleLock")}>
-                  {language.t("operator.locks.locked")}
-                </Tag>
-              </Show>
-            </span>
-          ),
-          value: (row) => row.action,
-        },
-        {
-          id: "from",
-          header: language.t("operator.toolPrompt.column.from"),
-          cell: (row) => origin(row.from),
-          value: (row) => String(origin(row.from)),
-        },
-      ]}
-    />
-  )
-}
-
-// Which of the agent's rules the session's own rules override.
-function Overrides(props: { rows: ReadonlyArray<OperatorPermissionRow>; session: ReadonlyArray<Rule> }) {
-  const language = useLanguage()
-  const pairs = () =>
-    props.session.flatMap((rule) => {
-      const row = props.rows.findLast((item) => sameKey(item, rule))
-      return row ? [{ rule, row }] : []
-    })
-  return (
-    <Show when={pairs().length}>
-      <ul data-slot="operator-overrides" data-testid="session-overrides">
-        <For each={pairs()}>
-          {(pair) => (
-            <li data-slot="operator-note">
-              {language.t("operator.sessionPermissions.overrides", {
-                rule: `${pair.rule.permission} ${pair.rule.pattern} ${pair.rule.action}`,
-                index: pair.row.index,
-                agentRule: `${pair.row.permission} ${pair.row.pattern} ${pair.row.action}`,
-              })}
-            </li>
-          )}
-        </For>
-      </ul>
-    </Show>
   )
 }

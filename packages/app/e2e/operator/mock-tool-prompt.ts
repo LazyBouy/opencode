@@ -8,7 +8,10 @@ type Row = {
   action: "allow" | "ask" | "deny"
   part: string
   from: { kind: string; path?: string; agent?: string }
+  level?: string
+  locked?: string
 }
+export type Key = { permission: string; pattern: string }
 
 const sizes = (description: string, schema: unknown) => {
   const total = description.length + JSON.stringify(schema).length
@@ -147,7 +150,13 @@ type Rule = { permission: string; pattern: string; action: "allow" | "ask" | "de
 
 // An agent's permissions for the editor: OpenCode's defaults, the agent's definition, a config rule,
 // the agent's own rules (from its settings), and the truncation folder.
-export function permissionsFor(directory: string, agent: string, own: Rule[] = []) {
+export function permissionsFor(
+  directory: string,
+  agent: string,
+  own: Rule[] = [],
+  marks: { locks?: Key[]; deleted?: Key[] } = {},
+  above: Row[] = [],
+) {
   const before: Row[] = [
     { index: 1, permission: "*", pattern: "*", action: "allow", part: "opencode", from: { kind: "opencode-default" } },
     {
@@ -192,6 +201,36 @@ export function permissionsFor(directory: string, agent: string, own: Rule[] = [
       from: { kind: "truncation" },
     },
   ]
+  // In levels: what the agent inherits (OpenCode's, the project's config, and any namespace lines given),
+  // then the lines in force with the agent's own lines and marks.
+  const truncation = rows.at(-1)!
+  const inherited: Row[] = [
+    ...[before[0]!, before[1]!, before[2]!, truncation].map((row) => ({ ...row, level: "opencode" })),
+    ...above,
+    { ...before[3]!, level: "project" },
+  ]
+  const sameKey = (a: Key, b: Key) => a.permission === b.permission && a.pattern === b.pattern
+  const levelRows: Row[] = [
+    ...inherited
+      .filter((row) => !(marks.deleted ?? []).some((key) => sameKey(key, row)))
+      .map((row) => {
+        const mine = own.find((rule) => sameKey(rule, row))
+        const lined: Row = mine && !row.locked ? { ...row, action: mine.action, level: "agent", part: "agent" } : row
+        return (marks.locks ?? []).some((key) => sameKey(key, row)) && !row.locked
+          ? { ...lined, locked: "agent" }
+          : lined
+      }),
+    ...own
+      .filter((rule) => !inherited.some((row) => sameKey(row, rule)))
+      .map((rule) => ({
+        ...rule,
+        index: 0,
+        part: "agent",
+        level: "agent",
+        from: { kind: "agent", path: `${directory}/.opencode/opencode.jsonc` },
+        ...((marks.locks ?? []).some((key) => sameKey(key, rule)) ? { locked: "agent" } : {}),
+      })),
+  ].map((row, index) => ({ ...row, index: index + 1 }))
   return {
     agent,
     rows,
@@ -204,6 +243,9 @@ export function permissionsFor(directory: string, agent: string, own: Rule[] = [
       global: { path: "/home/me/.config/opencode/opencode.jsonc", kind: "config", tracked: false },
     },
     alsoIn: [],
+    inherited: inherited.map((row, index) => ({ ...row, index: index + 1 })),
+    levelRows,
+    canDeleteOpenCode: false,
   }
 }
 
@@ -226,15 +268,18 @@ export function draftFor(directory: string, agent: string, body: { agentRules?: 
   }
 }
 
-// A session's permissions: build's list, then the session's own rules; and build's locked rules.
+// A session's permissions: what it inherits (build's lines in force, with build's locks), then the
+// session's own lines; the inherited lines it deletes.
 export function sessionPermissionsFor(
   directory: string,
   sessionID: string,
   own: Rule[] = [],
   locks: Array<{ permission: string; pattern: string }> = [],
+  deleted: Key[] = [],
 ) {
-  const agent = permissionsFor(directory, "build")
-  const start = agent.rows.length
+  const agent = permissionsFor(directory, "build", [], { locks })
+  const inherited = agent.levelRows
+  const start = inherited.length
   const sameKey = (a: { permission: string; pattern: string }, b: { permission: string; pattern: string }) =>
     a.permission === b.permission && a.pattern === b.pattern
   return {
@@ -242,22 +287,24 @@ export function sessionPermissionsFor(
     agent: "build",
     parent: false,
     rows: [
-      ...agent.rows,
+      ...inherited,
       ...own.map(({ origin, time, ...rule }, index) => ({
         ...rule,
         index: start + index + 1,
         part: "session",
+        level: "session",
         from: { kind: `session-${origin ?? "user"}`, time: time ?? 1_700_000_000_000 },
       })),
     ],
     editable: { start, end: start + own.length },
     written: own.map(({ permission, pattern, action }) => ({ permission, pattern, action })),
+    deleted,
     forms: agent.forms,
     known: agent.known,
-    locked: locks.flatMap((lock) => {
-      const row = agent.rows.findLast((item) => sameKey(item, lock))
-      return row ? [{ permission: row.permission, pattern: row.pattern, action: row.action }] : []
-    }),
-    allLocked: agent.rows.every((row) => locks.some((lock) => sameKey(lock, row))),
+    locked: inherited
+      .filter((row) => locks.some((lock) => sameKey(lock, row)))
+      .map(({ permission, pattern, action }) => ({ permission, pattern, action })),
+    allLocked: inherited.every((row) => locks.some((lock) => sameKey(lock, row))),
+    canDeleteOpenCode: false,
   }
 }

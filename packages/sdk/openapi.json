@@ -15904,7 +15904,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OperatorPermissionLevel1"
+                  "$ref": "#/components/schemas/OperatorPermissionLevelView"
                 }
               }
             }
@@ -15979,7 +15979,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OperatorPermissionLevel2"
+                  "$ref": "#/components/schemas/OperatorPermissionLevelView"
                 }
               }
             }
@@ -35897,9 +35897,39 @@
               "type": "string"
             },
             "description": "Config files that set this agent's `permission` (merged with what a save writes)"
+          },
+          "inherited": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPermissionRow"
+            },
+            "description": "What the agent inherits (OpenCode, global, namespace, project), broadest first"
+          },
+          "levelRows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPermissionRow"
+            },
+            "description": "The lines in force for the agent, broadest first, each with its level and lock"
+          },
+          "canDeleteOpenCode": {
+            "type": "boolean",
+            "description": "OpenCode's own lines can be deleted (not in the OpenCode namespace)"
           }
         },
-        "required": ["agent", "rows", "own", "written", "forms", "known", "targets", "alsoIn"],
+        "required": [
+          "agent",
+          "rows",
+          "own",
+          "written",
+          "forms",
+          "known",
+          "targets",
+          "alsoIn",
+          "inherited",
+          "levelRows",
+          "canDeleteOpenCode"
+        ],
         "additionalProperties": false
       },
       "OperatorAgentPermissionsNotFoundError": {
@@ -36053,7 +36083,7 @@
         "required": ["kind", "permission", "pattern", "reason"],
         "additionalProperties": false
       },
-      "OperatorPermissionLevel1": {
+      "OperatorPermissionLevelView": {
         "type": "object",
         "properties": {
           "level": {
@@ -36081,6 +36111,13 @@
               "$ref": "#/components/schemas/OperatorPermissionRow"
             },
             "description": "Inherited lines this level deletes, as they were"
+          },
+          "inherited": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPermissionRow"
+            },
+            "description": "What the level inherits, before its own changes (broadest first)"
           },
           "own": {
             "type": "array",
@@ -36126,6 +36163,7 @@
           "namespace",
           "rows",
           "deleted",
+          "inherited",
           "own",
           "marks",
           "canDeleteOpenCode",
@@ -36179,88 +36217,6 @@
           }
         },
         "required": ["lines", "deleted", "locks"],
-        "additionalProperties": false
-      },
-      "OperatorPermissionLevel2": {
-        "type": "object",
-        "properties": {
-          "level": {
-            "$ref": "#/components/schemas/OperatorPermissionLevelName"
-          },
-          "namespace": {
-            "type": "string"
-          },
-          "project": {
-            "type": "string"
-          },
-          "file": {
-            "type": "string"
-          },
-          "rows": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/OperatorPermissionRow"
-            },
-            "description": "The lines in force at this level: inherited ones and the level's own, each with its level and lock"
-          },
-          "deleted": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/OperatorPermissionRow"
-            },
-            "description": "Inherited lines this level deletes, as they were"
-          },
-          "own": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PermissionRule"
-            },
-            "description": "The level's own lines, as written in its file"
-          },
-          "marks": {
-            "$ref": "#/components/schemas/OperatorPermissionMarks"
-          },
-          "canDeleteOpenCode": {
-            "type": "boolean",
-            "description": "OpenCode's own lines can be deleted (not in the OpenCode namespace)"
-          },
-          "blocked": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/OperatorPermissionBlocked"
-            },
-            "description": "The level's lines or deletions a lock above sets aside"
-          },
-          "forms": {
-            "type": "object",
-            "additionalProperties": {
-              "$ref": "#/components/schemas/OperatorPermissionPatternForm"
-            }
-          },
-          "known": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Permissions the editor suggests"
-          },
-          "reload": {
-            "type": "string",
-            "enum": ["now", "when-idle"]
-          }
-        },
-        "required": [
-          "level",
-          "namespace",
-          "rows",
-          "deleted",
-          "own",
-          "marks",
-          "canDeleteOpenCode",
-          "blocked",
-          "forms",
-          "known"
-        ],
         "additionalProperties": false
       },
       "OperatorPermissionLevelLockedError": {
@@ -36364,6 +36320,10 @@
           "allLocked": {
             "type": "boolean",
             "description": "Every rule of the agent's list is locked: nothing to change"
+          },
+          "canDeleteOpenCode": {
+            "type": "boolean",
+            "description": "OpenCode's own lines can be deleted (not in the OpenCode namespace)"
           }
         },
         "required": [
@@ -36377,7 +36337,8 @@
           "forms",
           "known",
           "locked",
-          "allLocked"
+          "allLocked",
+          "canDeleteOpenCode"
         ],
         "additionalProperties": false
       },

@@ -63,6 +63,6 @@ test("the session details panel edits the session's own permissions, widened for
   const panel = page.getByRole("complementary", { name: "Session details" })
   const narrow = (await panel.boundingBox())!.width
   await panel.getByRole("tab", { name: "Permissions" }).click()
-  await expect(panel.getByTestId("session-permissions")).toContainText("Same as the agent until you change it here.")
+  await expect(panel.getByTestId("session-permissions")).toContainText("No lines added here.")
   await expect.poll(async () => (await panel.boundingBox())!.width).toBeGreaterThan(narrow + 100)
 })

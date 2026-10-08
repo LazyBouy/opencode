@@ -47,6 +47,15 @@ export const Info = Schema.Struct({
   alsoIn: Schema.Array(Schema.String).annotate({
     description: "Config files that set this agent's `permission` (merged with what a save writes)",
   }),
+  inherited: Schema.Array(OperatorPermissionRules.Row).annotate({
+    description: "What the agent inherits (OpenCode, global, namespace, project), broadest first",
+  }),
+  levelRows: Schema.Array(OperatorPermissionRules.Row).annotate({
+    description: "The lines in force for the agent, broadest first, each with its level and lock",
+  }),
+  canDeleteOpenCode: Schema.Boolean.annotate({
+    description: "OpenCode's own lines can be deleted (not in the OpenCode namespace)",
+  }),
 }).annotate({ identifier: "OperatorAgentPermissions" })
 export type Info = typeof Info.Type
 
@@ -128,8 +137,24 @@ const layer = Layer.effect(
         const value = parse(source.text) as { agent?: Record<string, { permission?: unknown } | undefined> } | undefined
         return value?.agent?.[name]?.permission !== undefined ? [source.path] : []
       })
+      const rowsOf = (lines: ReadonlyArray<OperatorPermissionLive.Line>) =>
+        OperatorPermissionModel.order(lines).map((line, index) => ({
+          permission: line.permission,
+          pattern: line.pattern,
+          action: line.action,
+          index: index + 1,
+          part: line.part,
+          from: line.from,
+          level: OperatorPermissionLive.levelName(line.level),
+          ...(line.lockedAt !== undefined ? { locked: OperatorPermissionLive.levelName(line.lockedAt) } : {}),
+        }))
+      const inherited = yield* live.lines({ agent: name, upTo: "project" })
+      const inForce = yield* live.lines({ agent: name, upTo: "agent" })
       return {
         agent: name,
+        inherited: rowsOf(inherited.lines),
+        levelRows: rowsOf(inForce.lines),
+        canDeleteOpenCode: (yield* operatorConfig.namespaceOf()) !== "opencode",
         rows: labelled.rows,
         own: labelled.own,
         written: OperatorPermissionRules.writtenRules(entry?.permission),

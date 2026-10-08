@@ -47,6 +47,9 @@ export const View = Schema.Struct({
   deleted: Schema.Array(OperatorPermissionRules.Row).annotate({
     description: "Inherited lines this level deletes, as they were",
   }),
+  inherited: Schema.Array(OperatorPermissionRules.Row).annotate({
+    description: "What the level inherits, before its own changes (broadest first)",
+  }),
   own: Schema.Array(PermissionV1.Rule).annotate({ description: "The level's own lines, as written in its file" }),
   marks: OperatorPermissionMarks.Marks,
   canDeleteOpenCode: Schema.Boolean.annotate({
@@ -56,7 +59,7 @@ export const View = Schema.Struct({
   forms: Schema.Record(Schema.String, OperatorPermissionRules.PatternForm),
   known: Schema.Array(Schema.String).annotate({ description: "Permissions the editor suggests" }),
   reload: Schema.optional(Schema.Literals(["now", "when-idle"])),
-}).annotate({ identifier: "OperatorPermissionLevel" })
+}).annotate({ identifier: "OperatorPermissionLevelView" })
 export type View = typeof View.Type
 
 export const SaveInput = Schema.Struct({
@@ -148,12 +151,9 @@ const layer = Layer.effect(
               })[0],
           )
         : []
-      // What the deleted lines were: the lines down to the level above, without this level's marks.
-      const above = yield* build(level, ns, { lines: own, marks: { deleted: [], locks: marks.locks } })
-      const deleted = above.lines.filter(
-        (line) =>
-          line.level < OperatorPermissionLive.LEVEL[level] && marks.deleted.some((key) => Model.sameKey(key, line)),
-      )
+      // What the level inherits: the lines down to the level above. The deleted ones, as they were.
+      const above = yield* live.lines({ upTo: level === "project" ? "namespace" : "global", namespace: ns })
+      const deleted = above.lines.filter((line) => marks.deleted.some((key) => Model.sameKey(key, line)))
       const editor = yield* agentPermissions.hints()
       return {
         level,
@@ -163,6 +163,7 @@ const layer = Layer.effect(
         // Broadest first: each line after the lines it wins against (the effective order).
         rows: Model.order(built.lines).map(rowOf),
         deleted: deleted.map(rowOf),
+        inherited: Model.order(above.lines).map(rowOf),
         own,
         marks,
         canDeleteOpenCode: ns !== "opencode",

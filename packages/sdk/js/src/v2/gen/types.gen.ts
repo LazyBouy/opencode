@@ -4544,6 +4544,18 @@ export type OperatorAgentPermissions = {
    * Config files that set this agent's `permission` (merged with what a save writes)
    */
   alsoIn: Array<string>
+  /**
+   * What the agent inherits (OpenCode, global, namespace, project), broadest first
+   */
+  inherited: Array<OperatorPermissionRow>
+  /**
+   * The lines in force for the agent, broadest first, each with its level and lock
+   */
+  levelRows: Array<OperatorPermissionRow>
+  /**
+   * OpenCode's own lines can be deleted (not in the OpenCode namespace)
+   */
+  canDeleteOpenCode: boolean
 }
 
 export type OperatorAgentPermissionsNotFoundError = {
@@ -4604,7 +4616,7 @@ export type OperatorPermissionBlocked = {
   reason: string
 }
 
-export type OperatorPermissionLevel1 = {
+export type OperatorPermissionLevelView = {
   level: OperatorPermissionLevelName
   namespace: string
   project?: string
@@ -4617,6 +4629,10 @@ export type OperatorPermissionLevel1 = {
    * Inherited lines this level deletes, as they were
    */
   deleted: Array<OperatorPermissionRow>
+  /**
+   * What the level inherits, before its own changes (broadest first)
+   */
+  inherited: Array<OperatorPermissionRow>
   /**
    * The level's own lines, as written in its file
    */
@@ -4651,42 +4667,6 @@ export type OperatorPermissionLevelSave = {
   lines: Array<PermissionRule>
   deleted: Array<OperatorPermissionKey>
   locks: Array<OperatorPermissionKey>
-}
-
-export type OperatorPermissionLevel2 = {
-  level: OperatorPermissionLevelName
-  namespace: string
-  project?: string
-  file?: string
-  /**
-   * The lines in force at this level: inherited ones and the level's own, each with its level and lock
-   */
-  rows: Array<OperatorPermissionRow>
-  /**
-   * Inherited lines this level deletes, as they were
-   */
-  deleted: Array<OperatorPermissionRow>
-  /**
-   * The level's own lines, as written in its file
-   */
-  own: Array<PermissionRule>
-  marks: OperatorPermissionMarks
-  /**
-   * OpenCode's own lines can be deleted (not in the OpenCode namespace)
-   */
-  canDeleteOpenCode: boolean
-  /**
-   * The level's lines or deletions a lock above sets aside
-   */
-  blocked: Array<OperatorPermissionBlocked>
-  forms: {
-    [key: string]: OperatorPermissionPatternForm
-  }
-  /**
-   * Permissions the editor suggests
-   */
-  known: Array<string>
-  reload?: "now" | "when-idle"
 }
 
 export type OperatorPermissionLevelLockedError = {
@@ -4737,6 +4717,10 @@ export type OperatorSessionPermissions = {
    * Every rule of the agent's list is locked: nothing to change
    */
   allLocked: boolean
+  /**
+   * OpenCode's own lines can be deleted (not in the OpenCode namespace)
+   */
+  canDeleteOpenCode: boolean
 }
 
 export type OperatorSessionPermissionsNotFoundError = {
@@ -16338,7 +16322,7 @@ export type OperatorPermissionLevelGetResponses = {
   /**
    * The level's permissions
    */
-  200: OperatorPermissionLevel1
+  200: OperatorPermissionLevelView
 }
 
 export type OperatorPermissionLevelGetResponse =
@@ -16375,7 +16359,7 @@ export type OperatorPermissionLevelSaveResponses = {
   /**
    * The level's permissions after the save
    */
-  200: OperatorPermissionLevel2
+  200: OperatorPermissionLevelView
 }
 
 export type OperatorPermissionLevelSaveResponse =

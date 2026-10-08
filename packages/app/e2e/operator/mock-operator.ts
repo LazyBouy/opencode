@@ -240,7 +240,14 @@ export interface OperatorMock {
   // The reply card's decisions, and the decisions recorded.
   decides: Array<{ id: string; body: Record<string, unknown> }>
   // Agents' locked rules, and every change to them.
-  locks: Record<string, { locks: Array<{ permission: string; pattern: string }>; inherit: "own" | "parent" }>
+  locks: Record<
+    string,
+    {
+      locks: Array<{ permission: string; pattern: string }>
+      inherit: "own" | "parent"
+      deleted?: Array<{ permission: string; pattern: string }>
+    }
+  >
   lockWrites: Array<{ agent: string; body: unknown }>
   decisions: Array<Record<string, unknown>>
   rejectWrite?: string
@@ -271,11 +278,84 @@ export interface OperatorMock {
   queue: Array<Record<string, unknown> & { id: string; agent: string; status: string }>
   queueSends: Array<Record<string, unknown>>
   projectRecords: Record<string, Record<string, unknown>>
-  sessionPermissionWrites: Array<{ sessionID: string; body: { rules: Array<Record<string, string>> } }>
+  sessionPermissionWrites: Array<{
+    sessionID: string
+    body: { rules: Array<Record<string, string>>; deleted?: Array<{ permission: string; pattern: string }> }
+  }>
+  sessionDeleted: Record<string, Array<{ permission: string; pattern: string }>>
+  // Namespace and project permission levels, and every save.
+  levels: Partial<Record<"namespace" | "project", Level>>
+  levelWrites: Array<{ level: "namespace" | "project"; body: Level }>
   sessionRules: Record<
     string,
     Array<{ permission: string; pattern: string; action: "allow" | "ask" | "deny"; origin?: string; time?: number }>
   >
+}
+
+type Key = { permission: string; pattern: string }
+type Line = Key & { action: "allow" | "ask" | "deny" }
+type Level = { lines: Line[]; deleted: Key[]; locks: Key[] }
+const sameKey = (a: Key, b: Key) => a.permission === b.permission && a.pattern === b.pattern
+
+// The namespace's lines, as rows a project and its agents inherit.
+function namespaceRows(state: OperatorMock) {
+  const namespace = state.levels.namespace
+  return (namespace?.lines ?? []).map((line, index) => ({
+    ...line,
+    index: index + 1,
+    part: "config",
+    level: "namespace",
+    from: { kind: "config-permission", path: "/work/acme/.opencode/opencode.jsonc" },
+    ...(namespace?.locks.some((key) => sameKey(key, line)) ? { locked: "namespace" } : {}),
+  }))
+}
+
+// A level's view: OpenCode's lines (and the namespace's, for a project), then its own and its marks.
+function levelFor(state: OperatorMock, name: "namespace" | "project", namespace = "opencode") {
+  const own = state.levels[name] ?? { lines: [], deleted: [], locks: [] }
+  const opencode = [
+    { permission: "*", pattern: "*", action: "allow" as const },
+    { permission: "question", pattern: "*", action: "deny" as const },
+    { permission: "read", pattern: "*.env", action: "ask" as const },
+  ].map((line) => ({ ...line, part: "opencode", level: "opencode", from: { kind: "opencode-default" } }))
+  const inherited = [...opencode, ...(name === "project" ? namespaceRows(state) : [])].map((row, index) => ({
+    ...row,
+    index: index + 1,
+  }))
+  const file = name === "project" ? `${directory}/.opencode/opencode.jsonc` : "/work/acme/.opencode/opencode.jsonc"
+  const rows = [
+    ...inherited
+      .filter((row) => !own.deleted.some((key) => sameKey(key, row)))
+      .map((row) => {
+        const mine = own.lines.find((line) => sameKey(line, row))
+        const lined = mine && !("locked" in row) ? { ...row, action: mine.action, level: name } : row
+        return own.locks.some((key) => sameKey(key, row)) && !("locked" in row) ? { ...lined, locked: name } : lined
+      }),
+    ...own.lines
+      .filter((line) => !inherited.some((row) => sameKey(row, line)))
+      .map((line) => ({
+        ...line,
+        part: "config",
+        level: name,
+        from: { kind: "config-permission", path: file },
+        ...(own.locks.some((key) => sameKey(key, line)) ? { locked: name } : {}),
+      })),
+  ].map((row, index) => ({ ...row, index: index + 1 }))
+  return {
+    level: name,
+    namespace,
+    ...(name === "project" ? { project: directory } : {}),
+    file,
+    rows,
+    deleted: inherited.filter((row) => own.deleted.some((key) => sameKey(key, row))),
+    inherited,
+    own: own.lines,
+    marks: { deleted: own.deleted, locks: own.locks },
+    canDeleteOpenCode: namespace !== "opencode",
+    blocked: [],
+    forms: { read: "path", edit: "path" },
+    known: ["*", "bash", "edit", "read", "webfetch"],
+  }
 }
 
 export async function mockOperator(page: Page) {
@@ -357,6 +437,9 @@ export async function mockOperator(page: Page) {
     drafts: [],
     sessionPermissionWrites: [],
     sessionRules: {},
+    sessionDeleted: {},
+    levels: {},
+    levelWrites: [],
     projectRecordWrites: [],
     projectRecords: {},
     mainSessions: {},
@@ -531,7 +614,7 @@ export async function mockOperator(page: Page) {
         state.ownRules[name] = body.rules as never
         return json(route, { path: `${directory}/.opencode/opencode.jsonc` })
       }
-      return json(route, permissionsFor(directory, name, state.ownRules[name]))
+      return json(route, permissionsFor(directory, name, state.ownRules[name], state.locks[name], namespaceRows(state)))
     }
     const calls = url.pathname.match(/^\/operator\/session\/([^/]+)\/(calls|calls\/export|call\/([^/]+)(\/raw)?)$/)
     if (calls && method === "GET") {
@@ -656,6 +739,7 @@ export async function mockOperator(page: Page) {
         const body = route.request().postDataJSON() as {
           locks: Array<{ permission: string; pattern: string }>
           inherit: "own" | "parent"
+          deleted?: Array<{ permission: string; pattern: string }>
         }
         state.lockWrites.push({ agent: name, body })
         state.locks[name] = body
@@ -666,11 +750,47 @@ export async function mockOperator(page: Page) {
     if (sessionPermissions) {
       const id = decodeURIComponent(sessionPermissions[1]!)
       if (method === "PUT") {
-        const body = route.request().postDataJSON() as { rules: Array<Record<string, string>> }
+        const body = route.request().postDataJSON() as {
+          rules: Array<Record<string, string>>
+          deleted?: Array<{ permission: string; pattern: string }>
+        }
         state.sessionPermissionWrites.push({ sessionID: id, body })
         state.sessionRules[id] = body.rules as never
+        if (body.deleted) state.sessionDeleted[id] = body.deleted
       }
-      return json(route, sessionPermissionsFor(directory, id, state.sessionRules[id], state.locks.build?.locks))
+      return json(
+        route,
+        sessionPermissionsFor(
+          directory,
+          id,
+          state.sessionRules[id],
+          state.locks.build?.locks,
+          state.sessionDeleted[id] ?? [],
+        ),
+      )
+    }
+    // A namespace's or project's permission level (permission-levels.ts).
+    const level = url.pathname.match(/^\/operator\/permission\/level\/(namespace|project)$/)
+    if (level) {
+      const name = level[1] as "namespace" | "project"
+      if (method === "PUT") {
+        const body = route.request().postDataJSON() as Level
+        state.levelWrites.push({ level: name, body })
+        // A project line inside a line the namespace locked is refused.
+        const locked = name === "project" ? (state.levels.namespace?.locks ?? []) : []
+        const clash = body.lines.find((line) => locked.some((key) => key.permission === line.permission))
+        if (clash)
+          return route.fulfill({
+            status: 409,
+            contentType: "application/json",
+            body: JSON.stringify({
+              name: "OperatorPermissionLevelLockedError",
+              data: { message: `${clash.permission} ${clash.pattern}: the namespace locks it` },
+            }),
+          })
+        state.levels[name] = body
+      }
+      return json(route, levelFor(state, name, url.searchParams.get("namespace") ?? "opencode"))
     }
     const draft = url.pathname.match(/^\/operator\/agent\/([^/]+)\/tool-prompt\/draft$/)
     if (draft && method === "POST") {

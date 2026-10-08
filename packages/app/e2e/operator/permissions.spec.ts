@@ -48,20 +48,18 @@ const choose = (page: Page, label: string, action: string) =>
     action,
   )
 
-test("the Permissions tab shows where each rule comes from, and edits the agent's own rules in place", async ({
-  page,
-}) => {
+test("the Permissions tab shows each line's level and origin, and edits the agent's own lines", async ({ page }) => {
   const state = await mockOperator(page)
   await page.goto(`/operator/agents/build${dir}&tab=permissions`)
   const table = page.getByRole("table", { name: "Permissions" })
   await expect(table.getByRole("row", { name: /question/ })).toContainText("OpenCode default")
-  await expect(table.getByRole("row", { name: /webfetch/ })).toContainText("Config permission")
+  await expect(table.getByRole("row", { name: /webfetch/ })).toContainText("Project · Config permission")
   await expect(table.getByRole("row", { name: /external_directory/ })).toContainText("OpenCode truncation folder")
 
   await page.getByRole("button", { name: "Edit permissions" }).click()
-  const editor = page.getByTestId("permission-editor")
-  await expect(editor).toContainText("Checked from the bottom up: the last rule that matches wins.")
-  await expect(editor).toContainText("The agent has no rules of its own.")
+  const editor = page.getByTestId("level-editor")
+  await expect(editor).toContainText("The most specific line that matches decides")
+  await expect(editor).toContainText("No lines added here.")
   await expect(page.getByTestId("agent-permissions-target")).toContainText(
     ".opencode/opencode.jsonc → agent.build.permission",
   )
@@ -69,13 +67,16 @@ test("the Permissions tab shows where each rule comes from, and edits the agent'
   // The overlay stays on this agent and section while editing.
   await expect(page.getByRole("tab", { name: "Overview" })).toBeDisabled()
 
+  // The same permission and pattern as an inherited line changes that line.
   await addRule(page, "webfetch", "*", "Deny")
+  const webfetch = editor.getByTestId("level-inherited").getByRole("row", { name: /webfetch/ })
+  await expect(webfetch).toContainText("changed here (was ask)")
   const impact = page.getByTestId("permission-impact")
   await expect(impact.getByTestId("impact-tools")).toContainText("webfetch")
-  await expect(impact.getByTestId("impact-tools")).toContainText("by rule #5")
 
-  // A pattern-only change: no change to what is sent, and an absolute read pattern gets a hint.
+  // A new line, with a hint for an absolute read pattern.
   await addRule(page, "read", "~/*", "Allow")
+  await expect(editor.getByTestId("level-own").getByRole("row", { name: /~\/\*/ })).toContainText("Not saved")
   await expect(editor.getByTestId("rule-hint")).toContainText("This pattern is absolute")
 
   await page.getByRole("button", { name: "Save permissions" }).click()
@@ -90,70 +91,61 @@ test("the Permissions tab shows where each rule comes from, and edits the agent'
       ],
     },
   })
-  // Back to the list, now with the agent's own rules.
+  // Back to the lines in force, now with the agent's own.
   await expect(page.getByRole("button", { name: "Edit permissions" })).toBeVisible()
   await expect(table.getByRole("row", { name: /~\/\*/ })).toContainText("Agent")
+  await expect(table.getByRole("row", { name: /webfetch/ })).toContainText("Deny")
 })
 
-test("a rule from elsewhere is changed on its own line; a repeated pair is caught", async ({ page }) => {
+test("an inherited line is changed, deleted or locked at the agent level", async ({ page }) => {
   const state = await mockOperator(page)
   await page.goto(`/operator/agents/build${dir}&tab=permissions`)
   await page.getByRole("button", { name: "Edit permissions" }).click()
-  const editor = page.getByTestId("permission-editor")
-  const webfetch = editor.locator("tr[data-locked]", { hasText: "webfetch" })
+  const inherited = page.getByTestId("level-inherited")
 
-  // The pencil opens the same line for a change; no line is added.
-  await webfetch.getByRole("button", { name: "Change rule #4" }).click()
-  await choose(page, "New action for rule #4", "Deny")
-  await expect(webfetch).toContainText("Changed for this agent · was Ask (Config permission")
-  await expect(webfetch).toContainText("Not saved")
-  await expect(editor.locator("tr[data-editable]")).toHaveCount(0)
-  await expect(editor.locator("tr", { hasText: "webfetch" })).toHaveCount(1)
-  // Its number says where it is checked: with the agent's own rules, after the config's.
-  await expect(webfetch.locator("td").nth(1)).toHaveText("5")
+  // OpenCode's lines can't be deleted in the OpenCode namespace; the project's can.
+  await expect(inherited.getByRole("button", { name: "Delete question * at this level" })).toHaveCount(0)
+  await inherited.getByRole("button", { name: "Delete webfetch * at this level" }).click()
+  await expect(inherited.getByRole("row", { name: /webfetch/ })).toContainText("deleted here")
+  await inherited
+    .getByRole("row", { name: /webfetch/ })
+    .getByRole("button", { name: "Restore" })
+    .click()
+  await expect(inherited.getByRole("row", { name: /webfetch/ })).not.toContainText("deleted here")
 
-  // Undo: the line is the config's rule again.
-  await webfetch.getByRole("button", { name: "Undo the change to rule #5" }).click()
-  await expect(webfetch).toContainText("Config permission")
-  await expect(webfetch.getByRole("button", { name: "Change rule #4" })).toBeVisible()
+  await choose(page, "Action of webfetch *", "Deny")
+  await expect(inherited.getByRole("row", { name: /webfetch/ })).toContainText("changed here (was ask)")
+  // Back to its own action: no change.
+  await choose(page, "Action of webfetch *", "Ask")
+  await expect(inherited.getByRole("row", { name: /webfetch/ })).not.toContainText("changed here")
+  await choose(page, "Action of webfetch *", "Deny")
 
-  // Changed again, then the same pair added below: the later one replaces the earlier one, which
-  // becomes a line of its own, and Save waits until it is removed.
-  await webfetch.getByRole("button", { name: "Change rule #4" }).click()
-  await choose(page, "New action for rule #4", "Deny")
-  await addRule(page, "webfetch", "*", "Allow")
-  await expect(page.getByTestId("permission-duplicates")).toContainText("the later one replaces the earlier one")
-  await expect(webfetch).toContainText("Allow")
-  await expect(editor.locator("tr[data-editable]")).toContainText("Replaced by #6")
-  await expect(page.getByRole("button", { name: "Save permissions" })).toBeDisabled()
-  await page.getByRole("button", { name: "Remove the earlier one" }).click()
-  await expect(page.getByTestId("permission-duplicates")).toHaveCount(0)
-  await expect(editor.locator("tr[data-editable]")).toHaveCount(0)
-
+  // Locked: the levels below (sessions) can't change it.
+  await inherited
+    .getByRole("row", { name: /\*\.env/ })
+    .locator('[data-slot="checkbox-v2-control"]')
+    .click()
   await page.getByRole("button", { name: "Save permissions" }).click()
-  await expect.poll(() => state.permissionWrites.length).toBe(1)
-  expect(state.permissionWrites[0].body.rules).toEqual([{ permission: "webfetch", pattern: "*", action: "allow" }])
-  // Saved: the list shows the change on the config rule's line.
+  await expect.poll(() => state.lockWrites.length).toBe(1)
+  expect(state.permissionWrites[0]!.body.rules).toEqual([{ permission: "webfetch", pattern: "*", action: "deny" }])
+  expect(state.lockWrites[0]!.body).toMatchObject({ locks: [{ permission: "read", pattern: "*.env" }], deleted: [] })
+})
+
+test("a line a namespace locked can't be changed, deleted or locked by the agent", async ({ page }) => {
+  const state = await mockOperator(page)
+  state.levels.namespace = {
+    lines: [{ permission: "bash", pattern: "rm *", action: "deny" }],
+    deleted: [],
+    locks: [{ permission: "bash", pattern: "rm *" }],
+  }
+  await page.goto(`/operator/agents/build${dir}&tab=permissions`)
   const table = page.getByRole("table", { name: "Permissions" })
-  await expect(table.getByRole("row", { name: /webfetch/ })).toHaveCount(1)
-  await expect(table.getByRole("row", { name: /webfetch/ })).toContainText("was Ask (Config permission")
-})
-
-test("an order that grouping changes is caught", async ({ page }) => {
-  const state = await mockOperator(page)
-  await page.goto(`/operator/agents/build${dir}&tab=permissions`)
+  await expect(table.getByRole("row", { name: /rm \*/ })).toContainText("Locked by Namespace")
   await page.getByRole("button", { name: "Edit permissions" }).click()
-
-  // read *, then * *, then read *.md: saved grouped, read's rules come first, which changes results.
-  await addRule(page, "read", "*", "Deny")
-  await addRule(page, "*", "*", "Ask")
-  await addRule(page, "read", "*.md", "Deny")
-  await expect(page.getByTestId("permission-reorder")).toContainText("saved grouped by permission")
-  await page.getByRole("button", { name: "Save permissions" }).click()
-  await expect(page.getByRole("dialog").last()).toContainText("Save rules grouped by permission?")
-  await page.getByRole("dialog").last().getByRole("button", { name: "Save anyway" }).click()
-  await expect.poll(() => state.permissionWrites.length).toBe(1)
-  expect(state.permissionWrites[0].body).toMatchObject({ confirmOrder: true })
+  const row = page.getByTestId("level-inherited").getByRole("row", { name: /rm \*/ })
+  await expect(row.getByTestId("locked-above")).toContainText("Locked by Namespace")
+  await expect(row.getByRole("button", { name: /Delete/ })).toHaveCount(0)
+  await expect(page.locator('[data-component="select-v2-root"][aria-label="Action of bash rm *"]')).toHaveCount(0)
 })
 
 test("Change access on a tool opens the Permissions editor filtered to its permission", async ({ page }) => {
@@ -163,28 +155,27 @@ test("Change access on a tool opens the Permissions editor filtered to its permi
   await page.getByTestId("tool-overlay").getByRole("button", { name: "Change access" }).click()
   await expect(page).toHaveURL(/atab=permissions/)
   await expect(page).toHaveURL(/aedit=1/)
-  const editor = page.getByTestId("permission-editor")
+  const editor = page.getByTestId("level-editor")
   await expect(editor).toContainText("Showing the rules for read")
   await expect(editor.getByRole("row", { name: /question/ })).toBeHidden()
   await expect(editor.getByRole("row", { name: /\*\.env/ })).toBeVisible()
 })
 
-test("the Edit form shows the agent's full list, not only its own rules", async ({ page }) => {
+test("the Edit form shows what the agent inherits, not only its own lines", async ({ page }) => {
   await mockOperator(page)
   await page.goto(`/operator/agents/build/edit${dir}`)
-  const editor = page.getByTestId("permission-editor")
+  const editor = page.getByTestId("level-editor")
   await expect(editor.getByRole("row", { name: /question/ })).toContainText("OpenCode default")
   await expect(editor.getByRole("row", { name: /webfetch/ })).toContainText("Config permission")
-  await expect(editor).toContainText("The agent has no rules of its own.")
+  await expect(editor).toContainText("No lines added here.")
 })
 
-test("a session's own rules: added on the Sessions page, saved with the session, and reset to its agent", async ({
+test("a session's own lines: added on the Sessions page, saved with the session, and reset to its agent", async ({
   page,
 }) => {
   const state = await mockOperator(page)
   await page.goto(`/operator/sessions${dir}&session=ses_op_1&stab=permissions`)
   const panel = page.getByTestId("session-permissions")
-  await expect(panel).toContainText("Same as the agent until you change it here.")
   await expect(panel.getByRole("row", { name: /question/ })).toContainText("OpenCode default")
 
   await addRule(page, "webfetch", "*", "Deny")
@@ -193,15 +184,17 @@ test("a session's own rules: added on the Sessions page, saved with the session,
   await expect.poll(() => state.sessionPermissionWrites.length).toBe(1)
   expect(state.sessionPermissionWrites[0]).toEqual({
     sessionID: "ses_op_1",
-    body: { rules: [{ permission: "webfetch", pattern: "*", action: "deny" }] },
+    body: { rules: [{ permission: "webfetch", pattern: "*", action: "deny" }], deleted: [] },
   })
-  await expect(panel.getByRole("row", { name: /webfetch \* /i }).last()).toContainText("Session · set by you")
+  await expect(panel.getByTestId("level-inherited").getByRole("row", { name: /webfetch/ })).toContainText(
+    "changed here (was ask)",
+  )
 
   await panel.getByRole("button", { name: "Reset to agent" }).click()
   await page.getByRole("dialog").last().getByRole("button", { name: "Reset to agent" }).click()
   await expect.poll(() => state.sessionPermissionWrites.length).toBe(2)
-  expect(state.sessionPermissionWrites[1].body).toEqual({ rules: [] })
-  await expect(panel).toContainText("Same as the agent until you change it here.")
+  expect(state.sessionPermissionWrites[1].body).toEqual({ rules: [], deleted: [] })
+  await expect(panel).toContainText("No lines added here.")
 })
 
 test("Change access on a session's tool prompt opens that session's rules", async ({ page }) => {
@@ -221,5 +214,7 @@ test("Allow for session in the inbox adds the rule to that session's own rules",
   await expect(page.getByRole("dialog")).toBeHidden()
   await page.goto(`/operator/sessions${dir}&session=ses_op_1&stab=permissions`)
   const panel = page.getByTestId("session-permissions")
-  await expect(panel.getByRole("row", { name: /git push \*/ })).toContainText("Session · Allow for session")
+  await expect(panel.getByTestId("level-own").getByRole("row", { name: /git push \*/ })).toContainText(
+    "Session · Allow for session",
+  )
 })

@@ -23,6 +23,7 @@ export const PROJECT_SECTIONS = [
   "prompt",
   "members",
   "models",
+  "permissions",
   "requests",
 ] as const
 export type ProjectSection = (typeof PROJECT_SECTIONS)[number]
