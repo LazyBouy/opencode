@@ -4576,6 +4576,124 @@ export type OperatorPermissionLocks = {
    * A subagent's locks: its own (default), or its own and its parent session's agent's
    */
   inherit: "own" | "parent"
+  deleted?: Array<OperatorPermissionLock>
+}
+
+export type OperatorPermissionLevelName = "namespace" | "project"
+
+export type OperatorPermissionKey = {
+  permission: string
+  pattern: string
+}
+
+export type OperatorPermissionMarks = {
+  /**
+   * Inherited lines this level deletes
+   */
+  deleted: Array<OperatorPermissionKey>
+  /**
+   * Lines this level locks: they bind every level below
+   */
+  locks: Array<OperatorPermissionKey>
+}
+
+export type OperatorPermissionBlocked = {
+  kind: "line" | "deleted"
+  permission: string
+  pattern: string
+  reason: string
+}
+
+export type OperatorPermissionLevel1 = {
+  level: OperatorPermissionLevelName
+  namespace: string
+  project?: string
+  file?: string
+  /**
+   * The lines in force at this level: inherited ones and the level's own, each with its level and lock
+   */
+  rows: Array<OperatorPermissionRow>
+  /**
+   * Inherited lines this level deletes, as they were
+   */
+  deleted: Array<OperatorPermissionRow>
+  /**
+   * The level's own lines, as written in its file
+   */
+  own: Array<PermissionRule>
+  marks: OperatorPermissionMarks
+  /**
+   * OpenCode's own lines can be deleted (not in the OpenCode namespace)
+   */
+  canDeleteOpenCode: boolean
+  /**
+   * The level's lines or deletions a lock above sets aside
+   */
+  blocked: Array<OperatorPermissionBlocked>
+  forms: {
+    [key: string]: OperatorPermissionPatternForm
+  }
+  /**
+   * Permissions the editor suggests
+   */
+  known: Array<string>
+  reload?: "now" | "when-idle"
+}
+
+export type OperatorPermissionLevelInvalidError = {
+  name: "OperatorPermissionLevelInvalidError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorPermissionLevelSave = {
+  lines: Array<PermissionRule>
+  deleted: Array<OperatorPermissionKey>
+  locks: Array<OperatorPermissionKey>
+}
+
+export type OperatorPermissionLevel2 = {
+  level: OperatorPermissionLevelName
+  namespace: string
+  project?: string
+  file?: string
+  /**
+   * The lines in force at this level: inherited ones and the level's own, each with its level and lock
+   */
+  rows: Array<OperatorPermissionRow>
+  /**
+   * Inherited lines this level deletes, as they were
+   */
+  deleted: Array<OperatorPermissionRow>
+  /**
+   * The level's own lines, as written in its file
+   */
+  own: Array<PermissionRule>
+  marks: OperatorPermissionMarks
+  /**
+   * OpenCode's own lines can be deleted (not in the OpenCode namespace)
+   */
+  canDeleteOpenCode: boolean
+  /**
+   * The level's lines or deletions a lock above sets aside
+   */
+  blocked: Array<OperatorPermissionBlocked>
+  forms: {
+    [key: string]: OperatorPermissionPatternForm
+  }
+  /**
+   * Permissions the editor suggests
+   */
+  known: Array<string>
+  reload?: "now" | "when-idle"
+}
+
+export type OperatorPermissionLevelLockedError = {
+  name: "OperatorPermissionLevelLockedError"
+  data: {
+    message: string
+  }
 }
 
 export type OperatorSessionPermissions = {
@@ -4600,6 +4718,13 @@ export type OperatorSessionPermissions = {
    * The session's own rules
    */
   written: Array<PermissionRule>
+  /**
+   * Inherited lines the session deletes
+   */
+  deleted: Array<{
+    permission: string
+    pattern: string
+  }>
   forms: {
     [key: string]: OperatorPermissionPatternForm
   }
@@ -16187,6 +16312,75 @@ export type OperatorAgentPermissionsSaveLocksResponses = {
 export type OperatorAgentPermissionsSaveLocksResponse =
   OperatorAgentPermissionsSaveLocksResponses[keyof OperatorAgentPermissionsSaveLocksResponses]
 
+export type OperatorPermissionLevelGetData = {
+  body?: never
+  path: {
+    level: OperatorPermissionLevelName
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+    namespace?: string
+  }
+  url: "/operator/permission/level/{level}"
+}
+
+export type OperatorPermissionLevelGetErrors = {
+  /**
+   * OperatorPermissionLevelInvalidError | InvalidRequestError
+   */
+  400: OperatorPermissionLevelInvalidError | InvalidRequestError
+}
+
+export type OperatorPermissionLevelGetError = OperatorPermissionLevelGetErrors[keyof OperatorPermissionLevelGetErrors]
+
+export type OperatorPermissionLevelGetResponses = {
+  /**
+   * The level's permissions
+   */
+  200: OperatorPermissionLevel1
+}
+
+export type OperatorPermissionLevelGetResponse =
+  OperatorPermissionLevelGetResponses[keyof OperatorPermissionLevelGetResponses]
+
+export type OperatorPermissionLevelSaveData = {
+  body?: OperatorPermissionLevelSave
+  path: {
+    level: OperatorPermissionLevelName
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+    namespace?: string
+  }
+  url: "/operator/permission/level/{level}"
+}
+
+export type OperatorPermissionLevelSaveErrors = {
+  /**
+   * OperatorPermissionLevelInvalidError | InvalidRequestError
+   */
+  400: OperatorPermissionLevelInvalidError | InvalidRequestError
+  /**
+   * OperatorPermissionLevelLockedError
+   */
+  409: OperatorPermissionLevelLockedError
+}
+
+export type OperatorPermissionLevelSaveError =
+  OperatorPermissionLevelSaveErrors[keyof OperatorPermissionLevelSaveErrors]
+
+export type OperatorPermissionLevelSaveResponses = {
+  /**
+   * The level's permissions after the save
+   */
+  200: OperatorPermissionLevel2
+}
+
+export type OperatorPermissionLevelSaveResponse =
+  OperatorPermissionLevelSaveResponses[keyof OperatorPermissionLevelSaveResponses]
+
 export type OperatorSessionPermissionsGetData = {
   body?: never
   path: {
@@ -16226,6 +16420,10 @@ export type OperatorSessionPermissionsGetResponse =
 export type OperatorSessionPermissionsSaveData = {
   body?: {
     rules: PermissionRuleset
+    deleted?: Array<{
+      permission: string
+      pattern: string
+    }>
   }
   path: {
     sessionID: string

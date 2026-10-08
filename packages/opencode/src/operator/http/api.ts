@@ -8,6 +8,7 @@ import { OperatorPromptApi } from "./groups/prompts"
 import { OperatorCallApi } from "./groups/calls"
 import { OperatorToolPromptApi } from "./groups/tool-prompt"
 import { OperatorAgentPermissionApi } from "./groups/agent-permissions"
+import { OperatorPermissionLevelApi } from "./groups/permission-levels"
 import { OperatorSessionPermissionApi } from "./groups/session-permissions"
 import { OperatorAgentSessionApi } from "./groups/agent-sessions"
 import { OperatorQueueApi } from "./groups/queue"
@@ -31,6 +32,7 @@ export const OperatorApi = HttpApi.make("operator")
   .addHttpApi(OperatorToolPromptApi)
   .addHttpApi(OperatorCallApi)
   .addHttpApi(OperatorAgentPermissionApi)
+  .addHttpApi(OperatorPermissionLevelApi)
   .addHttpApi(OperatorSessionPermissionApi)
   .addHttpApi(OperatorAgentSessionApi)
   .addHttpApi(OperatorQueueApi)

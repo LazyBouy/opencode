@@ -18,7 +18,7 @@ export const operatorSessionPermissionsHandlers = HttpApiBuilder.group(
       return handlers
         .handle("get", (ctx) => permissions.get(ctx.params.sessionID).pipe(Effect.mapError(notFound)))
         .handle("save", (ctx) =>
-          permissions.save(ctx.params.sessionID, ctx.payload.rules).pipe(
+          permissions.save(ctx.params.sessionID, ctx.payload.rules, ctx.payload.deleted).pipe(
             Effect.mapError((error) =>
               error._tag === "OperatorSessionPermissionsLocked"
                 ? new ApiSessionPermissionsLockedError({

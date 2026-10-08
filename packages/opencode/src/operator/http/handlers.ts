@@ -10,6 +10,7 @@ import { operatorPromptHandlers } from "./handlers/prompts"
 import { operatorToolPromptHandlers } from "./handlers/tool-prompt"
 import { operatorCallHandlers } from "./handlers/calls"
 import { operatorAgentPermissionsHandlers } from "./handlers/agent-permissions"
+import { operatorPermissionLevelsHandlers } from "./handlers/permission-levels"
 import { operatorSessionPermissionsHandlers } from "./handlers/session-permissions"
 import { operatorAgentSessionsHandlers } from "./handlers/agent-sessions"
 import { operatorQueueHandlers } from "./handlers/queue"
@@ -31,6 +32,7 @@ export const operatorHandlers = [
   operatorToolPromptHandlers,
   operatorCallHandlers,
   operatorAgentPermissionsHandlers,
+  operatorPermissionLevelsHandlers,
   operatorSessionPermissionsHandlers,
   operatorAgentSessionsHandlers,
   operatorQueueHandlers,

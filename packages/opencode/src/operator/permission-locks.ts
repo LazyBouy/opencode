@@ -40,6 +40,9 @@ export type Inherit = typeof Inherit.Type
 export const Info = Schema.Struct({
   locks: Schema.Array(Lock),
   inherit: Inherit,
+  deleted: Schema.optional(Schema.Array(Lock)).annotate({
+    description: "Inherited lines (the namespace's, the project's, OpenCode's outside its namespace) the agent deletes",
+  }),
 }).annotate({ identifier: "OperatorPermissionLocks" })
 export type Info = typeof Info.Type
 
@@ -55,18 +58,20 @@ let queue: Promise<unknown> = Promise.resolve()
 
 export async function read(project: string, agent: string): Promise<Info> {
   const entry = (await readStore())[project]?.[agent]
-  return { locks: entry?.locks ?? [], inherit: entry?.inherit ?? "own" }
+  return { locks: entry?.locks ?? [], inherit: entry?.inherit ?? "own", deleted: entry?.deleted ?? [] }
 }
 
 export function write(project: string, agent: string, info: Info) {
   const next = queue.then(async () => {
     const store = await readStore()
     const agents = store[project] ?? {}
-    if (!info.locks.length && info.inherit === "own") delete agents[agent]
+    const deleted = (info.deleted ?? []).map(({ permission, pattern }) => ({ permission, pattern }))
+    if (!info.locks.length && info.inherit === "own" && !deleted.length) delete agents[agent]
     else
       agents[agent] = {
         locks: info.locks.map(({ permission, pattern }) => ({ permission, pattern })),
         inherit: info.inherit,
+        ...(deleted.length ? { deleted } : {}),
       }
     if (Object.keys(agents).length) store[project] = agents
     else delete store[project]
@@ -123,12 +128,13 @@ const layer = Layer.effect(
       agent: string,
       depth: number,
       parentID?: string,
-    ): Effect.Effect<{ keys: ReadonlyArray<Lock>; inherited: ReadonlyArray<Rule> }> =>
+    ): Effect.Effect<{ keys: ReadonlyArray<Lock>; deleted: ReadonlyArray<Lock>; inherited: ReadonlyArray<Rule> }> =>
       Effect.gen(function* () {
         const info = yield* Effect.promise(async () => read(await projectKeyOf(directory), agent))
-        if (info.inherit !== "parent" || !parentID || depth > 3) return { keys: info.locks, inherited: [] }
+        const own = { keys: info.locks, deleted: info.deleted ?? [] }
+        if (info.inherit !== "parent" || !parentID || depth > 3) return { ...own, inherited: [] }
         const parent = yield* sessions.get(SessionID.make(parentID)).pipe(Effect.option)
-        if (parent._tag === "None") return { keys: info.locks, inherited: [] }
+        if (parent._tag === "None") return { ...own, inherited: [] }
         const parentAgent = parent.value.agent ?? (yield* agents.defaultAgent())
         const above = yield* locked(parent.value.directory, parentAgent, depth + 1, parent.value.parentID)
         const rows = above.keys.length
@@ -137,8 +143,8 @@ const layer = Layer.effect(
               Effect.orElseSucceed(() => []),
             )
           : []
-        return { keys: info.locks, inherited: [...above.inherited, ...lockedRules(rows, above.keys)] }
-      }).pipe(Effect.orElseSucceed(() => ({ keys: [], inherited: [] })))
+        return { ...own, inherited: [...above.inherited, ...lockedRules(rows, above.keys)] }
+      }).pipe(Effect.orElseSucceed(() => ({ keys: [], deleted: [], inherited: [] })))
 
     yield* Effect.acquireRelease(
       Effect.sync(() => {

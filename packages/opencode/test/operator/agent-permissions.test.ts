@@ -86,7 +86,7 @@ unix("saving writes only the agent's own rules, in order, replacing the earlier 
   }),
 )
 
-unix("a pair written twice is refused, and so is an order grouping would change, unless confirmed", () =>
+unix("a pair written twice is refused; grouping by permission is saved as is (order doesn't decide)", () =>
   Effect.gen(function* () {
     yield* configure()
     const permissions = yield* OperatorAgentPermissions.Service
@@ -100,9 +100,8 @@ unix("a pair written twice is refused, and so is an order grouping would change,
     expect(String(failure(twice))).toContain("the later one replaces the earlier one")
 
     const reordered = [rule("read", "*", "deny"), rule("*", "*", "allow"), rule("read", "*.md", "deny")]
-    const refused = yield* Effect.exit(permissions.save({ agent: "build", scope: "project", rules: reordered }))
-    expect(String(failure(refused))).toContain("grouped by permission")
-    const saved = yield* permissions.save({ agent: "build", scope: "project", rules: reordered, confirmOrder: true })
+    // The most specific line decides (permission-model.ts), so the grouped order means the same.
+    const saved = yield* permissions.save({ agent: "build", scope: "project", rules: reordered })
     expect(Permission.fromConfig((yield* json(saved.path)).agent.build.permission)).toEqual([
       rule("read", "*", "deny"),
       rule("read", "*.md", "deny"),

@@ -15860,6 +15860,177 @@
         ]
       }
     },
+    "/operator/permission/level/{level}": {
+      "get": {
+        "tags": ["operator permission levels"],
+        "operationId": "operator.permissionLevel.get",
+        "parameters": [
+          {
+            "name": "level",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/OperatorPermissionLevelName"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "namespace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The level's permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPermissionLevel1"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorPermissionLevelInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorPermissionLevelInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "The lines in force at the level (OpenCode's, global's if inherited, the namespace's, and for a project its own), each with its level and lock; the level's own lines as written in its config file; the inherited lines it deletes; its locks; and what a lock above sets aside.",
+        "summary": "A namespace's or project's permissions",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.permissionLevel.get({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "tags": ["operator permission levels"],
+        "operationId": "operator.permissionLevel.save",
+        "parameters": [
+          {
+            "name": "level",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/OperatorPermissionLevelName"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "namespace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The level's permissions after the save",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPermissionLevel2"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorPermissionLevelInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorPermissionLevelInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "OperatorPermissionLevelLockedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPermissionLevelLockedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Writes the level's lines to its config file's `permission` and its deletions and locks to the fork's store. Refused when a lock above covers a line or a deletion, or when it deletes OpenCode's own lines in the OpenCode namespace. Applies at once; the projects reload to read the file when none of their sessions is running.",
+        "summary": "Save a namespace's or project's permissions",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperatorPermissionLevelSave"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.permissionLevel.save({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/operator/session/{sessionID}/permissions": {
       "get": {
         "tags": ["operator session permissions"],
@@ -16009,6 +16180,22 @@
                 "properties": {
                   "rules": {
                     "$ref": "#/components/schemas/PermissionRuleset"
+                  },
+                  "deleted": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "permission": {
+                          "type": "string"
+                        },
+                        "pattern": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["permission", "pattern"],
+                      "additionalProperties": false
+                    }
                   }
                 },
                 "required": ["rules"],
@@ -35797,9 +35984,304 @@
             "type": "string",
             "enum": ["own", "parent"],
             "description": "A subagent's locks: its own (default), or its own and its parent session's agent's"
+          },
+          "deleted": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPermissionLock"
+            }
           }
         },
         "required": ["locks", "inherit"],
+        "additionalProperties": false
+      },
+      "OperatorPermissionLevelName": {
+        "type": "string",
+        "enum": ["namespace", "project"]
+      },
+      "OperatorPermissionKey": {
+        "type": "object",
+        "properties": {
+          "permission": {
+            "type": "string"
+          },
+          "pattern": {
+            "type": "string"
+          }
+        },
+        "required": ["permission", "pattern"],
+        "additionalProperties": false
+      },
+      "OperatorPermissionMarks": {
+        "type": "object",
+        "properties": {
+          "deleted": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPermissionKey"
+            },
+            "description": "Inherited lines this level deletes"
+          },
+          "locks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPermissionKey"
+            },
+            "description": "Lines this level locks: they bind every level below"
+          }
+        },
+        "required": ["deleted", "locks"],
+        "additionalProperties": false
+      },
+      "OperatorPermissionBlocked": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["line", "deleted"]
+          },
+          "permission": {
+            "type": "string"
+          },
+          "pattern": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": ["kind", "permission", "pattern", "reason"],
+        "additionalProperties": false
+      },
+      "OperatorPermissionLevel1": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "$ref": "#/components/schemas/OperatorPermissionLevelName"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPermissionRow"
+            },
+            "description": "The lines in force at this level: inherited ones and the level's own, each with its level and lock"
+          },
+          "deleted": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPermissionRow"
+            },
+            "description": "Inherited lines this level deletes, as they were"
+          },
+          "own": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PermissionRule"
+            },
+            "description": "The level's own lines, as written in its file"
+          },
+          "marks": {
+            "$ref": "#/components/schemas/OperatorPermissionMarks"
+          },
+          "canDeleteOpenCode": {
+            "type": "boolean",
+            "description": "OpenCode's own lines can be deleted (not in the OpenCode namespace)"
+          },
+          "blocked": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPermissionBlocked"
+            },
+            "description": "The level's lines or deletions a lock above sets aside"
+          },
+          "forms": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/OperatorPermissionPatternForm"
+            }
+          },
+          "known": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Permissions the editor suggests"
+          },
+          "reload": {
+            "type": "string",
+            "enum": ["now", "when-idle"]
+          }
+        },
+        "required": [
+          "level",
+          "namespace",
+          "rows",
+          "deleted",
+          "own",
+          "marks",
+          "canDeleteOpenCode",
+          "blocked",
+          "forms",
+          "known"
+        ],
+        "additionalProperties": false
+      },
+      "OperatorPermissionLevelInvalidError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorPermissionLevelInvalidError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorPermissionLevelSave": {
+        "type": "object",
+        "properties": {
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PermissionRule"
+            }
+          },
+          "deleted": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPermissionKey"
+            }
+          },
+          "locks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPermissionKey"
+            }
+          }
+        },
+        "required": ["lines", "deleted", "locks"],
+        "additionalProperties": false
+      },
+      "OperatorPermissionLevel2": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "$ref": "#/components/schemas/OperatorPermissionLevelName"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPermissionRow"
+            },
+            "description": "The lines in force at this level: inherited ones and the level's own, each with its level and lock"
+          },
+          "deleted": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPermissionRow"
+            },
+            "description": "Inherited lines this level deletes, as they were"
+          },
+          "own": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PermissionRule"
+            },
+            "description": "The level's own lines, as written in its file"
+          },
+          "marks": {
+            "$ref": "#/components/schemas/OperatorPermissionMarks"
+          },
+          "canDeleteOpenCode": {
+            "type": "boolean",
+            "description": "OpenCode's own lines can be deleted (not in the OpenCode namespace)"
+          },
+          "blocked": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorPermissionBlocked"
+            },
+            "description": "The level's lines or deletions a lock above sets aside"
+          },
+          "forms": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/OperatorPermissionPatternForm"
+            }
+          },
+          "known": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Permissions the editor suggests"
+          },
+          "reload": {
+            "type": "string",
+            "enum": ["now", "when-idle"]
+          }
+        },
+        "required": [
+          "level",
+          "namespace",
+          "rows",
+          "deleted",
+          "own",
+          "marks",
+          "canDeleteOpenCode",
+          "blocked",
+          "forms",
+          "known"
+        ],
+        "additionalProperties": false
+      },
+      "OperatorPermissionLevelLockedError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorPermissionLevelLockedError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
         "additionalProperties": false
       },
       "OperatorSessionPermissions": {
@@ -35843,6 +36325,23 @@
             },
             "description": "The session's own rules"
           },
+          "deleted": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "permission": {
+                  "type": "string"
+                },
+                "pattern": {
+                  "type": "string"
+                }
+              },
+              "required": ["permission", "pattern"],
+              "additionalProperties": false
+            },
+            "description": "Inherited lines the session deletes"
+          },
           "forms": {
             "type": "object",
             "additionalProperties": {
@@ -35874,6 +36373,7 @@
           "rows",
           "editable",
           "written",
+          "deleted",
           "forms",
           "known",
           "locked",
@@ -50012,6 +50512,10 @@
     {
       "name": "operator agent permissions",
       "description": "Agent permission routes."
+    },
+    {
+      "name": "operator permission levels",
+      "description": "Namespace and project permission routes."
     },
     {
       "name": "operator session permissions",

@@ -258,6 +258,12 @@ import type {
   OperatorPermissionDecideResponses,
   OperatorPermissionDecisionsErrors,
   OperatorPermissionDecisionsResponses,
+  OperatorPermissionLevelGetErrors,
+  OperatorPermissionLevelGetResponses,
+  OperatorPermissionLevelName,
+  OperatorPermissionLevelSave,
+  OperatorPermissionLevelSaveErrors,
+  OperatorPermissionLevelSaveResponses,
   OperatorPermissionLocks,
   OperatorPermissionPendingErrors,
   OperatorPermissionPendingResponses,
@@ -4475,6 +4481,91 @@ export class AgentPermissions extends HeyApiClient {
   }
 }
 
+export class PermissionLevel extends HeyApiClient {
+  /**
+   * A namespace's or project's permissions
+   *
+   * The lines in force at the level (OpenCode's, global's if inherited, the namespace's, and for a project its own), each with its level and lock; the level's own lines as written in its config file; the inherited lines it deletes; its locks; and what a lock above sets aside.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      level: OperatorPermissionLevelName
+      directory?: string
+      workspace?: string
+      namespace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "level" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "namespace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorPermissionLevelGetResponses,
+      OperatorPermissionLevelGetErrors,
+      ThrowOnError
+    >({
+      url: "/operator/permission/level/{level}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Save a namespace's or project's permissions
+   *
+   * Writes the level's lines to its config file's `permission` and its deletions and locks to the fork's store. Refused when a lock above covers a line or a deletion, or when it deletes OpenCode's own lines in the OpenCode namespace. Applies at once; the projects reload to read the file when none of their sessions is running.
+   */
+  public save<ThrowOnError extends boolean = false>(
+    parameters: {
+      level: OperatorPermissionLevelName
+      directory?: string
+      workspace?: string
+      namespace?: string
+      operatorPermissionLevelSave?: OperatorPermissionLevelSave
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "level" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "namespace" },
+            { key: "operatorPermissionLevelSave", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorPermissionLevelSaveResponses,
+      OperatorPermissionLevelSaveErrors,
+      ThrowOnError
+    >({
+      url: "/operator/permission/level/{level}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class SessionPermissions extends HeyApiClient {
   /**
    * A session's permissions, with where each rule comes from
@@ -4523,6 +4614,10 @@ export class SessionPermissions extends HeyApiClient {
       directory?: string
       workspace?: string
       rules?: PermissionRuleset
+      deleted?: Array<{
+        permission: string
+        pattern: string
+      }>
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4535,6 +4630,7 @@ export class SessionPermissions extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "rules" },
+            { in: "body", key: "deleted" },
           ],
         },
       ],
@@ -5488,6 +5584,11 @@ export class Operator extends HeyApiClient {
   private _agentPermissions?: AgentPermissions
   get agentPermissions(): AgentPermissions {
     return (this._agentPermissions ??= new AgentPermissions({ client: this.client }))
+  }
+
+  private _permissionLevel?: PermissionLevel
+  get permissionLevel(): PermissionLevel {
+    return (this._permissionLevel ??= new PermissionLevel({ client: this.client }))
   }
 
   private _sessionPermissions?: SessionPermissions

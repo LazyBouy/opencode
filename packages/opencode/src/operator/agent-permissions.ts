@@ -8,6 +8,8 @@ import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
 import { OperatorAgents } from "./agents"
 import { OperatorConfig } from "./config"
+import { OperatorPermissionLive } from "./permission-live"
+import { OperatorPermissionModel } from "./permission-model"
 import { OperatorPermissionRules } from "./permission-rules"
 import { OperatorTools } from "./tools"
 
@@ -60,8 +62,9 @@ type Rule = PermissionV1.Rule
 export interface Interface {
   readonly get: (agent: string) => Effect.Effect<Info, NotFoundError>
   /**
-   * Writes the agent's own rules, in order. Refuses a permission + pattern pair written twice, and an
-   * order that grouping by permission would change the result of, unless `confirmOrder`.
+   * Writes the agent's own rules. Refuses a permission + pattern pair written twice, and a rule a lock
+   * above the agent (the namespace's, the project's) covers. Order doesn't change what the rules decide
+   * (permission-model.ts); `confirmOrder` is accepted and ignored.
    */
   readonly save: (input: {
     agent: string
@@ -69,6 +72,8 @@ export interface Interface {
     rules: ReadonlyArray<Rule>
     confirmOrder?: boolean
   }) => Effect.Effect<{ path: string }, NotFoundError | InvalidError>
+  /** The editor's hints without an agent: the pattern each permission is asked with, and the permissions to suggest. */
+  readonly hints: () => Effect.Effect<{ forms: Record<string, OperatorPermissionRules.PatternForm>; known: string[] }>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorAgentPermissions") {}
@@ -90,6 +95,7 @@ const layer = Layer.effect(
     const operatorConfig = yield* OperatorConfig.Service
     const tools = yield* OperatorTools.Service
     const config = yield* Config.Service
+    const live = yield* OperatorPermissionLive.Service
 
     const get = Effect.fn("OperatorAgentPermissions.get")(function* (name: string) {
       const agent = (yield* agents.list()).find((item) => item.name === name)
@@ -154,10 +160,30 @@ const layer = Layer.effect(
             )
             .join("\n"),
         })
-      if (check.changed.length && !input.confirmOrder)
+      // A rule a lock above the agent covers, with another action, is refused.
+      const built = yield* live.lines({ agent: input.agent, agentRules: input.rules })
+      const blocked = built.blocked.find((item) => item.level === OperatorPermissionLive.LEVEL.agent)
+      if (blocked)
         return yield* new InvalidError({
-          message: `Rules are saved grouped by permission, which changes the order of ${check.changed.map(at).join(", ")} and can change what they decide. Confirm the order, or put each permission's rules together.`,
+          message: blocked.lock
+            ? `${blocked.key.permission} ${blocked.key.pattern} is locked by the ${OperatorPermissionLive.levelName(blocked.lock.lockedAt!)}: the agent may not change it.`
+            : `${blocked.key.permission} ${blocked.key.pattern}: OpenCode's own lines can't be deleted in the OpenCode namespace.`,
         })
+      const above = built.lines.filter(
+        (line) => line.lockedAt !== undefined && line.lockedAt < OperatorPermissionLive.LEVEL.agent,
+      )
+      for (const rule of input.rules) {
+        const lock = above.find(
+          (line) =>
+            line.action !== rule.action &&
+            OperatorPermissionModel.contains(line.permission, rule.permission) &&
+            OperatorPermissionModel.contains(line.pattern, rule.pattern),
+        )
+        if (lock)
+          return yield* new InvalidError({
+            message: `${rule.permission} ${rule.pattern}: the ${OperatorPermissionLive.levelName(lock.lockedAt!)} locks ${lock.permission} ${lock.pattern} ${lock.action}, which covers it.`,
+          })
+      }
       const patch: typeof OperatorAgents.Patch.Type = input.rules.length
         ? { permission: OperatorPermissionRules.toConfig(input.rules) as typeof OperatorAgents.Patch.Type.permission }
         : { reset: ["permission"] }
@@ -171,12 +197,34 @@ const layer = Layer.effect(
       )
     })
 
-    return Service.of({ get, save })
+    const hints = Effect.fn("OperatorAgentPermissions.hints")(function* () {
+      const listed = yield* tools.list()
+      return {
+        forms: {
+          ...OperatorPermissionRules.FORMS,
+          ...Object.fromEntries(
+            listed.filter((tool) => tool.origin === "mcp").map((tool) => [tool.id, "any" as const]),
+          ),
+        } as Record<string, OperatorPermissionRules.PatternForm>,
+        known: [...new Set([...STANDARD, ...listed.map((tool) => OperatorPermissionRules.permissionOf(tool.id))])].sort(
+          (a, b) => a.localeCompare(b),
+        ),
+      }
+    })
+
+    return Service.of({ get, save, hints })
   }),
 )
 
 export const node = LayerNode.make({
   service: Service,
   layer,
-  deps: [OperatorPermissionRules.node, OperatorAgents.node, OperatorConfig.node, OperatorTools.node, Config.node],
+  deps: [
+    OperatorPermissionRules.node,
+    OperatorAgents.node,
+    OperatorConfig.node,
+    OperatorTools.node,
+    Config.node,
+    OperatorPermissionLive.node,
+  ],
 })

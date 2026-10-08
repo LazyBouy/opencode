@@ -14,8 +14,10 @@ import { OperatorConfig } from "./config"
 import { OperatorNamespaceScope } from "./namespace-scope"
 import { OperatorPermissionEffective } from "./permission-effective"
 import { OperatorPermissionHook } from "./permission-hook"
+import { OperatorPermissionMarks } from "./permission-marks"
 import { OperatorPermissionModel as Model } from "./permission-model"
 import { OperatorPermissionRules } from "./permission-rules"
+import { OperatorProjects } from "./projects"
 
 // A session's permission lines in levels, and the decisions they make (permission-model.ts says how):
 //
@@ -44,7 +46,18 @@ export const LEVEL = Object.fromEntries(OperatorPermissionRules.LEVELS.map((name
 export const levelName = (level: number) => OperatorPermissionRules.LEVELS[level] ?? "session"
 
 export type LinesInput = {
-  agent: string
+  /** The agent; without one, OpenCode's defaults stand for the OpenCode level (the namespace and project views). */
+  agent?: string
+  /** The namespace level of this namespace instead of the project's (the namespace view). */
+  namespace?: string
+  /** Only the levels down to this one. */
+  upTo?: OperatorPermissionRules.Level
+  /** A namespace's or project's unsaved lines and marks, in place of what is saved. */
+  draft?: {
+    level: "namespace" | "project"
+    lines: ReadonlyArray<Rule>
+    marks: OperatorPermissionMarks.Marks
+  }
   /** The session whose rules and parent apply. */
   session?: Session.Info
   /** The session that started this agent's session, without one (Runs as Subagent, started from it). */
@@ -53,6 +66,8 @@ export type LinesInput = {
   sessionLines?: ReadonlyArray<Rule & Partial<Meta>>
   /** A draft of the agent's own rules, in place of its saved ones. */
   agentRules?: ReadonlyArray<Rule>
+  /** In place of the inherited lines the session deletes (a draft). */
+  sessionDeleted?: ReadonlyArray<Model.Key>
   /** The permission asked for: doom_loop leaves the session's rules out. */
   permission?: string
 }
@@ -70,15 +85,24 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorPermissionLive") {}
 
-// What an agent locks (fixes_spec §4.2), registered by the locks service: its lock keys, and its parent
-// session's agent's locked rules when it inherits them.
+// What an agent locks (fixes_spec §4.2) and deletes, registered by the locks service: its lock keys, the
+// inherited lines it deletes, and its parent session's agent's locked rules when it inherits them.
 export const locks: {
-  of?: (input: {
-    directory: string
-    agent: string
-    parentID?: string
-  }) => Effect.Effect<{ keys: ReadonlyArray<Model.Key>; inherited: ReadonlyArray<Rule> }>
+  of?: (input: { directory: string; agent: string; parentID?: string }) => Effect.Effect<{
+    keys: ReadonlyArray<Model.Key>
+    deleted: ReadonlyArray<Model.Key>
+    inherited: ReadonlyArray<Rule>
+  }>
 } = {}
+
+// The inherited lines a session deletes, registered by the session permissions service.
+export const sessionMarks: { deleted?: (sessionID: string) => Promise<ReadonlyArray<Model.Key>> } = {}
+
+// A config file's text, parsed (JSONC).
+export function parseConfig(text: string) {
+  const value = parse(text) as Record<string, unknown> | undefined
+  return value && typeof value === "object" ? value : undefined
+}
 
 const keyOf = (directory: string, agent: string) => `${directory}\u0000${agent}`
 const same = (a: Rule, b: Rule | undefined) =>
@@ -90,8 +114,8 @@ const plain = ({ permission, pattern, action }: Rule): Rule => ({ permission, pa
 // A config file's lines: its legacy `tools` switches (edit, write and patch are `edit`), then its
 // `permission`, which wins for the same permission and pattern (as config.ts merges them).
 function configLines(path: string, text: string): Array<Rule & Meta> {
-  const value = parse(text) as Record<string, unknown> | undefined
-  if (!value || typeof value !== "object") return []
+  const value = parseConfig(text)
+  if (!value) return []
   const tools = value.tools && typeof value.tools === "object" ? (value.tools as Record<string, unknown>) : {}
   const switched = Object.entries(tools).flatMap(([tool, enabled]) =>
     typeof enabled === "boolean"
@@ -136,22 +160,47 @@ const layer = Layer.effect(
       () => Effect.sync(() => GlobalBus.off("event", onEvent)),
     )
 
-    // The config levels, from the files as they are now.
-    const configLevels = Effect.fnUntraced(function* () {
+    // The config levels, from the files as they are now (a draft in place of its level's file), and the
+    // namespace's and project's marks.
+    const configLevels = Effect.fnUntraced(function* (namespace?: string, draft?: LinesInput["draft"]) {
       const ctx = yield* InstanceState.context
-      const inherit = yield* OperatorNamespaceScope.inheritsGlobal(ctx.directory, ctx.worktree)
-      const { sources } = yield* operatorConfig.layers()
+      const ns = yield* operatorConfig.namespaceOf(namespace)
+      const inherit = (yield* Effect.promise(() => OperatorNamespaceScope.namespaceLayer(ns))).inherit
+      const layers = yield* operatorConfig.layers(namespace)
+      const target = draft ? layers.targets[draft.level] : undefined
       const of = (kinds: ReadonlyArray<string>) =>
-        sources
-          .filter((source) => kinds.includes(source.kind))
+        layers.sources
+          .filter((source) => kinds.includes(source.kind) && source.path !== target)
           .flatMap((source) => configLines(source.path, source.text))
+      const drafted = (level: "namespace" | "project") =>
+        draft?.level === level && target
+          ? draft.lines.map((rule) => ({
+              ...plain(rule),
+              part: "config" as const,
+              from: { kind: "config-permission" as const, path: target },
+            }))
+          : []
       const env = Flag.OPENCODE_PERMISSION
         ? configLines("OPENCODE_PERMISSION", JSON.stringify({ permission: safeJson(Flag.OPENCODE_PERMISSION) }))
         : []
+      const project = yield* Effect.promise(() => OperatorProjects.keyOf(ctx))
       return {
-        global: inherit ? of(["global"]) : [],
-        namespace: of(["namespace"]),
-        project: [...of(["custom", "project", "directory", "env"]), ...env],
+        namespace: ns,
+        lines: {
+          global: inherit ? of(["global"]) : [],
+          namespace: [...of(["namespace"]), ...drafted("namespace")],
+          project: [...of(["custom", "project", "directory", "env"]), ...drafted("project"), ...env],
+        },
+        marks: {
+          namespace:
+            draft?.level === "namespace"
+              ? draft.marks
+              : yield* Effect.promise(() => OperatorPermissionMarks.namespaceMarks(ns)),
+          project:
+            draft?.level === "project"
+              ? draft.marks
+              : yield* Effect.promise(() => OperatorPermissionMarks.projectMarks(project)),
+        },
       }
     })
 
@@ -159,26 +208,33 @@ const layer = Layer.effect(
       const ctx = yield* InstanceState.context
       const directory = input.session?.directory ?? ctx.directory
       // The agent's list as OpenCode loaded it, in parts (with a draft of its own rules, as saving it would
-      // write them).
-      const labelled = yield* rules.agent(input.agent, input.agentRules)
+      // write them). Without an agent, OpenCode's defaults (the agent new sessions start with gives them).
+      const agent = input.agent ?? (yield* agents.defaultAgent())
+      const labelled = yield* rules.agent(agent, input.agentRules)
       const part = (name: OperatorPermissionRules.Part) =>
         labelled.rows
-          .filter((row) => row.part === name)
+          .filter((row) => row.part === name && (input.agent || row.from.kind !== "opencode-agent"))
           .map(({ permission, pattern, action, part, from }) => ({ permission, pattern, action, part, from }))
-      const pending = input.agentRules ? undefined : written.get(keyOf(directory, input.agent))
+      const pending = input.agentRules ? undefined : written.get(keyOf(directory, agent))
       const own: Array<Rule & Meta> = pending
         ? pending.map((rule) => ({ ...plain(rule), part: "agent", from: { kind: "agent-written" } }))
         : part("agent")
-      const config = yield* configLevels()
-      const locked = locks.of
-        ? yield* locks.of({
-            directory,
-            agent: input.agent,
-            ...((input.session?.parentID ?? input.parentID)
-              ? { parentID: input.session?.parentID ?? input.parentID! }
-              : {}),
-          })
-        : { keys: [], inherited: [] }
+      const config = yield* configLevels(input.namespace, input.draft)
+      const locked =
+        locks.of && input.agent
+          ? yield* locks.of({
+              directory,
+              agent: input.agent,
+              ...((input.session?.parentID ?? input.parentID)
+                ? { parentID: input.session?.parentID ?? input.parentID! }
+                : {}),
+            })
+          : { keys: [], deleted: [], inherited: [] }
+      const sessionDeleted =
+        input.sessionDeleted ??
+        (input.session && sessionMarks.deleted
+          ? yield* Effect.promise(() => sessionMarks.deleted!(input.session!.id)).pipe(Effect.orElseSucceed(() => []))
+          : [])
       const inherited = locked.inherited.map((rule) => ({
         ...plain(rule),
         part: "agent" as const,
@@ -192,14 +248,19 @@ const layer = Layer.effect(
               part: rule.part ?? "session",
               from: rule.from ?? { kind: "session-opencode" },
             }))
-      return Model.build<Meta>([
+      const levels: Model.Level<Meta>[] = [
         { lines: [...part("opencode"), ...part("truncation")] },
-        { lines: config.global },
-        { lines: config.namespace },
-        { lines: config.project },
-        { lines: [...inherited, ...own], locks: [...inherited, ...locked.keys] },
-        { lines: session },
-      ])
+        { lines: config.lines.global },
+        { lines: config.lines.namespace, ...config.marks.namespace },
+        { lines: config.lines.project, ...config.marks.project },
+        { lines: [...inherited, ...own], deleted: locked.deleted, locks: [...inherited, ...locked.keys] },
+        { lines: session, deleted: sessionDeleted },
+      ]
+      const upTo = input.upTo ? LEVEL[input.upTo] : levels.length - 1
+      // OpenCode's own lines can't be deleted in the OpenCode namespace.
+      return Model.build<Meta>(levels.slice(0, upTo + 1), {
+        keep: (line) => config.namespace === "opencode" && line.level === LEVEL.opencode,
+      })
     })
 
     const sessionLines = Effect.fnUntraced(function* (sessionID: string, permission?: string) {

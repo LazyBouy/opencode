@@ -13,6 +13,7 @@ import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { OperatorAgentPermissions } from "./agent-permissions"
 import { OperatorPermissionHook } from "./permission-hook"
+import { OperatorPermissionLive } from "./permission-live"
 import { OperatorPermissionLocks } from "./permission-locks"
 import { OperatorPermissionModel } from "./permission-model"
 import { OperatorPermissionRules } from "./permission-rules"
@@ -77,8 +78,40 @@ export function replace(sessionID: string, rules: ReadonlyArray<Rule>, origin: O
 }
 
 export function forget(sessionID: string) {
-  return change((store) => {
-    delete store[sessionID]
+  return Promise.all([
+    change((store) => {
+      delete store[sessionID]
+    }),
+    changeDeleted((store) => {
+      delete store[sessionID]
+    }),
+  ])
+}
+
+// The inherited lines a session deletes (tool_prompt_from_permission.md §3.2), by session, deleted with it.
+type Key = { permission: string; pattern: string }
+const deletionsFile = () => path.join(Global.Path.data, "operator", "session-permission-deletions.json")
+const readDeleted = (): Promise<Record<string, Key[]>> =>
+  Bun.file(deletionsFile())
+    .json()
+    .catch(() => ({}))
+function changeDeleted(work: (store: Record<string, Key[]>) => void) {
+  const next = queue.then(async () => {
+    const store = await readDeleted()
+    work(store)
+    await fs.mkdir(path.dirname(deletionsFile()), { recursive: true })
+    await Bun.write(deletionsFile(), JSON.stringify(store, null, 2) + "\n")
+  })
+  queue = next.catch(() => undefined)
+  return next
+}
+export async function deletedOf(sessionID: string): Promise<Key[]> {
+  return (await readDeleted())[sessionID] ?? []
+}
+function writeDeleted(sessionID: string, keys: ReadonlyArray<Key>) {
+  return changeDeleted((store) => {
+    if (keys.length) store[sessionID] = keys.map(({ permission, pattern }) => ({ permission, pattern }))
+    else delete store[sessionID]
   })
 }
 
@@ -93,6 +126,9 @@ export const Info = Schema.Struct({
     description: "The session's own rules: rows[start] up to (not including) rows[end]",
   }),
   written: Schema.Array(PermissionV1.Rule).annotate({ description: "The session's own rules" }),
+  deleted: Schema.Array(Schema.Struct({ permission: Schema.String, pattern: Schema.String })).annotate({
+    description: "Inherited lines the session deletes",
+  }),
   forms: Schema.Record(Schema.String, OperatorPermissionRules.PatternForm),
   known: Schema.Array(Schema.String),
   locked: Schema.Array(PermissionV1.Rule).annotate({
@@ -112,8 +148,12 @@ export class LockedError extends Schema.TaggedErrorClass<LockedError>()("Operato
 
 export interface Interface {
   readonly get: (sessionID: string) => Effect.Effect<Info, NotFoundError>
-  /** Replaces the session's own rules (Reset to agent: none). */
-  readonly save: (sessionID: string, rules: ReadonlyArray<Rule>) => Effect.Effect<Info, NotFoundError | LockedError>
+  /** Replaces the session's own rules and the inherited lines it deletes (Reset to agent: none). */
+  readonly save: (
+    sessionID: string,
+    rules: ReadonlyArray<Rule>,
+    deleted?: ReadonlyArray<Key>,
+  ) => Effect.Effect<Info, NotFoundError | LockedError>
   /** Adds rules after the session's own (Allow for session), with where they came from. */
   readonly add: (sessionID: string, rules: ReadonlyArray<Rule>, origin: Origin) => Effect.Effect<void, NotFoundError>
 }
@@ -129,6 +169,7 @@ const layer = Layer.effect(
     const config = yield* Config.Service
     const agents = yield* Agent.Service
     const locks = yield* OperatorPermissionLocks.Service
+    const live = yield* OperatorPermissionLive.Service
 
     // A session deleted for good takes its record with it.
     const onEvent = (event: GlobalEvent) => {
@@ -160,6 +201,7 @@ const layer = Layer.effect(
       Effect.sync(() => {
         OperatorPermissionHook.handlers.always = always
         OperatorPermissionHook.handlers.switched = switched
+        OperatorPermissionLive.sessionMarks.deleted = deletedOf
       }),
       () =>
         Effect.sync(() => {
@@ -178,7 +220,20 @@ const layer = Layer.effect(
       const info = yield* session(sessionID)
       // A session's agent, else the agent new sessions start with.
       const agent = info.agent ?? (yield* agents.defaultAgent())
-      const labelled = yield* rules.agent(agent)
+      // Everything the session inherits (OpenCode, global, namespace, project, agent), as it is in force.
+      const inherited = yield* live.lines({ agent, session: info, upTo: "agent" })
+      const labelled = {
+        rows: OperatorPermissionModel.order(inherited.lines).map((line, index) => ({
+          permission: line.permission,
+          pattern: line.pattern,
+          action: line.action,
+          index: index + 1,
+          part: line.part,
+          from: line.from,
+          level: OperatorPermissionLive.levelName(line.level),
+          ...(line.lockedAt !== undefined ? { locked: OperatorPermissionLive.levelName(line.lockedAt) } : {}),
+        })),
+      }
       const editor = yield* agentPermissions
         .get(agent)
         .pipe(Effect.mapError(() => new NotFoundError({ message: `No agent named "${agent}"` })))
@@ -200,6 +255,7 @@ const layer = Layer.effect(
         rows: [...labelled.rows, ...sessionRows],
         editable: { start: labelled.rows.length, end: labelled.rows.length + sessionRows.length },
         written: own,
+        deleted: yield* Effect.promise(() => deletedOf(sessionID)),
         forms: editor.forms,
         known: editor.known,
         locked,
@@ -207,8 +263,12 @@ const layer = Layer.effect(
       }
     })
 
-    const save = Effect.fn("OperatorSessionPermissions.save")(function* (sessionID: string, next: ReadonlyArray<Rule>) {
-      yield* session(sessionID)
+    const save = Effect.fn("OperatorSessionPermissions.save")(function* (
+      sessionID: string,
+      next: ReadonlyArray<Rule>,
+      deleted?: ReadonlyArray<Key>,
+    ) {
+      const info = yield* session(sessionID)
       const list = next.map((rule) => ({
         permission: rule.permission.trim(),
         pattern: rule.pattern.trim() || "*",
@@ -232,6 +292,21 @@ const layer = Layer.effect(
         return yield* new LockedError({
           message: `${clash.lock!.permission} ${clash.lock!.pattern} is locked: sessions may not override it (${clash.rule.permission} ${clash.rule.pattern}).`,
         })
+      // A deletion of a locked line, or of OpenCode's own lines in the OpenCode namespace, is refused.
+      if (deleted) {
+        const agent = info.agent ?? (yield* agents.defaultAgent())
+        const built = yield* live.lines({ agent, session: info, sessionDeleted: deleted })
+        const refused = built.blocked.find(
+          (item) => item.level === OperatorPermissionLive.LEVEL.session && item.kind === "deleted",
+        )
+        if (refused)
+          return yield* new LockedError({
+            message: refused.lock
+              ? `${refused.key.permission} ${refused.key.pattern} is locked: sessions may not delete it.`
+              : `${refused.key.permission} ${refused.key.pattern}: OpenCode's own lines can't be deleted in the OpenCode namespace.`,
+          })
+        yield* Effect.promise(() => writeDeleted(sessionID, deleted))
+      }
       yield* Effect.promise(() => replace(sessionID, list, "user"))
       // Approvals kept in memory for the session stop applying: its rules are what you saved.
       OperatorPermissionHook.reset(sessionID)
@@ -268,5 +343,6 @@ export const node = LayerNode.make({
     Config.node,
     Agent.node,
     OperatorPermissionLocks.node,
+    OperatorPermissionLive.node,
   ],
 })

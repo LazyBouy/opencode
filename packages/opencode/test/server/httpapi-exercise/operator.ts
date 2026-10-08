@@ -433,6 +433,47 @@ export const operatorScenarios: Scenario[] = [
     }))
     .status(400),
   http.protected
+    .get("/operator/permission/level/{level}", "operator.permissionLevel.get")
+    .at((ctx) => ({ path: route("/operator/permission/level/{level}", { level: "project" }), headers: ctx.headers() }))
+    .json(200, (body) => {
+      object(body)
+      array(body.rows)
+      array(body.own)
+      check(
+        body.rows.some((row) => isRecord(row) && row.level === "opencode"),
+        "a project inherits OpenCode's lines",
+      )
+      check(body.canDeleteOpenCode === false, "OpenCode's lines stay in the OpenCode namespace")
+    }),
+  http.protected
+    .put("/operator/permission/level/{level}", "operator.permissionLevel.save")
+    .mutating()
+    .at((ctx) => ({
+      path: route("/operator/permission/level/{level}", { level: "project" }),
+      headers: ctx.headers(),
+      body: { lines: [{ permission: "webfetch", pattern: "*", action: "deny" }], deleted: [], locks: [] },
+    }))
+    .json(
+      200,
+      (body) => {
+        object(body)
+        array(body.own)
+        check(
+          body.own.some((row) => isRecord(row) && row.permission === "webfetch" && row.action === "deny"),
+          "the project's line is written",
+        )
+      },
+      "status",
+    ),
+  http.protected
+    .put("/operator/permission/level/{level}", "operator.permissionLevel.save.protected")
+    .at((ctx) => ({
+      path: route("/operator/permission/level/{level}", { level: "project" }),
+      headers: ctx.headers(),
+      body: { lines: [], deleted: [{ permission: "*", pattern: "*" }], locks: [] },
+    }))
+    .status(409),
+  http.protected
     .get("/operator/session/{sessionID}/permissions", "operator.sessionPermissions.get")
     .seeded((ctx) => ctx.session({ title: "Permission session" }))
     .at((ctx) => ({

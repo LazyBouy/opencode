@@ -274,10 +274,10 @@ function beats(a: Line<unknown>, b: Line<unknown>) {
   return RANK[a.action] > RANK[b.action]
 }
 
-// The lines as one ordered list for upstream code that checks the last line that matches (the skills and
-// subagent lists, MCP instructions): a line comes after every line it wins against where both can match.
-// Exact for the usual lists; the fork decides asks and the tool list from the lines themselves.
-export function compile<T>(lines: ReadonlyArray<Line<T>>): Rule[] {
+// The lines in one order where each line comes after every line it wins against where both can match:
+// the broader lines first. Exact for the usual lists; the fork decides asks and the tool list from the
+// lines themselves.
+export function order<L extends Line<unknown>>(lines: ReadonlyArray<L>): L[] {
   const after = lines.map(() => new Set<number>())
   lines.forEach((a, i) =>
     lines.forEach((b, j) => {
@@ -286,20 +286,23 @@ export function compile<T>(lines: ReadonlyArray<Line<T>>): Rule[] {
     }),
   )
   const placed = new Set<number>()
-  const order: number[] = []
-  while (order.length < lines.length) {
+  const result: L[] = []
+  while (result.length < lines.length) {
     const ready = lines.findIndex(
       (_, index) => !placed.has(index) && [...after[index]!].every((other) => placed.has(other)),
     )
     // A cycle (lines that each win somewhere): the first one left goes next.
     const next = ready >= 0 ? ready : lines.findIndex((_, index) => !placed.has(index))
     placed.add(next)
-    order.push(next)
+    result.push(lines[next]!)
   }
-  return order.map((index) => {
-    const line = lines[index]!
-    return { permission: line.permission, pattern: line.pattern, action: line.action }
-  })
+  return result
+}
+
+// The lines as one ordered list for upstream code that checks the last line that matches (the skills and
+// subagent lists, MCP instructions).
+export function compile<T>(lines: ReadonlyArray<Line<T>>): Rule[] {
+  return order(lines).map(({ permission, pattern, action }) => ({ permission, pattern, action }))
 }
 
 // One rule per input, each deciding its own input when checked last: what the permission hook returns, so

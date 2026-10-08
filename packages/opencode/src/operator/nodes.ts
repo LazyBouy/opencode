@@ -20,6 +20,7 @@ import { OperatorPermissionRules } from "./permission-rules"
 import { OperatorToolPrompt } from "./tool-prompt"
 import { OperatorCalls } from "./calls"
 import { OperatorAgentPermissions } from "./agent-permissions"
+import { OperatorPermissionLevels } from "./permission-levels"
 import { OperatorSessionPermissions } from "./session-permissions"
 import { OperatorAgentSessions } from "./agent-sessions"
 import { OperatorQueue } from "./queue"
@@ -43,6 +44,7 @@ export const operatorNodes = [
   OperatorToolPrompt.node,
   OperatorCalls.node,
   OperatorAgentPermissions.node,
+  OperatorPermissionLevels.node,
   OperatorSessionPermissions.node,
   OperatorAgentSessions.node,
   OperatorQueue.node,

@@ -52,7 +52,10 @@ export const OperatorSessionPermissionApi = HttpApi.make("operator-session-permi
           params: { sessionID: Schema.String },
           query: WorkspaceRoutingQuery,
           payload: Schema.Struct({
-            rules: PermissionV1.Ruleset.annotate({ description: "The session's own rules, in order; none resets" }),
+            rules: PermissionV1.Ruleset.annotate({ description: "The session's own rules; none resets" }),
+            deleted: Schema.optional(
+              Schema.Array(Schema.Struct({ permission: Schema.String, pattern: Schema.String })),
+            ).annotate({ description: "Inherited lines the session deletes (unchanged when absent)" }),
           }),
           success: described(OperatorSessionPermissions.Info, "The session's permissions after the save"),
           error: [ApiSessionPermissionsNotFoundError, ApiSessionPermissionsLockedError],
