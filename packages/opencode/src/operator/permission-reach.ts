@@ -23,7 +23,7 @@ const IGNORE_CASE = process.platform === "win32"
 const OTHER = "\u0000other"
 
 type Token = { kind: "char"; char: string } | { kind: "one" } | { kind: "any" }
-type Automaton = { tokens: Token[]; optionalTail: boolean }
+export type Automaton = { tokens: Token[]; optionalTail: boolean }
 
 const normalize = (text: string) => {
   const slashed = text.replaceAll("\\", "/")
@@ -41,7 +41,7 @@ export function compile(pattern: string): Automaton {
 
 // The states an automaton can be in after reading nothing more, from a set: `*` lets a state move on
 // without a character, and the optional tail lets the state before " *" reach the end.
-function close(automaton: Automaton, states: ReadonlySet<number>) {
+export function close(automaton: Automaton, states: ReadonlySet<number>) {
   const result = new Set(states)
   const stack = [...states]
   const end = automaton.tokens.length
@@ -59,7 +59,7 @@ function close(automaton: Automaton, states: ReadonlySet<number>) {
   return result
 }
 
-function step(automaton: Automaton, states: ReadonlySet<number>, symbol: string) {
+export function step(automaton: Automaton, states: ReadonlySet<number>, symbol: string) {
   const next = new Set<number>()
   for (const state of states) {
     const token = automaton.tokens[state]
@@ -71,7 +71,19 @@ function step(automaton: Automaton, states: ReadonlySet<number>, symbol: string)
   return close(automaton, next)
 }
 
-const accepts = (automaton: Automaton, states: ReadonlySet<number>) => states.has(automaton.tokens.length)
+export const accepts = (automaton: Automaton, states: ReadonlySet<number>) => states.has(automaton.tokens.length)
+
+// The characters that tell the automata apart, plus one symbol for every other character.
+export function alphabetOf(automata: ReadonlyArray<Automaton | undefined>) {
+  return [
+    ...new Set(
+      automata.flatMap((item) => (item?.tokens ?? []).flatMap((token) => (token.kind === "char" ? [token.char] : []))),
+    ),
+    OTHER,
+  ]
+}
+// How a symbol is written in an example input.
+export const textOf = (symbol: string) => (symbol === OTHER ? "⁣" : symbol)
 
 // Whether a compiled pattern matches a text (for tests against Wildcard.match).
 export function matches(pattern: string, text: string) {
@@ -83,15 +95,8 @@ export function matches(pattern: string, text: string) {
 
 // An input in L(own) and in none of `later` (or, with `own` undefined, in none of `later` at all),
 // found by a breadth-first search; undefined when there is none.
-function exclusive(own: Automaton | undefined, later: ReadonlyArray<Automaton>) {
-  const alphabet = [
-    ...new Set(
-      [own, ...later].flatMap((item) =>
-        (item?.tokens ?? []).flatMap((token) => (token.kind === "char" ? [token.char] : [])),
-      ),
-    ),
-    OTHER,
-  ]
+export function exclusive(own: Automaton | undefined, later: ReadonlyArray<Automaton>) {
+  const alphabet = alphabetOf([own, ...later])
   const start = {
     own: own ? close(own, new Set([0])) : undefined,
     later: later.map((item) => close(item, new Set([0]))),
@@ -111,7 +116,7 @@ function exclusive(own: Automaton | undefined, later: ReadonlyArray<Automaton>) 
       const next = {
         own: own ? step(own, node.own!, symbol) : undefined,
         later: node.later.map((states, index) => step(later[index]!, states, symbol)),
-        text: node.text + (symbol === OTHER ? "⁣" : symbol),
+        text: node.text + textOf(symbol),
       }
       if (own && next.own!.size === 0) continue
       const id = key(next)

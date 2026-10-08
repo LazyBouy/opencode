@@ -2,13 +2,12 @@ export * as OperatorInbox from "./inbox"
 
 import { Context, Effect, Layer, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Wildcard } from "@opencode-ai/core/util/wildcard"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { InstanceStore } from "@/project/instance-store"
 import { OperatorAgentPermissions } from "./agent-permissions"
 import { OperatorAgents } from "./agents"
 import { OperatorPermissionDecisions } from "./permission-decisions"
-import { OperatorPermissionLocks } from "./permission-locks"
+import { OperatorPermissionLive } from "./permission-live"
 import { OperatorPermissionRules } from "./permission-rules"
 import { OperatorSessionPermissions } from "./session-permissions"
 
@@ -59,7 +58,7 @@ const layer = Layer.effect(
     const sessionPermissions = yield* OperatorSessionPermissions.Service
     const agentPermissions = yield* OperatorAgentPermissions.Service
     const agents = yield* OperatorAgents.Service
-    const locks = yield* OperatorPermissionLocks.Service
+    const live = yield* OperatorPermissionLive.Service
 
     const describe = (entry: OperatorPermissionDecisions.Asked) =>
       instances
@@ -69,19 +68,32 @@ const layer = Layer.effect(
             const request = entry.request
             const list = yield* sessionPermissions.get(request.sessionID).pipe(Effect.option)
             const rows = list._tag === "Some" ? list.value.rows : []
-            // The last rule that matches a pattern it asks for.
-            const asking = request.patterns
-              .map((pattern) =>
-                rows.findLast(
-                  (row) => Wildcard.match(request.permission, row.permission) && Wildcard.match(pattern, row.pattern),
-                ),
-              )
-              .find((row) => !row || row.action === "ask")
+            // The line that decides a pattern it asks for (permission-model.ts), and the lock that binds it.
+            const decided = yield* Effect.forEach(request.patterns, (pattern) =>
+              live.decide(request.sessionID, request.permission, pattern),
+            )
+            const line = decided.find((decision) => decision.action === "ask")?.line
+            const asking = line
+              ? (rows.findLast(
+                  (row) =>
+                    row.permission === line.permission &&
+                    row.pattern === line.pattern &&
+                    row.action === line.action &&
+                    row.part === line.part,
+                ) ?? {
+                  index: 0,
+                  permission: line.permission,
+                  pattern: line.pattern,
+                  action: line.action,
+                  part: line.part,
+                  from: line.from,
+                })
+              : undefined
             const agent = entry.agent ?? (list._tag === "Some" ? list.value.agent : undefined)
-            const locked = yield* locks.sessionRules(request.sessionID)
-            const lockedBy = request.patterns
-              .map((pattern) => OperatorPermissionLocks.deciding(locked, request.permission, pattern))
-              .find((rule) => rule !== undefined)
+            const lock = decided.find((decision) => decision.lock)?.lock
+            const lockedBy = lock
+              ? { permission: lock.permission, pattern: lock.pattern, action: lock.action }
+              : undefined
             const found = agent
               ? (yield* agents.list().pipe(Effect.orElseSucceed(() => []))).find((item) => item.name === agent)
               : undefined
@@ -135,6 +147,6 @@ export const node = LayerNode.make({
     OperatorSessionPermissions.node,
     OperatorAgentPermissions.node,
     OperatorAgents.node,
-    OperatorPermissionLocks.node,
+    OperatorPermissionLive.node,
   ],
 })

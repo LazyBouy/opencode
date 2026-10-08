@@ -51,13 +51,22 @@ export type Origin = typeof Origin.Type
 export const Part = Schema.Literals(["opencode", "config", "agent", "truncation", "session"])
 export type Part = typeof Part.Type
 
+// The levels permission lines are written at, highest first (permission-model.ts).
+export const LEVELS = ["opencode", "global", "namespace", "project", "agent", "session"] as const
+export const Level = Schema.Literals(LEVELS).annotate({ identifier: "OperatorPermissionLevel" })
+export type Level = typeof Level.Type
+
 export const Row = Schema.Struct({
-  index: Schema.Finite.annotate({ description: "1-based, in evaluation order" }),
+  index: Schema.Finite.annotate({ description: "1-based" }),
   permission: Schema.String,
   pattern: Schema.String,
   action: Schema.Literals(["allow", "ask", "deny"]),
   part: Part,
   from: Origin,
+  level: Schema.optional(Level).annotate({ description: "The level the line is written at" }),
+  locked: Schema.optional(Level).annotate({
+    description: 'The level that locked the line ("Can be overridden below: no"); it binds every level below',
+  }),
 }).annotate({ identifier: "OperatorPermissionRow" })
 export type Row = typeof Row.Type
 
@@ -215,7 +224,7 @@ export function isTaskRule(rule: Rule, primaryTools: string[] = []) {
 const same = (a: Rule, b: Rule) => a.permission === b.permission && a.pattern === b.pattern && a.action === b.action
 
 // OpenCode's `~` and `$HOME` expansion of config patterns (permission/index.ts).
-function expand(pattern: string) {
+export function expand(pattern: string) {
   if (pattern.startsWith("~/")) return os.homedir() + pattern.slice(1)
   if (pattern === "~") return os.homedir()
   if (pattern.startsWith("$HOME/")) return os.homedir() + pattern.slice(5)

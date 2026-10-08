@@ -5,7 +5,6 @@ import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Global } from "@opencode-ai/core/global"
-import { Wildcard } from "@opencode-ai/core/util/wildcard"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Agent } from "@/agent/agent"
 import { InstanceState } from "@/effect/instance-state"
@@ -20,7 +19,8 @@ import { OperatorProjects } from "./projects"
 // request it matches, the agent's last rule with that permission and pattern decides, whatever the
 // session's rules say — even a broader session rule (a session `bash *` allow cannot beat a locked
 // `bash git push*` ask). Locks are checked last on every ask (permission-live.ts), so no session rule
-// list needs rewriting when they change.
+// list needs rewriting when they change. permission-model.ts says how a lock binds: for an input a locked
+// line matches, only the lines of the agent level and above decide.
 //
 // A subagent (mode subagent or all) checks its own locks, or with `inherit: "parent"` its own and
 // those of the agent of the session that started it.
@@ -89,11 +89,6 @@ export function lockedRules(rows: ReadonlyArray<Rule>, locks: ReadonlyArray<Lock
   })
 }
 
-// The locked rule that decides a request's pattern, if one does.
-export function deciding(locked: ReadonlyArray<Rule>, permission: string, pattern: string) {
-  return locked.findLast((rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern))
-}
-
 export class InvalidError extends Schema.TaggedErrorClass<InvalidError>()("OperatorPermissionLocksInvalid", {
   message: Schema.String,
 }) {}
@@ -102,7 +97,7 @@ export interface Interface {
   /** An agent's locks in this project. */
   readonly get: (agent: string) => Effect.Effect<Info>
   readonly save: (agent: string, info: Info) => Effect.Effect<Info>
-  /** The locked rules a session checks last: its agent's, and its parent's when the agent inherits them. */
+  /** The locked lines that bind a session: every level's locks, its parent's when its agent inherits them. */
   readonly sessionRules: (sessionID: string) => Effect.Effect<ReadonlyArray<Rule>>
 }
 
@@ -114,36 +109,40 @@ const layer = Layer.effect(
     const agentPermissions = yield* OperatorAgentPermissions.Service
     const sessions = yield* Session.Service
     const agents = yield* Agent.Service
+    const live = yield* OperatorPermissionLive.Service
 
     const project = Effect.fnUntraced(function* () {
       const ctx = yield* InstanceState.context
       return yield* Effect.promise(() => OperatorProjects.keyOf(ctx))
     })
 
-    // The rules an agent locks, in a project (read in that project's instance).
-    const locked = (directory: string, agent: string, depth: number, parentID?: string): Effect.Effect<Rule[]> =>
+    // What an agent locks in a project: its lock keys (the agent level marks its lines with them), and,
+    // when it inherits them, the locked rules of the agent of the session that started it (and so on up).
+    const locked = (
+      directory: string,
+      agent: string,
+      depth: number,
+      parentID?: string,
+    ): Effect.Effect<{ keys: ReadonlyArray<Lock>; inherited: ReadonlyArray<Rule> }> =>
       Effect.gen(function* () {
         const info = yield* Effect.promise(async () => read(await projectKeyOf(directory), agent))
-        const rows = info.locks.length
-          ? yield* agentPermissions.get(agent).pipe(
+        if (info.inherit !== "parent" || !parentID || depth > 3) return { keys: info.locks, inherited: [] }
+        const parent = yield* sessions.get(SessionID.make(parentID)).pipe(Effect.option)
+        if (parent._tag === "None") return { keys: info.locks, inherited: [] }
+        const parentAgent = parent.value.agent ?? (yield* agents.defaultAgent())
+        const above = yield* locked(parent.value.directory, parentAgent, depth + 1, parent.value.parentID)
+        const rows = above.keys.length
+          ? yield* agentPermissions.get(parentAgent).pipe(
               Effect.map((editor) => editor.rows),
               Effect.orElseSucceed(() => []),
             )
           : []
-        const own = lockedRules(rows, info.locks)
-        if (info.inherit !== "parent" || !parentID || depth > 3) return own
-        const parent = yield* sessions.get(SessionID.make(parentID)).pipe(Effect.option)
-        if (parent._tag === "None") return own
-        const parentAgent = parent.value.agent ?? (yield* agents.defaultAgent())
-        const inherited: Rule[] = yield* locked(parent.value.directory, parentAgent, depth + 1, parent.value.parentID)
-        // The parent's come first: the subagent's own locks decide where both lock the same rule.
-        return [...inherited, ...own]
-      }).pipe(Effect.orElseSucceed(() => []))
+        return { keys: info.locks, inherited: [...above.inherited, ...lockedRules(rows, above.keys)] }
+      }).pipe(Effect.orElseSucceed(() => ({ keys: [], inherited: [] })))
 
     yield* Effect.acquireRelease(
       Effect.sync(() => {
-        OperatorPermissionLive.locks.of = (input) =>
-          locked(input.directory, input.agent, 0, input.parentID).pipe(Effect.orElseSucceed(() => []))
+        OperatorPermissionLive.locks.of = (input) => locked(input.directory, input.agent, 0, input.parentID)
       }),
       () => Effect.sync(() => (OperatorPermissionLive.locks.of = undefined)),
     )
@@ -158,7 +157,10 @@ const layer = Layer.effect(
         Effect.gen(function* () {
           const info = yield* sessions.get(SessionID.make(sessionID))
           const agent = info.agent ?? (yield* agents.defaultAgent())
-          return yield* locked(info.directory, agent, 0, info.parentID)
+          const built = yield* live.lines({ agent, session: info })
+          return built.lines
+            .filter((line) => line.lockedAt !== undefined)
+            .map(({ permission, pattern, action }) => ({ permission, pattern, action }))
         }).pipe(Effect.orElseSucceed(() => [])),
     })
   }),

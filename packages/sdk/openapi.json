@@ -29966,12 +29966,16 @@
         "required": ["kind"],
         "additionalProperties": false
       },
+      "OperatorPermissionLevel": {
+        "type": "string",
+        "enum": ["opencode", "global", "namespace", "project", "agent", "session"]
+      },
       "OperatorPermissionRow": {
         "type": "object",
         "properties": {
           "index": {
             "type": "number",
-            "description": "1-based, in evaluation order"
+            "description": "1-based"
           },
           "permission": {
             "type": "string"
@@ -29989,6 +29993,12 @@
           },
           "from": {
             "$ref": "#/components/schemas/OperatorPermissionOrigin"
+          },
+          "level": {
+            "$ref": "#/components/schemas/OperatorPermissionLevel"
+          },
+          "locked": {
+            "$ref": "#/components/schemas/OperatorPermissionLevel"
           }
         },
         "required": ["index", "permission", "pattern", "action", "part", "from"],

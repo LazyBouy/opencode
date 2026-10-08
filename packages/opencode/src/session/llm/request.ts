@@ -236,7 +236,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
 
 function resolveTools(
   input: Pick<PrepareInput, "tools" | "agent" | "permission" | "user">,
-  effective?: PermissionV1.Ruleset,
+  effective?: OperatorPermissionEffective.Effective,
 ) {
   const disabled = effective
     ? OperatorPermissionEffective.unreachable(Object.keys(input.tools), effective)

@@ -92,7 +92,11 @@ unix("a tool no call could be allowed for is not offered, though its last rule i
     expect(names(noshell)).toEqual(toolsOf((yield* llm.inputs).at(-1)))
     const bash = noshell.notSent.find((item) => item.name === "bash")!
     expect(bash.reason).toBe("permission")
-    expect(noshell.rows.find((row) => row.index === bash.rule)).toMatchObject({ pattern: "rm *", action: "deny" })
+    expect(noshell.rows.find((row) => row.index === bash.rule)).toMatchObject({
+      permission: "bash",
+      action: "deny",
+      level: "agent",
+    })
 
     // `git *` can be allowed: bash stays.
     yield* send((yield* sessions.create({ title: "Git", agent: "gitonly" })).id, "hello", "gitonly")
@@ -127,7 +131,8 @@ unix("a locked deny removes the tool even after the session's allow; the Tool Pr
     expect(prompt.rows.find((row) => row.index === webfetch.rule)).toMatchObject({
       permission: "webfetch",
       action: "deny",
-      from: { kind: "lock" },
+      level: "agent",
+      locked: "agent",
     })
   }),
 )
@@ -248,4 +253,27 @@ unix("Runs as Subagent, started from a session: the Tool Prompt gets that sessio
     // From a new session: nothing passes, and explore keeps webfetch.
     expect(names(yield* prompts.build({ agent: "explore", runsAs: "subagent" }))).toContain("webfetch")
   }),
+)
+
+unix(
+  "an ask is decided by the most specific line: the project's `bash ls *` allow beats the agent's `bash *` ask",
+  () =>
+    Effect.gen(function* () {
+      yield* configure({
+        permission: { bash: { "git *": "allow" } },
+        agent: { careful: { mode: "primary", description: "Careful", permission: { bash: "ask" } } },
+      })
+      const sessions = yield* Session.Service
+      const agents = yield* Agent.Service
+      const loaded = (yield* agents.get("careful"))!.permission
+      const s = yield* sessions.create({ title: "Careful", agent: "careful" })
+      // OpenCode alone (the last rule that matches) would ask for git: the agent's `bash *` comes last.
+      expect(Permission.evaluate("bash", "git status", loaded).action).toBe("ask")
+      expect(
+        yield* allowed({ sessionID: s.id, id: "per_m1", permission: "bash", pattern: "git status", ruleset: loaded }),
+      ).toBe(true)
+      expect(
+        yield* allowed({ sessionID: s.id, id: "per_m2", permission: "bash", pattern: "cat a", ruleset: loaded }),
+      ).toBe(false)
+    }),
 )

@@ -14,6 +14,7 @@ import { SessionID } from "@/session/schema"
 import { OperatorAgentPermissions } from "./agent-permissions"
 import { OperatorPermissionHook } from "./permission-hook"
 import { OperatorPermissionLocks } from "./permission-locks"
+import { OperatorPermissionModel } from "./permission-model"
 import { OperatorPermissionRules } from "./permission-rules"
 
 // A session's own permission rules (session.permission, upstream's field): OpenCode applies them after
@@ -213,12 +214,23 @@ const layer = Layer.effect(
         pattern: rule.pattern.trim() || "*",
         action: rule.action,
       }))
-      // A session rule may not change a rule the agent locks.
+      // A session rule may not change what a locked line decides: one that falls inside a locked line
+      // with another action is refused (a broader one still applies outside the lock).
       const locked = yield* locks.sessionRules(sessionID)
-      const clash = list.find((rule) => locked.some((lock) => sameKey(lock, rule) && lock.action !== rule.action))
+      const clash = list
+        .map((rule) => ({
+          rule,
+          lock: locked.find(
+            (lock) =>
+              lock.action !== rule.action &&
+              OperatorPermissionModel.contains(lock.permission, rule.permission) &&
+              OperatorPermissionModel.contains(lock.pattern, rule.pattern),
+          ),
+        }))
+        .find((item) => item.lock)
       if (clash)
         return yield* new LockedError({
-          message: `The agent locks ${clash.permission} ${clash.pattern}: sessions may not override it.`,
+          message: `${clash.lock!.permission} ${clash.lock!.pattern} is locked: sessions may not override it (${clash.rule.permission} ${clash.rule.pattern}).`,
         })
       yield* Effect.promise(() => replace(sessionID, list, "user"))
       // Approvals kept in memory for the session stop applying: its rules are what you saved.

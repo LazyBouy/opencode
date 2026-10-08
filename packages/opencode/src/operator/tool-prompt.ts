@@ -13,7 +13,6 @@ import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { MCP } from "@/mcp"
-import { Permission } from "@/permission"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { Session } from "@/session/session"
@@ -23,7 +22,7 @@ import { ToolRegistry } from "@/tool/registry"
 import { OperatorModels } from "./models"
 import { OperatorPermissionEffective } from "./permission-effective"
 import { OperatorPermissionLive } from "./permission-live"
-import { OperatorPermissionReach } from "./permission-reach"
+import { OperatorPermissionModel } from "./permission-model"
 import { OperatorPermissionRules } from "./permission-rules"
 import { OperatorProfile } from "./profile"
 import { OperatorProfileStore } from "./profile-store"
@@ -34,7 +33,8 @@ import { OperatorTools } from "./tools"
 // The tool prompt: the tools list a request of an agent sends, with each tool's description and
 // schema as sent, the version of its description and why, its size, and the tools not sent with the
 // reason. It is built with the functions a request uses (ToolRegistry.tools, which runs the
-// `tool.definition` hook; ToolJsonSchema.fromTool; ProviderTransform.schema; Permission.disabled),
+// `tool.definition` hook; ToolJsonSchema.fromTool; ProviderTransform.schema; the fork's reachability check
+// on the permission levels, permission-live.ts),
 // and mirrors the steps upstream does not export (session/tools.ts: the MCP resource tools and MCP
 // tools; session/llm/request.ts: resolveTools, `strict`, `_noop`, the sort; session/llm.ts: `invalid`
 // is never offered). test/operator/tool-prompt.test.ts checks it against what a request sends.
@@ -324,11 +324,10 @@ const layer = Layer.effect(
         .getModel(ProviderV2.ID.make(ref.providerID), ModelV2.ID.make(ref.modelID))
         .pipe(Effect.mapError(() => missing(`No model ${modelName}`)))
 
-      // The rules: the agent's (with draft rules in place of its own), then the session's.
+      // The rules: every level's lines (with draft rules in place of the agent's or the session's own).
       const runsAs: RunsAs = input.sessionID
         ? "session"
         : (input.runsAs ?? (agent.mode === "subagent" ? "subagent" : "primary"))
-      const labelled = yield* rules.agent(agent.name, input.agentRules)
       const session =
         runsAs === "session" && input.sessionID
           ? yield* sessions
@@ -348,61 +347,41 @@ const layer = Layer.effect(
           : runsAs === "subagent"
             ? OperatorPermissionRules.subagentRules({ agent, primaryTools, parent: parent?.permission ?? [] })
             : []
-      // R (permission-effective.ts): the agent's loaded rules, its rules saved since load (unless a draft
-      // stands in for them), the session's, then the locked rules, applied last.
-      const ctx = yield* InstanceState.context
-      const pending = input.agentRules ? [] : live.pending(ctx.directory, agent.name)
-      const locked = OperatorPermissionLive.locks.of
-        ? yield* OperatorPermissionLive.locks.of({
-            directory: session?.directory ?? ctx.directory,
-            agent: agent.name,
-            ...((session?.parentID ?? parent?.id) ? { parentID: session?.parentID ?? parent!.id } : {}),
-          })
-        : []
-      const base = [
-        ...labelled.rows,
-        ...pending.map((rule, index) => ({
-          ...rule,
-          index: labelled.rows.length + index + 1,
-          part: "agent" as const,
-          from: { kind: "agent-written" as const },
-        })),
-      ]
-      const sessionPart = [
-        ...(runsAs === "subagent"
-          ? sessionRules.map((rule, index) => ({
-              ...rule,
-              index: base.length + index + 1,
-              part: "session" as const,
-              from: { kind: "session-task" as const },
-            }))
+      const sessionLines =
+        runsAs === "subagent"
+          ? sessionRules.map((rule) => ({ ...rule, part: "session" as const, from: { kind: "session-task" as const } }))
           : OperatorPermissionRules.sessionRows({
               rules: sessionRules,
-              start: base.length,
+              start: 0,
               parent: !!session?.parentID,
               primaryTools,
               recorded: session ? yield* Effect.promise(() => OperatorSessionPermissions.recorded(session.id)) : [],
-            })),
-      ]
-      const rows = [
-        ...base,
-        ...sessionPart,
-        ...locked.map((rule, index) => ({
-          permission: rule.permission,
-          pattern: rule.pattern,
-          action: rule.action,
-          index: base.length + sessionPart.length + index + 1,
-          part: "agent" as const,
-          from: { kind: "lock" as const },
-        })),
-      ]
-      const agentList: Rule[] = labelled.rows.map(({ permission, pattern, action }) => ({
-        permission,
-        pattern,
-        action,
+            })
+      // R (permission-live.ts): the lines of every level, decided as permission-model.ts says.
+      const built = yield* live.lines({
+        agent: agent.name,
+        ...(session ? { session } : {}),
+        ...(parent ? { parentID: parent.id } : {}),
+        sessionLines,
+        ...(input.agentRules ? { agentRules: input.agentRules } : {}),
+      })
+      const lines = built.lines
+      const rows: OperatorPermissionRules.Row[] = lines.map((line, index) => ({
+        permission: line.permission,
+        pattern: line.pattern,
+        action: line.action,
+        index: index + 1,
+        part: line.part,
+        from: line.from,
+        level: OperatorPermissionLive.levelName(line.level),
+        ...(line.lockedAt !== undefined ? { locked: OperatorPermissionLive.levelName(line.lockedAt) } : {}),
       }))
-      const ruleset: Rule[] = rows.map(({ permission, pattern, action }) => ({ permission, pattern, action }))
-      const drafted: Agent.Info = { ...agent, permission: agentList }
+      const rowOf = (line: OperatorPermissionLive.Line | undefined) => (line ? rows[lines.indexOf(line)] : undefined)
+      const ruleset = OperatorPermissionModel.compile(lines)
+      const drafted = OperatorPermissionEffective.withDraft(
+        { ...agent, permission: ruleset },
+        { ...(input.agentRules ? { agentRules: input.agentRules } : {}), sessionRules },
+      )
 
       // Candidates, as the registry gives them for this model (with the `tool.definition` hook).
       const all = (yield* registry.all()).filter((tool) => tool.id !== "invalid")
@@ -419,6 +398,7 @@ const layer = Layer.effect(
       }
 
       // Versions: the profile's copy, the namespace's version, else OpenCode's text.
+      const ctx = yield* InstanceState.context
       const key = yield* Effect.promise(() => OperatorProjects.keyOf(ctx))
       const loaded = yield* Effect.promise(() => OperatorProfileStore.forProject(key))
       const shellName = Shell.name(Shell.acceptable(cfg.shell))
@@ -477,12 +457,11 @@ const layer = Layer.effect(
         .filter((item) => item.mode !== "primary")
         .toSorted((a, b) => a.name.localeCompare(b.name))
         .map((item) => {
-          const decisive = rows.findLast(
-            (row) => Wildcard.match("task", row.permission) && Wildcard.match(item.name, row.pattern),
-          )
+          const decision = OperatorPermissionModel.decide(lines, "task", item.name)
+          const decisive = rowOf(decision.line)
           return {
             name: item.name,
-            kept: Permission.evaluate("task", item.name, ruleset).action !== "deny",
+            kept: decision.action !== "deny",
             ...(decisive ? { rule: decisive.index } : {}),
           }
         })
@@ -564,23 +543,17 @@ const layer = Layer.effect(
         }
 
       // The permission filter (resolveTools on R): a tool is offered only if some call to it could be
-      // allowed or asked (permission-reach.ts). The rule named is the last one that still decides an
-      // input: a deny that comes after every allow.
+      // allowed or asked (permission-model.ts `reach`). The line named is one that denies some input.
       const disabled = OperatorPermissionEffective.unreachable(
         candidates.map((item) => item.name),
-        ruleset,
+        { rules: ruleset, lines },
       )
       const notSent: NotSent[] = []
       for (const item of candidates) {
         if (!disabled.has(item.name)) continue
         const permission = OperatorPermissionRules.permissionOf(item.name)
-        const deciding = OperatorPermissionReach.reach(permission, ruleset).live.find(
-          (found) => found.index !== undefined,
-        )
-        const decisive =
-          deciding?.index !== undefined
-            ? rows[deciding.index]
-            : rows.findLast((row) => Wildcard.match(permission, row.permission))
+        const deciding = OperatorPermissionEffective.reachOf(permission, lines).live.find((found) => found.line)
+        const decisive = rowOf(deciding?.line)
         notSent.push({
           name: item.name,
           permission,
@@ -713,7 +686,10 @@ const layer = Layer.effect(
       const after = new Map(next.sent.map((item) => [item.name, item]))
       const decisive = (prompt: ToolPrompt, name: string) => {
         const permission = OperatorPermissionRules.permissionOf(name)
-        return prompt.rows.findLast((row) => Wildcard.match(permission, row.permission))?.index
+        return (
+          prompt.notSent.find((item) => item.name === name)?.rule ??
+          prompt.rows.findLast((row) => Wildcard.match(permission, row.permission))?.index
+        )
       }
       const ruleOf = (prompt: ToolPrompt, name: string) => {
         const index = decisive(prompt, name)

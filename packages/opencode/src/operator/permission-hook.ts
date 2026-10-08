@@ -4,9 +4,8 @@ import { Effect } from "effect"
 
 // Where upstream's permission code hands rules to the fork (the fork lines in permission/index.ts and
 // session/prompt.ts): rules "Always allow" added to a session, a client's tool switches merged into a
-// session's rules, and the rules every ask also checks, last (permission-live.ts: an agent's rules
-// allowed since its project last loaded, the session's own rules as they are now, and locked agent
-// rules). The fork's services register the handlers. Without a handler (or if it fails) nothing
+// session's rules, and the rules every ask also checks, last (permission-live.ts: one exact rule per
+// input, as the fork's permission levels decide it). The fork's services register the handlers. Without a handler (or if it fails) nothing
 // happens; the request goes on either way.
 
 type Rule = { permission: string; pattern: string; action: "allow" | "ask" | "deny" }
@@ -17,6 +16,7 @@ export const handlers: {
   rules?: (input: {
     sessionID: string
     permission: string
+    patterns: ReadonlyArray<string>
     given: ReadonlyArray<Rule>
   }) => Effect.Effect<ReadonlyArray<Rule>>
 } = {}
@@ -43,7 +43,16 @@ export const switched = (sessionID: string, rules: ReadonlyArray<Rule>) =>
   )
 
 // The rules an ask checks after its own (`given`) and the session's approvals (none without a handler).
-export const rules = (sessionID: string, permission: string, given: ReadonlyArray<Rule>) =>
+export const rules = (
+  request: { sessionID: string; permission: string; patterns: ReadonlyArray<string> },
+  given: ReadonlyArray<Rule>,
+) =>
   Effect.suspend(
-    () => handlers.rules?.({ sessionID, permission, given }) ?? Effect.succeed<ReadonlyArray<Rule>>([]),
+    () =>
+      handlers.rules?.({
+        sessionID: request.sessionID,
+        permission: request.permission,
+        patterns: request.patterns,
+        given,
+      }) ?? Effect.succeed<ReadonlyArray<Rule>>([]),
   ).pipe(Effect.catchCause(() => Effect.succeed<ReadonlyArray<Rule>>([])))

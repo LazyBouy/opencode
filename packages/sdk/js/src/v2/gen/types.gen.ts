@@ -2250,9 +2250,11 @@ export type OperatorPermissionOrigin = {
   time?: number
 }
 
+export type OperatorPermissionLevel = "opencode" | "global" | "namespace" | "project" | "agent" | "session"
+
 export type OperatorPermissionRow = {
   /**
-   * 1-based, in evaluation order
+   * 1-based
    */
   index: number
   permission: string
@@ -2260,6 +2262,8 @@ export type OperatorPermissionRow = {
   action: "allow" | "ask" | "deny"
   part: "opencode" | "config" | "agent" | "truncation" | "session"
   from: OperatorPermissionOrigin
+  level?: OperatorPermissionLevel
+  locked?: OperatorPermissionLevel
 }
 
 export type OperatorPendingPermission = {

@@ -141,7 +141,8 @@ unix("why a tool is not sent, and patterns that change nothing", () =>
       const reasons = (prompt: OperatorToolPrompt.ToolPrompt) =>
         Object.fromEntries(prompt.notSent.map((item) => [item.name, item.reason]))
 
-      // A pattern on read never removes it; only a final `*` deny does.
+      // A pattern on read never removes it, in either order: the more specific line decides
+      // (permission-model.ts).
       expect(
         names(
           yield* prompts.build({
@@ -161,11 +162,30 @@ unix("why a tool is not sent, and patterns that change nothing", () =>
           }),
         ),
       ).toContain("read")
+      expect(
+        names(
+          yield* prompts.build({
+            agent: "build",
+            agentRules: [
+              { permission: "read", pattern: `${home}/*`, action: "allow" },
+              { permission: "read", pattern: "*", action: "deny" },
+            ],
+          }),
+        ),
+      ).toContain("read")
+      // read `*` deny alone keeps read: OpenCode's more specific `.env` lines still ask (or allow).
+      expect(
+        names(
+          yield* prompts.build({ agent: "build", agentRules: [{ permission: "read", pattern: "*", action: "deny" }] }),
+        ),
+      ).toContain("read")
       const readGone = yield* prompts.build({
         agent: "build",
         agentRules: [
-          { permission: "read", pattern: `${home}/*`, action: "allow" },
           { permission: "read", pattern: "*", action: "deny" },
+          { permission: "read", pattern: "*.env", action: "deny" },
+          { permission: "read", pattern: "*.env.*", action: "deny" },
+          { permission: "read", pattern: "*.env.example", action: "deny" },
         ],
       })
       expect(names(readGone)).not.toContain("read")
@@ -241,7 +261,7 @@ unix("rules are labelled with where they come from", () =>
         kind: "config-tools",
         path: config,
       })
-      expect(build.rows.at(-1)?.from.kind).toBe("truncation")
+      expect(build.rows.find((row) => row.from.kind === "truncation")).toMatchObject({ level: "opencode" })
       // The bash description is OpenCode's template, with the values it was filled with.
       expect(build.sent.find((item) => item.name === "bash")?.version.template).toMatchObject({
         file: "packages/opencode/src/tool/shell/shell.txt",
