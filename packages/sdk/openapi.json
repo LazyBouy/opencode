@@ -1203,6 +1203,9 @@
                   "folder": {
                     "type": "string",
                     "description": "An absolute folder inside the workspace roots; it is created if missing"
+                  },
+                  "inheritGlobal": {
+                    "type": "boolean"
                   }
                 },
                 "required": ["name", "folder"],
@@ -1333,7 +1336,7 @@
             }
           }
         },
-        "description": "Change a namespace's name, its org purpose (sent first in every agent's prompt), its default profile, its folder or its default project.",
+        "description": "Change a namespace's name, its org purpose (sent first in every agent's prompt), its default profile, its folder, its default project, or whether it inherits the global capabilities.",
         "summary": "Change a namespace",
         "requestBody": {
           "content": {
@@ -1355,6 +1358,9 @@
                   },
                   "defaultProject": {
                     "type": "string"
+                  },
+                  "inheritGlobal": {
+                    "type": "boolean"
                   }
                 },
                 "additionalProperties": false
@@ -29220,6 +29226,9 @@
           },
           "defaultProject": {
             "type": "string"
+          },
+          "inheritGlobal": {
+            "type": "boolean"
           },
           "createdAt": {
             "type": "number"

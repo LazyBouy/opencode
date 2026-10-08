@@ -14,6 +14,11 @@ import { Global } from "@opencode-ai/core/global"
 //   opencode.json, and skips it in the folder loop (where it would be merged after the project's JSON).
 // A namespace whose folder has no `.opencode` adds nothing, so OpenCode's behaviour is unchanged until
 // something is put there.
+//
+// A namespace can also leave out the global capabilities (§6, "Inherit global capabilities" off): the
+// global capability folders (`~/.config/opencode`, `~/.opencode`; `~/.claude/skills` and
+// `~/.agents/skills` in skill/index.ts) and the global config's capability keys. The global config's
+// other settings (providers, model, username, keybinds, …) always apply. OpenCode always inherits.
 
 const CONFIG_DIR = ".opencode"
 const OPENCODE = "opencode"
@@ -32,7 +37,25 @@ const owned = new Set<string>()
 // a namespace, or a project moving between namespaces, reloads exactly those instances.
 const loaded = new Map<string, { project: string; namespace: string }>()
 
-export type Layer = { namespace: string; project: string; dir?: string }
+export type Layer = { namespace: string; project: string; dir?: string; inherit: boolean }
+
+// The config keys that are capabilities: left out of the global config for a namespace that doesn't
+// inherit it.
+export const CAPABILITY_KEYS: ReadonlyArray<string> = [
+  "command",
+  "agent",
+  "mode",
+  "mcp",
+  "plugin",
+  "skills",
+  "instructions",
+  "tools",
+  "permission",
+  "references",
+]
+
+// The global folders that hold capability files.
+const globalFolders = () => [Global.Path.config, path.join(Global.Path.home, CONFIG_DIR)]
 
 const exists = (dir: string) =>
   fs
@@ -64,24 +87,44 @@ export async function layerOf(directory: string, worktree?: string): Promise<Lay
   const record = await readJson(path.join(store(), namespace, "namespace.json"))
   const folder = typeof record.folder === "string" && record.folder ? record.folder : undefined
   const dir = folder ? path.join(folder, CONFIG_DIR) : undefined
+  const inherit = namespace === OPENCODE || record.inheritGlobal !== false
   loaded.set(directory, { project, namespace })
-  if (!dir || !(await exists(dir))) return { namespace, project }
+  if (!dir || !(await exists(dir))) return { namespace, project, inherit }
   owned.add(dir)
-  return { namespace, project, dir }
+  return { namespace, project, dir, inherit }
 }
 
 // The config folders for `directory`: upstream's list with the namespace layer right after the global
-// config folder. A non-git project under its namespace folder would also reach the layer by walking
-// up; it stays once, in the namespace position.
+// config folder (first when the namespace leaves out the global folders). A non-git project under its
+// namespace folder would also reach the layer by walking up; it stays once, in the namespace position.
 export const directories = Effect.fnUntraced(function* (
   directory: string,
   worktree: string | undefined,
   upstream: ReadonlyArray<string>,
 ) {
   const layer = yield* Effect.promise(() => layerOf(directory, worktree))
-  if (!layer.dir) return [...upstream]
-  const rest = upstream.filter((dir) => dir !== layer.dir)
-  return [...rest.slice(0, 1), layer.dir, ...rest.slice(1)]
+  const global = new Set(globalFolders())
+  const kept = layer.inherit ? [...upstream] : upstream.filter((dir) => !global.has(dir))
+  if (!layer.dir) return kept
+  const rest = kept.filter((dir) => dir !== layer.dir)
+  const at = rest[0] === Global.Path.config ? 1 : 0
+  return [...rest.slice(0, at), layer.dir, ...rest.slice(at)]
+})
+
+// The global config as a project of the namespace sees it: whole, or without its capability keys.
+export function globalFor<T extends object>(ctx: { directory: string; worktree: string }, config: T) {
+  return Effect.promise(() => layerOf(ctx.directory, ctx.worktree)).pipe(
+    Effect.map((layer) =>
+      layer.inherit
+        ? config
+        : (Object.fromEntries(Object.entries(config).filter(([key]) => !CAPABILITY_KEYS.includes(key))) as T),
+    ),
+  )
+}
+
+// Whether the folder's namespace gets the global capabilities.
+export const inheritsGlobal = Effect.fnUntraced(function* (directory: string, worktree: string) {
+  return (yield* Effect.promise(() => layerOf(directory, worktree))).inherit
 })
 
 // The namespace layer's opencode.json(c), merged right after the global config files.

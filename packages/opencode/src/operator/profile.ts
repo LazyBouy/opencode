@@ -165,6 +165,10 @@ export const Namespace = Schema.Struct({
   defaultProject: Schema.optional(Schema.String).annotate({
     description: "The project chosen as the namespace's default; without one, its first project is the default",
   }),
+  inheritGlobal: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "Whether the namespace's projects get the global config's capabilities (commands, skills, tools, MCP servers, agents, plugins, instructions, permissions, references); on unless set to false, and always on for OpenCode",
+  }),
   createdAt: Schema.Finite,
   updatedAt: Schema.Finite,
 }).annotate({ identifier: "OperatorNamespace" })

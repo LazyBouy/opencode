@@ -2,6 +2,7 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
+import { CheckboxV2 } from "@opencode-ai/ui/v2/checkbox-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import type { OperatorNamespaceSummary } from "@opencode-ai/sdk/v2/client"
 import { type Component, createEffect, createMemo, createResource, createUniqueId, For, on, Show } from "solid-js"
@@ -148,6 +149,7 @@ function NamespaceRecord(props: {
     purpose: "",
     folder: "",
     defaultProject: FIRST,
+    inheritGlobal: true,
     busy: false,
     confirming: false,
   })
@@ -175,6 +177,7 @@ function NamespaceRecord(props: {
           found?.namespace.defaultProject && found.projects.includes(found.namespace.defaultProject)
             ? found.namespace.defaultProject
             : FIRST,
+        inheritGlobal: found?.namespace.inheritGlobal !== false,
         confirming: false,
       })
     }),
@@ -183,18 +186,36 @@ function NamespaceRecord(props: {
   const fail = (error: unknown) =>
     showToast({ title: language.t("settings.namespaces.failed"), description: requestError(error) })
 
+  // Leaving the form puts focus back in the record (on Edit), so Escape closes the record, not Settings.
+  let edit: HTMLButtonElement | undefined
+  createEffect(
+    on(
+      () => store.editing,
+      (editing) => {
+        if (!editing) queueMicrotask(() => edit?.focus())
+      },
+      { defer: true },
+    ),
+  )
+
   const save = async () => {
     setStore("busy", true)
     const folder = store.folder.trim()
     const request =
       store.selected === "new"
-        ? client().create({ name: store.name.trim(), purpose: store.purpose, folder })
+        ? client().create({
+            name: store.name.trim(),
+            purpose: store.purpose,
+            folder,
+            inheritGlobal: store.inheritGlobal,
+          })
         : client().update({
             ns: store.selected,
             name: store.name.trim(),
             purpose: store.purpose,
             ...(folder && folder !== current()?.namespace.folder ? { folder } : {}),
             defaultProject: store.defaultProject === FIRST ? "" : store.defaultProject,
+            ...(store.selected === OPENCODE ? {} : { inheritGlobal: store.inheritGlobal }),
           })
     await request
       .then(async (result) => {
@@ -276,9 +297,25 @@ function NamespaceRecord(props: {
                     {defaultProjectText(found(), language.t)}
                   </span>
                 </RecordField>
+                <RecordField
+                  label={language.t("settings.namespaces.inheritGlobal")}
+                  help={language.t("operator.help.namespaceInheritGlobal")}
+                >
+                  <span data-testid="namespace-inherit-global">
+                    {found().namespace.id === OPENCODE
+                      ? language.t("settings.namespaces.inheritAlways")
+                      : found().namespace.inheritGlobal === false
+                        ? language.t("settings.namespaces.inheritOff")
+                        : language.t("settings.namespaces.inheritOn")}
+                  </span>
+                </RecordField>
               </dl>
               <div class="flex items-center justify-end gap-2">
-                <ButtonV2 variant="contrast" onClick={() => setStore("editing", true)}>
+                <ButtonV2
+                  ref={(element: HTMLButtonElement) => (edit = element)}
+                  variant="contrast"
+                  onClick={() => setStore("editing", true)}
+                >
                   {language.t("operator.profile.edit")}
                 </ButtonV2>
               </div>
@@ -345,6 +382,18 @@ function NamespaceRecord(props: {
             </ButtonV2>
           </div>
         </div>
+        <span class="inline-flex items-center">
+          <CheckboxV2
+            label={language.t("settings.namespaces.inheritGlobal")}
+            checked={store.selected === OPENCODE || store.inheritGlobal}
+            disabled={store.selected === OPENCODE}
+            onChange={(checked: boolean) => setStore("inheritGlobal", checked)}
+          />
+          <FieldHelp
+            field={language.t("settings.namespaces.inheritGlobal")}
+            text={language.t("operator.help.namespaceInheritGlobal")}
+          />
+        </span>
         <div class="flex flex-col gap-1">
           <div class="flex items-center">
             <label class="text-12-medium" for={`${id}-purpose`}>

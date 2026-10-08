@@ -44,6 +44,10 @@ export const dict = {
   "settings.namespaces.defaultProject": "Default project",
   "settings.namespaces.firstProject": "First project ({{name}})",
   "settings.namespaces.noDefaultProject": "None: the namespace has no projects yet",
+  "settings.namespaces.inheritGlobal": "Inherit global capabilities",
+  "settings.namespaces.inheritOn": "Yes: the global commands, skills, tools, MCP servers, agents and plugins too",
+  "settings.namespaces.inheritOff": "No: only OpenCode's built-ins, the namespace's and each project's own",
+  "settings.namespaces.inheritAlways": "Always, for OpenCode",
   "settings.namespaces.create": "Create namespace",
   "settings.namespaces.save": "Save",
   "settings.namespaces.delete": "Delete",
@@ -293,6 +297,8 @@ export const dict = {
   "operator.help.namespaceProjects": "The projects in this namespace. Move a project on the Projects page.",
   "operator.help.namespaceFolder":
     "The namespace's own folder, inside the server's workspace. New projects of the namespace are created in it, and it holds the namespace's memory. It is created if it doesn't exist. Projects already elsewhere stay where they are.",
+  "operator.help.namespaceInheritGlobal":
+    "On: the namespace's projects get the global config's capabilities (~/.config/opencode and ~/.opencode: commands, skills, tools, MCP servers, agents, plugins, instructions, permissions, references; and ~/.claude/skills, ~/.agents/skills), below the namespace's own. Off: they get only OpenCode's built-ins, the namespace's and their own. The global config's other settings (providers, model, username, …) apply either way. The OpenCode namespace always inherits.",
   "operator.help.namespaceDefaultProject":
     "The project a new agent of this namespace is saved in unless you choose another. Without a choice, it is the namespace's first project (the earliest added); if the chosen project leaves the namespace, the first project is the default again.",
   "operator.table.columnsOf": "Columns of {{table}}",

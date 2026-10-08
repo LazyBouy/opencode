@@ -103,6 +103,9 @@ export const OperatorNamespaceGroup = HttpApiGroup.make("operatorNamespace")
         folder: Schema.String.annotate({
           description: "An absolute folder inside the workspace roots; it is created if missing",
         }),
+        inheritGlobal: Schema.optional(Schema.Boolean).annotate({
+          description: "Whether its projects get the global config's capabilities (default true)",
+        }),
       }),
       success: described(OperatorProfile.Namespace, "The new namespace"),
       error: errors,
@@ -131,6 +134,9 @@ export const OperatorNamespaceGroup = HttpApiGroup.make("operatorNamespace")
           description:
             "One of the namespace's projects; an empty string clears it, so the first project is the default",
         }),
+        inheritGlobal: Schema.optional(Schema.Boolean).annotate({
+          description: "Whether its projects get the global config's capabilities; always on for OpenCode",
+        }),
       }),
       success: described(OperatorProfile.Namespace, "The namespace"),
       error: errors,
@@ -138,7 +144,7 @@ export const OperatorNamespaceGroup = HttpApiGroup.make("operatorNamespace")
       doc(
         "operator.namespace.update",
         "Change a namespace",
-        "Change a namespace's name, its org purpose (sent first in every agent's prompt), its default profile, its folder or its default project.",
+        "Change a namespace's name, its org purpose (sent first in every agent's prompt), its default profile, its folder, its default project, or whether it inherits the global capabilities.",
       ),
     ),
     HttpApiEndpoint.delete("remove", OperatorNamespacePaths.namespace, {

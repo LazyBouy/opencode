@@ -48,7 +48,11 @@ export const operatorNamespaceHandlers = HttpApiBuilder.group(OperatorRootApi, "
       )
       .handle("update", (ctx) =>
         store.updateNamespace(ctx.params.ns, ctx.payload).pipe(
-          Effect.tap(() => (ctx.payload.folder === undefined ? Effect.void : reload({ namespace: ctx.params.ns }))),
+          Effect.tap(() =>
+            ctx.payload.folder === undefined && ctx.payload.inheritGlobal === undefined
+              ? Effect.void
+              : reload({ namespace: ctx.params.ns }),
+          ),
           Effect.mapError(apiError),
         ),
       )

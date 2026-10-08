@@ -26,6 +26,7 @@ type Namespace = {
   defaultProfile?: string
   folder?: string
   defaultProject?: string
+  inheritGlobal?: boolean
   createdAt: number
   updatedAt: number
 }
@@ -580,6 +581,7 @@ export function createPromptMock(
         name,
         purpose: String(body?.purpose ?? ""),
         folder,
+        ...(body?.inheritGlobal === false ? { inheritGlobal: false } : {}),
         createdAt: 1,
         updatedAt: 1,
       }

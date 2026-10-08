@@ -2329,6 +2329,7 @@ export type OperatorNamespace = {
   defaultProfile?: string
   folder?: string
   defaultProject?: string
+  inheritGlobal?: boolean
   createdAt: number
   updatedAt: number
 }
@@ -9766,6 +9767,7 @@ export type OperatorNamespaceCreateData = {
      * An absolute folder inside the workspace roots; it is created if missing
      */
     folder: string
+    inheritGlobal?: boolean
   }
   path?: never
   query?: never
@@ -9863,6 +9865,7 @@ export type OperatorNamespaceUpdateData = {
     defaultProfile?: string
     folder?: string
     defaultProject?: string
+    inheritGlobal?: boolean
   }
   path: {
     ns: string

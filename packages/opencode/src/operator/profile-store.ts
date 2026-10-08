@@ -15,7 +15,7 @@ import { OperatorTrashFiles } from "./trash-files"
 
 // Prompt profile data is server-wide, in the global config folder; nothing goes into a project:
 //
-//   namespaces/<ns>/namespace.json      { id, name, purpose, defaultProfile?, folder?, defaultProject?, createdAt, updatedAt }
+//   namespaces/<ns>/namespace.json      { id, name, purpose, defaultProfile?, folder?, defaultProject?, inheritGlobal?, createdAt, updatedAt }
 //   namespaces/<ns>/types/<id>.json     { id, name, description }
 //   namespaces/<ns>/layers/<id>.md      frontmatter { id, name, type, section, replaces? }; body: the text
 //   namespaces/<ns>/groups/<id>.json    { id, name, types }
@@ -106,11 +106,19 @@ export interface Interface {
     name: string
     purpose?: string
     folder: string
+    inheritGlobal?: boolean
   }) => Effect.Effect<OperatorProfile.Namespace, Failure>
   /** An empty `defaultProject` clears the choice, so the first project is the default. */
   readonly updateNamespace: (
     id: string,
-    input: { name?: string; purpose?: string; defaultProfile?: string; folder?: string; defaultProject?: string },
+    input: {
+      name?: string
+      purpose?: string
+      defaultProfile?: string
+      folder?: string
+      defaultProject?: string
+      inheritGlobal?: boolean
+    },
   ) => Effect.Effect<OperatorProfile.Namespace, Failure>
   /** The namespace's default project (see NamespaceSummary), if it has any project. */
   readonly defaultProject: (ns: string) => Effect.Effect<string | undefined>
@@ -596,6 +604,7 @@ const layer = Layer.effect(
       name: string
       purpose?: string
       folder: string
+      inheritGlobal?: boolean
     }) {
       yield* refuse(input.name.trim() ? undefined : "A namespace needs a name")
       const folder = yield* Effect.promise(() => namespaceFolder(input.folder))
@@ -609,6 +618,7 @@ const layer = Layer.effect(
         purpose: input.purpose ?? "",
         ...(source.namespace.defaultProfile ? { defaultProfile: source.namespace.defaultProfile } : {}),
         folder: folder.folder,
+        ...(input.inheritGlobal === false ? { inheritGlobal: false } : {}),
         createdAt: now,
         updatedAt: now,
       }
@@ -627,9 +637,21 @@ const layer = Layer.effect(
 
     const updateNamespace = Effect.fn("OperatorProfileStore.updateNamespace")(function* (
       id: string,
-      input: { name?: string; purpose?: string; defaultProfile?: string; folder?: string; defaultProject?: string },
+      input: {
+        name?: string
+        purpose?: string
+        defaultProfile?: string
+        folder?: string
+        defaultProject?: string
+        inheritGlobal?: boolean
+      },
     ) {
       const catalog = yield* load(id)
+      yield* refuse(
+        id === OperatorProfile.OPENCODE && input.inheritGlobal === false
+          ? "OpenCode always gets the global capabilities"
+          : undefined,
+      )
       if (input.name !== undefined) yield* refuse(input.name.trim() ? undefined : "A namespace needs a name")
       const folder =
         input.folder === undefined ? undefined : yield* Effect.promise(() => namespaceFolder(input.folder!))
@@ -652,6 +674,8 @@ const layer = Layer.effect(
         ...(input.defaultProfile !== undefined ? { defaultProfile: input.defaultProfile || undefined } : {}),
         ...(folder?.folder ? { folder: folder.folder } : {}),
         ...(input.defaultProject !== undefined ? { defaultProject: input.defaultProject || undefined } : {}),
+        // Absent means on: only "off" is written.
+        ...(input.inheritGlobal !== undefined ? { inheritGlobal: input.inheritGlobal ? undefined : false } : {}),
         updatedAt: Date.now(),
       }
       // A cleared choice leaves no key behind (the response would carry it as null).
@@ -1302,6 +1326,7 @@ async function readNamespaceRecord(id: string): Promise<OperatorProfile.Namespac
     ...(typeof data.defaultProfile === "string" ? { defaultProfile: data.defaultProfile } : {}),
     ...(typeof data.folder === "string" && data.folder ? { folder: data.folder } : {}),
     ...(typeof data.defaultProject === "string" && data.defaultProject ? { defaultProject: data.defaultProject } : {}),
+    ...(data.inheritGlobal === false ? { inheritGlobal: false } : {}),
     createdAt: typeof data.createdAt === "number" ? data.createdAt : 0,
     updatedAt: typeof data.updatedAt === "number" ? data.updatedAt : 0,
   }

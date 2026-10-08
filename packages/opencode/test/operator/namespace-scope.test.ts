@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
+import { Effect } from "effect"
 import { Global } from "@opencode-ai/core/global"
+import { OperatorNamespaceScope } from "@/operator/namespace-scope"
 import { Server } from "../../src/server/server"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
@@ -37,11 +39,11 @@ afterEach(async () => {
 })
 
 // Acme, with its folder, and the projects in it.
-const acme = async (folder: string, projects: string[]) => {
+const acme = async (folder: string, projects: string[], extra: Record<string, unknown> = {}) => {
   keep.projects = await fs.readFile(path.join(store(), "projects.json"), "utf8").catch(() => "")
   await write(
     path.join(store(), "acme", "namespace.json"),
-    JSON.stringify({ id: "acme", name: "Acme", purpose: "", folder, createdAt: 1, updatedAt: 1 }),
+    JSON.stringify({ id: "acme", name: "Acme", purpose: "", folder, createdAt: 1, updatedAt: 1, ...extra }),
   )
   const current = keep.projects ? (JSON.parse(keep.projects) as Record<string, unknown>) : {}
   await write(
@@ -143,5 +145,70 @@ describe("the namespace layer", () => {
     for (let attempt = 0; attempt < 50 && !(await names()).includes("acme-only"); attempt++)
       await new Promise((resolve) => setTimeout(resolve, 100))
     expect(await names()).toContain("acme-only")
+  })
+
+  test("a namespace that leaves out the global capabilities still gets the global settings", async () => {
+    await using folder = await tmpdir()
+    await using own = await tmpdir({ git: true })
+    await using opencode = await tmpdir({ git: true })
+    await global("commands/ghello.md", command("Global hello"))
+    await global("skills/gskill/SKILL.md", skill("gskill", "Global skill."))
+    await global("agents/gagent.md", "---\ndescription: A global agent\nmode: subagent\n---\nHelp.\n")
+    const home = path.join(Global.Path.home, ".claude", "skills", "hskill", "SKILL.md")
+    await write(home, skill("hskill", "From ~/.claude."))
+    written.push(home)
+    await acme(folder.path, [own.path], { inheritGlobal: false })
+    const commands = async (directory: string) => (await get<Command[]>("/command", directory)).map((item) => item.name)
+    const skills = async (directory: string) => (await get<Skill[]>("/skill", directory)).map((item) => item.name)
+    const agents = async (directory: string) => (await get<Agent[]>("/agent", directory)).map((item) => item.name)
+    expect(await commands(own.path)).not.toContain("ghello")
+    expect(await commands(opencode.path)).toContain("ghello")
+    for (const name of ["gskill", "hskill"]) {
+      expect(await skills(own.path)).not.toContain(name)
+      expect(await skills(opencode.path)).toContain(name)
+    }
+    expect(await agents(own.path)).not.toContain("gagent")
+    expect(await agents(opencode.path)).toContain("gagent")
+
+    // The global config file's capability keys are left out; its other settings apply.
+    const config: Record<string, unknown> = {
+      username: "global-user",
+      model: "opencode/big",
+      command: { gjson: { template: "From global JSON" } },
+      mcp: { docs: { type: "remote", url: "https://example.com" } },
+      permission: { bash: "deny" },
+    }
+    expect(
+      await Effect.runPromise(OperatorNamespaceScope.globalFor({ directory: own.path, worktree: own.path }, config)),
+    ).toEqual({
+      username: "global-user",
+      model: "opencode/big",
+    })
+    expect(
+      await Effect.runPromise(
+        OperatorNamespaceScope.globalFor({ directory: opencode.path, worktree: opencode.path }, config),
+      ),
+    ).toEqual(config)
+
+    // Turned back on, the namespace's projects get them after their reload.
+    const on = await app().request("/operator/namespaces/acme", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ inheritGlobal: true }),
+    })
+    expect(on.status).toBe(200)
+    for (let attempt = 0; attempt < 50 && !(await commands(own.path)).includes("ghello"); attempt++)
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(await commands(own.path)).toContain("ghello")
+  })
+
+  test("OpenCode always gets the global capabilities", async () => {
+    const off = await app().request("/operator/namespaces/opencode", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ inheritGlobal: false }),
+    })
+    expect(off.status).toBe(400)
+    expect(JSON.stringify(await off.json())).toContain("OpenCode always gets the global capabilities")
   })
 })

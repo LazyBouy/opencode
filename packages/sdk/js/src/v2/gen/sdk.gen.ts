@@ -2426,6 +2426,7 @@ export class Namespace extends HeyApiClient {
       name?: string
       purpose?: string
       folder?: string
+      inheritGlobal?: boolean
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2437,6 +2438,7 @@ export class Namespace extends HeyApiClient {
             { in: "body", key: "name" },
             { in: "body", key: "purpose" },
             { in: "body", key: "folder" },
+            { in: "body", key: "inheritGlobal" },
           ],
         },
       ],
@@ -2506,7 +2508,7 @@ export class Namespace extends HeyApiClient {
   /**
    * Change a namespace
    *
-   * Change a namespace's name, its org purpose (sent first in every agent's prompt), its default profile, its folder or its default project.
+   * Change a namespace's name, its org purpose (sent first in every agent's prompt), its default profile, its folder, its default project, or whether it inherits the global capabilities.
    */
   public update<ThrowOnError extends boolean = false>(
     parameters: {
@@ -2516,6 +2518,7 @@ export class Namespace extends HeyApiClient {
       defaultProfile?: string
       folder?: string
       defaultProject?: string
+      inheritGlobal?: boolean
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2530,6 +2533,7 @@ export class Namespace extends HeyApiClient {
             { in: "body", key: "defaultProfile" },
             { in: "body", key: "folder" },
             { in: "body", key: "defaultProject" },
+            { in: "body", key: "inheritGlobal" },
           ],
         },
       ],

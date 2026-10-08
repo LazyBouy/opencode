@@ -411,7 +411,7 @@ const layer = Layer.effect(
         }
 
         const global = Object.keys(authEnv).length ? yield* loadGlobal(authEnv) : yield* getGlobal()
-        yield* merge(Global.Path.config, global, "global")
+        yield* merge(Global.Path.config, yield* OperatorNamespaceScope.globalFor(ctx, global), "global")
         for (const file of yield* OperatorNamespaceScope.configFiles(ctx))
           yield* merge(file, yield* loadFile(file, authEnv))
 
