@@ -21,6 +21,7 @@ import { useServerSync } from "@/context/server-sync"
 import { useProviders } from "@/hooks/use-providers"
 import { NEW_SESSION_CONTENT_WIDTH } from "@/pages/session/new-session-layout"
 import { Persist, persisted } from "@/utils/persist"
+import { OperatorNewSession } from "@/operator/new-session"
 import type { NewSessionDraftController } from "./new-session-draft-controller"
 import type { NewSessionWorkspaceController } from "./new-session-workspace-controller"
 
@@ -39,13 +40,14 @@ export function NewSessionView(props: {
       >
         <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
           <div class={NEW_SESSION_CONTENT_WIDTH}>
-            <WordmarkV2 class="h-auto w-full text-v2-background-bg-inverse" />
+            {OperatorNewSession.wordmark() ?? <WordmarkV2 class="h-auto w-full text-v2-background-bg-inverse" />}
             <div class="mt-8 flex flex-col gap-8">
               <PromptInputV2Composer controller={props.input} />
-              <Show when={props.project.empty()}>
+              {OperatorNewSession.projectRow(props)}
+              <Show when={!OperatorNewSession.replacesProjectRow && props.project.empty()}>
                 <PromptProjectAddButton controller={props.project} />
               </Show>
-              <Show when={props.project.selected()}>
+              <Show when={!OperatorNewSession.replacesProjectRow && props.project.selected()}>
                 <div class="flex min-h-7 min-w-0 flex-col items-center justify-center gap-0 text-v2-text-text-faint sm:flex-row">
                   <PromptProjectSelector controller={props.project} placement="bottom" />
                   <Show
