@@ -210,7 +210,7 @@ export function ProjectPromptForm(props: { project: OperatorPromptProject; onDon
                     )
                   }
                 >
-                  {language.t("operator.profile.newPurpose")}
+                  {language.t("operator.profile.new.purpose")}
                 </button>
               </div>
             </Field>

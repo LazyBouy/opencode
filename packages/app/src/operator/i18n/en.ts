@@ -196,6 +196,7 @@ export const dict = {
   "operator.profile.about": "What it is",
   "operator.profile.layersOfType": "Layers of this type",
   "operator.profile.noSuchType": "This group type no longer exists.",
+  "operator.profile.noSuchGroup": "This group no longer exists.",
   "operator.help.layerSection": "Where the layer is listed in Layer Definition.",
   "operator.help.layerOrigin":
     "OpenCode: one of OpenCode's own texts, read-only. Copy of …: your editable copy of one of them. Yours: written in this namespace.",
