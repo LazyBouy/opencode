@@ -1,12 +1,14 @@
 import fs from "fs/promises"
 import path from "path"
 import { OperatorFolders } from "@/operator/folders"
+import { OperatorNamespaceScope } from "@/operator/namespace-scope"
 import { OperatorProfile } from "@/operator/profile"
 import { OperatorProfileStore } from "@/operator/profile-store"
 import { OperatorProjectCopy } from "@/operator/project-copy"
 import { OperatorProjectSessions } from "@/operator/project-sessions"
 import { OperatorProjectRecords } from "@/operator/project-records"
 import { OperatorProjects } from "@/operator/projects"
+import { OperatorReloadWhenIdle } from "@/operator/reload-when-idle"
 import { InstanceStore } from "@/project/instance-store"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -24,6 +26,13 @@ export const operatorNamespaceHandlers = HttpApiBuilder.group(OperatorRootApi, "
     const folders = yield* OperatorFolders.Service
     const sessions = yield* OperatorProjectSessions.Service
     const instances = yield* InstanceStore.Service
+    const reloads = yield* OperatorReloadWhenIdle.Service
+    // A namespace's capabilities come from its folder: a project that moves, or a namespace whose folder
+    // changes, reloads its loaded instances (each when none of its sessions is running).
+    const reload = (target: { namespace: string } | { project: string }) =>
+      Effect.forEach(OperatorNamespaceScope.instancesOf(target), (directory) => reloads.want({ directory }), {
+        discard: true,
+      })
     const done = Effect.as(true)
     const invalid = (message: string) =>
       new ApiProfileInvalidError({ name: "OperatorProfileInvalidError", data: { message } })
@@ -37,7 +46,12 @@ export const operatorNamespaceHandlers = HttpApiBuilder.group(OperatorRootApi, "
           Effect.mapError(apiError),
         ),
       )
-      .handle("update", (ctx) => store.updateNamespace(ctx.params.ns, ctx.payload).pipe(Effect.mapError(apiError)))
+      .handle("update", (ctx) =>
+        store.updateNamespace(ctx.params.ns, ctx.payload).pipe(
+          Effect.tap(() => (ctx.payload.folder === undefined ? Effect.void : reload({ namespace: ctx.params.ns }))),
+          Effect.mapError(apiError),
+        ),
+      )
       .handle("remove", (ctx) => store.removeNamespace(ctx.params.ns).pipe(done, Effect.mapError(apiError)))
       .handle("catalog", (ctx) => store.catalog(ctx.params.ns).pipe(Effect.mapError(apiError)))
       .handle("typeCreate", (ctx) =>
@@ -162,7 +176,14 @@ export const operatorNamespaceHandlers = HttpApiBuilder.group(OperatorRootApi, "
             defaultProfile: ctx.payload.defaultProfile,
             dryRun: ctx.payload.dryRun,
           })
-          .pipe(Effect.mapError(apiError)),
+          .pipe(
+            Effect.tap(() =>
+              ctx.payload.namespace === undefined || ctx.payload.dryRun
+                ? Effect.void
+                : reload({ project: ctx.payload.key }),
+            ),
+            Effect.mapError(apiError),
+          ),
       )
   }),
 )

@@ -1,0 +1,111 @@
+export * as OperatorNamespaceScope from "./namespace-scope"
+
+import fs from "fs/promises"
+import path from "path"
+import { Effect } from "effect"
+import { Global } from "@opencode-ai/core/global"
+
+// The namespace layer of a project's capabilities (capability_scopes_spec.md §4): the folder
+// `<namespace folder>/.opencode/`, laid out as a project's `.opencode` (opencode.jsonc, commands/,
+// skills/, tools/, agents/, plugins/). OpenCode loads it through two seams:
+// - `ConfigPaths.directories()` lists it right after the global config folder, so the project's own
+//   command, agent, tool and plugin files (later in the list) win over the namespace's;
+// - `Config` merges its opencode.json(c) right after the global files and before the project's
+//   opencode.json, and skips it in the folder loop (where it would be merged after the project's JSON).
+// A namespace whose folder has no `.opencode` adds nothing, so OpenCode's behaviour is unchanged until
+// something is put there.
+
+const CONFIG_DIR = ".opencode"
+const OPENCODE = "opencode"
+// This module is imported by config/paths.ts, so it reads the namespace store's two small files itself
+// (profile-store.ts writes them) rather than importing the operator's services.
+const store = () => path.join(Global.Path.config, "namespaces")
+const readJson = (file: string) =>
+  Bun.file(file)
+    .json()
+    .then((data: unknown) => (data && typeof data === "object" ? (data as Record<string, unknown>) : {}))
+    .catch(() => ({}) as Record<string, unknown>)
+
+// The namespace `.opencode` folders handed out, so the folder loop can tell them apart.
+const owned = new Set<string>()
+// Every instance folder that asked for its namespace layer, with its project and namespace: a change to
+// a namespace, or a project moving between namespaces, reloads exactly those instances.
+const loaded = new Map<string, { project: string; namespace: string }>()
+
+export type Layer = { namespace: string; project: string; dir?: string }
+
+const exists = (dir: string) =>
+  fs
+    .stat(dir)
+    .then((stat) => stat.isDirectory())
+    .catch(() => false)
+
+// The project a folder belongs to (as OperatorProjects.keyOf): its worktree, or outside git the
+// registered folder it is in.
+function projectOf(directory: string, worktree: string, registered: ReadonlyArray<string>) {
+  if (worktree !== "/") return worktree
+  const resolved = path.resolve(directory)
+  return (
+    registered
+      .filter((key) => resolved === key || resolved.startsWith(key.endsWith(path.sep) ? key : key + path.sep))
+      .toSorted((a, b) => b.length - a.length)[0] ?? resolved
+  )
+}
+
+// The namespace a folder's project is in, and that namespace's `.opencode` folder when it exists.
+export async function layerOf(directory: string, worktree?: string): Promise<Layer> {
+  const settings = await readJson(path.join(store(), "projects.json"))
+  const project = projectOf(directory, worktree ?? "/", Object.keys(settings))
+  const entry = settings[project]
+  const namespace =
+    entry && typeof entry === "object" && typeof (entry as { namespace?: unknown }).namespace === "string"
+      ? (entry as { namespace: string }).namespace
+      : OPENCODE
+  const record = await readJson(path.join(store(), namespace, "namespace.json"))
+  const folder = typeof record.folder === "string" && record.folder ? record.folder : undefined
+  const dir = folder ? path.join(folder, CONFIG_DIR) : undefined
+  loaded.set(directory, { project, namespace })
+  if (!dir || !(await exists(dir))) return { namespace, project }
+  owned.add(dir)
+  return { namespace, project, dir }
+}
+
+// The config folders for `directory`: upstream's list with the namespace layer right after the global
+// config folder. A non-git project under its namespace folder would also reach the layer by walking
+// up; it stays once, in the namespace position.
+export const directories = Effect.fnUntraced(function* (
+  directory: string,
+  worktree: string | undefined,
+  upstream: ReadonlyArray<string>,
+) {
+  const layer = yield* Effect.promise(() => layerOf(directory, worktree))
+  if (!layer.dir) return [...upstream]
+  const rest = upstream.filter((dir) => dir !== layer.dir)
+  return [...rest.slice(0, 1), layer.dir, ...rest.slice(1)]
+})
+
+// The namespace layer's opencode.json(c), merged right after the global config files.
+export const configFiles = Effect.fnUntraced(function* (ctx: { directory: string; worktree: string }) {
+  const layer = yield* Effect.promise(() => layerOf(ctx.directory, ctx.worktree))
+  if (!layer.dir) return []
+  return [path.join(layer.dir, "opencode.json"), path.join(layer.dir, "opencode.jsonc")]
+})
+
+// Whether a config folder is a namespace layer (its JSON is merged earlier, not in the folder loop).
+export function owns(dir: string) {
+  return owned.has(dir)
+}
+
+// The loaded instance folders a change affects: every one in the namespace, or in the project.
+export function instancesOf(target: { namespace: string } | { project: string }) {
+  return [...loaded.entries()]
+    .filter(([, item]) =>
+      "namespace" in target ? item.namespace === target.namespace : item.project === target.project,
+    )
+    .map(([directory]) => directory)
+}
+
+// An instance that is gone no longer needs reloading.
+export function forget(directory: string) {
+  loaded.delete(directory)
+}

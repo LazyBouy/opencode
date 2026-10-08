@@ -6,6 +6,7 @@ import { Global } from "@opencode-ai/core/global"
 import { unique } from "remeda"
 import * as Effect from "effect/Effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { OperatorNamespaceScope } from "@/operator/namespace-scope"
 
 export const files = Effect.fn("ConfigPaths.projectFiles")(function* (
   name: string,
@@ -22,7 +23,7 @@ export const files = Effect.fn("ConfigPaths.projectFiles")(function* (
 
 export const directories = Effect.fn("ConfigPaths.directories")(function* (directory: string, worktree?: string) {
   const afs = yield* FSUtil.Service
-  return unique([
+  const found = unique([
     Global.Path.config,
     ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
       ? yield* afs.up({
@@ -38,6 +39,7 @@ export const directories = Effect.fn("ConfigPaths.directories")(function* (direc
     })),
     ...(Flag.OPENCODE_CONFIG_DIR ? [Flag.OPENCODE_CONFIG_DIR] : []),
   ])
+  return yield* OperatorNamespaceScope.directories(directory, worktree, found)
 })
 
 export function fileInDirectory(dir: string, name: string) {

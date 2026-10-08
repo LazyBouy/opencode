@@ -102,8 +102,8 @@ export interface Interface {
   readonly available: (agent?: Agent.Info) => Effect.Effect<Info[]>
 }
 
-const add = Effect.fnUntraced(function* (state: State, match: string, events: EventV2Bridge.Service["Service"]) {
-  const md = yield* Effect.tryPromise({
+const parse = Effect.fnUntraced(function* (match: string, events: EventV2Bridge.Service["Service"]) {
+  return yield* Effect.tryPromise({
     try: () => ConfigMarkdown.parse(match),
     catch: (err) => err,
   }).pipe(
@@ -117,7 +117,13 @@ const add = Effect.fnUntraced(function* (state: State, match: string, events: Ev
       }),
     ),
   )
+})
 
+const add = Effect.fnUntraced(function* (
+  state: State,
+  match: string,
+  md: Awaited<ReturnType<typeof ConfigMarkdown.parse>> | undefined,
+) {
   if (!md) return
 
   if (!isSkillFrontmatter(md.data)) return
@@ -237,10 +243,11 @@ const loadSkills = Effect.fnUntraced(function* (
   discovered: DiscoveryState,
   events: EventV2Bridge.Service["Service"],
 ) {
-  yield* Effect.forEach(discovered.matches, (match) => add(state, match, events), {
+  // Parsed in parallel, applied in discovery order: the same name resolves the same way every time.
+  const parsed = yield* Effect.forEach(discovered.matches, (match) => parse(match, events), {
     concurrency: "unbounded",
-    discard: true,
   })
+  for (const [index, match] of discovered.matches.entries()) yield* add(state, match, parsed[index])
 
   yield* Effect.logInfo("init", { count: Object.keys(state.skills).length })
 })
