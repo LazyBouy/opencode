@@ -9,6 +9,7 @@ import { shortPath } from "../format"
 import { requestError } from "../pages/config-helpers"
 import { useOperatorProjects } from "../project"
 import { useConfirm } from "./confirm"
+import { useProjectConfigWrite } from "./project-config-copy"
 import { FieldHelp } from "./field-help"
 import { useModelSourceText } from "./prompt-trace"
 
@@ -91,6 +92,7 @@ function ModelPicker(props: {
   const api = useOperatorClient()
   const queryClient = useQueryClient()
   const confirm = useConfirm()
+  const write = useProjectConfigWrite()
   const models = useConnectedModels(() => props.directory)
   const options = () => [OPENCODE, ...models().map((model) => model.key)]
   const nameOf = (key: string) =>
@@ -108,13 +110,19 @@ function ModelPicker(props: {
       confirm: language.t("operator.modelDefaults.save"),
     })
     if (!ok) return
-    await api
-      .client()
-      .operator.config.update(
-        { directory: props.directory, scope: props.scope, body: { [props.configKey]: key === OPENCODE ? null : key } },
+    await write((confirmCopy) =>
+      api.client().operator.config.update(
+        {
+          directory: props.directory,
+          scope: props.scope,
+          body: { [props.configKey]: key === OPENCODE ? null : key },
+          ...(confirmCopy ? { confirmCopy } : {}),
+        },
         { throwOnError: true },
-      )
+      ),
+    )
       .then(async (result) => {
+        if (!result) return
         showToast({
           title: language.t("operator.modelDefaults.saved"),
           description:

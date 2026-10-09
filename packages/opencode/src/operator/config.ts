@@ -15,6 +15,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { isRecord } from "@/util/record"
 import { OperatorLayout } from "./layout"
 import { OperatorNamespaceScope } from "./namespace-scope"
+import { OperatorProjectConfig } from "./project-config"
 
 export const Scope = Schema.Literals(["global", "project"]).annotate({ identifier: "OperatorConfigScope" })
 export type Scope = typeof Scope.Type
@@ -33,6 +34,11 @@ export const Source = Schema.Struct({
   }),
   path: Schema.String,
   text: Schema.String,
+  variable: Schema.optional(
+    Schema.Literals(["OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG_CONTENT"]),
+  ).annotate({
+    description: "env: the environment variable it comes from",
+  }),
 }).annotate({ identifier: "OperatorConfigSource" })
 export type Source = typeof Source.Type
 
@@ -51,6 +57,10 @@ export const Layers = Schema.Struct({
     namespace: Schema.optional(Schema.String),
   }).annotate({ description: "The folder that holds agent, command and skill files at each scope" }),
   namespace: Schema.String.annotate({ description: "The namespace the namespace scope stands for" }),
+  project: Schema.Literals(["own", "namespace"]).annotate({
+    description:
+      "own: the project has a config of its own, and its namespace's isn't merged; namespace: it uses its namespace's",
+  }),
   origins: Schema.Record(Schema.String, Source.fields.kind).annotate({
     description: "For each top-level key, the kind of source that sets it last (the one in effect)",
   }),
@@ -74,17 +84,21 @@ export class InvalidError extends Schema.TaggedErrorClass<InvalidError>()("Opera
 // The namespace scope is the project's namespace unless `namespace` names another.
 export interface Interface {
   readonly layers: (namespace?: string) => Effect.Effect<Layers>
+  /**
+   * Merges `patch` into the scope's config file. The project scope is copy-on-write (project-config.ts):
+   * without a config of its own, the project gets a copy of its namespace's, which needs consent.
+   */
   readonly update: (
     scope: WriteScope,
     patch: Record<string, unknown>,
     namespace?: string,
-  ) => Effect.Effect<typeof UpdateResult.Type, InvalidError>
+  ) => Effect.Effect<typeof UpdateResult.Type, InvalidError | OperatorProjectConfig.CopyNeededError>
   /** Replaces the scope's config file with `text` after validating it, for raw JSONC editing. */
   readonly write: (
     scope: WriteScope,
     text: string,
     namespace?: string,
-  ) => Effect.Effect<typeof UpdateResult.Type, InvalidError>
+  ) => Effect.Effect<typeof UpdateResult.Type, InvalidError | OperatorProjectConfig.CopyNeededError>
   /** The namespace the namespace scope stands for: `namespace`, else the project's. */
   readonly namespaceOf: (namespace?: string) => Effect.Effect<string>
 }
@@ -128,8 +142,16 @@ const layer = Layer.effect(
       return { id, dir: layer.target, file: path.join(layer.target, name) }
     })
 
+    // Whether the project has a config of its own (then its namespace's isn't merged, §6).
+    const ownConfig = Effect.fnUntraced(function* () {
+      const ctx = yield* InstanceState.context
+      const layer = yield* Effect.promise(() => OperatorNamespaceScope.layerOf(ctx.directory, ctx.worktree))
+      return (yield* Effect.promise(() => OperatorNamespaceScope.ownConfigFiles(layer.project))).length > 0
+    })
+
     // Mirrors the load order in Config.loadInstanceState so the last project source is the effective one:
-    // the global files, the namespace's, a custom file, the project's, then the config folders'.
+    // the global files, the namespace's (unless the project has its own config), a custom file, the
+    // project's, then the config folders'.
     const collect = Effect.fnUntraced(function* (namespace?: string) {
       const ctx = yield* InstanceState.context
       const global = yield* Effect.forEach(["config.json", "opencode.json", "opencode.jsonc"], (name) =>
@@ -137,17 +159,24 @@ const layer = Layer.effect(
       )
       const own = yield* namespaceFile(namespace)
       const ns =
-        own.dir && !("global" in own)
+        own.dir && !("global" in own) && (namespace || !(yield* ownConfig()))
           ? yield* Effect.forEach(["opencode.json", "opencode.jsonc"], (name) =>
               read("namespace", path.join(own.dir!, name)),
             )
           : []
       // The environment's files are "env" (global_and_opencode_namespaces_spec.md §13 #5).
-      const custom = Flag.OPENCODE_CONFIG ? yield* read("env", Flag.OPENCODE_CONFIG) : []
+      const custom = Flag.OPENCODE_CONFIG
+        ? (yield* read("env", Flag.OPENCODE_CONFIG)).map((source) => ({
+            ...source,
+            variable: "OPENCODE_CONFIG" as const,
+          }))
+        : []
       const project = Flag.OPENCODE_DISABLE_PROJECT_CONFIG
         ? []
         : yield* Effect.forEach(
-            yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie),
+            OperatorNamespaceScope.projectFiles(
+              yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie),
+            ),
             (file) => read("project", file),
           )
       const directories = (yield* ConfigPaths.directories(ctx.directory, ctx.worktree).pipe(Effect.orDie)).filter(
@@ -161,26 +190,42 @@ const layer = Layer.effect(
             ? ("global" as const)
             : ("directory" as const)
       const directory = yield* Effect.forEach(directories, (dir) =>
-        Effect.forEach(["opencode.json", "opencode.jsonc"], (name) => read(kindOf(dir), path.join(dir, name))),
+        Effect.forEach(["opencode.json", "opencode.jsonc"], (name) =>
+          read(kindOf(dir), path.join(dir, name)).pipe(
+            Effect.map((found) =>
+              dir === Flag.OPENCODE_CONFIG_DIR
+                ? found.map((source) => ({ ...source, variable: "OPENCODE_CONFIG_DIR" as const }))
+                : found,
+            ),
+          ),
+        ),
       )
       const env = Flag.OPENCODE_CONFIG_CONTENT
-        ? [{ kind: "env" as const, path: "OPENCODE_CONFIG_CONTENT", text: Flag.OPENCODE_CONFIG_CONTENT }]
+        ? [
+            {
+              kind: "env" as const,
+              path: "OPENCODE_CONFIG_CONTENT",
+              text: Flag.OPENCODE_CONFIG_CONTENT,
+              variable: "OPENCODE_CONFIG_CONTENT" as const,
+            },
+          ]
         : []
       return [...global.flat(), ...ns.flat(), ...custom, ...project.flat(), ...directory.flat(2), ...env]
     })
     const sources = (namespace?: string) => collect(namespace).pipe(Effect.provideService(FSUtil.Service, fs))
 
     const targets = Effect.fnUntraced(function* (list: ReadonlyArray<Source>, namespace?: string) {
-      const root = projectRoot(yield* InstanceState.context)
+      const ctx = yield* InstanceState.context
       const global =
         ["opencode.jsonc", "opencode.json", "config.json"]
           .map((name) => path.join(Global.Path.config, name))
           .find((file) => list.some((source) => source.path === file)) ??
         path.join(Global.Path.config, "opencode.jsonc")
+      // The project's own config file (§7.1: the first that exists), else where its copy would go.
+      const layer = yield* Effect.promise(() => OperatorNamespaceScope.layerOf(ctx.directory, ctx.worktree))
       const project =
-        list.findLast(
-          (source) => (source.kind === "project" || source.kind === "directory") && FSUtil.contains(root, source.path),
-        )?.path ?? path.join(root, ".opencode", "opencode.jsonc")
+        (yield* Effect.promise(() => OperatorNamespaceScope.ownConfigFiles(layer.project)))[0] ??
+        path.join(layer.project, OperatorNamespaceScope.OWN_CONFIG_FILES[0]!)
       const own = yield* namespaceFile(namespace)
       return { global, project, ...(own.file ? { namespace: own.file } : {}) }
     })
@@ -189,6 +234,8 @@ const layer = Layer.effect(
       const list = yield* sources(namespace)
       const ctx = yield* InstanceState.context
       const own = yield* namespaceFile(namespace)
+      // Global's capability keys don't reach a namespace that leaves out Global's capabilities.
+      const inherit = (yield* Effect.promise(() => OperatorNamespaceScope.namespaceLayer(own.id))).inherit
       return {
         sources: list,
         targets: yield* targets(list, namespace),
@@ -198,12 +245,17 @@ const layer = Layer.effect(
           ...(own.dir ? { namespace: own.dir } : {}),
         },
         namespace: own.id,
+        project: (yield* ownConfig()) ? ("own" as const) : ("namespace" as const),
         origins: Object.fromEntries(
           list.flatMap((source) => {
             const value = parse(source.text) as unknown
             return isRecord(value)
               ? Object.keys(value)
                   .filter((key) => key !== "$schema")
+                  .filter(
+                    (key) =>
+                      inherit || source.kind !== "global" || !OperatorNamespaceScope.CAPABILITY_KEYS.includes(key),
+                  )
                   .map((key) => [key, source.kind] as const)
               : []
           }),
@@ -224,13 +276,19 @@ const layer = Layer.effect(
 
     const save = Effect.fnUntraced(function* (file: string, before: string, after: string) {
       if (after === before) return { path: file, changed: false }
-      yield* Effect.try({
-        try: () =>
-          ConfigParse.schema(ConfigV1.Info, ConfigV2Compat.lower(ConfigParse.jsonc(after, file), file).value, file),
-        catch: (cause) => new InvalidError({ path: file, message: describe(cause) }),
-      })
+      yield* validate(file, after)
       yield* fs.writeWithDirs(file, after).pipe(Effect.orDie)
       return { path: file, changed: true }
+    })
+
+    // A write into the project's config: its own file, or a copy of its namespace's (with consent).
+    const project = Effect.fnUntraced(function* (edit: (text: string) => string) {
+      const prepared = yield* OperatorProjectConfig.prepare(yield* InstanceState.context)
+      if (prepared.own) return yield* save(prepared.file, prepared.text, edit(prepared.text))
+      const after = OperatorProjectConfig.withoutLocked(edit(prepared.text), prepared.copy?.locks ?? [])
+      const result = yield* save(prepared.file, "", after)
+      yield* Effect.promise(() => OperatorProjectConfig.finish(prepared, result.path))
+      return result
     })
 
     const current = Effect.fnUntraced(function* (file: string) {
@@ -242,12 +300,14 @@ const layer = Layer.effect(
       patch: Record<string, unknown>,
       namespace?: string,
     ) {
+      if (scope === "project") return yield* project((text) => patchJsonc(text || "{}", patch))
       const file = yield* target(scope, namespace)
       const before = (yield* current(file)) ?? "{}"
       return yield* save(file, before, patchJsonc(before, patch))
     })
 
     const write = Effect.fn("OperatorConfig.write")(function* (scope: WriteScope, text: string, namespace?: string) {
+      if (scope === "project") return yield* project(() => text)
       const file = yield* target(scope, namespace)
       return yield* save(file, (yield* current(file)) ?? "", text)
     })
@@ -257,6 +317,19 @@ const layer = Layer.effect(
 )
 
 export const node = LayerNode.make({ service: Service, layer, deps: [FSUtil.node] })
+
+/** Checks a config file's text before it is written. */
+export function validate(file: string, text: string) {
+  return Effect.try({
+    try: () => ConfigParse.schema(ConfigV1.Info, ConfigV2Compat.lower(ConfigParse.jsonc(text, file), file).value, file),
+    catch: (cause) => new InvalidError({ path: file, message: describe(cause) }),
+  }).pipe(Effect.asVoid)
+}
+
+/** A JSON merge patch applied to JSONC text, comments kept. */
+export function patchText(text: string, patch: Record<string, unknown>) {
+  return patchJsonc(text || "{}", patch)
+}
 
 // Where a project's own files live. Non-git projects report "/" as their worktree; their root is the
 // directory itself.

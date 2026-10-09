@@ -1,10 +1,12 @@
 import { OperatorTrash } from "@/operator/trash"
 import { OperatorTrashItems } from "@/operator/trash-items"
+import { OperatorProjectConfig } from "@/operator/project-config"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { ApiTrashError } from "../groups/trash"
 import { OperatorRootApi } from "../groups/overview"
+import { copyOr } from "../groups/project-config"
 
 const apiError = (error: { message: string }) =>
   new ApiTrashError({ name: "OperatorTrashError", data: { message: error.message } })
@@ -25,6 +27,10 @@ export const operatorTrashHandlers = HttpApiBuilder.group(OperatorRootApi, "oper
 export const operatorTrashItemHandlers = HttpApiBuilder.group(InstanceHttpApi, "operatorTrashItem", (handlers) =>
   Effect.gen(function* () {
     const items = yield* OperatorTrashItems.Service
-    return handlers.handle("remove", (ctx) => items.remove(ctx.payload).pipe(Effect.mapError(apiError)))
+    return handlers.handle("remove", (ctx) =>
+      items
+        .remove(ctx.payload)
+        .pipe(Effect.mapError(copyOr(apiError)), OperatorProjectConfig.consent(ctx.query.confirmCopy)),
+    )
   }),
 )

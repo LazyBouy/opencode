@@ -9,6 +9,7 @@ import { ready, useOperatorClient } from "../data"
 import { shortPath } from "../format"
 import { requestError } from "../pages/config-helpers"
 import { LevelEditor, LevelTable, type LevelValue } from "./level-editor"
+import { useProjectConfigWrite } from "./project-config-copy"
 
 // A namespace's or project's permissions (tool_prompt_from_permission.md §7): the lines in force at
 // the level, broadest first, and "Edit permissions" for its own lines, its changes and deletions of
@@ -24,6 +25,7 @@ export function LevelPermissions(props: {
   const language = useLanguage()
   const api = useOperatorClient()
   const queryClient = useQueryClient()
+  const write = useProjectConfigWrite()
   const key = () => api.key("permission-level", props.level, props.directory, props.namespace)
   const view = useQuery(() => ({
     queryKey: key(),
@@ -81,18 +83,20 @@ export function LevelPermissions(props: {
 
   const save = async () => {
     setStore({ saving: true, error: "" })
-    await api
-      .client()
-      .operator.permissionLevel.save(
+    await write((confirmCopy) =>
+      api.client().operator.permissionLevel.save(
         {
           level: props.level,
           ...(props.directory ? { directory: props.directory } : {}),
           ...(props.namespace ? { namespace: props.namespace } : {}),
+          ...(confirmCopy ? { confirmCopy } : {}),
           operatorPermissionLevelSave: store.value,
         },
         { throwOnError: true },
-      )
+      ),
+    )
       .then(async (result) => {
+        if (!result) return
         queryClient.setQueryData(key(), result.data)
         setStore("editing", false)
         showToast({

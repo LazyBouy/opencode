@@ -3,6 +3,7 @@ import { OperatorPermissionDecisions } from "@/operator/permission-decisions"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { described } from "@/server/routes/instance/httpapi/groups/metadata"
+import { ApiProjectConfigCopyError, ConfirmCopyField } from "./project-config"
 
 // Replying to permission requests with the reply card's four choices, and every decision recorded
 // (fixes_spec.md §3, §4.3). Server-wide: a request is found by its id in whichever project raised it.
@@ -38,9 +39,10 @@ export const OperatorPermissionDecisionGroup = HttpApiGroup.make("operatorPermis
   .add(
     HttpApiEndpoint.post("decide", OperatorPermissionDecisionPaths.decide, {
       params: { requestID: Schema.String },
+      query: Schema.Struct({ ...ConfirmCopyField }),
       payload: OperatorPermissionDecide.Input,
       success: described(OperatorPermissionDecide.Result, "What was written and answered"),
-      error: [ApiPermissionGoneError, ApiPermissionRefusedError],
+      error: [ApiPermissionGoneError, ApiPermissionRefusedError, ApiProjectConfigCopyError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "operator.permission.decide",

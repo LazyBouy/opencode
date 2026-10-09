@@ -422,7 +422,10 @@ const layer = Layer.effect(
         }
 
         if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
-          for (const file of yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
+          // fork: not Global's own files (they are the Global base already)
+          for (const file of OperatorNamespaceScope.projectFiles(
+            yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie),
+          )) {
             yield* merge(file, yield* loadFile(file, authEnv), "local")
           }
         }

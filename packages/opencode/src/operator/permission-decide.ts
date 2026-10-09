@@ -10,6 +10,7 @@ import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { OperatorAgentPermissions } from "./agent-permissions"
 import { OperatorAgents } from "./agents"
+import { OperatorProjectConfig } from "./project-config"
 import { OperatorPermissionDecisions } from "./permission-decisions"
 import { OperatorPermissionLive } from "./permission-live"
 import { OperatorReloadWhenIdle } from "./reload-when-idle"
@@ -53,7 +54,10 @@ export class RefusedError extends Schema.TaggedErrorClass<RefusedError>()("Opera
 }) {}
 
 export interface Interface {
-  readonly decide: (requestID: string, input: Input) => Effect.Effect<Result, GoneError | RefusedError>
+  readonly decide: (
+    requestID: string,
+    input: Input,
+  ) => Effect.Effect<Result, GoneError | RefusedError | OperatorProjectConfig.CopyNeededError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorPermissionDecide") {}
@@ -177,7 +181,13 @@ const layer = Layer.effect(
               const next = upsert(current.written, rules)
               const saved = yield* editor
                 .save({ agent, scope: "project", rules: next, confirmOrder: true })
-                .pipe(Effect.mapError((error) => new RefusedError({ message: error.message })))
+                .pipe(
+                  Effect.mapError((error) =>
+                    error instanceof OperatorProjectConfig.CopyNeededError
+                      ? error
+                      : new RefusedError({ message: error.message }),
+                  ),
+                )
               yield* live.written({ directory: entry.directory, agent, rules: next })
               const reload = yield* reloads.wantFile(saved.path, entry.directory)
               const draft = { decision: "allow-agent" as const, via: input.via }

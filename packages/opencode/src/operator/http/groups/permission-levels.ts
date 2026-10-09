@@ -8,6 +8,7 @@ import {
   WorkspaceRoutingQueryFields,
 } from "@/server/routes/instance/httpapi/middleware/workspace-routing"
 import { described } from "@/server/routes/instance/httpapi/groups/metadata"
+import { ApiProjectConfigCopyError, ConfirmCopyField } from "./project-config"
 
 // A namespace's or project's permission level (tool_prompt_from_permission.md §3, §7).
 export const OperatorPermissionLevelPaths = {
@@ -48,10 +49,10 @@ export const OperatorPermissionLevelApi = HttpApi.make("operator-permission-leve
         ),
         HttpApiEndpoint.put("save", OperatorPermissionLevelPaths.level, {
           params: { level: OperatorPermissionLevels.LevelName },
-          query,
+          query: Schema.Struct({ ...query.fields, ...ConfirmCopyField }),
           payload: OperatorPermissionLevels.SaveInput,
           success: described(OperatorPermissionLevels.View, "The level's permissions after the save"),
-          error: [ApiPermissionLevelInvalidError, ApiPermissionLevelLockedError],
+          error: [ApiPermissionLevelInvalidError, ApiPermissionLevelLockedError, ApiProjectConfigCopyError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "operator.permissionLevel.save",

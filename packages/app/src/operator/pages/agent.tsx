@@ -8,6 +8,7 @@ import { showToast } from "@/utils/toast"
 import { useOpenSession, useOperatorClient } from "../data"
 import { formatAgo, formatCost } from "../format"
 import { useConfirm } from "../ui/confirm"
+import { useProjectConfigWrite } from "../ui/project-config-copy"
 import { DataTable } from "../ui/data-table"
 import { RecordView } from "../ui/record-overlay"
 import { AgentPrompt, useAgentPromptSetting } from "./agent-prompt"
@@ -95,6 +96,7 @@ export function AgentDetail(props: { name: string; directory: string; tab: strin
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const confirm = useConfirm()
+  const write = useProjectConfigWrite()
   const dir = () => `?dir=${encodeURIComponent(directory())}`
   const refresh = () => queryClient.invalidateQueries({ queryKey: api.key("agents", directory()) })
   const fail = (error: unknown) =>
@@ -109,15 +111,16 @@ export function AgentDetail(props: { name: string; directory: string; tab: strin
       .catch(fail)
   }
   const toggle = async (name: string, disabled: boolean) => {
-    await api
-      .client()
-      .operator.agent.update({
+    await write((confirmCopy) =>
+      api.client().operator.agent.update({
         name,
         directory: directory(),
         scope: "project",
         ...(disabled ? { reset: ["disable" as const] } : { disable: true }),
-      })
-      .then(refresh)
+        ...(confirmCopy ? { confirmCopy } : {}),
+      }),
+    )
+      .then((result) => (result ? refresh() : undefined))
       .catch(fail)
   }
   const remove = async (name: string) => {
@@ -128,10 +131,16 @@ export function AgentDetail(props: { name: string; directory: string; tab: strin
       danger: true,
     })
     if (!ok) return
-    await api
-      .client()
-      .operator.agent.remove({ name, directory: directory(), scope: "project" })
-      .then(async () => {
+    await write((confirmCopy) =>
+      api.client().operator.agent.remove({
+        name,
+        directory: directory(),
+        scope: "project",
+        ...(confirmCopy ? { confirmCopy } : {}),
+      }),
+    )
+      .then(async (result) => {
+        if (!result) return
         await refresh()
         props.onGone()
       })

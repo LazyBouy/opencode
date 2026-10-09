@@ -217,6 +217,7 @@ test("the config page saves the project file and shows validation errors", async
   const state = await mockOperator(page)
   await page.goto(`/operator/config${dir}`)
   await expect(page.locator('[data-component="operator-sources"]')).toContainText(".opencode/opencode.jsonc")
+  await expect(page.getByTestId("config-status")).toContainText("Using this project's own config")
 
   const editor = page.getByRole("textbox", { name: "Edit settings" })
   await expect(editor).toHaveValue('{\n  "username": "me"\n}\n')
@@ -224,24 +225,21 @@ test("the config page saves the project file and shows validation errors", async
   await editor.fill('{ "share": "sometimes" }')
   await page.getByRole("button", { name: "Save" }).click()
   await expect(page.locator('[data-slot="operator-error"]')).toContainText("share: Expected")
-  const write = state.writes[0]
-  expect(new URL(write.url).searchParams.get("scope")).toBe("project")
+  const write = state.writes[0]!
+  expect(new URL(write.url).pathname).toBe("/operator/config/project")
   expect(write.body).toEqual({ text: '{ "share": "sometimes" }' })
 })
 
-test("the config page edits the namespace's config too, and says where each setting comes from", async ({ page }) => {
-  const state = await mockOperator(page)
+test("the config page has no scope switch, and says where each setting comes from in §3's words", async ({ page }) => {
+  await mockOperator(page)
   await page.goto(`/operator/config${dir}`)
-  await expect(page.locator('[data-component="operator-sources"]')).toContainText("Namespace")
+  await expect(page.locator('[data-component="operator-scope-switch"]')).toHaveCount(0)
+  const sources = page.locator('[data-component="operator-sources"]')
+  await expect(sources).toContainText("Global base")
+  await expect(sources).toContainText("OpenCode's config")
+  await expect(sources).toContainText("This project")
   await expect(page.getByTestId("config-origins")).toContainText("model")
-  await expect(page.getByTestId("config-origins")).toContainText("Namespace")
-  await page.getByRole("button", { name: "Namespace", exact: true }).click()
-  const editor = page.getByRole("textbox", { name: "Edit settings" })
-  await expect(editor).toHaveValue('{ "model": "opencode/big" }')
-  await editor.fill('{ "model": "opencode/small" }')
-  await page.getByRole("button", { name: "Save" }).click()
-  await expect.poll(() => state.writes.length).toBe(1)
-  expect(new URL(state.writes[0]!.url).searchParams.get("scope")).toBe("namespace")
+  await expect(page.getByTestId("config-origins")).toContainText("OpenCode's config")
 })
 
 test("capabilities list tools by origin and connect an MCP server", async ({ page }) => {

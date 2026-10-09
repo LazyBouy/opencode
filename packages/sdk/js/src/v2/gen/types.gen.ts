@@ -2559,6 +2559,7 @@ export type OperatorTrashKind =
   | "mcp"
   | "memory"
   | "plugin"
+  | "config"
 
 export type OperatorTrashEntry = {
   id: string
@@ -2586,6 +2587,16 @@ export type OperatorTrashEntry = {
   }
   sessions?: Array<string>
   archived?: Array<string>
+  copy?: {
+    namespace: string
+    copiedAt: number
+    namespaceHash: string
+    file: string
+    deleted?: Array<{
+      permission: string
+      pattern: string
+    }>
+  }
 }
 
 export type OperatorTrashError = {
@@ -2643,6 +2654,48 @@ export type OperatorLayoutError = {
   name: "OperatorLayoutError"
   data: {
     message: string
+  }
+}
+
+export type OperatorNamespaceConfig = {
+  id: string
+  name: string
+  /**
+   * Global (or, with a blank working directory, Global · OpenCode)
+   */
+  global: boolean
+  file: string
+  text: string
+  /**
+   * false: the namespace has no config yet; saving creates it
+   */
+  exists: boolean
+  /**
+   * The namespace's projects that use this config (they have none of their own)
+   */
+  using: Array<{
+    project: string
+    name: string
+  }>
+  /**
+   * The namespace's projects with their own config: changes here don't reach them
+   */
+  own: Array<{
+    project: string
+    name: string
+  }>
+  /**
+   * Global: the namespaces that inherit its capabilities (its other settings reach every namespace)
+   */
+  inheriting: Array<string>
+  reload?: "now" | "when-idle"
+}
+
+export type OperatorNamespaceConfigError = {
+  name: "OperatorNamespaceConfigError"
+  data: {
+    message: string
+    path: string
   }
 }
 
@@ -2713,6 +2766,19 @@ export type OperatorPermissionGoneError = {
   name: "OperatorPermissionGoneError"
   data: {
     message: string
+  }
+}
+
+export type OperatorProjectConfigCopyNeededError = {
+  name: "OperatorProjectConfigCopyNeededError"
+  data: {
+    message: string
+    project: string
+    namespace: string
+    /**
+     * Where the project's own config would be written
+     */
+    file: string
   }
 }
 
@@ -3367,6 +3433,10 @@ export type OperatorConfigLayers = {
    */
   namespace: string
   /**
+   * own: the project has a config of its own, and its namespace's isn't merged; namespace: it uses its namespace's
+   */
+  project: "own" | "namespace"
+  /**
    * For each top-level key, the kind of source that sets it last (the one in effect)
    */
   origins: {
@@ -3387,6 +3457,72 @@ export type OperatorConfigInvalidError = {
   data: {
     path: string
     message: string
+  }
+}
+
+export type OperatorProjectConfigResolved = {
+  /**
+   * own: the project's own config; namespace: its namespace's (it has none of its own)
+   */
+  mode: "own" | "namespace"
+  project: string
+  /**
+   * The file the project uses
+   */
+  file: string
+  text: string
+  namespace: {
+    id: string
+    name: string
+    global: boolean
+    file: string
+    exists: boolean
+  }
+  copy?: {
+    namespace: string
+    name: string
+    copiedAt: number
+    /**
+     * The namespace's config changed after the copy
+     */
+    changedSince: boolean
+  }
+  /**
+   * Every config file of the project's own, in the order OpenCode merges them
+   */
+  ownFiles: Array<string>
+  /**
+   * Config files below the project folder: they apply only to sessions in those subfolders
+   */
+  subfolderFiles: Array<string>
+  /**
+   * The own file is tracked by git: edited, never removed
+   */
+  tracked: boolean
+  /**
+   * Where a copy is written
+   */
+  target: string
+}
+
+export type OperatorProjectConfigReverted = {
+  /**
+   * The Trash entry holding the project's config files
+   */
+  trash: string
+  reload: "now" | "when-idle"
+}
+
+export type OperatorProjectConfigCompare = {
+  project: {
+    file: string
+    text: string
+  }
+  namespace: {
+    id: string
+    name: string
+    file: string
+    text: string
   }
 }
 
@@ -11204,6 +11340,65 @@ export type OperatorLayoutWorkingDirResponses = {
 export type OperatorLayoutWorkingDirResponse =
   OperatorLayoutWorkingDirResponses[keyof OperatorLayoutWorkingDirResponses]
 
+export type OperatorNamespaceConfigGetData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/operator/namespace/{id}/config"
+}
+
+export type OperatorNamespaceConfigGetErrors = {
+  /**
+   * OperatorNamespaceConfigError | InvalidRequestError
+   */
+  400: OperatorNamespaceConfigError | InvalidRequestError
+}
+
+export type OperatorNamespaceConfigGetError = OperatorNamespaceConfigGetErrors[keyof OperatorNamespaceConfigGetErrors]
+
+export type OperatorNamespaceConfigGetResponses = {
+  /**
+   * The namespace's config and who uses it
+   */
+  200: OperatorNamespaceConfig
+}
+
+export type OperatorNamespaceConfigGetResponse =
+  OperatorNamespaceConfigGetResponses[keyof OperatorNamespaceConfigGetResponses]
+
+export type OperatorNamespaceConfigSaveData = {
+  body?: {
+    text: string
+  }
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/operator/namespace/{id}/config"
+}
+
+export type OperatorNamespaceConfigSaveErrors = {
+  /**
+   * OperatorNamespaceConfigError | InvalidRequestError
+   */
+  400: OperatorNamespaceConfigError | InvalidRequestError
+}
+
+export type OperatorNamespaceConfigSaveError =
+  OperatorNamespaceConfigSaveErrors[keyof OperatorNamespaceConfigSaveErrors]
+
+export type OperatorNamespaceConfigSaveResponses = {
+  /**
+   * The namespace's config after the save
+   */
+  200: OperatorNamespaceConfig
+}
+
+export type OperatorNamespaceConfigSaveResponse =
+  OperatorNamespaceConfigSaveResponses[keyof OperatorNamespaceConfigSaveResponses]
+
 export type OperatorProjectRecordListData = {
   body?: never
   path?: never
@@ -11272,7 +11467,9 @@ export type OperatorPermissionDecideData = {
   path: {
     requestID: string
   }
-  query?: never
+  query?: {
+    confirmCopy?: "true" | "false"
+  }
   url: "/operator/permission/{requestID}/decide"
 }
 
@@ -11282,9 +11479,9 @@ export type OperatorPermissionDecideErrors = {
    */
   400: OperatorPermissionRefusedError | InvalidRequestError
   /**
-   * OperatorPermissionGoneError
+   * OperatorPermissionGoneError | OperatorProjectConfigCopyNeededError
    */
-  409: OperatorPermissionGoneError
+  409: OperatorPermissionGoneError | OperatorProjectConfigCopyNeededError
 }
 
 export type OperatorPermissionDecideError = OperatorPermissionDecideErrors[keyof OperatorPermissionDecideErrors]
@@ -15273,6 +15470,7 @@ export type OperatorConfigUpdateData = {
     workspace?: string
     scope: OperatorConfigWriteScope
     namespace?: string
+    confirmCopy?: "true" | "false"
   }
   url: "/operator/config"
 }
@@ -15282,6 +15480,10 @@ export type OperatorConfigUpdateErrors = {
    * OperatorConfigInvalidError | InvalidRequestError
    */
   400: OperatorConfigInvalidError | InvalidRequestError
+  /**
+   * OperatorProjectConfigCopyNeededError
+   */
+  409: OperatorProjectConfigCopyNeededError
 }
 
 export type OperatorConfigUpdateError = OperatorConfigUpdateErrors[keyof OperatorConfigUpdateErrors]
@@ -15295,37 +15497,124 @@ export type OperatorConfigUpdateResponses = {
 
 export type OperatorConfigUpdateResponse = OperatorConfigUpdateResponses[keyof OperatorConfigUpdateResponses]
 
-export type OperatorConfigWriteData = {
+export type OperatorConfigResolvedData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/config/resolved"
+}
+
+export type OperatorConfigResolvedErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorConfigResolvedError = OperatorConfigResolvedErrors[keyof OperatorConfigResolvedErrors]
+
+export type OperatorConfigResolvedResponses = {
+  /**
+   * The config the project uses
+   */
+  200: OperatorProjectConfigResolved
+}
+
+export type OperatorConfigResolvedResponse = OperatorConfigResolvedResponses[keyof OperatorConfigResolvedResponses]
+
+export type OperatorConfigProjectData = {
   body?: {
     text: string
   }
   path?: never
-  query: {
+  query?: {
     directory?: string
     workspace?: string
-    scope: OperatorConfigWriteScope
-    namespace?: string
+    confirmCopy?: "true" | "false"
   }
-  url: "/operator/config/raw"
+  url: "/operator/config/project"
 }
 
-export type OperatorConfigWriteErrors = {
+export type OperatorConfigProjectErrors = {
   /**
    * OperatorConfigInvalidError | InvalidRequestError
    */
   400: OperatorConfigInvalidError | InvalidRequestError
+  /**
+   * OperatorProjectConfigCopyNeededError
+   */
+  409: OperatorProjectConfigCopyNeededError
 }
 
-export type OperatorConfigWriteError = OperatorConfigWriteErrors[keyof OperatorConfigWriteErrors]
+export type OperatorConfigProjectError = OperatorConfigProjectErrors[keyof OperatorConfigProjectErrors]
 
-export type OperatorConfigWriteResponses = {
+export type OperatorConfigProjectResponses = {
   /**
    * Written file
    */
   200: OperatorConfigUpdateResult
 }
 
-export type OperatorConfigWriteResponse = OperatorConfigWriteResponses[keyof OperatorConfigWriteResponses]
+export type OperatorConfigProjectResponse = OperatorConfigProjectResponses[keyof OperatorConfigProjectResponses]
+
+export type OperatorConfigRevertData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/config/project/revert"
+}
+
+export type OperatorConfigRevertErrors = {
+  /**
+   * OperatorConfigInvalidError | InvalidRequestError
+   */
+  400: OperatorConfigInvalidError | InvalidRequestError
+}
+
+export type OperatorConfigRevertError = OperatorConfigRevertErrors[keyof OperatorConfigRevertErrors]
+
+export type OperatorConfigRevertResponses = {
+  /**
+   * Where the project's config went
+   */
+  200: OperatorProjectConfigReverted
+}
+
+export type OperatorConfigRevertResponse = OperatorConfigRevertResponses[keyof OperatorConfigRevertResponses]
+
+export type OperatorConfigCompareData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/config/compare"
+}
+
+export type OperatorConfigCompareErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorConfigCompareError = OperatorConfigCompareErrors[keyof OperatorConfigCompareErrors]
+
+export type OperatorConfigCompareResponses = {
+  /**
+   * The project's and the namespace's config texts
+   */
+  200: OperatorProjectConfigCompare
+}
+
+export type OperatorConfigCompareResponse = OperatorConfigCompareResponses[keyof OperatorConfigCompareResponses]
 
 export type OperatorConfigSchemaData = {
   body?: never
@@ -15423,6 +15712,7 @@ export type OperatorAgentCreateData = {
     directory?: string
     workspace?: string
     scope: OperatorConfigScope
+    confirmCopy?: "true" | "false"
   }
   url: "/operator/agent"
 }
@@ -15437,9 +15727,9 @@ export type OperatorAgentCreateErrors = {
    */
   404: OperatorAgentNotFoundError
   /**
-   * OperatorAgentConflictError
+   * OperatorAgentConflictError | OperatorProjectConfigCopyNeededError
    */
-  409: OperatorAgentConflictError
+  409: OperatorAgentConflictError | OperatorProjectConfigCopyNeededError
 }
 
 export type OperatorAgentCreateError = OperatorAgentCreateErrors[keyof OperatorAgentCreateErrors]
@@ -15462,6 +15752,7 @@ export type OperatorAgentRemoveData = {
     directory?: string
     workspace?: string
     scope: OperatorConfigScope
+    confirmCopy?: "true" | "false"
   }
   url: "/operator/agent/{name}"
 }
@@ -15476,9 +15767,9 @@ export type OperatorAgentRemoveErrors = {
    */
   404: OperatorAgentNotFoundError
   /**
-   * OperatorAgentConflictError
+   * OperatorAgentConflictError | OperatorProjectConfigCopyNeededError
    */
-  409: OperatorAgentConflictError
+  409: OperatorAgentConflictError | OperatorProjectConfigCopyNeededError
 }
 
 export type OperatorAgentRemoveError = OperatorAgentRemoveErrors[keyof OperatorAgentRemoveErrors]
@@ -15530,6 +15821,7 @@ export type OperatorAgentUpdateData = {
     directory?: string
     workspace?: string
     scope: OperatorConfigScope
+    confirmCopy?: "true" | "false"
   }
   url: "/operator/agent/{name}"
 }
@@ -15544,9 +15836,9 @@ export type OperatorAgentUpdateErrors = {
    */
   404: OperatorAgentNotFoundError
   /**
-   * OperatorAgentConflictError
+   * OperatorAgentConflictError | OperatorProjectConfigCopyNeededError
    */
-  409: OperatorAgentConflictError
+  409: OperatorAgentConflictError | OperatorProjectConfigCopyNeededError
 }
 
 export type OperatorAgentUpdateError = OperatorAgentUpdateErrors[keyof OperatorAgentUpdateErrors]
@@ -15961,6 +16253,7 @@ export type OperatorTrashItemData = {
   query?: {
     directory?: string
     workspace?: string
+    confirmCopy?: "true" | "false"
   }
   url: "/operator/trash/item"
 }
@@ -15970,6 +16263,10 @@ export type OperatorTrashItemErrors = {
    * OperatorTrashError | InvalidRequestError
    */
   400: OperatorTrashError | InvalidRequestError
+  /**
+   * OperatorProjectConfigCopyNeededError
+   */
+  409: OperatorProjectConfigCopyNeededError
 }
 
 export type OperatorTrashItemError = OperatorTrashItemErrors[keyof OperatorTrashItemErrors]
@@ -16336,6 +16633,7 @@ export type OperatorAgentPermissionsSaveData = {
   query?: {
     directory?: string
     workspace?: string
+    confirmCopy?: "true" | "false"
   }
   url: "/operator/agent/{name}/permissions"
 }
@@ -16349,6 +16647,10 @@ export type OperatorAgentPermissionsSaveErrors = {
    * OperatorAgentPermissionsNotFoundError
    */
   404: OperatorAgentPermissionsNotFoundError
+  /**
+   * OperatorProjectConfigCopyNeededError
+   */
+  409: OperatorProjectConfigCopyNeededError
 }
 
 export type OperatorAgentPermissionsSaveError =
@@ -16469,6 +16771,7 @@ export type OperatorPermissionLevelSaveData = {
     directory?: string
     workspace?: string
     namespace?: string
+    confirmCopy?: "true" | "false"
   }
   url: "/operator/permission/level/{level}"
 }
@@ -16479,9 +16782,9 @@ export type OperatorPermissionLevelSaveErrors = {
    */
   400: OperatorPermissionLevelInvalidError | InvalidRequestError
   /**
-   * OperatorPermissionLevelLockedError
+   * OperatorPermissionLevelLockedError | OperatorProjectConfigCopyNeededError
    */
-  409: OperatorPermissionLevelLockedError
+  409: OperatorPermissionLevelLockedError | OperatorProjectConfigCopyNeededError
 }
 
 export type OperatorPermissionLevelSaveError =
@@ -16903,6 +17206,7 @@ export type OperatorCapabilityOverrideData = {
   query?: {
     directory?: string
     workspace?: string
+    confirmCopy?: "true" | "false"
   }
   url: "/operator/capability/override"
 }
@@ -16912,6 +17216,10 @@ export type OperatorCapabilityOverrideErrors = {
    * OperatorCapabilityError | InvalidRequestError
    */
   400: OperatorCapabilityError | InvalidRequestError
+  /**
+   * OperatorProjectConfigCopyNeededError
+   */
+  409: OperatorProjectConfigCopyNeededError
 }
 
 export type OperatorCapabilityOverrideError = OperatorCapabilityOverrideErrors[keyof OperatorCapabilityOverrideErrors]
@@ -16936,6 +17244,7 @@ export type OperatorCapabilityDisableData = {
   query?: {
     directory?: string
     workspace?: string
+    confirmCopy?: "true" | "false"
   }
   url: "/operator/capability/disable"
 }
@@ -16945,6 +17254,10 @@ export type OperatorCapabilityDisableErrors = {
    * OperatorCapabilityError | InvalidRequestError
    */
   400: OperatorCapabilityError | InvalidRequestError
+  /**
+   * OperatorProjectConfigCopyNeededError
+   */
+  409: OperatorProjectConfigCopyNeededError
 }
 
 export type OperatorCapabilityDisableError = OperatorCapabilityDisableErrors[keyof OperatorCapabilityDisableErrors]
@@ -16969,6 +17282,7 @@ export type OperatorCapabilityRevertData = {
   query?: {
     directory?: string
     workspace?: string
+    confirmCopy?: "true" | "false"
   }
   url: "/operator/capability/revert"
 }
@@ -16978,6 +17292,10 @@ export type OperatorCapabilityRevertErrors = {
    * OperatorCapabilityError | InvalidRequestError
    */
   400: OperatorCapabilityError | InvalidRequestError
+  /**
+   * OperatorProjectConfigCopyNeededError
+   */
+  409: OperatorProjectConfigCopyNeededError
 }
 
 export type OperatorCapabilityRevertError = OperatorCapabilityRevertErrors[keyof OperatorCapabilityRevertErrors]
@@ -17002,6 +17320,7 @@ export type OperatorCapabilityRemoveData = {
   query?: {
     directory?: string
     workspace?: string
+    confirmCopy?: "true" | "false"
   }
   url: "/operator/capability/remove"
 }
@@ -17011,6 +17330,10 @@ export type OperatorCapabilityRemoveErrors = {
    * OperatorCapabilityError | InvalidRequestError
    */
   400: OperatorCapabilityError | InvalidRequestError
+  /**
+   * OperatorProjectConfigCopyNeededError
+   */
+  409: OperatorProjectConfigCopyNeededError
 }
 
 export type OperatorCapabilityRemoveError = OperatorCapabilityRemoveErrors[keyof OperatorCapabilityRemoveErrors]
@@ -17107,6 +17430,7 @@ export type OperatorCapabilityEditData = {
   query?: {
     directory?: string
     workspace?: string
+    confirmCopy?: "true" | "false"
   }
   url: "/operator/capability/source"
 }
@@ -17116,6 +17440,10 @@ export type OperatorCapabilityEditErrors = {
    * OperatorCapabilityError | InvalidRequestError
    */
   400: OperatorCapabilityError | InvalidRequestError
+  /**
+   * OperatorProjectConfigCopyNeededError
+   */
+  409: OperatorProjectConfigCopyNeededError
 }
 
 export type OperatorCapabilityEditError = OperatorCapabilityEditErrors[keyof OperatorCapabilityEditErrors]
@@ -17139,6 +17467,7 @@ export type OperatorCapabilityTakeOpenCodeData = {
   query?: {
     directory?: string
     workspace?: string
+    confirmCopy?: "true" | "false"
   }
   url: "/operator/capability/take-opencode"
 }
@@ -17148,6 +17477,10 @@ export type OperatorCapabilityTakeOpenCodeErrors = {
    * OperatorCapabilityError | InvalidRequestError
    */
   400: OperatorCapabilityError | InvalidRequestError
+  /**
+   * OperatorProjectConfigCopyNeededError
+   */
+  409: OperatorProjectConfigCopyNeededError
 }
 
 export type OperatorCapabilityTakeOpenCodeError =
@@ -17197,6 +17530,7 @@ export type OperatorCapabilityCreateData = {
   query?: {
     directory?: string
     workspace?: string
+    confirmCopy?: "true" | "false"
   }
   url: "/operator/capability/create"
 }
@@ -17206,6 +17540,10 @@ export type OperatorCapabilityCreateErrors = {
    * OperatorCapabilityError | InvalidRequestError
    */
   400: OperatorCapabilityError | InvalidRequestError
+  /**
+   * OperatorProjectConfigCopyNeededError
+   */
+  409: OperatorProjectConfigCopyNeededError
 }
 
 export type OperatorCapabilityCreateError = OperatorCapabilityCreateErrors[keyof OperatorCapabilityCreateErrors]

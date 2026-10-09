@@ -3560,6 +3560,126 @@
         ]
       }
     },
+    "/operator/namespace/{id}/config": {
+      "get": {
+        "tags": ["operator namespace config"],
+        "operationId": "operator.namespaceConfig.get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The namespace's config and who uses it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorNamespaceConfig"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorNamespaceConfigError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorNamespaceConfigError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "A namespace's config file (`global` for Global's own) and text, the namespace's projects that use it and those with their own config, and, for Global, the namespaces that inherit it.",
+        "summary": "A namespace's config",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespaceConfig.get({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "tags": ["operator namespace config"],
+        "operationId": "operator.namespaceConfig.save",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The namespace's config after the save",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorNamespaceConfig"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorNamespaceConfigError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorNamespaceConfigError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Replaces a namespace's config file (created when missing) with the given JSONC text, checked first. The projects that use it reload when idle; for Global, every project.",
+        "summary": "Save a namespace's config",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": ["text"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespaceConfig.save({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/operator/project-records": {
       "get": {
         "tags": ["operator project records"],
@@ -3693,6 +3813,15 @@
               "type": "string"
             },
             "required": true
+          },
+          {
+            "name": "confirmCopy",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -3724,11 +3853,18 @@
             }
           },
           "409": {
-            "description": "OperatorPermissionGoneError",
+            "description": "OperatorPermissionGoneError | OperatorProjectConfigCopyNeededError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OperatorPermissionGoneError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorPermissionGoneError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/OperatorProjectConfigCopyNeededError"
+                    }
+                  ]
                 }
               }
             }
@@ -13267,6 +13403,15 @@
               "type": "string"
             },
             "required": false
+          },
+          {
+            "name": "confirmCopy",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -13296,9 +13441,19 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "OperatorProjectConfigCopyNeededError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectConfigCopyNeededError"
+                }
+              }
+            }
           }
         },
-        "description": "Merge a patch into the global, namespace or project config file, keeping comments. A null value removes the key so the inherited value applies. The result is validated before it is written.",
+        "description": "Merge a patch into the global, namespace or project config file, keeping comments. A null value removes the key so the inherited value applies. The result is validated before it is written. The project scope is copy-on-write: a project without a config of its own gets a copy of its namespace's, which needs confirmCopy.",
         "summary": "Update config at a scope",
         "requestBody": {
           "content": {
@@ -13317,10 +13472,64 @@
         ]
       }
     },
-    "/operator/config/raw": {
+    "/operator/config/resolved": {
+      "get": {
+        "tags": ["operator config"],
+        "operationId": "operator.config.resolved",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The config the project uses",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectConfigResolved"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The config this project uses: its own (own) or its namespace's (namespace), its file and text, the copy record and whether the namespace's config changed since, every own file, and files in subfolders.",
+        "summary": "The project's config",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.config.resolved({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/config/project": {
       "put": {
         "tags": ["operator config"],
-        "operationId": "operator.config.write",
+        "operationId": "operator.config.project",
         "parameters": [
           {
             "name": "directory",
@@ -13339,18 +13548,11 @@
             "required": false
           },
           {
-            "name": "scope",
+            "name": "confirmCopy",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/OperatorConfigWriteScope"
-            },
-            "required": true
-          },
-          {
-            "name": "namespace",
-            "in": "query",
-            "schema": {
-              "type": "string"
+              "type": "string",
+              "enum": ["true", "false"]
             },
             "required": false
           }
@@ -13382,10 +13584,20 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "OperatorProjectConfigCopyNeededError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectConfigCopyNeededError"
+                }
+              }
+            }
           }
         },
-        "description": "Replace the global, namespace or project config file with the given JSONC text. The text is validated before it is written.",
-        "summary": "Replace a config file",
+        "description": "Saves the project's config text, checked first. A project without a config of its own gets one at <project>/.opencode/opencode.jsonc (its namespace's config isn't changed): that needs confirmCopy, and lines the namespace locks are left out of it.",
+        "summary": "Save the project's config",
         "requestBody": {
           "content": {
             "application/json": {
@@ -13405,7 +13617,122 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.config.write({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.config.project({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/config/project/revert": {
+      "post": {
+        "tags": ["operator config"],
+        "operationId": "operator.config.revert",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Where the project's config went",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectConfigReverted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorConfigInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorConfigInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Moves the project's own config files to Trash (restorable), so the project uses its namespace's config again. Refused for a file git tracks.",
+        "summary": "Use the namespace's config again",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.config.revert({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/config/compare": {
+      "get": {
+        "tags": ["operator config"],
+        "operationId": "operator.config.compare",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The project's and the namespace's config texts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectConfigCompare"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The project's own config text and its namespace's current config text, for a side-by-side diff.",
+        "summary": "Compare with the namespace's config",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.config.compare({\n  ...\n})"
           }
         ]
       }
@@ -13549,6 +13876,15 @@
               "$ref": "#/components/schemas/OperatorConfigScope"
             },
             "required": true
+          },
+          {
+            "name": "confirmCopy",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -13590,11 +13926,18 @@
             }
           },
           "409": {
-            "description": "OperatorAgentConflictError",
+            "description": "OperatorAgentConflictError | OperatorProjectConfigCopyNeededError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OperatorAgentConflictError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorAgentConflictError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/OperatorProjectConfigCopyNeededError"
+                    }
+                  ]
                 }
               }
             }
@@ -13727,6 +14070,15 @@
               "$ref": "#/components/schemas/OperatorConfigScope"
             },
             "required": true
+          },
+          {
+            "name": "confirmCopy",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -13768,11 +14120,18 @@
             }
           },
           "409": {
-            "description": "OperatorAgentConflictError",
+            "description": "OperatorAgentConflictError | OperatorProjectConfigCopyNeededError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OperatorAgentConflictError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorAgentConflictError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/OperatorProjectConfigCopyNeededError"
+                    }
+                  ]
                 }
               }
             }
@@ -13896,6 +14255,15 @@
               "$ref": "#/components/schemas/OperatorConfigScope"
             },
             "required": true
+          },
+          {
+            "name": "confirmCopy",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -13937,11 +14305,18 @@
             }
           },
           "409": {
-            "description": "OperatorAgentConflictError",
+            "description": "OperatorAgentConflictError | OperatorProjectConfigCopyNeededError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OperatorAgentConflictError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorAgentConflictError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/OperatorProjectConfigCopyNeededError"
+                    }
+                  ]
                 }
               }
             }
@@ -14870,6 +15245,15 @@
               "type": "string"
             },
             "required": false
+          },
+          {
+            "name": "confirmCopy",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -14896,6 +15280,16 @@
                       "$ref": "#/components/schemas/InvalidRequestError"
                     }
                   ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "OperatorProjectConfigCopyNeededError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectConfigCopyNeededError"
                 }
               }
             }
@@ -15754,6 +16148,15 @@
               "type": "string"
             },
             "required": false
+          },
+          {
+            "name": "confirmCopy",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -15790,6 +16193,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OperatorAgentPermissionsNotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "OperatorProjectConfigCopyNeededError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectConfigCopyNeededError"
                 }
               }
             }
@@ -16069,6 +16482,15 @@
               "type": "string"
             },
             "required": false
+          },
+          {
+            "name": "confirmCopy",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -16100,11 +16522,18 @@
             }
           },
           "409": {
-            "description": "OperatorPermissionLevelLockedError",
+            "description": "OperatorPermissionLevelLockedError | OperatorProjectConfigCopyNeededError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OperatorPermissionLevelLockedError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorPermissionLevelLockedError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/OperatorProjectConfigCopyNeededError"
+                    }
+                  ]
                 }
               }
             }
@@ -17057,6 +17486,15 @@
               "type": "string"
             },
             "required": false
+          },
+          {
+            "name": "confirmCopy",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -17083,6 +17521,16 @@
                       "$ref": "#/components/schemas/InvalidRequestError"
                     }
                   ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "OperatorProjectConfigCopyNeededError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectConfigCopyNeededError"
                 }
               }
             }
@@ -17140,6 +17588,15 @@
               "type": "string"
             },
             "required": false
+          },
+          {
+            "name": "confirmCopy",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -17166,6 +17623,16 @@
                       "$ref": "#/components/schemas/InvalidRequestError"
                     }
                   ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "OperatorProjectConfigCopyNeededError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectConfigCopyNeededError"
                 }
               }
             }
@@ -17223,6 +17690,15 @@
               "type": "string"
             },
             "required": false
+          },
+          {
+            "name": "confirmCopy",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -17249,6 +17725,16 @@
                       "$ref": "#/components/schemas/InvalidRequestError"
                     }
                   ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "OperatorProjectConfigCopyNeededError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectConfigCopyNeededError"
                 }
               }
             }
@@ -17306,6 +17792,15 @@
               "type": "string"
             },
             "required": false
+          },
+          {
+            "name": "confirmCopy",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -17333,6 +17828,16 @@
                       "$ref": "#/components/schemas/InvalidRequestError"
                     }
                   ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "OperatorProjectConfigCopyNeededError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectConfigCopyNeededError"
                 }
               }
             }
@@ -17571,6 +18076,15 @@
               "type": "string"
             },
             "required": false
+          },
+          {
+            "name": "confirmCopy",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -17597,6 +18111,16 @@
                       "$ref": "#/components/schemas/InvalidRequestError"
                     }
                   ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "OperatorProjectConfigCopyNeededError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectConfigCopyNeededError"
                 }
               }
             }
@@ -17657,6 +18181,15 @@
               "type": "string"
             },
             "required": false
+          },
+          {
+            "name": "confirmCopy",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -17683,6 +18216,16 @@
                       "$ref": "#/components/schemas/InvalidRequestError"
                     }
                   ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "OperatorProjectConfigCopyNeededError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectConfigCopyNeededError"
                 }
               }
             }
@@ -17814,6 +18357,15 @@
               "type": "string"
             },
             "required": false
+          },
+          {
+            "name": "confirmCopy",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -17840,6 +18392,16 @@
                       "$ref": "#/components/schemas/InvalidRequestError"
                     }
                   ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "OperatorProjectConfigCopyNeededError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectConfigCopyNeededError"
                 }
               }
             }
@@ -30954,7 +31516,8 @@
           "tool",
           "mcp",
           "memory",
-          "plugin"
+          "plugin",
+          "config"
         ]
       },
       "OperatorTrashEntry": {
@@ -31035,6 +31598,41 @@
             "items": {
               "type": "string"
             }
+          },
+          "copy": {
+            "type": "object",
+            "properties": {
+              "namespace": {
+                "type": "string"
+              },
+              "copiedAt": {
+                "type": "number"
+              },
+              "namespaceHash": {
+                "type": "string"
+              },
+              "file": {
+                "type": "string"
+              },
+              "deleted": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "permission": {
+                      "type": "string"
+                    },
+                    "pattern": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["permission", "pattern"],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": ["namespace", "copiedAt", "namespaceHash", "file"],
+            "additionalProperties": false
           }
         },
         "required": ["id", "kind", "name", "deletedAt", "files"],
@@ -31167,6 +31765,102 @@
               }
             },
             "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorNamespaceConfig": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "global": {
+            "type": "boolean",
+            "description": "Global (or, with a blank working directory, Global · OpenCode)"
+          },
+          "file": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "exists": {
+            "type": "boolean",
+            "description": "false: the namespace has no config yet; saving creates it"
+          },
+          "using": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "project": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": ["project", "name"],
+              "additionalProperties": false
+            },
+            "description": "The namespace's projects that use this config (they have none of their own)"
+          },
+          "own": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "project": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": ["project", "name"],
+              "additionalProperties": false
+            },
+            "description": "The namespace's projects with their own config: changes here don't reach them"
+          },
+          "inheriting": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Global: the namespaces that inherit its capabilities (its other settings reach every namespace)"
+          },
+          "reload": {
+            "type": "string",
+            "enum": ["now", "when-idle"]
+          }
+        },
+        "required": ["id", "name", "global", "file", "text", "exists", "using", "own", "inheriting"],
+        "additionalProperties": false
+      },
+      "OperatorNamespaceConfigError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorNamespaceConfigError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": ["message", "path"],
             "additionalProperties": false
           }
         },
@@ -31339,6 +32033,37 @@
               }
             },
             "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorProjectConfigCopyNeededError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorProjectConfigCopyNeededError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "project": {
+                "type": "string"
+              },
+              "namespace": {
+                "type": "string"
+              },
+              "file": {
+                "type": "string",
+                "description": "Where the project's own config would be written"
+              }
+            },
+            "required": ["message", "project", "namespace", "file"],
             "additionalProperties": false
           }
         },
@@ -33201,6 +33926,11 @@
             "type": "string",
             "description": "The namespace the namespace scope stands for"
           },
+          "project": {
+            "type": "string",
+            "enum": ["own", "namespace"],
+            "description": "own: the project has a config of its own, and its namespace's isn't merged; namespace: it uses its namespace's"
+          },
           "origins": {
             "type": "object",
             "additionalProperties": {
@@ -33211,7 +33941,7 @@
             "description": "For each top-level key, the kind of source that sets it last (the one in effect)"
           }
         },
-        "required": ["sources", "targets", "folders", "namespace", "origins"],
+        "required": ["sources", "targets", "folders", "namespace", "project", "origins"],
         "additionalProperties": false
       },
       "OperatorConfigWriteScope": {
@@ -33257,6 +33987,146 @@
           }
         },
         "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorProjectConfigResolved": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": ["own", "namespace"],
+            "description": "own: the project's own config; namespace: its namespace's (it has none of its own)"
+          },
+          "project": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string",
+            "description": "The file the project uses"
+          },
+          "text": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "global": {
+                "type": "boolean"
+              },
+              "file": {
+                "type": "string"
+              },
+              "exists": {
+                "type": "boolean"
+              }
+            },
+            "required": ["id", "name", "global", "file", "exists"],
+            "additionalProperties": false
+          },
+          "copy": {
+            "type": "object",
+            "properties": {
+              "namespace": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "copiedAt": {
+                "type": "number"
+              },
+              "changedSince": {
+                "type": "boolean",
+                "description": "The namespace's config changed after the copy"
+              }
+            },
+            "required": ["namespace", "name", "copiedAt", "changedSince"],
+            "additionalProperties": false
+          },
+          "ownFiles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Every config file of the project's own, in the order OpenCode merges them"
+          },
+          "subfolderFiles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Config files below the project folder: they apply only to sessions in those subfolders"
+          },
+          "tracked": {
+            "type": "boolean",
+            "description": "The own file is tracked by git: edited, never removed"
+          },
+          "target": {
+            "type": "string",
+            "description": "Where a copy is written"
+          }
+        },
+        "required": ["mode", "project", "file", "text", "namespace", "ownFiles", "subfolderFiles", "tracked", "target"],
+        "additionalProperties": false
+      },
+      "OperatorProjectConfigReverted": {
+        "type": "object",
+        "properties": {
+          "trash": {
+            "type": "string",
+            "description": "The Trash entry holding the project's config files"
+          },
+          "reload": {
+            "type": "string",
+            "enum": ["now", "when-idle"]
+          }
+        },
+        "required": ["trash", "reload"],
+        "additionalProperties": false
+      },
+      "OperatorProjectConfigCompare": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["file", "text"],
+            "additionalProperties": false
+          },
+          "namespace": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "file": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["id", "name", "file", "text"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["project", "namespace"],
         "additionalProperties": false
       },
       "OperatorAgentSource": {
@@ -50610,6 +51480,10 @@
     {
       "name": "operator layout",
       "description": "Where namespaces and projects live."
+    },
+    {
+      "name": "operator namespace config",
+      "description": "A namespace's and Global's config."
     },
     {
       "name": "operator project records",

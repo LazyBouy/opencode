@@ -2,11 +2,13 @@ import { Config } from "@/config/config"
 import { EffectBridge } from "@/effect/bridge"
 import { OperatorAgents } from "@/operator/agents"
 import { OperatorModels } from "@/operator/models"
+import { OperatorProjectConfig } from "@/operator/project-config"
 import { OperatorTools } from "@/operator/tools"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { ApiAgentConflictError, ApiAgentInvalidError, ApiAgentNotFoundError } from "../groups/project"
+import { copyOr } from "../groups/project-config"
 import { reloadAfterWrite } from "../reload"
 
 export const operatorProjectHandlers = HttpApiBuilder.group(InstanceHttpApi, "operatorProject", (handlers) =>
@@ -29,17 +31,29 @@ export const operatorProjectHandlers = HttpApiBuilder.group(InstanceHttpApi, "op
         const { name, format, ...patch } = ctx.payload
         return agents
           .create(ctx.query.scope, name, patch, format)
-          .pipe(Effect.flatMap(written(ctx.query.scope)), Effect.mapError(apiError))
+          .pipe(
+            Effect.flatMap(written(ctx.query.scope)),
+            Effect.mapError(copyOr(apiError)),
+            OperatorProjectConfig.consent(ctx.query.confirmCopy),
+          )
       })
       .handle("agentUpdate", (ctx) =>
         agents
           .update(ctx.query.scope, ctx.params.name, ctx.payload)
-          .pipe(Effect.flatMap(written(ctx.query.scope)), Effect.mapError(apiError)),
+          .pipe(
+            Effect.flatMap(written(ctx.query.scope)),
+            Effect.mapError(copyOr(apiError)),
+            OperatorProjectConfig.consent(ctx.query.confirmCopy),
+          ),
       )
       .handle("agentRemove", (ctx) =>
         agents
           .remove(ctx.query.scope, ctx.params.name)
-          .pipe(Effect.flatMap(written(ctx.query.scope)), Effect.mapError(apiError)),
+          .pipe(
+            Effect.flatMap(written(ctx.query.scope)),
+            Effect.mapError(copyOr(apiError)),
+            OperatorProjectConfig.consent(ctx.query.confirmCopy),
+          ),
       )
   }),
 )

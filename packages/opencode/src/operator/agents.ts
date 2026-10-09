@@ -17,6 +17,7 @@ import { configEntryNameFromPath } from "@/config/entry-name"
 import { InstanceState } from "@/effect/instance-state"
 import { OperatorProjects } from "./projects"
 import { OperatorConfig } from "./config"
+import { OperatorProjectConfig } from "./project-config"
 import { OperatorModels } from "./models"
 import { OperatorTrashFiles } from "./trash-files"
 
@@ -113,7 +114,10 @@ export interface Interface {
     name: string,
     patch: Fields,
     format?: Format,
-  ) => Effect.Effect<string, ConflictError | InvalidError | OperatorConfig.InvalidError>
+  ) => Effect.Effect<
+    string,
+    ConflictError | InvalidError | OperatorConfig.InvalidError | OperatorProjectConfig.CopyNeededError
+  >
   /** Where the agent's prompt comes from. */
   readonly promptOrigin: (name: string) => Effect.Effect<PromptOrigin>
   /** Edits the agent's file, or for built-in and config agents, its `agent.<name>` config at the scope. */
@@ -121,12 +125,18 @@ export interface Interface {
     scope: OperatorConfig.Scope,
     name: string,
     patch: Fields,
-  ) => Effect.Effect<string, NotFoundError | InvalidError | OperatorConfig.InvalidError>
+  ) => Effect.Effect<
+    string,
+    NotFoundError | InvalidError | OperatorConfig.InvalidError | OperatorProjectConfig.CopyNeededError
+  >
   /** Deletes the agent's file or config entry. Built-in agents can only be turned off. */
   readonly remove: (
     scope: OperatorConfig.Scope,
     name: string,
-  ) => Effect.Effect<string, NotFoundError | InvalidError | OperatorConfig.InvalidError>
+  ) => Effect.Effect<
+    string,
+    NotFoundError | InvalidError | OperatorConfig.InvalidError | OperatorProjectConfig.CopyNeededError
+  >
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorAgents") {}

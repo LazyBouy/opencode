@@ -26,6 +26,10 @@ import { usePromptCatalog, useProfileNames } from "./profile-data"
 import { OPENCODE } from "./profile-model"
 import { useProjectSettings } from "./project-prompt"
 import { useAgentLocks } from "../ui/permission-locks"
+import { useProjectConfigWrite } from "../ui/project-config-copy"
+
+// The user kept the namespace's config: nothing was written.
+const CANCELLED = Symbol("cancelled")
 
 // Create a new agent (an agent file or a config entry) or edit an existing one.
 export default function AgentFormPage() {
@@ -37,6 +41,7 @@ export default function AgentFormPage() {
   const settings = useProjectSettings()
   const navigate = useNavigate()
   const api = useOperatorClient()
+  const write = useProjectConfigWrite()
   const queryClient = useQueryClient()
   const directory = useScopedProject()
   const agents = useAgents()
@@ -110,17 +115,27 @@ export default function AgentFormPage() {
     setStore({ saving: true, error: "" })
     const patch = agentPatch(store.form, existing()?.settings ?? {}, rulesToConfig(store.rules))
     const client = api.client()
-    const request = editing()
-      ? client.operator.agent.update({ name: existing()!.name, directory: directory(), scope: store.scope, ...patch })
-      : client.operator.agent.create({
-          name: store.form.name.trim(),
-          directory: directory(),
-          scope: store.scope,
-          format: store.format,
-          ...patch,
-        })
+    const request = write((confirmCopy) =>
+      editing()
+        ? client.operator.agent.update({
+            name: existing()!.name,
+            directory: directory(),
+            scope: store.scope,
+            ...patch,
+            ...(confirmCopy ? { confirmCopy } : {}),
+          })
+        : client.operator.agent.create({
+            name: store.form.name.trim(),
+            directory: directory(),
+            scope: store.scope,
+            format: store.format,
+            ...patch,
+            ...(confirmCopy ? { confirmCopy } : {}),
+          }),
+    )
     const chosen = profile()
     await request
+      .then((written) => (written ? written : Promise.reject(CANCELLED)))
       .then(() =>
         chosen
           ? client.operator.agentPrompt.update({
@@ -146,7 +161,7 @@ export default function AgentFormPage() {
         showToast({ title: language.t("operator.agentForm.saved", { name: store.form.name }) })
         done(store.form.name.trim())
       })
-      .catch((error: unknown) => setStore("error", requestError(error)))
+      .catch((error: unknown) => (error === CANCELLED ? undefined : setStore("error", requestError(error))))
       .finally(() => setStore("saving", false))
   }
 

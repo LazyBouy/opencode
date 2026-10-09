@@ -251,6 +251,15 @@ export interface OperatorMock {
   lockWrites: Array<{ agent: string; body: unknown }>
   decisions: Array<Record<string, unknown>>
   rejectWrite?: string
+  // The project's config (global_and_opencode_namespaces_spec.md §7): its own, or OpenCode's.
+  projectConfig: {
+    mode: "own" | "namespace"
+    text: string
+    tracked: boolean
+    copy?: { namespace: string; name: string; copiedAt: number; changedSince: boolean }
+  }
+  // Each namespace's config text (none: no config yet).
+  namespaceConfigs: Record<string, string | undefined>
   // Trash: what is in it, and every call to it.
   trash: Array<{
     id: string
@@ -367,6 +376,8 @@ export async function mockOperator(page: Page) {
   const state: OperatorMock = {
     replies: [],
     writes: [],
+    projectConfig: { mode: "own", text: '{\n  "username": "me"\n}\n', tracked: false },
+    namespaceConfigs: { opencode: '{ "model": "opencode/big" }' },
     connects: [],
     sessionQueries: [],
     agentWrites: [],
@@ -909,18 +920,102 @@ export async function mockOperator(page: Page) {
         namespace: "opencode",
         origins: { theme: "global", model: "namespace", username: "directory" },
       })
-    if (url.pathname === "/operator/config/raw" && method === "PUT") {
+    const own = `${directory}/.opencode/opencode.jsonc`
+    const namespaceFile = `${workspace}/opencode/.opencode/opencode.jsonc`
+    if (url.pathname === "/operator/config/resolved") {
+      const config = state.projectConfig
+      const namespaceText = state.namespaceConfigs.opencode
+      return json(route, {
+        mode: config.mode,
+        project: directory,
+        file: config.mode === "own" ? own : namespaceFile,
+        text:
+          config.mode === "own"
+            ? config.text
+            : (namespaceText ?? "// OpenCode has no config yet. Saving here creates this project's own config.\n{}\n"),
+        namespace: { id: "opencode", name: "OpenCode", global: false, file: namespaceFile, exists: !!namespaceText },
+        ...(config.copy ? { copy: config.copy } : {}),
+        ownFiles: config.mode === "own" ? [own] : [],
+        subfolderFiles: [],
+        tracked: config.tracked,
+        target: own,
+      })
+    }
+    if (url.pathname === "/operator/config/project" && method === "PUT") {
       state.writes.push({ url: url.toString(), body: route.request().postDataJSON() })
       if (state.rejectWrite)
+        return json(route, { name: "OperatorConfigInvalidError", data: { path: own, message: state.rejectWrite } }, 400)
+      const config = state.projectConfig
+      if (config.mode === "namespace" && url.searchParams.get("confirmCopy") !== "true")
         return json(
           route,
           {
-            name: "OperatorConfigInvalidError",
-            data: { path: `${directory}/.opencode/opencode.jsonc`, message: state.rejectWrite },
+            name: "OperatorProjectConfigCopyNeededError",
+            data: {
+              message: "This project uses OpenCode's config.",
+              project: directory,
+              namespace: "opencode",
+              file: own,
+            },
           },
-          400,
+          409,
         )
-      return json(route, { path: `${directory}/.opencode/opencode.jsonc`, changed: true })
+      const { text } = route.request().postDataJSON() as { text: string }
+      state.projectConfig = {
+        ...config,
+        mode: "own",
+        text,
+        ...(config.mode === "namespace"
+          ? { copy: { namespace: "opencode", name: "OpenCode", copiedAt: Date.UTC(2026, 9, 8), changedSince: false } }
+          : {}),
+      }
+      return json(route, { path: own, changed: true, reload: "now" })
+    }
+    if (url.pathname === "/operator/config/project/revert" && method === "POST") {
+      state.writes.push({ url: url.toString(), body: undefined })
+      if (state.projectConfig.tracked)
+        return json(route, { name: "OperatorConfigInvalidError", data: { path: own, message: "git tracks it" } }, 400)
+      state.projectConfig = { mode: "namespace", text: "", tracked: false }
+      return json(route, { trash: "trash-config", reload: "now" })
+    }
+    if (url.pathname === "/operator/config/compare")
+      return json(route, {
+        project: { file: own, text: state.projectConfig.text },
+        namespace: {
+          id: "opencode",
+          name: "OpenCode",
+          file: namespaceFile,
+          text: state.namespaceConfigs.opencode ?? "",
+        },
+      })
+    const namespaceConfig = url.pathname.match(/^\/operator\/namespace\/([^/]+)\/config$/)
+    if (namespaceConfig) {
+      const id = decodeURIComponent(namespaceConfig[1]!)
+      if (method === "PUT") {
+        const body = route.request().postDataJSON() as { text: string }
+        state.writes.push({ url: url.toString(), body })
+        state.namespaceConfigs[id] = body.text
+      }
+      const text = state.namespaceConfigs[id]
+      const global = id === "global"
+      return json(route, {
+        id,
+        name: global ? "Global" : id === "opencode" ? "OpenCode" : id,
+        global,
+        file: global ? "/home/me/.config/opencode/opencode.jsonc" : `${workspace}/${id}/.opencode/opencode.jsonc`,
+        text: text ?? "{}\n",
+        exists: text !== undefined,
+        using:
+          id === "opencode" && state.projectConfig.mode === "namespace"
+            ? [{ project: directory, name: "smoke-project" }]
+            : [],
+        own:
+          id === "opencode" && state.projectConfig.mode === "own"
+            ? [{ project: directory, name: "smoke-project" }]
+            : [],
+        inheriting: global ? ["OpenCode"] : [],
+        ...(method === "PUT" ? { reload: "now" } : {}),
+      })
     }
     if (url.pathname === "/operator/config" && method === "PATCH") {
       state.writes.push({ url: url.toString(), body: route.request().postDataJSON() })

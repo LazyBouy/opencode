@@ -17,6 +17,7 @@ import { requestError } from "./config-helpers"
 import { useOverlayParams } from "../ui/overlay-nav"
 import { CheckboxV2 } from "@opencode-ai/ui/v2/checkbox-v2"
 import { useAgentLocks } from "../ui/permission-locks"
+import { useProjectConfigWrite } from "../ui/project-config-copy"
 
 type Scope = "project" | "global"
 
@@ -206,6 +207,7 @@ function AgentPermissionsEditor(props: {
 }) {
   const language = useLanguage()
   const api = useOperatorClient()
+  const write = useProjectConfigWrite()
   const refresh = useRefreshAgent()
   const locks = useAgentLocks(
     () => props.agent,
@@ -237,13 +239,20 @@ function AgentPermissionsEditor(props: {
       JSON.stringify(store.value.deleted) !== JSON.stringify(before.deleted) ||
       JSON.stringify(store.value.locks) !== JSON.stringify(before.locks)
     const rules = rulesChanged
-      ? await api
-          .client()
-          .operator.agentPermissions.save(
-            { name: props.agent, directory: props.directory, scope: store.scope, rules: store.value.lines },
+      ? await write((confirmCopy) =>
+          api.client().operator.agentPermissions.save(
+            {
+              name: props.agent,
+              directory: props.directory,
+              scope: store.scope,
+              rules: store.value.lines,
+              ...(confirmCopy ? { confirmCopy } : {}),
+            },
             { throwOnError: true },
-          )
-          .then((result) => result.data)
+          ),
+        )
+          // Kept the namespace's config: nothing written, nothing more to do.
+          .then((result) => (result ? result.data : null))
           .catch((error: unknown) => {
             setStore("error", requestError(error))
             return null

@@ -181,15 +181,21 @@ import type {
   OperatorCapabilitySourceResponses,
   OperatorCapabilityTakeOpenCodeErrors,
   OperatorCapabilityTakeOpenCodeResponses,
+  OperatorConfigCompareErrors,
+  OperatorConfigCompareResponses,
   OperatorConfigLayersErrors,
   OperatorConfigLayersResponses,
+  OperatorConfigProjectErrors,
+  OperatorConfigProjectResponses,
+  OperatorConfigResolvedErrors,
+  OperatorConfigResolvedResponses,
+  OperatorConfigRevertErrors,
+  OperatorConfigRevertResponses,
   OperatorConfigSchemaErrors,
   OperatorConfigSchemaResponses,
   OperatorConfigScope,
   OperatorConfigUpdateErrors,
   OperatorConfigUpdateResponses,
-  OperatorConfigWriteErrors,
-  OperatorConfigWriteResponses,
   OperatorConfigWriteScope,
   OperatorFolderCreateErrors,
   OperatorFolderCreateResponses,
@@ -217,6 +223,10 @@ import type {
   OperatorModelDefaultsResponses,
   OperatorNamespaceCatalogErrors,
   OperatorNamespaceCatalogResponses,
+  OperatorNamespaceConfigGetErrors,
+  OperatorNamespaceConfigGetResponses,
+  OperatorNamespaceConfigSaveErrors,
+  OperatorNamespaceConfigSaveResponses,
   OperatorNamespaceCopyErrors,
   OperatorNamespaceCopyResponses,
   OperatorNamespaceCreateErrors,
@@ -1699,6 +1709,7 @@ export class Permission extends HeyApiClient {
   public decide<ThrowOnError extends boolean = false>(
     parameters: {
       requestID: string
+      confirmCopy?: "true" | "false"
       operatorPermissionDecideInput?: OperatorPermissionDecideInput
     },
     options?: Options<never, ThrowOnError>,
@@ -1709,6 +1720,7 @@ export class Permission extends HeyApiClient {
         {
           args: [
             { in: "path", key: "requestID" },
+            { in: "query", key: "confirmCopy" },
             { key: "operatorPermissionDecideInput", map: "body" },
           ],
         },
@@ -3020,6 +3032,7 @@ export class Trash extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
+      confirmCopy?: "true" | "false"
       kind?: OperatorTrashItemKind
       name?: string
     },
@@ -3032,6 +3045,7 @@ export class Trash extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "confirmCopy" },
             { in: "body", key: "kind" },
             { in: "body", key: "name" },
           ],
@@ -3082,6 +3096,70 @@ export class Layout extends HeyApiClient {
       ThrowOnError
     >({
       url: "/operator/layout/working-dir",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class NamespaceConfig extends HeyApiClient {
+  /**
+   * A namespace's config
+   *
+   * A namespace's config file (`global` for Global's own) and text, the namespace's projects that use it and those with their own config, and, for Global, the namespaces that inherit it.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
+    return (options?.client ?? this.client).get<
+      OperatorNamespaceConfigGetResponses,
+      OperatorNamespaceConfigGetErrors,
+      ThrowOnError
+    >({
+      url: "/operator/namespace/{id}/config",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Save a namespace's config
+   *
+   * Replaces a namespace's config file (created when missing) with the given JSONC text, checked first. The projects that use it reload when idle; for Global, every project.
+   */
+  public save<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      text?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "body", key: "text" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorNamespaceConfigSaveResponses,
+      OperatorNamespaceConfigSaveErrors,
+      ThrowOnError
+    >({
+      url: "/operator/namespace/{id}/config",
       ...options,
       ...params,
       headers: {
@@ -3195,7 +3273,7 @@ export class Config2 extends HeyApiClient {
   /**
    * Update config at a scope
    *
-   * Merge a patch into the global, namespace or project config file, keeping comments. A null value removes the key so the inherited value applies. The result is validated before it is written.
+   * Merge a patch into the global, namespace or project config file, keeping comments. A null value removes the key so the inherited value applies. The result is validated before it is written. The project scope is copy-on-write: a project without a config of its own gets a copy of its namespace's, which needs confirmCopy.
    */
   public update<ThrowOnError extends boolean = false>(
     parameters: {
@@ -3203,6 +3281,7 @@ export class Config2 extends HeyApiClient {
       workspace?: string
       scope: OperatorConfigWriteScope
       namespace?: string
+      confirmCopy?: "true" | "false"
       body?: {
         [key: string]: unknown
       }
@@ -3218,6 +3297,7 @@ export class Config2 extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "query", key: "scope" },
             { in: "query", key: "namespace" },
+            { in: "query", key: "confirmCopy" },
             { key: "body", map: "body" },
           ],
         },
@@ -3240,16 +3320,49 @@ export class Config2 extends HeyApiClient {
   }
 
   /**
-   * Replace a config file
+   * The project's config
    *
-   * Replace the global, namespace or project config file with the given JSONC text. The text is validated before it is written.
+   * The config this project uses: its own (own) or its namespace's (namespace), its file and text, the copy record and whether the namespace's config changed since, every own file, and files in subfolders.
    */
-  public write<ThrowOnError extends boolean = false>(
-    parameters: {
+  public resolved<ThrowOnError extends boolean = false>(
+    parameters?: {
       directory?: string
       workspace?: string
-      scope: OperatorConfigWriteScope
-      namespace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorConfigResolvedResponses,
+      OperatorConfigResolvedErrors,
+      ThrowOnError
+    >({
+      url: "/operator/config/resolved",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Save the project's config
+   *
+   * Saves the project's config text, checked first. A project without a config of its own gets one at <project>/.opencode/opencode.jsonc (its namespace's config isn't changed): that needs confirmCopy, and lines the namespace locks are left out of it.
+   */
+  public project<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      confirmCopy?: "true" | "false"
       text?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -3261,15 +3374,18 @@ export class Config2 extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
-            { in: "query", key: "scope" },
-            { in: "query", key: "namespace" },
+            { in: "query", key: "confirmCopy" },
             { in: "body", key: "text" },
           ],
         },
       ],
     )
-    return (options?.client ?? this.client).put<OperatorConfigWriteResponses, OperatorConfigWriteErrors, ThrowOnError>({
-      url: "/operator/config/raw",
+    return (options?.client ?? this.client).put<
+      OperatorConfigProjectResponses,
+      OperatorConfigProjectErrors,
+      ThrowOnError
+    >({
+      url: "/operator/config/project",
       ...options,
       ...params,
       headers: {
@@ -3277,6 +3393,74 @@ export class Config2 extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Use the namespace's config again
+   *
+   * Moves the project's own config files to Trash (restorable), so the project uses its namespace's config again. Refused for a file git tracks.
+   */
+  public revert<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorConfigRevertResponses,
+      OperatorConfigRevertErrors,
+      ThrowOnError
+    >({
+      url: "/operator/config/project/revert",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Compare with the namespace's config
+   *
+   * The project's own config text and its namespace's current config text, for a side-by-side diff.
+   */
+  public compare<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorConfigCompareResponses,
+      OperatorConfigCompareErrors,
+      ThrowOnError
+    >({
+      url: "/operator/config/compare",
+      ...options,
+      ...params,
     })
   }
 
@@ -3356,6 +3540,7 @@ export class Agent extends HeyApiClient {
       directory?: string
       workspace?: string
       scope: OperatorConfigScope
+      confirmCopy?: "true" | "false"
       name?: string
       format?: OperatorAgentFormat
       description?: string
@@ -3397,6 +3582,7 @@ export class Agent extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "query", key: "scope" },
+            { in: "query", key: "confirmCopy" },
             { in: "body", key: "name" },
             { in: "body", key: "format" },
             { in: "body", key: "description" },
@@ -3442,6 +3628,7 @@ export class Agent extends HeyApiClient {
       directory?: string
       workspace?: string
       scope: OperatorConfigScope
+      confirmCopy?: "true" | "false"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3454,6 +3641,7 @@ export class Agent extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "query", key: "scope" },
+            { in: "query", key: "confirmCopy" },
           ],
         },
       ],
@@ -3480,6 +3668,7 @@ export class Agent extends HeyApiClient {
       directory?: string
       workspace?: string
       scope: OperatorConfigScope
+      confirmCopy?: "true" | "false"
       description?: string
       mode?: "subagent" | "primary" | "all"
       model?: string
@@ -3520,6 +3709,7 @@ export class Agent extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "query", key: "scope" },
+            { in: "query", key: "confirmCopy" },
             { in: "body", key: "description" },
             { in: "body", key: "mode" },
             { in: "body", key: "model" },
@@ -4410,6 +4600,7 @@ export class AgentPermissions extends HeyApiClient {
       name: string
       directory?: string
       workspace?: string
+      confirmCopy?: "true" | "false"
       scope?: OperatorConfigScope
       rules?: PermissionRuleset
       confirmOrder?: boolean
@@ -4424,6 +4615,7 @@ export class AgentPermissions extends HeyApiClient {
             { in: "path", key: "name" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "confirmCopy" },
             { in: "body", key: "scope" },
             { in: "body", key: "rules" },
             { in: "body", key: "confirmOrder" },
@@ -4577,6 +4769,7 @@ export class PermissionLevel extends HeyApiClient {
       directory?: string
       workspace?: string
       namespace?: string
+      confirmCopy?: "true" | "false"
       operatorPermissionLevelSave?: OperatorPermissionLevelSave
     },
     options?: Options<never, ThrowOnError>,
@@ -4590,6 +4783,7 @@ export class PermissionLevel extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "query", key: "namespace" },
+            { in: "query", key: "confirmCopy" },
             { key: "operatorPermissionLevelSave", map: "body" },
           ],
         },
@@ -5061,6 +5255,7 @@ export class Capability extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
+      confirmCopy?: "true" | "false"
       kind?: OperatorCapabilityKind
       name?: string
       namespace?: string
@@ -5074,6 +5269,7 @@ export class Capability extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "confirmCopy" },
             { in: "body", key: "kind" },
             { in: "body", key: "name" },
             { in: "body", key: "namespace" },
@@ -5106,6 +5302,7 @@ export class Capability extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
+      confirmCopy?: "true" | "false"
       kind?: OperatorCapabilityKind
       name?: string
       namespace?: string
@@ -5119,6 +5316,7 @@ export class Capability extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "confirmCopy" },
             { in: "body", key: "kind" },
             { in: "body", key: "name" },
             { in: "body", key: "namespace" },
@@ -5151,6 +5349,7 @@ export class Capability extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
+      confirmCopy?: "true" | "false"
       kind?: OperatorCapabilityKind
       name?: string
       namespace?: string
@@ -5164,6 +5363,7 @@ export class Capability extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "confirmCopy" },
             { in: "body", key: "kind" },
             { in: "body", key: "name" },
             { in: "body", key: "namespace" },
@@ -5196,6 +5396,7 @@ export class Capability extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
+      confirmCopy?: "true" | "false"
       kind?: OperatorCapabilityKind
       name?: string
       namespace?: string
@@ -5209,6 +5410,7 @@ export class Capability extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "confirmCopy" },
             { in: "body", key: "kind" },
             { in: "body", key: "name" },
             { in: "body", key: "namespace" },
@@ -5328,6 +5530,7 @@ export class Capability extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
+      confirmCopy?: "true" | "false"
       kind?: OperatorCapabilityKind
       name?: string
       namespace?: string
@@ -5342,6 +5545,7 @@ export class Capability extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "confirmCopy" },
             { in: "body", key: "kind" },
             { in: "body", key: "name" },
             { in: "body", key: "namespace" },
@@ -5375,6 +5579,7 @@ export class Capability extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
+      confirmCopy?: "true" | "false"
       kind?: OperatorCapabilityKind
       name?: string
       namespace?: string
@@ -5388,6 +5593,7 @@ export class Capability extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "confirmCopy" },
             { in: "body", key: "kind" },
             { in: "body", key: "name" },
             { in: "body", key: "namespace" },
@@ -5461,6 +5667,7 @@ export class Capability extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
+      confirmCopy?: "true" | "false"
       operatorCapabilityCreate?: OperatorCapabilityCreate
     },
     options?: Options<never, ThrowOnError>,
@@ -5472,6 +5679,7 @@ export class Capability extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "confirmCopy" },
             { key: "operatorCapabilityCreate", map: "body" },
           ],
         },
@@ -5580,6 +5788,11 @@ export class Operator extends HeyApiClient {
   private _layout?: Layout
   get layout(): Layout {
     return (this._layout ??= new Layout({ client: this.client }))
+  }
+
+  private _namespaceConfig?: NamespaceConfig
+  get namespaceConfig(): NamespaceConfig {
+    return (this._namespaceConfig ??= new NamespaceConfig({ client: this.client }))
   }
 
   private _projectRecord?: ProjectRecord

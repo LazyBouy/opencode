@@ -1,8 +1,10 @@
 import { OperatorPermissionLevels } from "@/operator/permission-levels"
+import { OperatorProjectConfig } from "@/operator/project-config"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { ApiPermissionLevelInvalidError, ApiPermissionLevelLockedError } from "../groups/permission-levels"
+import { copyOr } from "../groups/project-config"
 
 export const operatorPermissionLevelsHandlers = HttpApiBuilder.group(
   InstanceHttpApi,
@@ -33,7 +35,9 @@ export const operatorPermissionLevelsHandlers = HttpApiBuilder.group(
           ),
         )
         .handle("save", (ctx) =>
-          levels.save(ctx.params.level, ctx.payload, ctx.query.namespace).pipe(Effect.mapError(apiError)),
+          levels
+            .save(ctx.params.level, ctx.payload, ctx.query.namespace)
+            .pipe(Effect.mapError(copyOr(apiError)), OperatorProjectConfig.consent(ctx.query.confirmCopy)),
         )
     }),
 )

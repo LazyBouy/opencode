@@ -6,8 +6,10 @@ import { InstanceContextMiddleware } from "@/server/routes/instance/httpapi/midd
 import {
   WorkspaceRoutingMiddleware,
   WorkspaceRoutingQuery,
+  WorkspaceRoutingQueryFields,
 } from "@/server/routes/instance/httpapi/middleware/workspace-routing"
 import { described } from "@/server/routes/instance/httpapi/groups/metadata"
+import { ApiProjectConfigCopyError, ConfirmCopyField } from "./project-config"
 
 export const OperatorCapabilityPaths = {
   list: "/operator/capability",
@@ -64,10 +66,10 @@ export const OperatorCapabilityApi = HttpApi.make("operator-capabilities")
           ),
         ),
         HttpApiEndpoint.post("override", OperatorCapabilityPaths.override, {
-          query: WorkspaceRoutingQuery,
+          query: Schema.Struct({ ...WorkspaceRoutingQueryFields, ...ConfirmCopyField }),
           payload: target,
           success: described(OperatorCapabilities.Item, "The capability, now the project's own"),
-          error: ApiCapabilityError,
+          error: [ApiCapabilityError, ApiProjectConfigCopyError],
         }).annotateMerge(
           doc(
             "operator.capability.override",
@@ -76,10 +78,10 @@ export const OperatorCapabilityApi = HttpApi.make("operator-capabilities")
           ),
         ),
         HttpApiEndpoint.post("disable", OperatorCapabilityPaths.disable, {
-          query: WorkspaceRoutingQuery,
+          query: Schema.Struct({ ...WorkspaceRoutingQueryFields, ...ConfirmCopyField }),
           payload: target,
           success: described(OperatorCapabilities.Item, "The capability, now turned off"),
-          error: ApiCapabilityError,
+          error: [ApiCapabilityError, ApiProjectConfigCopyError],
         }).annotateMerge(
           doc(
             "operator.capability.disable",
@@ -88,10 +90,10 @@ export const OperatorCapabilityApi = HttpApi.make("operator-capabilities")
           ),
         ),
         HttpApiEndpoint.post("revert", OperatorCapabilityPaths.revert, {
-          query: WorkspaceRoutingQuery,
+          query: Schema.Struct({ ...WorkspaceRoutingQueryFields, ...ConfirmCopyField }),
           payload: target,
           success: described(OperatorCapabilities.Item, "The capability as inherited"),
-          error: ApiCapabilityError,
+          error: [ApiCapabilityError, ApiProjectConfigCopyError],
         }).annotateMerge(
           doc(
             "operator.capability.revert",
@@ -100,10 +102,10 @@ export const OperatorCapabilityApi = HttpApi.make("operator-capabilities")
           ),
         ),
         HttpApiEndpoint.post("remove", OperatorCapabilityPaths.remove, {
-          query: WorkspaceRoutingQuery,
+          query: Schema.Struct({ ...WorkspaceRoutingQueryFields, ...ConfirmCopyField }),
           payload: target,
           success: described(Schema.Boolean, "Moved to Trash"),
-          error: ApiCapabilityError,
+          error: [ApiCapabilityError, ApiProjectConfigCopyError],
         }).annotateMerge(
           doc(
             "operator.capability.remove",
@@ -148,7 +150,7 @@ export const OperatorCapabilityApi = HttpApi.make("operator-capabilities")
           ),
         ),
         HttpApiEndpoint.put("edit", OperatorCapabilityPaths.source, {
-          query: WorkspaceRoutingQuery,
+          query: Schema.Struct({ ...WorkspaceRoutingQueryFields, ...ConfirmCopyField }),
           payload: Schema.Struct({
             kind: OperatorCapabilities.Kind,
             name: Schema.String,
@@ -156,7 +158,7 @@ export const OperatorCapabilityApi = HttpApi.make("operator-capabilities")
             text: Schema.String,
           }),
           success: described(OperatorCapabilities.Item, "The capability"),
-          error: ApiCapabilityError,
+          error: [ApiCapabilityError, ApiProjectConfigCopyError],
         }).annotateMerge(
           doc(
             "operator.capability.edit",
@@ -165,10 +167,10 @@ export const OperatorCapabilityApi = HttpApi.make("operator-capabilities")
           ),
         ),
         HttpApiEndpoint.post("takeOpenCode", OperatorCapabilityPaths.take, {
-          query: WorkspaceRoutingQuery,
+          query: Schema.Struct({ ...WorkspaceRoutingQueryFields, ...ConfirmCopyField }),
           payload: target,
           success: described(OperatorCapabilities.Item, "The copy, with OpenCode's current text"),
-          error: ApiCapabilityError,
+          error: [ApiCapabilityError, ApiProjectConfigCopyError],
         }).annotateMerge(
           doc(
             "operator.capability.takeOpenCode",
@@ -189,10 +191,10 @@ export const OperatorCapabilityApi = HttpApi.make("operator-capabilities")
           ),
         ),
         HttpApiEndpoint.post("create", OperatorCapabilityPaths.create, {
-          query: WorkspaceRoutingQuery,
+          query: Schema.Struct({ ...WorkspaceRoutingQueryFields, ...ConfirmCopyField }),
           payload: OperatorCapabilities.CreateInput,
           success: described(OperatorCapabilities.Item, "The new capability"),
-          error: ApiCapabilityError,
+          error: [ApiCapabilityError, ApiProjectConfigCopyError],
         }).annotateMerge(
           doc(
             "operator.capability.create",

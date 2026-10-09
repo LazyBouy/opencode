@@ -7,8 +7,10 @@ import { InstanceContextMiddleware } from "@/server/routes/instance/httpapi/midd
 import {
   WorkspaceRoutingMiddleware,
   WorkspaceRoutingQuery,
+  WorkspaceRoutingQueryFields,
 } from "@/server/routes/instance/httpapi/middleware/workspace-routing"
 import { described } from "@/server/routes/instance/httpapi/groups/metadata"
+import { ApiProjectConfigCopyError, ConfirmCopyField } from "./project-config"
 
 export const OperatorTrashPaths = {
   list: "/operator/trash",
@@ -101,10 +103,10 @@ export const OperatorTrashItemApi = HttpApi.make("operator-trash-item")
     HttpApiGroup.make("operatorTrashItem")
       .add(
         HttpApiEndpoint.post("remove", OperatorTrashPaths.item, {
-          query: WorkspaceRoutingQuery,
+          query: Schema.Struct({ ...WorkspaceRoutingQueryFields, ...ConfirmCopyField }),
           payload: Schema.Struct({ kind: OperatorTrashItems.ItemKind, name: Schema.String }),
           success: described(OperatorTrash.Entry, "The Trash entry"),
-          error: ApiTrashError,
+          error: [ApiTrashError, ApiProjectConfigCopyError],
         }).annotateMerge(
           doc(
             "operator.trash.item",

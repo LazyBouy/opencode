@@ -2,7 +2,7 @@ import fs from "fs/promises"
 import path from "path"
 import { expect } from "bun:test"
 import matter from "gray-matter"
-import { Cause, Effect, Exit } from "effect"
+import { Cause, Effect, Exit, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Database } from "@opencode-ai/core/database/database"
@@ -14,26 +14,31 @@ import { ConfigAgent } from "@/config/agent"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { OperatorAgents } from "@/operator/agents"
+import { OperatorProjectConfig } from "@/operator/project-config"
 import { Session } from "@/session/session"
 import { NpmTest } from "../fake/npm"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
+// Project writes copy the namespace's config only with consent (project-config.ts): these tests give it.
 const it = testEffect(
-  AppNodeBuilder.build(
-    LayerNode.group([
-      OperatorAgents.node,
-      Agent.node,
-      Session.node,
-      SessionProjector.node,
-      EventV2Bridge.node,
-      Database.node,
-      CrossSpawnSpawner.node,
-    ]),
-    [
-      [RuntimeFlags.node, RuntimeFlags.layer()],
-      [Npm.node, NpmTest.noop],
-    ],
+  Layer.merge(
+    AppNodeBuilder.build(
+      LayerNode.group([
+        OperatorAgents.node,
+        Agent.node,
+        Session.node,
+        SessionProjector.node,
+        EventV2Bridge.node,
+        Database.node,
+        CrossSpawnSpawner.node,
+      ]),
+      [
+        [RuntimeFlags.node, RuntimeFlags.layer()],
+        [Npm.node, NpmTest.noop],
+      ],
+    ),
+    Layer.succeed(OperatorProjectConfig.Consent, true),
   ),
 )
 
@@ -88,7 +93,7 @@ it.instance("creating an agent as a config entry writes agent.<name> into the sc
     )
 
     expect(file).toBe(path.join(directory, ".opencode", "opencode.jsonc"))
-    expect(JSON.parse(yield* Effect.promise(() => fs.readFile(file, "utf8")))).toEqual({
+    expect(JSON.parse(yield* Effect.promise(() => fs.readFile(file, "utf8")))).toMatchObject({
       agent: { reviewer: { description: "Reviews diffs", mode: "subagent", prompt: "Review the diff." } },
     })
     expect(
@@ -178,7 +183,7 @@ it.instance("editing a built-in agent writes overrides into the scope's config",
     const file = yield* agents.update("project", "build", { temperature: 0.2, home: path.join(directory, "work") })
 
     expect(file).toBe(path.join(directory, ".opencode", "opencode.jsonc"))
-    expect(JSON.parse(yield* Effect.promise(() => fs.readFile(file, "utf8")))).toEqual({
+    expect(JSON.parse(yield* Effect.promise(() => fs.readFile(file, "utf8")))).toMatchObject({
       agent: { build: { temperature: 0.2, home: path.join(directory, "work") } },
     })
   }),

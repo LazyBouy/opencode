@@ -2,11 +2,13 @@ import { InstanceState } from "@/effect/instance-state"
 import { OperatorAgentPermissions } from "@/operator/agent-permissions"
 import { OperatorPermissionLive } from "@/operator/permission-live"
 import { OperatorPermissionLocks } from "@/operator/permission-locks"
+import { OperatorProjectConfig } from "@/operator/project-config"
 import { OperatorReloadWhenIdle } from "@/operator/reload-when-idle"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { ApiAgentPermissionsInvalidError, ApiAgentPermissionsNotFoundError } from "../groups/agent-permissions"
+import { copyOr } from "../groups/project-config"
 
 export const operatorAgentPermissionsHandlers = HttpApiBuilder.group(
   InstanceHttpApi,
@@ -60,7 +62,8 @@ export const operatorAgentPermissionsHandlers = HttpApiBuilder.group(
                   return { ...written, reload }
                 }),
               ),
-              Effect.mapError(apiError),
+              Effect.mapError(copyOr(apiError)),
+              OperatorProjectConfig.consent(ctx.query.confirmCopy),
             ),
         )
         .handle("locks", (ctx) => locks.get(ctx.params.name))

@@ -59,7 +59,8 @@ const inventory = async (directory: string) =>
 const find = async (directory: string, kind: string, name: string) =>
   (await inventory(directory)).find((item) => item.kind === kind && item.name === name)
 const act = async (action: string, directory: string, kind: string, name: string) => {
-  const response = await app().request(`/operator/capability/${action}${where(directory)}`, {
+  // A project's first config write copies its namespace's config, which needs consent.
+  const response = await app().request(`/operator/capability/${action}${where(directory)}&confirmCopy=true`, {
     method: "POST",
     headers: json,
     body: JSON.stringify({ kind, name }),

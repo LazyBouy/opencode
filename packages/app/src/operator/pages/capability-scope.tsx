@@ -21,6 +21,7 @@ import { FieldHelp } from "../ui/field-help"
 import { ALL, useNamespaceScope } from "../ui/namespace-picker"
 import { useScopedProject } from "../project"
 import { requestError } from "./config-helpers"
+import { useProjectConfigWrite } from "../ui/project-config-copy"
 
 // The Capabilities page's scope (capability_scopes_spec.md §9): a project's effective set, or a
 // namespace's own layer. Every row shows where its definition comes from and its state, and the actions
@@ -144,6 +145,7 @@ export function useCapabilityActions(directory: () => string | undefined, namesp
   const api = useOperatorClient()
   const queryClient = useQueryClient()
   const moveToTrash = useMoveToTrash()
+  const write = useProjectConfigWrite()
   const [state, setState] = createStore({ busy: "" })
   const run = async (action: "override" | "disable" | "revert" | "takeOpenCode", item: OperatorCapability) => {
     setState("busy", `${item.kind}:${item.name}`)
@@ -154,16 +156,19 @@ export function useCapabilityActions(directory: () => string | undefined, namesp
       ...(namespace() ? { namespace: namespace() } : {}),
     }
     const client = api.client().operator.capability
-    const request =
-      action === "override"
-        ? client.override(body, { throwOnError: true })
+    const request = write((confirmCopy) => {
+      const query = { ...body, ...(confirmCopy ? { confirmCopy } : {}) }
+      return action === "override"
+        ? client.override(query, { throwOnError: true })
         : action === "disable"
-          ? client.disable(body, { throwOnError: true })
+          ? client.disable(query, { throwOnError: true })
           : action === "takeOpenCode"
-            ? client.takeOpenCode(body, { throwOnError: true })
-            : client.revert(body, { throwOnError: true })
+            ? client.takeOpenCode(query, { throwOnError: true })
+            : client.revert(query, { throwOnError: true })
+    })
     await request
-      .then(async () => {
+      .then(async (result) => {
+        if (!result) return
         showToast({ title: language.t(`operator.capabilities.done.${action}`, { name: item.name }) })
         await queryClient.invalidateQueries({ queryKey: api.key() })
       })
@@ -177,18 +182,20 @@ export function useCapabilityActions(directory: () => string | undefined, namesp
   }
   const remove = (item: OperatorCapability, done?: () => void) =>
     moveToTrash(item.name, () =>
-      api
-        .client()
-        .operator.capability.remove(
+      write((confirmCopy) =>
+        api.client().operator.capability.remove(
           {
             directory: directory(),
             kind: item.kind,
             name: item.name,
             ...(namespace() ? { namespace: namespace() } : {}),
+            ...(confirmCopy ? { confirmCopy } : {}),
           },
           { throwOnError: true },
-        )
-        .then(async () => {
+        ),
+      )
+        .then(async (result) => {
+          if (!result) return
           showToast({ title: language.t("operator.trash.moved", { name: item.name }) })
           done?.()
           await queryClient.invalidateQueries({ queryKey: api.key() })
@@ -231,6 +238,7 @@ function EditDialog(props: {
   const dialog = useDialog()
   const api = useOperatorClient()
   const queryClient = useQueryClient()
+  const write = useProjectConfigWrite()
   const [store, setStore] = createStore({ location: "", text: "", loaded: false, busy: false, error: "" })
   const where = () => ({
     directory: props.directory(),
@@ -247,10 +255,16 @@ function EditDialog(props: {
   })
   const save = async () => {
     setStore({ busy: true, error: "" })
-    await api
-      .client()
-      .operator.capability.edit({ ...where(), text: store.text }, { throwOnError: true })
-      .then(async () => {
+    await write((confirmCopy) =>
+      api
+        .client()
+        .operator.capability.edit(
+          { ...where(), text: store.text, ...(confirmCopy ? { confirmCopy } : {}) },
+          { throwOnError: true },
+        ),
+    )
+      .then(async (result) => {
+        if (!result) return
         showToast({ title: language.t("operator.capabilities.saved", { name: props.item.name }) })
         await queryClient.invalidateQueries({ queryKey: api.key() })
         dialog.close()
@@ -444,6 +458,7 @@ function CreateDialog(props: {
   const dialog = useDialog()
   const api = useOperatorClient()
   const queryClient = useQueryClient()
+  const write = useProjectConfigWrite()
   const id = createUniqueId()
   const [store, setStore] = createStore({
     name: "",
@@ -475,11 +490,11 @@ function CreateDialog(props: {
           ? { type: "local", command: store.command.trim().split(/\s+/).filter(Boolean) }
           : { type: "remote", url: store.url.trim() }
         : undefined
-    await api
-      .client()
-      .operator.capability.create(
+    await write((confirmCopy) =>
+      api.client().operator.capability.create(
         {
           directory: props.directory(),
+          ...(confirmCopy ? { confirmCopy } : {}),
           operatorCapabilityCreate: {
             kind: props.kind,
             name: store.name.trim(),
@@ -496,8 +511,10 @@ function CreateDialog(props: {
           },
         },
         { throwOnError: true },
-      )
-      .then(async () => {
+      ),
+    )
+      .then(async (result) => {
+        if (!result) return
         showToast({ title: language.t("operator.capabilities.created", { name: store.name.trim() }) })
         await queryClient.invalidateQueries({ queryKey: api.key() })
         dialog.close()

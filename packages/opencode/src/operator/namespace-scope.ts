@@ -156,12 +156,54 @@ export const inheritsGlobal = Effect.fnUntraced(function* (directory: string, wo
   return (yield* Effect.promise(() => layerOf(directory, worktree))).inherit
 })
 
-// The namespace layer's opencode.json(c), merged right after the global config files.
+// The namespace layer's opencode.json(c), merged right after the global config files: only for a project
+// without a config of its own (global_and_opencode_namespaces_spec.md §6, layer 2). A project's own config
+// is a full copy of its namespace's, made when a project page first saved a change (project-config.ts).
 export const configFiles = Effect.fnUntraced(function* (ctx: { directory: string; worktree: string }) {
   const layer = yield* Effect.promise(() => layerOf(ctx.directory, ctx.worktree))
   if (!layer.dir) return []
+  if ((yield* Effect.promise(() => ownConfigFiles(layer.project))).length) return []
   return [path.join(layer.dir, "opencode.json"), path.join(layer.dir, "opencode.jsonc")]
 })
+
+// A project's own config files (§7.1), in the order the project Config page picks the one it edits: the
+// first that exists. Upstream merges every one of them (MERGE_ORDER).
+export const OWN_CONFIG_FILES: ReadonlyArray<string> = [
+  path.join(CONFIG_DIR, "opencode.jsonc"),
+  path.join(CONFIG_DIR, "opencode.json"),
+  "opencode.jsonc",
+  "opencode.json",
+]
+// The order upstream merges them: the project folder's files (json, then jsonc), then its `.opencode`'s.
+export const MERGE_ORDER: ReadonlyArray<string> = [
+  "opencode.json",
+  "opencode.jsonc",
+  path.join(CONFIG_DIR, "opencode.json"),
+  path.join(CONFIG_DIR, "opencode.jsonc"),
+]
+
+const isFile = (file: string) =>
+  fs
+    .stat(file)
+    .then((stat) => stat.isFile())
+    .catch(() => false)
+
+export async function ownConfigFiles(project: string, order: ReadonlyArray<string> = OWN_CONFIG_FILES) {
+  const found = await Promise.all(
+    order.map(async (name) => {
+      const file = path.join(project, name)
+      return (await isFile(file)) ? file : undefined
+    }),
+  )
+  return found.filter((file): file is string => file !== undefined)
+}
+
+// The project files upstream walks up to, without Global's own config files: they are the Global base
+// already, and a Global project outside git would otherwise find them again as its own (§6).
+export function projectFiles(files: ReadonlyArray<string>) {
+  const global = path.resolve(Global.Path.config)
+  return files.filter((file) => path.dirname(path.resolve(file)) !== global)
+}
 
 // Whether a config folder is a namespace layer (its JSON is merged earlier, not in the folder loop).
 export function owns(dir: string) {

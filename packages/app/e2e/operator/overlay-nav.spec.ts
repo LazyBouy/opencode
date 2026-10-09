@@ -106,9 +106,8 @@ test("an open project has its own sections; Config edits its files inside the re
   await expect(editor).toHaveValue(/"username": "me"/)
   await editor.fill('{ "username": "you" }')
   await overlay.getByRole("button", { name: "Save", exact: true }).click()
-  await expect.poll(() => state.writes.filter((write) => write.url.includes("/operator/config/raw")).length).toBe(1)
-  const write = state.writes.find((item) => item.url.includes("/operator/config/raw"))!
-  expect(new URL(write.url).searchParams.get("scope")).toBe("project")
+  await expect.poll(() => state.writes.filter((write) => write.url.includes("/operator/config/project")).length).toBe(1)
+  const write = state.writes.find((item) => item.url.includes("/operator/config/project"))!
   expect(write.body).toMatchObject({ text: '{ "username": "you" }' })
 
   // Agents and Sessions list the project's own; ‹ All projects returns to the namespaces.

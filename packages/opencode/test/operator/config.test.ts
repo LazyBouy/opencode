@@ -1,15 +1,22 @@
 import fs from "fs/promises"
 import path from "path"
 import { expect } from "bun:test"
-import { Cause, Effect, Exit } from "effect"
+import { Cause, Effect, Exit, Layer } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { OperatorConfig } from "@/operator/config"
+import { OperatorProjectConfig } from "@/operator/project-config"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(LayerNode.compile(LayerNode.group([OperatorConfig.node, FSUtil.node])))
+// Project writes copy the namespace's config only with consent (project-config.ts): these tests give it.
+const it = testEffect(
+  Layer.merge(
+    LayerNode.compile(LayerNode.group([OperatorConfig.node, FSUtil.node])),
+    Layer.succeed(OperatorProjectConfig.Consent, true),
+  ),
+)
 
 // Points the global config directory at a folder inside the test project for the duration of a test.
 const withGlobalDirectory = <A, E, R>(body: (dir: string) => Effect.Effect<A, E, R>) =>
@@ -40,7 +47,7 @@ it.instance("a project write creates .opencode/opencode.jsonc and lists it as a 
     const layers = yield* config.layers()
 
     expect(result).toEqual({ path: path.join(directory, ".opencode", "opencode.jsonc"), changed: true })
-    expect(JSON.parse(yield* readText(result.path))).toEqual({ username: "operator" })
+    expect(JSON.parse(yield* readText(result.path))).toMatchObject({ username: "operator" })
     expect(layers.targets.project).toBe(result.path)
     expect(layers.sources.findLast((source) => source.kind === "directory")?.path).toBe(result.path)
     expect(layers.folders.project).toBe(path.join(directory, ".opencode"))

@@ -8,6 +8,7 @@ import { GlobalBus } from "@/bus/global"
 import { OperatorPermissionDecide } from "@/operator/permission-decide"
 import { OperatorPermissionDecisions } from "@/operator/permission-decisions"
 import { OperatorSessionPermissions } from "@/operator/session-permissions"
+import { OperatorProjectConfig } from "@/operator/project-config"
 import { Permission } from "@/permission"
 import { InstanceBootstrap } from "@/project/bootstrap-service"
 import { InstanceStore } from "@/project/instance-store"
@@ -16,15 +17,19 @@ import { testEffect } from "../lib/effect"
 import { configure, replacements, root } from "../merge/harness"
 
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
+// Project writes copy the namespace's config only with consent (project-config.ts): these tests give it.
 const it = testEffect(
-  LayerNode.compile(
-    LayerNode.group([
-      root,
-      OperatorPermissionDecide.node,
-      OperatorPermissionDecisions.node,
-      OperatorSessionPermissions.node,
-    ]),
-    [...replacements, [InstanceStore.bootstrapNode, noopBootstrap]],
+  Layer.merge(
+    LayerNode.compile(
+      LayerNode.group([
+        root,
+        OperatorPermissionDecide.node,
+        OperatorPermissionDecisions.node,
+        OperatorSessionPermissions.node,
+      ]),
+      [...replacements, [InstanceStore.bootstrapNode, noopBootstrap]],
+    ),
+    Layer.succeed(OperatorProjectConfig.Consent, true),
   ),
 )
 const unix = process.platform !== "win32" ? it.instance : it.instance.skip

@@ -9,8 +9,10 @@ import { InstanceContextMiddleware } from "@/server/routes/instance/httpapi/midd
 import {
   WorkspaceRoutingMiddleware,
   WorkspaceRoutingQuery,
+  WorkspaceRoutingQueryFields,
 } from "@/server/routes/instance/httpapi/middleware/workspace-routing"
 import { described } from "@/server/routes/instance/httpapi/groups/metadata"
+import { ApiProjectConfigCopyError, ConfirmCopyField } from "./project-config"
 
 // Under /operator/agent (the API's agent routes), never the app's /operator/agents pages.
 export const OperatorAgentPermissionPaths = {
@@ -55,7 +57,7 @@ export const OperatorAgentPermissionApi = HttpApi.make("operator-agent-permissio
         ),
         HttpApiEndpoint.put("save", OperatorAgentPermissionPaths.agent, {
           params: { name: Schema.String },
-          query: WorkspaceRoutingQuery,
+          query: Schema.Struct({ ...WorkspaceRoutingQueryFields, ...ConfirmCopyField }),
           payload: Schema.Struct({
             scope: OperatorConfig.Scope,
             rules: PermissionV1.Ruleset.annotate({ description: "The agent's own rules, in order" }),
@@ -64,7 +66,7 @@ export const OperatorAgentPermissionApi = HttpApi.make("operator-agent-permissio
             }),
           }),
           success: described(AgentPermissionsWritten, "The file that was written"),
-          error: [ApiAgentPermissionsNotFoundError, ApiAgentPermissionsInvalidError],
+          error: [ApiAgentPermissionsNotFoundError, ApiAgentPermissionsInvalidError, ApiProjectConfigCopyError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "operator.agentPermissions.save",

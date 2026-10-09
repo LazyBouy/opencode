@@ -37,6 +37,14 @@ export const dict = {
   "settings.namespaces.workingDirFailed": "Couldn't set the working directory",
   "settings.namespaces.globalOpenCode": "Global · OpenCode",
   "settings.namespaces.notInPlace": "Not in place: it belongs at {{target}}",
+  "settings.namespaces.config.title": "Config",
+  "settings.namespaces.config.hint":
+    "This namespace's config file. It is the only place it is edited: project pages save to the project's own copy instead.",
+  "settings.namespaces.config.none": "not created yet: saving creates it",
+  "settings.namespaces.config.reach": "Changes apply to {{name}}'s {{count}} projects that use {{name}}'s config.",
+  "settings.namespaces.config.own": "{{count}} projects use their own copies and won't change:",
+  "settings.namespaces.config.globalReach":
+    "Global's config is also the base for every namespace: changes reach every namespace and its projects, except where their own config sets a value. Its capabilities (commands, agents, MCP servers, …) reach the {{count}} namespaces that inherit them.",
   "settings.namespaces.globalFolder": "Global's folder is always ~/.config/opencode",
   "settings.namespaces.inheritGlobalSelf": "Always: Global's capabilities are its own",
   "settings.namespaces.new": "New namespace",
@@ -285,8 +293,10 @@ export const dict = {
   "operator.help.adapter":
     "Lets /merge {{id}} drive {{name}} from a session. Turn it off to stop /merge from using it; Recheck looks for its program again.",
   "operator.help.scopePicker": "The project this page shows. Agents, config and sessions belong to a project.",
-  "operator.help.configScope":
-    "Which file the editor shows and saves: Global (Global's config, the base for every namespace that inherits it), Namespace (the namespace folder's .opencode/opencode.jsonc, for every project of the namespace; off when the namespace has no folder) or This project. A project's file wins over its namespace's, which wins over Global's.",
+  "operator.help.configProject":
+    "The config this project uses: its own file if it has one, else its namespace's. Saving from here never changes the namespace's or Global's config: the first save gives the project its own copy.",
+  "operator.help.globalBase":
+    "Global's config is the base under every namespace that inherits it. A value set here replaces Global's; removing it here doesn't remove Global's.",
   "operator.help.showHidden":
     "Also list hidden agents: ones defined with hidden: true (OpenCode's helpers, and agents a config entry or an agent file hides). OpenCode keeps them out of the agent picker and the @ menu. The number counts the project's hidden agents.",
   "operator.help.sessionChildren": "Also list sessions that agents started for subagents.",
@@ -370,9 +380,7 @@ export const dict = {
   "operator.scope.environment": "Environment",
   "operator.scope.outside": "Elsewhere",
   "operator.scope.project": "This project",
-  "operator.scope.namespace": "Namespace ({{name}})",
   "operator.scope.namespaceShort": "Namespace",
-  "operator.scope.projectShort": "Project",
   "operator.scope.all": "All projects",
   "operator.scope.picker": "Project",
   "operator.live.on": "Live",
@@ -867,21 +875,54 @@ export const dict = {
   "operator.help.capabilityText.plugin": "A TypeScript file that exports an OpenCode plugin.",
 
   "operator.config.sources": "Where settings come from",
-  "operator.config.sourcesHint": "These files apply to this project in this order. Later files override earlier ones.",
-  "operator.config.kind.global": "Global",
-  "operator.config.kind.custom": "OPENCODE_CONFIG",
-  "operator.config.kind.project": "Project",
-  "operator.config.kind.directory": "Project (.opencode)",
-  "operator.config.kind.env": "Environment",
-  "operator.config.kind.namespace": "Namespace",
+  "operator.config.sourcesHint":
+    "The config files OpenCode reads for this project, in the order it reads them; a later file's value replaces an earlier one's. Command and agent files in the Global and namespace folders load after these.",
+  "operator.config.kind.global": "Global base",
+  "operator.config.kind.globalHome": "Global base (~/.opencode)",
+  "operator.config.kind.project": "This project",
+  "operator.config.kind.namespaceOf": "{{name}}'s config",
+  "operator.config.kind.envOf": "Environment ({{variable}})",
   "operator.config.origins": "Where each setting comes from",
   "operator.config.edit": "Edit settings",
   "operator.config.editHint": "Saving writes {{path}}. The text is checked before it is saved.",
   "operator.config.save": "Save",
   "operator.config.revert": "Discard changes",
   "operator.config.saved": "Settings saved",
+  "operator.config.savedWhenIdle": "Saved to {{path}}; applies after the project reloads (when no session is running)",
   "operator.config.effective": "Effective settings",
   "operator.config.effectiveHint": "The merged result for this project. Keys, tokens and passwords are hidden.",
+  "operator.projectConfig.usingNamespace": "Using {{name}}'s config",
+  "operator.projectConfig.noOwn": "This project has no config of its own.",
+  "operator.projectConfig.usingOwn": "Using this project's own config",
+  "operator.projectConfig.copiedFrom": "Copied from {{name}} on {{date}}.",
+  "operator.projectConfig.changedSince": "{{name}}'s config has changed since.",
+  "operator.projectConfig.several":
+    "OpenCode merges all of these files, in this order: {{files}}. This page edits {{file}}.",
+  "operator.projectConfig.tracked":
+    "git tracks this file: saving changes it in the repository. The console never removes it.",
+  "operator.projectConfig.compare": "Compare with {{name}}'s config",
+  "operator.projectConfig.compareTitle": "This project's config and {{name}}'s",
+  "operator.projectConfig.compareProject": "This project's config",
+  "operator.projectConfig.compareNamespace": "{{name}}'s config now",
+  "operator.projectConfig.noNamespaceConfig": "(no config yet)",
+  "operator.projectConfig.compareFailed": "Couldn't compare the configs",
+  "operator.projectConfig.revert": "Use {{name}}'s config again",
+  "operator.projectConfig.revertTitle": "Use {{name}}'s config again?",
+  "operator.projectConfig.revertBody":
+    "This project's own config ({{files}}) moves to Trash, where it can be restored. The project then uses {{name}}'s config, as it is now.",
+  "operator.projectConfig.revertConfirm": "Use {{name}}'s config",
+  "operator.projectConfig.reverted": "This project uses {{name}}'s config again",
+  "operator.projectConfig.revertFailed": "Couldn't go back to the namespace's config",
+  "operator.projectConfig.openNamespace": "Open {{name}}'s config",
+  "operator.projectConfig.subfolders": "Also applies in subfolders",
+  "operator.projectConfig.subfoldersHint":
+    "These config files apply only to sessions in their folders; they aren't this project's config.",
+  "operator.projectConfig.editHintCopy":
+    "This is {{name}}'s config. Saving a change here gives this project its own copy at {{path}}; {{name}}'s config isn't changed.",
+  "operator.projectConfig.copyTitle": "Save as this project's own config?",
+  "operator.projectConfig.copyBody":
+    "{{name}}'s config isn't changed. This project gets its own copy at {{file}}, with your change. From then on, changes to {{name}}'s config won't reach this project; you can go back to {{name}}'s config later. Lines {{name}} locks stay in its config and keep applying.",
+  "operator.projectConfig.copyConfirm": "Save as project config",
 
   "operator.inbox.empty": "Nothing is waiting for approval",
   "operator.inbox.emptyHint": "Requests appear here as soon as an agent asks, in any project.",

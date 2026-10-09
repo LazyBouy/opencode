@@ -7,6 +7,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { InstanceState } from "@/effect/instance-state"
 import { Skill } from "@/skill"
 import { OperatorConfig } from "./config"
+import { OperatorProjectConfig } from "./project-config"
 import { OperatorMemory } from "./memory"
 import { OperatorProjects } from "./projects"
 import { OperatorScopes } from "./scopes"
@@ -27,7 +28,7 @@ export interface Interface {
   readonly remove: (input: {
     kind: ItemKind
     name: string
-  }) => Effect.Effect<OperatorTrash.Entry, OperatorTrash.TrashError>
+  }) => Effect.Effect<OperatorTrash.Entry, OperatorTrash.TrashError | OperatorProjectConfig.CopyNeededError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorTrashItems") {}
@@ -102,16 +103,25 @@ const layer = Layer.effect(
     ) {
       const entry = yield* configEntry(section, name)
       if (!entry) return yield* fail(`${name} is not defined in this project's, its namespace's or Global's config`)
-      const namespace = "namespace" in entry ? entry.namespace : undefined
+      // A project page never writes its namespace's or Global's config (global_and_opencode_namespaces_spec.md
+      // §7.3): a namespace's entry goes from the project's own copy of that config; Global's is the base
+      // under every namespace and can't be removed from a project.
+      if (entry.scope === "global")
+        return yield* fail(
+          `${name} is in Global's config: delete it in Settings → Namespaces → Global, or turn it off for this project`,
+        )
       yield* config
-        .update(entry.scope, { [section]: { [name]: null } }, namespace)
-        .pipe(Effect.mapError((error) => fail(error.message)))
+        .update("project", { [section]: { [name]: null } })
+        .pipe(
+          Effect.mapError((error) =>
+            error instanceof OperatorProjectConfig.CopyNeededError ? error : fail(error.message),
+          ),
+        )
       return yield* put({
         kind,
         name,
         project: directory,
-        ...(namespace ? { namespace } : {}),
-        config: { scope: entry.scope, ...(namespace ? { namespace } : {}), key: [section, name], value: entry.value },
+        config: { scope: "project", key: [section, name], value: entry.value },
       })
     })
 

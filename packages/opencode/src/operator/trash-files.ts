@@ -25,6 +25,7 @@ export const Kind = Schema.Literals([
   "mcp",
   "memory",
   "plugin",
+  "config",
 ]).annotate({ identifier: "OperatorTrashKind" })
 export type Kind = typeof Kind.Type
 
@@ -57,6 +58,15 @@ export const Entry = Schema.Struct({
   archived: Schema.optional(Schema.Array(Schema.String)).annotate({
     description: "Sessions it archived: unarchived on restore",
   }),
+  copy: Schema.optional(
+    Schema.Struct({
+      namespace: Schema.String,
+      copiedAt: Schema.Finite,
+      namespaceHash: Schema.String,
+      file: Schema.String,
+      deleted: Schema.optional(Schema.Array(Schema.Struct({ permission: Schema.String, pattern: Schema.String }))),
+    }),
+  ).annotate({ description: "A project's config: the copy record it took, given back on restore" }),
 }).annotate({ identifier: "OperatorTrashEntry" })
 export type Entry = typeof Entry.Type
 

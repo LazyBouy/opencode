@@ -16,6 +16,7 @@ import { OperatorNamespaceScope } from "./namespace-scope"
 import { OperatorPermissionEffective } from "./permission-effective"
 import { OperatorPermissionHook } from "./permission-hook"
 import { OperatorPermissionMarks } from "./permission-marks"
+import { OperatorProjectConfig } from "./project-config"
 import { OperatorPermissionModel as Model } from "./permission-model"
 import { OperatorPermissionRules } from "./permission-rules"
 import { OperatorProjects } from "./projects"
@@ -189,12 +190,32 @@ const layer = Layer.effect(
         ? configLines("OPENCODE_PERMISSION", JSON.stringify({ permission: safeJson(Flag.OPENCODE_PERMISSION) }))
         : []
       const project = yield* Effect.promise(() => OperatorProjects.keyOf(ctx))
+      const namespaceMarks = isGlobal
+        ? OperatorPermissionMarks.EMPTY
+        : draft?.level === "namespace"
+          ? draft.marks
+          : yield* Effect.promise(() => OperatorPermissionMarks.namespaceMarks(ns))
+      // A project with its own config has a copy of its namespace's lines (and deletions) but the locked
+      // ones: those keep applying from the namespace's file (global_and_opencode_namespaces_spec.md §7).
+      const copied = !namespace && !isGlobal && layers.project === "own"
+      const namespaceLines = copied
+        ? yield* Effect.promise(async () => {
+            const source = await OperatorProjectConfig.namespaceConfig(ns)
+            return source.text === undefined
+              ? []
+              : configLines(source.file, source.text).filter((line) =>
+                  namespaceMarks.locks.some(
+                    (key) => key.permission === line.permission && key.pattern === line.pattern,
+                  ),
+                )
+          })
+        : [...of(["namespace"]), ...drafted("namespace")]
       return {
         namespace: ns,
         protectBuiltins: OperatorLayout.builtinsProtected(ns, layout),
         lines: {
           global: inherit || isGlobal ? [...of(["global"]), ...(isGlobal ? drafted("namespace") : [])] : [],
-          namespace: isGlobal ? [] : [...of(["namespace"]), ...drafted("namespace")],
+          namespace: isGlobal ? [] : namespaceLines,
           project: [...of(["project", "directory", "env"]), ...drafted("project"), ...env],
         },
         marks: {
@@ -204,11 +225,7 @@ const layer = Layer.effect(
               : inherit || isGlobal
                 ? yield* Effect.promise(() => OperatorPermissionMarks.namespaceMarks(OperatorLayout.globalId(layout)))
                 : OperatorPermissionMarks.EMPTY,
-          namespace: isGlobal
-            ? OperatorPermissionMarks.EMPTY
-            : draft?.level === "namespace"
-              ? draft.marks
-              : yield* Effect.promise(() => OperatorPermissionMarks.namespaceMarks(ns)),
+          namespace: copied ? { deleted: [], locks: namespaceMarks.locks } : namespaceMarks,
           project:
             draft?.level === "project"
               ? draft.marks

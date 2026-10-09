@@ -15,6 +15,7 @@ import { PageHeader } from "../ui/page-header"
 import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOverlay } from "../ui/record-overlay"
 import { requestError } from "./config-helpers"
 import { useOverlayParams } from "../ui/overlay-nav"
+import { useProjectConfigWrite } from "../ui/project-config-copy"
 
 // What is in Trash, and putting it back or deleting it for good; any change refreshes what it can
 // affect.
@@ -54,12 +55,19 @@ export function useTrashItem(directory: () => string | undefined) {
   const api = useOperatorClient()
   const queryClient = useQueryClient()
   const moveToTrash = useMoveToTrash()
+  const write = useProjectConfigWrite()
   return (kind: "skill" | "command" | "tool" | "mcp" | "memory", name: string, label = name, done?: () => void) =>
     moveToTrash(label, () =>
-      api
-        .client()
-        .operator.trash.item({ directory: directory(), kind, name }, { throwOnError: true })
-        .then(async () => {
+      write((confirmCopy) =>
+        api
+          .client()
+          .operator.trash.item(
+            { directory: directory(), kind, name, ...(confirmCopy ? { confirmCopy } : {}) },
+            { throwOnError: true },
+          ),
+      )
+        .then(async (result) => {
+          if (!result) return
           showToast({ title: language.t("operator.trash.moved", { name: label }) })
           done?.()
           await queryClient.invalidateQueries({ queryKey: api.key() })

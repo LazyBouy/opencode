@@ -277,7 +277,9 @@ const layer = Layer.effect(
           const reply = String(properties.reply)
           const sessionID = String(properties.sessionID)
           const draft = drafts.get(requestID)
-          drafts.delete(requestID)
+          // Every listener on the bus sees the event in this tick (a second runtime in one process, as in
+          // tests): the draft goes once they all have.
+          setTimeout(() => drafts.delete(requestID))
           end(requestID, (entry) => draft ?? inferred(entry, reply))
           if (reply !== "once" && !cascading.has(sessionID)) {
             cascading.set(sessionID, { requestID, reply, via: draft?.via ?? "client" })

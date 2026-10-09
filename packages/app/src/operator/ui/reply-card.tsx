@@ -18,6 +18,7 @@ import { requestError } from "../pages/config-helpers"
 import { FieldHelp } from "./field-help"
 import { useOriginText } from "./permission-origin"
 import "./record-overlay.css"
+import { useProjectConfigWrite } from "./project-config-copy"
 
 export * as OperatorReplyCard from "./reply-card"
 
@@ -36,17 +37,23 @@ export function useDecide() {
   const language = useLanguage()
   const api = useOperatorClient()
   const queryClient = useQueryClient()
+  const write = useProjectConfigWrite()
   return async (
     item: OperatorPendingPermission,
     input: OperatorPermissionDecideInput,
   ): Promise<OperatorPermissionDecideResult | undefined> => {
-    const result = await api
-      .client()
-      .operator.permission.decide(
-        { requestID: item.request.id, operatorPermissionDecideInput: input },
+    // Allow for agent writes the agent's rule: a config agent's goes into the project's own config.
+    const result = await write((confirmCopy) =>
+      api.client().operator.permission.decide(
+        {
+          requestID: item.request.id,
+          ...(confirmCopy ? { confirmCopy } : {}),
+          operatorPermissionDecideInput: input,
+        },
         { throwOnError: true },
-      )
-      .then((response) => response.data)
+      ),
+    )
+      .then((response) => response?.data)
       .catch((error: unknown) => {
         showToast({ title: language.t("operator.reply.failed"), description: requestError(error) })
         return undefined

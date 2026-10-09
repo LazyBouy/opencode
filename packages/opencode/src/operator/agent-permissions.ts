@@ -7,6 +7,7 @@ import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
 import { OperatorAgents } from "./agents"
+import { OperatorProjectConfig } from "./project-config"
 import { OperatorConfig } from "./config"
 import { OperatorLayout } from "./layout"
 import { OperatorPermissionLive } from "./permission-live"
@@ -81,7 +82,7 @@ export interface Interface {
     scope: OperatorConfig.Scope
     rules: ReadonlyArray<Rule>
     confirmOrder?: boolean
-  }) => Effect.Effect<{ path: string }, NotFoundError | InvalidError>
+  }) => Effect.Effect<{ path: string }, NotFoundError | InvalidError | OperatorProjectConfig.CopyNeededError>
   /** The editor's hints without an agent: the pattern each permission is asked with, and the permissions to suggest. */
   readonly hints: () => Effect.Effect<{ forms: Record<string, OperatorPermissionRules.PatternForm>; known: string[] }>
 }

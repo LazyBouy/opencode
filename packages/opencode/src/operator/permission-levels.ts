@@ -12,6 +12,7 @@ import { OperatorPermissionLive } from "./permission-live"
 import { OperatorPermissionMarks } from "./permission-marks"
 import { OperatorPermissionModel as Model } from "./permission-model"
 import { OperatorPermissionRules } from "./permission-rules"
+import { OperatorProjectConfig } from "./project-config"
 import { OperatorProjects } from "./projects"
 import { OperatorReloadWhenIdle } from "./reload-when-idle"
 
@@ -83,7 +84,7 @@ export interface Interface {
     level: LevelName,
     input: SaveInput,
     namespace?: string,
-  ) => Effect.Effect<View, LockedError | InvalidError>
+  ) => Effect.Effect<View, LockedError | InvalidError | OperatorProjectConfig.CopyNeededError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorPermissionLevels") {}
@@ -145,9 +146,11 @@ const layer = Layer.effect(
       at: Where,
       draft?: { lines: ReadonlyArray<Rule>; marks: OperatorPermissionMarks.Marks },
     ) {
+      // A project's lines are its own namespace's (no namespace given): with a config of its own, only the
+      // namespace's locked lines apply from there. A namespace's are all its lines.
       return yield* live.lines({
         upTo: at.upTo,
-        namespace: at.ns,
+        ...(level === "project" ? {} : { namespace: at.ns }),
         ...(draft ? { draft: { level, ...draft } } : {}),
       })
     })
@@ -169,7 +172,7 @@ const layer = Layer.effect(
           )
         : []
       // What the level inherits: the lines down to the level above. The deleted ones, as they were.
-      const above = yield* live.lines({ upTo: at.above, namespace: ns })
+      const above = yield* live.lines({ upTo: at.above, ...(level === "project" ? {} : { namespace: ns }) })
       const deleted = above.lines.filter((line) => marks.deleted.some((key) => Model.sameKey(key, line)))
       const editor = yield* agentPermissions.hints()
       return {
@@ -201,11 +204,38 @@ const layer = Layer.effect(
         return yield* new InvalidError({
           message: `The namespace ${ns} has no folder; set one in Settings → Namespaces`,
         })
-      const lines = input.lines.flatMap((rule) => {
+      const given = input.lines.flatMap((rule) => {
         const permission = rule.permission.trim()
         return permission ? [{ permission, pattern: rule.pattern.trim() || "*", action: rule.action }] : []
       })
-      const marks = { deleted: [...input.deleted], locks: [...input.locks] }
+      // The first project save without a config of its own copies its namespace's config: the
+      // namespace's unlocked lines and its deletions become the project's too (the locked ones keep
+      // applying from the namespace's file), so writing the project's lines whole mustn't drop them.
+      const copying =
+        level === "project" &&
+        (yield* operatorConfig.layers()).project === "namespace" &&
+        !OperatorLayout.isGlobal(ns, yield* Effect.promise(() => OperatorLayout.snapshot()))
+      const inherited = copying
+        ? yield* Effect.promise(async () => {
+            const source = await OperatorProjectConfig.namespaceConfig(ns)
+            const marks = await OperatorPermissionMarks.namespaceMarks(source.id)
+            const value = source.text === undefined ? undefined : OperatorPermissionLive.parseConfig(source.text)
+            const same = (a: OperatorPermissionMarks.Key, b: OperatorPermissionMarks.Key) =>
+              a.permission === b.permission && a.pattern === b.pattern
+            return {
+              // Not the locked ones, nor those the project changes or deletes in this save.
+              lines: OperatorPermissionRules.writtenRules(value?.permission).filter(
+                (rule) =>
+                  !marks.locks.some((key) => same(key, rule)) &&
+                  !given.some((line) => same(line, rule)) &&
+                  !input.deleted.some((key) => same(key, rule)),
+              ),
+              deleted: marks.deleted.filter((key) => !input.deleted.some((item) => same(item, key))),
+            }
+          })
+        : { lines: [], deleted: [] }
+      const lines = [...inherited.lines, ...given]
+      const marks = { deleted: [...input.deleted, ...inherited.deleted], locks: [...input.locks] }
       // Refused: a line or deletion a lock above sets aside, a line inside a locked line above that
       // decides otherwise, and a deletion of OpenCode's own lines in the OpenCode namespace.
       const built = yield* build(level, at, { lines, marks })
@@ -231,7 +261,13 @@ const layer = Layer.effect(
           { permission: lines.length ? OperatorConfig.whole(OperatorPermissionRules.toConfig(lines)) : null },
           level === "namespace" ? ns : undefined,
         )
-        .pipe(Effect.mapError((error) => new InvalidError({ message: error.message })))
+        .pipe(
+          Effect.mapError((error) =>
+            error instanceof OperatorProjectConfig.CopyNeededError
+              ? error
+              : new InvalidError({ message: error.message }),
+          ),
+        )
       yield* Effect.promise(() =>
         level === "project" && project
           ? OperatorPermissionMarks.writeProject(project, marks)

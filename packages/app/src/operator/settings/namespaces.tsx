@@ -5,7 +5,17 @@ import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
 import { CheckboxV2 } from "@opencode-ai/ui/v2/checkbox-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import type { OperatorNamespaceSummary } from "@opencode-ai/sdk/v2/client"
-import { type Component, createEffect, createMemo, createResource, createUniqueId, For, on, Show } from "solid-js"
+import {
+  type Component,
+  createEffect,
+  createMemo,
+  createResource,
+  createUniqueId,
+  For,
+  on,
+  onMount,
+  Show,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { SettingsListV2 } from "@/components/settings-v2/parts/list"
 import { SettingsRowV2 } from "@/components/settings-v2/parts/row"
@@ -20,6 +30,7 @@ import { FieldHelp } from "../ui/field-help"
 import { useFolderBrowser } from "../ui/folder-browser"
 import { NamespaceStart, type Start } from "./namespace-start"
 import { LevelPermissions } from "../ui/level-permissions"
+import { NamespaceConfigEditor, takeRequestedNamespace } from "./namespace-config"
 import { WorkingDirectory } from "./working-dir"
 import { RecordField } from "../ui/record-overlay"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -52,7 +63,7 @@ export const SettingsNamespacesV2: Component = () => {
       .then((result) => result.data ?? []),
   )
   const firstLine = (text: string) => text.split("\n").find((line) => line.trim()) ?? ""
-  const open = (selected: string) =>
+  const open = (selected: string, section?: "config") =>
     void dialog.push(() => (
       <Dialog size="large">
         <DialogHeader>
@@ -66,6 +77,7 @@ export const SettingsNamespacesV2: Component = () => {
           <div data-slot="settings-namespace-overlay">
             <NamespaceRecord
               selected={selected}
+              section={section}
               list={() => list.latest ?? []}
               refetch={refetch}
               onClose={() => dialog.close()}
@@ -74,6 +86,11 @@ export const SettingsNamespacesV2: Component = () => {
         </DialogBody>
       </Dialog>
     ))
+  // Opened from a project's Config page ("Open Acme's config"): straight to that namespace's Config.
+  onMount(() => {
+    const requested = takeRequestedNamespace()
+    if (requested) open(requested, "config")
+  })
 
   return (
     <>
@@ -141,6 +158,8 @@ export const SettingsNamespacesV2: Component = () => {
 // and Delete.
 function NamespaceRecord(props: {
   selected: string
+  /** A section to scroll to once open. */
+  section?: "config"
   list: () => ReadonlyArray<OperatorNamespaceSummary>
   refetch: () => unknown
   onClose: () => void
@@ -347,6 +366,14 @@ function NamespaceRecord(props: {
               </div>
               <h3 class="settings-v2-tab-title">{language.t("operator.levels.title")}</h3>
               <LevelPermissions level="namespace" directory={undefined} namespace={found().namespace.id} />
+              <h3 class="settings-v2-tab-title flex items-center">
+                {language.t("settings.namespaces.config.title")}
+                <FieldHelp
+                  field={language.t("settings.namespaces.config.title")}
+                  text={language.t("settings.namespaces.config.hint")}
+                />
+              </h3>
+              <NamespaceConfigEditor namespace={found().namespace.id} focus={props.section === "config"} />
             </div>
           )}
         </Show>

@@ -54,7 +54,8 @@ const request = async (method: string, route: string, directory: string, body?: 
   return { status: response.status, body: (await response.json()) as unknown }
 }
 const level = (directory: string, name: "namespace" | "project", body?: unknown) =>
-  request(body ? "PUT" : "GET", `/operator/permission/level/${name}`, directory, body)
+  // A project's first save copies its namespace's config, which needs consent.
+  request(body ? "PUT" : "GET", `/operator/permission/level/${name}${body ? "?confirmCopy=true" : ""}`, directory, body)
 const tools = async (directory: string, agent = "build") =>
   ((await request("GET", `/operator/agent/${agent}/tool-prompt`, directory)).body as Prompt).list.map(
     (item) => item.name,
@@ -91,12 +92,13 @@ describe("namespace and project levels", () => {
     expect(list).toContain("read")
     for (const name of ["bash", "edit", "webfetch", "glob", "grep", "task", "question"])
       expect(list).not.toContain(name)
+    // The project's first save gave it its own copy of Acme's config: Acme's lines are the project's now.
     const view = (await level(project.path, "project")).body as View
     expect(view.rows.find((row) => row.permission === "*" && row.pattern === "*")).toMatchObject({
       action: "deny",
-      level: "namespace",
+      level: "project",
     })
-    expect(view.own).toEqual([rule("read", "*", "allow")])
+    expect(view.own).toEqual([rule("*", "*", "deny"), rule("read", "*", "allow")])
   })
 
   test("a project deletes an inherited namespace line, and the next line decides", async () => {
@@ -107,9 +109,11 @@ describe("namespace and project levels", () => {
     expect(await tools(project.path)).not.toContain("webfetch")
     const saved = await level(project.path, "project", { lines: [], deleted: [key("webfetch", "*")], locks: [] })
     expect(saved.status).toBe(200)
-    expect((saved.body as View).deleted).toEqual([
-      expect.objectContaining({ permission: "webfetch", level: "namespace" }),
-    ])
+    // The save gave the project its own copy of Acme's config, without the line it deletes.
+    expect((saved.body as View).own).toEqual([])
+    expect((saved.body as View).rows.some((row) => row.permission === "webfetch" && row.level === "namespace")).toBe(
+      false,
+    )
     // OpenCode's `* * allow` decides again.
     expect(await tools(project.path)).toContain("webfetch")
   })

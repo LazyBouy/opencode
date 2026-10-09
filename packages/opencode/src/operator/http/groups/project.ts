@@ -12,6 +12,7 @@ import {
   WorkspaceRoutingQueryFields,
 } from "@/server/routes/instance/httpapi/middleware/workspace-routing"
 import { described } from "@/server/routes/instance/httpapi/groups/metadata"
+import { ApiProjectConfigCopyError, ConfirmCopyField } from "./project-config"
 
 export const OperatorProjectPaths = {
   agents: "/operator/agent",
@@ -20,7 +21,7 @@ export const OperatorProjectPaths = {
   models: "/operator/model",
 } as const
 
-const ScopeQuery = Schema.Struct({ ...WorkspaceRoutingQueryFields, scope: OperatorConfig.Scope })
+const ScopeQuery = Schema.Struct({ ...WorkspaceRoutingQueryFields, scope: OperatorConfig.Scope, ...ConfirmCopyField })
 const AgentWritten = Schema.Struct({ path: Schema.String }).annotate({ identifier: "OperatorAgentWritten" })
 
 const agentError = <Name extends string, Status extends number>(name: Name, status: Status) =>
@@ -58,7 +59,7 @@ export const OperatorProjectApi = HttpApi.make("operator-project")
             ...OperatorAgents.Patch.fields,
           }),
           success: described(AgentWritten, "The agent file or config file that was written"),
-          error: [ApiAgentNotFoundError, ApiAgentConflictError, ApiAgentInvalidError],
+          error: [ApiAgentNotFoundError, ApiAgentConflictError, ApiAgentInvalidError, ApiProjectConfigCopyError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "operator.agent.create",
@@ -72,7 +73,7 @@ export const OperatorProjectApi = HttpApi.make("operator-project")
           query: ScopeQuery,
           payload: OperatorAgents.Patch,
           success: described(AgentWritten, "The file that was written"),
-          error: [ApiAgentNotFoundError, ApiAgentConflictError, ApiAgentInvalidError],
+          error: [ApiAgentNotFoundError, ApiAgentConflictError, ApiAgentInvalidError, ApiProjectConfigCopyError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "operator.agent.update",
@@ -85,7 +86,7 @@ export const OperatorProjectApi = HttpApi.make("operator-project")
           params: { name: Schema.String },
           query: ScopeQuery,
           success: described(AgentWritten, "The file that was changed"),
-          error: [ApiAgentNotFoundError, ApiAgentConflictError, ApiAgentInvalidError],
+          error: [ApiAgentNotFoundError, ApiAgentConflictError, ApiAgentInvalidError, ApiProjectConfigCopyError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "operator.agent.remove",

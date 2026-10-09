@@ -24,6 +24,7 @@ import { isRecord } from "@/util/record"
 import { OperatorCapabilitySwitches } from "./capability-switches"
 import { OperatorConfig } from "./config"
 import { OperatorNamespaceScope } from "./namespace-scope"
+import { OperatorProjectConfig } from "./project-config"
 import { OperatorReloadWhenIdle } from "./reload-when-idle"
 import { OperatorTools } from "./tools"
 import { OperatorTrashFiles } from "./trash-files"
@@ -100,43 +101,41 @@ export class ActionError extends Schema.TaggedErrorClass<ActionError>()("Operato
   message: Schema.String,
 }) {}
 
+// A project write may need the project's own copy of its namespace's config first (project-config.ts).
+export type Failure = ActionError | OperatorProjectConfig.CopyNeededError
+
 export interface Interface {
   /** The capabilities of the project in context, or of a namespace on its own. */
   readonly inventory: (input: { namespace?: string }) => Effect.Effect<Inventory>
   /** Copies an inherited capability into the project (or the namespace), to edit there. */
-  readonly override: (input: { kind: Kind; name: string; namespace?: string }) => Effect.Effect<Item, ActionError>
+  readonly override: (input: { kind: Kind; name: string; namespace?: string }) => Effect.Effect<Item, Failure>
   /** Turns an inherited capability off in the project (or the namespace). */
-  readonly disable: (input: { kind: Kind; name: string; namespace?: string }) => Effect.Effect<Item, ActionError>
+  readonly disable: (input: { kind: Kind; name: string; namespace?: string }) => Effect.Effect<Item, Failure>
   /** Removes the project's override (to Trash) or its disable, so the inherited capability applies. */
-  readonly revert: (input: { kind: Kind; name: string; namespace?: string }) => Effect.Effect<Item, ActionError>
+  readonly revert: (input: { kind: Kind; name: string; namespace?: string }) => Effect.Effect<Item, Failure>
   /** Deletes a capability defined at the scope (to Trash). */
-  readonly remove: (input: { kind: Kind; name: string; namespace?: string }) => Effect.Effect<boolean, ActionError>
+  readonly remove: (input: { kind: Kind; name: string; namespace?: string }) => Effect.Effect<boolean, Failure>
   /** Creates a capability at the scope. */
-  readonly create: (input: CreateInput) => Effect.Effect<Item, ActionError>
+  readonly create: (input: CreateInput) => Effect.Effect<Item, Failure>
   /** Copies a namespace's capability into another namespace's layer. */
-  readonly copyTo: (input: {
-    kind: Kind
-    name: string
-    namespace: string
-    to: string
-  }) => Effect.Effect<Item, ActionError>
+  readonly copyTo: (input: { kind: Kind; name: string; namespace: string; to: string }) => Effect.Effect<Item, Failure>
   /** The text of a definition the scope owns: its file, or its config entry as JSON. */
   readonly read: (input: {
     kind: Kind
     name: string
     namespace?: string
-  }) => Effect.Effect<{ location: string; text: string }, ActionError>
+  }) => Effect.Effect<{ location: string; text: string }, Failure>
   /** Replaces a definition the scope owns. */
   readonly write: (input: {
     kind: Kind
     name: string
     namespace?: string
     text: string
-  }) => Effect.Effect<Item, ActionError>
+  }) => Effect.Effect<Item, Failure>
   /** A copy of an OpenCode built-in takes OpenCode's current text. */
-  readonly takeOpenCode: (input: { kind: Kind; name: string; namespace?: string }) => Effect.Effect<Item, ActionError>
+  readonly takeOpenCode: (input: { kind: Kind; name: string; namespace?: string }) => Effect.Effect<Item, Failure>
   /** Copies a source namespace's chosen capabilities and config keys into a new namespace. */
-  readonly seed: (input: SeedInput) => Effect.Effect<Item[], ActionError>
+  readonly seed: (input: SeedInput) => Effect.Effect<Item[], Failure>
 }
 
 export const SeedInput = Schema.Struct({
@@ -640,7 +639,7 @@ const layer = Layer.effect(
       view: Scope
       namespace?: string
       dir: string
-      patch: (body: Record<string, unknown>) => Effect.Effect<unknown, ActionError>
+      patch: (body: Record<string, unknown>) => Effect.Effect<unknown, Failure>
       config: () => Effect.Effect<Record<string, unknown>>
       reload: () => Effect.Effect<void>
       project?: string
@@ -673,8 +672,19 @@ const layer = Layer.effect(
         view: "project" as const,
         dir: OperatorConfig.scopeDirectory("project", ctx),
         patch: (body: Record<string, unknown>) =>
-          operatorConfig.update("project", body).pipe(Effect.mapError((error) => fail(error.message))),
-        config: () => operatorConfig.layers().pipe(Effect.flatMap((layers) => fileConfig(layers.targets.project))),
+          operatorConfig
+            .update("project", body)
+            .pipe(
+              Effect.mapError((error) =>
+                error instanceof OperatorProjectConfig.CopyNeededError ? error : fail(error.message),
+              ),
+            ),
+        // The config the project uses: its own, else its namespace's (a first write copies it).
+        config: () =>
+          Effect.promise(async () => {
+            const value = parse((await OperatorProjectConfig.resolved(ctx)).text) as unknown
+            return isRecord(value) ? value : {}
+          }),
         reload: () =>
           Effect.forEach(
             OperatorNamespaceScope.instancesOf({ project: scope.project }),

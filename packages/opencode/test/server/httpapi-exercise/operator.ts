@@ -45,7 +45,8 @@ export const operatorScenarios: Scenario[] = [
     .patch("/operator/config", "operator.config.update")
     .mutating()
     .at((ctx) => ({
-      path: "/operator/config?scope=project",
+      // A project without a config of its own gets a copy of its namespace's: that needs confirmCopy.
+      path: "/operator/config?scope=project&confirmCopy=true",
       headers: ctx.headers(),
       body: { username: "httpapi-operator" },
     }))
@@ -62,7 +63,11 @@ export const operatorScenarios: Scenario[] = [
     ),
   http.protected
     .patch("/operator/config", "operator.config.update.invalid")
-    .at((ctx) => ({ path: "/operator/config?scope=project", headers: ctx.headers(), body: { username: 1 } }))
+    .at((ctx) => ({
+      path: "/operator/config?scope=project&confirmCopy=true",
+      headers: ctx.headers(),
+      body: { username: 1 },
+    }))
     .status(400),
   http.protected
     .get("/operator/status", "operator.status")
@@ -165,7 +170,8 @@ export const operatorScenarios: Scenario[] = [
     .patch("/operator/agent/{name}", "operator.agent.update")
     .mutating()
     .at((ctx) => ({
-      path: route("/operator/agent/{name}", { name: "build" }) + "?scope=project",
+      // The project gets its own copy of its namespace's config: that needs confirmCopy.
+      path: route("/operator/agent/{name}", { name: "build" }) + "?scope=project&confirmCopy=true",
       headers: ctx.headers(),
       body: { temperature: 0.4 },
     }))
@@ -406,7 +412,7 @@ export const operatorScenarios: Scenario[] = [
     .put("/operator/agent/{name}/permissions", "operator.agentPermissions.save")
     .mutating()
     .at((ctx) => ({
-      path: route("/operator/agent/{name}/permissions", { name: "build" }),
+      path: route("/operator/agent/{name}/permissions", { name: "build" }) + "?confirmCopy=true",
       headers: ctx.headers(),
       body: { scope: "project", rules: [{ permission: "webfetch", pattern: "*", action: "deny" }] },
     }))
@@ -449,7 +455,7 @@ export const operatorScenarios: Scenario[] = [
     .put("/operator/permission/level/{level}", "operator.permissionLevel.save")
     .mutating()
     .at((ctx) => ({
-      path: route("/operator/permission/level/{level}", { level: "project" }),
+      path: route("/operator/permission/level/{level}", { level: "project" }) + "?confirmCopy=true",
       headers: ctx.headers(),
       body: { lines: [{ permission: "webfetch", pattern: "*", action: "deny" }], deleted: [], locks: [] },
     }))
@@ -573,11 +579,18 @@ export const operatorScenarios: Scenario[] = [
       "read should be listed as a built-in tool",
     )
   }),
+  http.protected.get("/operator/config/resolved", "operator.config.resolved").json(200, (body) => {
+    object(body)
+    check(body.mode === "own" || body.mode === "namespace", "the project uses its own config or its namespace's")
+    check(typeof body.file === "string" && typeof body.text === "string", "the config's file and text")
+    array(body.ownFiles)
+    array(body.subfolderFiles)
+  }),
   http.protected
-    .put("/operator/config/raw", "operator.config.write")
+    .put("/operator/config/project", "operator.config.project")
     .mutating()
     .at((ctx) => ({
-      path: "/operator/config/raw?scope=project",
+      path: "/operator/config/project?confirmCopy=true",
       headers: ctx.headers(),
       body: { text: '{\n  // by hand\n  "username": "httpapi-raw"\n}\n' },
     }))
@@ -587,13 +600,50 @@ export const operatorScenarios: Scenario[] = [
         Effect.gen(function* () {
           object(body)
           const text = yield* Effect.promise(() => Bun.file(String(body.path)).text())
-          check(text.includes("// by hand"), "the raw text should be written as given")
+          check(text.includes("// by hand"), "the text should be written as given")
         }),
       "status",
     ),
   http.protected
-    .put("/operator/config/raw", "operator.config.write.invalid")
-    .at((ctx) => ({ path: "/operator/config/raw?scope=project", headers: ctx.headers(), body: { text: "{ nope" } }))
+    .put("/operator/config/project", "operator.config.project.invalid")
+    .at((ctx) => ({
+      path: "/operator/config/project?confirmCopy=true",
+      headers: ctx.headers(),
+      body: { text: "{ nope" },
+    }))
+    .status(400),
+  http.protected.get("/operator/config/compare", "operator.config.compare").json(200, (body) => {
+    object(body)
+    object(body.project)
+    object(body.namespace)
+  }),
+  http.protected
+    .post("/operator/config/project/revert", "operator.config.revert")
+    .mutating()
+    .seeded((ctx) => ctx.file("opencode.json", "{}\n"))
+    .at((ctx) => ({ path: "/operator/config/project/revert", headers: ctx.headers() }))
+    .json(
+      200,
+      (body) => check(isRecord(body) && typeof body.trash === "string", "the config should go to Trash"),
+      "status",
+    ),
+  http.protected
+    .get("/operator/namespace/{id}/config", "operator.namespaceConfig.get")
+    .at((ctx) => ({ path: route("/operator/namespace/{id}/config", { id: "opencode" }), headers: ctx.headers() }))
+    .json(200, (body) => {
+      object(body)
+      check(typeof body.file === "string" && typeof body.global === "boolean", "the namespace's config file")
+      array(body.using)
+      array(body.own)
+    }),
+  // A valid save would change Global's config for every later scenario: only the refusal is exercised.
+  http.protected
+    .put("/operator/namespace/{id}/config", "operator.namespaceConfig.save")
+    .at((ctx) => ({
+      path: route("/operator/namespace/{id}/config", { id: "opencode" }),
+      headers: ctx.headers(),
+      body: { text: '{ "username": 3 }' },
+    }))
     .status(400),
   http.protected.get("/operator/config/schema", "operator.config.schema").json(200, (body) => {
     object(body)
@@ -910,7 +960,7 @@ export const operatorScenarios: Scenario[] = [
     .post("/operator/capability/disable", "operator.capability.disable")
     .mutating()
     .at((ctx) => ({
-      path: "/operator/capability/disable",
+      path: "/operator/capability/disable?confirmCopy=true",
       headers: ctx.headers(),
       body: { kind: "tool", name: "webfetch" },
     }))

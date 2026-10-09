@@ -11,6 +11,9 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { InstanceStore } from "@/project/instance-store"
 import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
+import { OperatorNamespaceScope } from "./namespace-scope"
+import { OperatorProjectConfig } from "./project-config"
+import { OperatorReloadWhenIdle } from "./reload-when-idle"
 import { OperatorConfig } from "./config"
 import { OperatorProfileStore } from "./profile-store"
 import { OperatorTrashFiles } from "./trash-files"
@@ -50,6 +53,7 @@ const layer = Layer.effect(
     const sessions = yield* Session.Service
     const instances = yield* InstanceStore.Service
     const config = yield* OperatorConfig.Service
+    const reloads = yield* OperatorReloadWhenIdle.Service
     const fail = (message: string) => new TrashError({ message })
 
     // Sessions that ran in a folder or below it.
@@ -157,7 +161,16 @@ const layer = Layer.effect(
       yield* Effect.promise(async () => {
         for (const file of entry.files) await move(path.join(root(), id, file.stored), file.path)
         if (entry.settings) await OperatorProfileStore.restoreProject(entry.project!, entry.settings)
+        // A project's own config back from Trash: its copy record and copied deletions with it.
+        if (entry.kind === "config" && entry.project && entry.copy)
+          await OperatorProjectConfig.giveBack(entry.project, entry.copy)
       })
+      if (entry.kind === "config" && entry.project)
+        yield* Effect.forEach(
+          OperatorNamespaceScope.instancesOf({ project: entry.project }),
+          (directory) => reloads.want({ directory }),
+          { discard: true },
+        )
       if (entry.config) {
         const value = entry.config
         const patch = value.key.reduceRight<unknown>((inner, key) => ({ [key]: inner }), value.value) as Record<
@@ -168,7 +181,10 @@ const layer = Layer.effect(
         yield* instances
           .provide(
             { directory: entry.project ?? process.cwd() },
-            config.update(value.scope, patch, value.scope === "namespace" ? value.namespace : undefined),
+            // Restoring into a project without a config of its own gives it a copy of its namespace's.
+            config
+              .update(value.scope, patch, value.scope === "namespace" ? value.namespace : undefined)
+              .pipe(OperatorProjectConfig.consent(true)),
           )
           .pipe(Effect.mapError((error) => fail(error.message)))
       }
@@ -197,5 +213,5 @@ const layer = Layer.effect(
 export const node = LayerNode.make({
   service: Service,
   layer,
-  deps: [Database.node, Session.node, InstanceStore.node, OperatorConfig.node],
+  deps: [Database.node, Session.node, InstanceStore.node, OperatorConfig.node, OperatorReloadWhenIdle.node],
 })
