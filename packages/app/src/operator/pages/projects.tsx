@@ -40,6 +40,7 @@ import {
   ProjectSessions,
 } from "./project-sections"
 import { useOverlayParams } from "../ui/overlay-nav"
+import { useLayoutMove } from "../ui/layout-move"
 
 // A project as the page lists it: a git project the server knows, or a folder outside git — a
 // project once registered (it has prompt settings), else "not a project". Folders outside git that
@@ -577,6 +578,7 @@ function ProjectRecord(props: {
   const api = useOperatorClient()
   const queryClient = useQueryClient()
   const moveToTrash = useMoveToTrash()
+  const moveFolder = useLayoutMove()
   // To Trash: the project's whole folder, its settings and (archived) its sessions.
   const remove = () =>
     moveToTrash(name(), () =>
@@ -645,6 +647,37 @@ function ProjectRecord(props: {
                 <ButtonV2 variant="neutral" onClick={() => props.onCopying(true)}>
                   {language.t("operator.projects.copy")}
                 </ButtonV2>
+                {/* A project's namespace changes by moving its folder (global_and_opencode_namespaces_spec.md §11). */}
+                <Show
+                  when={props.row.flag}
+                  fallback={
+                    <ButtonV2
+                      variant="neutral"
+                      onClick={() =>
+                        moveFolder({ project: props.row.key, name: props.row.key.split("/").at(-1) ?? "" })
+                      }
+                    >
+                      {language.t("operator.move.toNamespace")}
+                    </ButtonV2>
+                  }
+                >
+                  {(flag) => (
+                    <ButtonV2
+                      variant="outline"
+                      onClick={() =>
+                        moveFolder({
+                          project: props.row.key,
+                          name: props.row.key.split("/").at(-1) ?? "",
+                          namespace: flag() === "outside-opencode" ? OPENCODE : props.row.ns,
+                        })
+                      }
+                    >
+                      {flag() === "outside-opencode"
+                        ? language.t("operator.move.intoOpenCode")
+                        : language.t("operator.move.intoNamespace", { name: props.nsName })}
+                    </ButtonV2>
+                  )}
+                </Show>
                 <ButtonV2 variant="danger" onClick={() => void remove()}>
                   {language.t("operator.trash.delete")}
                 </ButtonV2>

@@ -1,12 +1,16 @@
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { described } from "@/server/routes/instance/httpapi/groups/metadata"
+import { OperatorLayoutMove } from "@/operator/layout-move"
 
 // Where namespaces and projects live (global_and_opencode_namespaces_spec.md §4, §5, §9, §14).
 // Server-wide, part of OperatorRootApi.
 export const OperatorLayoutPaths = {
   layout: "/operator/layout",
   workingDir: "/operator/layout/working-dir",
+  plan: "/operator/layout/plan",
+  move: "/operator/layout/move",
+  report: "/operator/layout/move/:id",
 } as const
 
 export class ApiLayoutError extends Schema.ErrorClass<{
@@ -71,5 +75,34 @@ export const OperatorLayoutGroup = HttpApiGroup.make("operatorLayout")
         "Sets the working directory while it's blank: Global and OpenCode become separate namespaces, OpenCode's folder is <working dir>/opencode, and Global gets its own record. It must be inside the workspace roots, outside Global's folder and outside any git repository; it is created if missing. Changing it once set moves every namespace folder, which comes with the move procedure; clearing it isn't offered.",
       ),
     ),
+  )
+  .add(
+    HttpApiEndpoint.post("plan", OperatorLayoutPaths.plan, {
+      payload: OperatorLayoutMove.PlanInput,
+      success: described(OperatorLayoutMove.Plan, "What would move, and what blocks it"),
+      error: ApiLayoutError,
+    }).annotateMerge(
+      doc(
+        "operator.layout.plan",
+        "Plan a move",
+        "A plan for moving a project into a namespace's folder (Move to namespace…, Move into OpenCode's folder), or a namespace into place: each item from → to, its size and sessions, and what blocks it (the target exists, the move crosses file systems, linked git worktrees, running sessions, open terminals, protected folders). Nothing moves.",
+      ),
+    ),
+    HttpApiEndpoint.post("move", OperatorLayoutPaths.move, {
+      payload: OperatorLayoutMove.MoveInput,
+      success: described(OperatorLayoutMove.Report, "What moved, what was skipped, and files to update by hand"),
+      error: ApiLayoutError,
+    }).annotateMerge(
+      doc(
+        "operator.layout.move",
+        "Move folders",
+        "Moves a plan's chosen items, one by one, with a journal: their instances stop, the folder is renamed, and every stored path is rewritten (database, namespace store, operator stores, snapshots); a failure rolls the item back. Progress comes as operator.layout.move events on the global stream. Config files that name the old folder aren't rewritten: the report lists them.",
+      ),
+    ),
+    HttpApiEndpoint.get("report", OperatorLayoutPaths.report, {
+      params: { id: Schema.String },
+      success: described(OperatorLayoutMove.Report, "A move's report"),
+      error: ApiLayoutError,
+    }).annotateMerge(doc("operator.layout.moveReport", "A move's report", "What a move did, by its id.")),
   )
   .annotateMerge(OpenApi.annotations({ title: "operator layout", description: "Where namespaces and projects live." }))

@@ -44,7 +44,7 @@ const acme = (state: Awaited<ReturnType<typeof mockOperator>>) => {
   }
 }
 
-test("a project opens in the overlay; Edit moves it after a check, then links its purpose and default profile", async ({
+test("a project opens in the overlay; Move to namespace… moves it after a plan, then it links its purpose and default profile", async ({
   page,
 }) => {
   const state = await mockOperator(page)
@@ -83,17 +83,19 @@ test("a project opens in the overlay; Edit moves it after a check, then links it
   await expect(overlay.locator('[data-component="select-v2-root"][aria-label="Default profile"]')).toContainText(
     "Namespace default (OpenCode)",
   )
+  // The namespace is where the folder is: it changes with Move to namespace…, which plans, then moves.
+  await expect(overlay.getByTestId("project-namespace")).toContainText("OpenCode")
+  await overlay.getByRole("button", { name: "Move to namespace…", exact: true }).click()
+  const move = page.getByRole("dialog").last()
   await pick(page, "Namespace", "Acme")
-  await overlay.getByRole("button", { name: "Check the move" }).click()
-  await expect(overlay.getByRole("status")).toContainText("These are copied to Acme:")
-  await expect(overlay.getByRole("status")).toContainText("Release goal")
+  await move.getByRole("button", { name: "Check the move" }).click()
+  await expect(move.getByTestId("move-row")).toContainText(`${workspace}/apps/`)
   expect(state.prompt.projects[directory]!.namespace).toBe("opencode")
-  await overlay.getByRole("button", { name: "Move", exact: true }).click()
+  await move.getByRole("button", { name: "Move 1 folders" }).click()
+  await expect(move.getByTestId("move-report")).toContainText("Moved")
+  expect(state.prompt.moves.map((item) => item.path)).toEqual(["/operator/layout/plan", "/operator/layout/move"])
+  await move.getByRole("button", { name: "Close" }).click()
   await expect(overlay.getByRole("button", { name: "Prompt settings", exact: true })).toBeVisible()
-  expect(state.prompt.writes.map((write) => write.body)).toEqual([
-    { key: directory, namespace: "acme", dryRun: true },
-    { key: directory, namespace: "acme" },
-  ])
   await expect(overlay.locator('[data-component="record-fields"]')).toContainText("Acme")
 
   await overlay.getByRole("button", { name: "Prompt settings", exact: true }).click()
@@ -101,7 +103,7 @@ test("a project opens in the overlay; Edit moves it after a check, then links it
   await pick(page, "Default profile", "Spec")
   await overlay.getByRole("button", { name: "Save", exact: true }).click()
   await expect(overlay.getByRole("button", { name: "Prompt settings", exact: true })).toBeVisible()
-  expect(state.prompt.writes[2]!.body).toEqual({
+  expect(state.prompt.writes[0]!.body).toEqual({
     key: directory,
     purpose: "ship",
     // The project is in Acme now: Acme's own copy of the Spec profile.

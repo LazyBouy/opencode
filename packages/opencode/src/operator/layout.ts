@@ -215,3 +215,41 @@ async function insideGit(folder: string): Promise<boolean> {
     current = parent
   }
 }
+
+// The folder names OpenCode reads in a config folder (config/agent.ts, command.ts, plugin.ts,
+// skill/index.ts, tool/registry.ts; the TUI's themes; plugins' node_modules) and the fork's own: a Global
+// project's folder sits next to them in Global's folder, so it can't take one (§4.4).
+// test/operator/layout.test.ts checks this against the patterns in those files.
+export const RESERVED_GLOBAL_NAMES: ReadonlyArray<string> = [
+  "agent",
+  "agents",
+  "command",
+  "commands",
+  "mode",
+  "modes",
+  "plugin",
+  "plugins",
+  "tool",
+  "tools",
+  "skill",
+  "skills",
+  "themes",
+  "node_modules",
+  "namespaces",
+  "tokenizers",
+]
+
+/** Why a Global project can't be called `name` (§4.4), if it can't. */
+export async function globalNameProblem(name: string) {
+  if (!name || name.includes("/") || name.includes(path.sep)) return `"${name}" isn't a folder name`
+  if (name.startsWith(".")) return `A Global project's name can't start with a dot`
+  if (RESERVED_GLOBAL_NAMES.includes(name)) return `"${name}" is a folder OpenCode reads in Global's folder`
+  if (
+    await fs.stat(path.join(Global.Path.config, name)).then(
+      () => true,
+      () => false,
+    )
+  )
+    return `${path.join(Global.Path.config, name)} already exists`
+  return undefined
+}

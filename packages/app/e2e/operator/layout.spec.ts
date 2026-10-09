@@ -94,3 +94,53 @@ test("projects outside OpenCode's folder, or not yet in their namespace's folder
   )
   await expect(rows.filter({ hasText: "notes" }).getByTestId("project-flag")).toHaveCount(0)
 })
+
+test("a project outside OpenCode's folder moves into it, after a plan", async ({ page }) => {
+  const state = await mockOperator(page)
+  state.prompt.projects[directory]!.flag = "outside-opencode"
+  await page.goto(`/operator/projects?project=${encodeURIComponent(directory)}`)
+  const overlay = page.getByRole("dialog")
+  await overlay.getByRole("button", { name: "Move into OpenCode's folder" }).click()
+  const move = page.getByRole("dialog").last()
+  await expect(move.getByTestId("move-row")).toContainText("/workspace/opencode/")
+  await expect(move.getByTestId("move-row")).toContainText("Ready")
+  expect(state.prompt.moves.map((item) => item.path)).toEqual(["/operator/layout/plan"])
+  expect(state.prompt.moves[0]!.body).toMatchObject({ kind: "project", project: directory, namespace: "opencode" })
+  await move.getByRole("button", { name: "Move 1 folders" }).click()
+  await expect(move.getByTestId("move-report")).toContainText("2 sessions re-linked")
+  expect(state.prompt.moves[1]!.body).toMatchObject({ plan: "mp_1", items: ["mi_1"] })
+})
+
+test("a blocked folder can't be chosen, and says why", async ({ page }) => {
+  const state = await mockOperator(page)
+  state.prompt.moveBlockers = [{ kind: "target-exists", message: "/workspace/opencode/x already exists" }]
+  state.prompt.projects[directory]!.flag = "outside-opencode"
+  await page.goto(`/operator/projects?project=${encodeURIComponent(directory)}`)
+  await page.getByRole("dialog").getByRole("button", { name: "Move into OpenCode's folder" }).click()
+  const move = page.getByRole("dialog").last()
+  await expect(move.getByTestId("move-blocker")).toHaveText("/workspace/opencode/x already exists")
+  await expect(move.getByRole("checkbox")).toBeDisabled()
+  await expect(move.getByRole("button", { name: "Move 0 folders" })).toBeDisabled()
+})
+
+test("a namespace that isn't in place moves into place from its record", async ({ page }) => {
+  const state = await mockOperator(page)
+  state.prompt.namespaces.push({
+    id: "acme",
+    name: "Acme",
+    purpose: "",
+    folder: "/elsewhere/acme",
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  state.prompt.items.acme = { types: [], layers: [], groups: [], profiles: [] }
+  const settings = await namespaces(page)
+  await settings.locator('[data-slot="settings-namespace"]', { hasText: "Acme" }).click()
+  const record = page.getByRole("dialog").last()
+  await record.getByRole("button", { name: "Move into place" }).click()
+  const move = page.getByRole("dialog").last()
+  await expect(move.getByTestId("move-row")).toContainText("/workspace/acme")
+  await move.getByRole("button", { name: "Move 1 folders" }).click()
+  await expect(move.getByTestId("move-report")).toContainText("Moved")
+  expect(state.prompt.namespaces.find((item) => item.id === "acme")!.folder).toBe("/workspace/acme")
+})

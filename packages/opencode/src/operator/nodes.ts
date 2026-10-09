@@ -13,6 +13,7 @@ import { OperatorProfileStore } from "./profile-store"
 import { OperatorTrash } from "./trash"
 import { OperatorTrashItems } from "./trash-items"
 import { OperatorCapabilities } from "./capabilities"
+import { OperatorLayoutMove } from "./layout-move"
 import { OperatorProjectSessions } from "./project-sessions"
 import { OperatorPrompts } from "./prompts"
 import { OperatorTools } from "./tools"
@@ -63,4 +64,5 @@ export const operatorNodes = [
   OperatorTrash.node,
   OperatorTrashItems.node,
   OperatorCapabilities.node,
+  OperatorLayoutMove.node,
 ] as const

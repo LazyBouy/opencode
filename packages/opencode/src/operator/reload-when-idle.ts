@@ -1,5 +1,6 @@
 export * as OperatorReloadWhenIdle from "./reload-when-idle"
 
+import path from "path"
 import { Context, Effect, Layer, Scope } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
@@ -25,6 +26,8 @@ export interface Interface {
    * environment's feed every project; a namespace's, its projects; a project's, the project in `directory`.
    */
   readonly wantFile: (file: string, directory: string) => Effect.Effect<Reload>
+  /** The sessions running now in a folder or below it (a move waits for them, or skips the folder). */
+  readonly runningUnder: (folder: string) => Effect.Effect<ReadonlyArray<string>>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorReloadWhenIdle") {}
@@ -114,7 +117,15 @@ const layer = Layer.effect(
       return yield* want({ directory })
     })
 
-    return Service.of({ want, wantFile })
+    const runningUnder = (folder: string) =>
+      Effect.sync(() => {
+        const root = path.resolve(folder)
+        return [...running.entries()]
+          .filter(([, directory]) => directory === root || directory.startsWith(root + path.sep))
+          .map(([sessionID]) => sessionID)
+      })
+
+    return Service.of({ want, wantFile, runningUnder })
   }),
 )
 

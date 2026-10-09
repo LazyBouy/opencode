@@ -2657,6 +2657,91 @@ export type OperatorLayoutError = {
   }
 }
 
+export type OperatorLayoutPlanInput =
+  | {
+      kind: "project"
+      project: string
+      namespace: string
+      name?: string
+    }
+  | {
+      kind: "namespace"
+      namespace: string
+    }
+
+export type OperatorLayoutBlockerKind =
+  | "target-exists"
+  | "cross-device"
+  | "worktrees"
+  | "busy"
+  | "terminal"
+  | "protected"
+  | "name"
+
+export type OperatorLayoutBlocker = {
+  kind: OperatorLayoutBlockerKind
+  message: string
+}
+
+export type OperatorLayoutMoveItem = {
+  id: string
+  kind: "project" | "namespace"
+  name: string
+  from: string
+  to: string
+  /**
+   * project: the namespace it goes to; namespace: the one moving
+   */
+  namespace: string
+  size?: number
+  /**
+   * Sessions in the folder
+   */
+  sessions: number
+  blockers: Array<OperatorLayoutBlocker>
+}
+
+export type OperatorLayoutPlan = {
+  id: string
+  kind: "project" | "namespace" | "upgrade" | "working-dir"
+  items: Array<OperatorLayoutMoveItem>
+}
+
+export type OperatorLayoutMoveInput = {
+  plan: string
+  /**
+   * The plan's items to move
+   */
+  items: Array<string>
+  waitIdle?: boolean
+}
+
+export type OperatorLayoutMoveReport = {
+  id: string
+  plan: string
+  status: "running" | "done" | "partial" | "failed"
+  moved: Array<{
+    item: string
+    name: string
+    from: string
+    to: string
+    sessions: number
+  }>
+  skipped: Array<{
+    item: string
+    name: string
+    from: string
+    to: string
+    reason: string
+  }>
+  /**
+   * Files that still name an old folder (config files aren't rewritten): update these by hand
+   */
+  byHand: Array<string>
+  startedAt: number
+  finishedAt?: number
+}
+
 export type OperatorNamespaceConfig = {
   id: string
   name: string
@@ -3405,6 +3490,7 @@ export type OperatorConfigSource = {
   kind: "global" | "namespace" | "project" | "directory" | "env"
   path: string
   text: string
+  variable?: "OPENCODE_CONFIG" | "OPENCODE_CONFIG_DIR" | "OPENCODE_CONFIG_CONTENT"
 }
 
 export type OperatorConfigLayers = {
@@ -11339,6 +11425,84 @@ export type OperatorLayoutWorkingDirResponses = {
 
 export type OperatorLayoutWorkingDirResponse =
   OperatorLayoutWorkingDirResponses[keyof OperatorLayoutWorkingDirResponses]
+
+export type OperatorLayoutPlanData = {
+  body?: OperatorLayoutPlanInput
+  path?: never
+  query?: never
+  url: "/operator/layout/plan"
+}
+
+export type OperatorLayoutPlanErrors = {
+  /**
+   * OperatorLayoutError | InvalidRequestError
+   */
+  400: OperatorLayoutError | InvalidRequestError
+}
+
+export type OperatorLayoutPlanError = OperatorLayoutPlanErrors[keyof OperatorLayoutPlanErrors]
+
+export type OperatorLayoutPlanResponses = {
+  /**
+   * What would move, and what blocks it
+   */
+  200: OperatorLayoutPlan
+}
+
+export type OperatorLayoutPlanResponse = OperatorLayoutPlanResponses[keyof OperatorLayoutPlanResponses]
+
+export type OperatorLayoutMoveData = {
+  body?: OperatorLayoutMoveInput
+  path?: never
+  query?: never
+  url: "/operator/layout/move"
+}
+
+export type OperatorLayoutMoveErrors = {
+  /**
+   * OperatorLayoutError | InvalidRequestError
+   */
+  400: OperatorLayoutError | InvalidRequestError
+}
+
+export type OperatorLayoutMoveError = OperatorLayoutMoveErrors[keyof OperatorLayoutMoveErrors]
+
+export type OperatorLayoutMoveResponses = {
+  /**
+   * What moved, what was skipped, and files to update by hand
+   */
+  200: OperatorLayoutMoveReport
+}
+
+export type OperatorLayoutMoveResponse = OperatorLayoutMoveResponses[keyof OperatorLayoutMoveResponses]
+
+export type OperatorLayoutMoveReportData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/operator/layout/move/{id}"
+}
+
+export type OperatorLayoutMoveReportErrors = {
+  /**
+   * OperatorLayoutError | InvalidRequestError
+   */
+  400: OperatorLayoutError | InvalidRequestError
+}
+
+export type OperatorLayoutMoveReportError = OperatorLayoutMoveReportErrors[keyof OperatorLayoutMoveReportErrors]
+
+export type OperatorLayoutMoveReportResponses = {
+  /**
+   * A move's report
+   */
+  200: OperatorLayoutMoveReport
+}
+
+export type OperatorLayoutMoveReportResponse =
+  OperatorLayoutMoveReportResponses[keyof OperatorLayoutMoveReportResponses]
 
 export type OperatorNamespaceConfigGetData = {
   body?: never

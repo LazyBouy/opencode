@@ -708,6 +708,23 @@ export const operatorScenarios: Scenario[] = [
       body: { workingDir: "relative/dir" },
     }))
     .status(400),
+  // Moving folders: only refusals are exercised (a real move changes folders for every later scenario).
+  http.protected
+    .post("/operator/layout/plan", "operator.layout.plan")
+    .at((ctx) => ({
+      path: "/operator/layout/plan",
+      headers: ctx.headers(),
+      body: { kind: "namespace", namespace: "opencode" },
+    }))
+    .status(400),
+  http.protected
+    .post("/operator/layout/move", "operator.layout.move")
+    .at((ctx) => ({ path: "/operator/layout/move", headers: ctx.headers(), body: { plan: "mp_missing", items: [] } }))
+    .status(400),
+  http.protected
+    .get("/operator/layout/move/{id}", "operator.layout.moveReport")
+    .at((ctx) => ({ path: route("/operator/layout/move/{id}", { id: "mv_missing" }), headers: ctx.headers() }))
+    .status(400),
   http.protected.get("/operator/namespaces", "operator.namespace.list").json(200, (body) => {
     array(body)
     check(

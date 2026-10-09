@@ -35,6 +35,7 @@ import { WorkingDirectory } from "./working-dir"
 import { RecordField } from "../ui/record-overlay"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
+import { useLayoutMove } from "../ui/layout-move"
 
 const OPENCODE = "opencode"
 // The Default project choice that means "the namespace's first project".
@@ -165,6 +166,7 @@ function NamespaceRecord(props: {
   onClose: () => void
 }) {
   const language = useLanguage()
+  const moveFolder = useLayoutMove()
   const id = createUniqueId()
   const serverSdk = useServerSDK()
   const client = () => serverSdk().client.operator.namespace
@@ -331,6 +333,13 @@ function NamespaceRecord(props: {
                     {found().namespace.folder ?? language.t("settings.namespaces.noFolder")}
                     <Show when={!found().inPlace}>
                       <Tag>{language.t("settings.namespaces.notInPlace", { target: found().target })}</Tag>
+                      <ButtonV2
+                        size="small"
+                        variant="outline"
+                        onClick={() => moveFolder({ namespace: found().namespace.id }, () => void props.refetch())}
+                      >
+                        {language.t("operator.move.intoPlace")}
+                      </ButtonV2>
                     </Show>
                   </span>
                 </RecordField>

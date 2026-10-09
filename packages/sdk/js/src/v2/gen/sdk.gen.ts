@@ -211,6 +211,14 @@ import type {
   OperatorFolderSessionsMoveResponses,
   OperatorLayoutGetErrors,
   OperatorLayoutGetResponses,
+  OperatorLayoutMoveErrors,
+  OperatorLayoutMoveInput,
+  OperatorLayoutMoveReportErrors,
+  OperatorLayoutMoveReportResponses,
+  OperatorLayoutMoveResponses,
+  OperatorLayoutPlanErrors,
+  OperatorLayoutPlanInput,
+  OperatorLayoutPlanResponses,
   OperatorLayoutWorkingDirErrors,
   OperatorLayoutWorkingDirResponses,
   OperatorMemoryOverviewErrors,
@@ -3103,6 +3111,77 @@ export class Layout extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Plan a move
+   *
+   * A plan for moving a project into a namespace's folder (Move to namespace…, Move into OpenCode's folder), or a namespace into place: each item from → to, its size and sessions, and what blocks it (the target exists, the move crosses file systems, linked git worktrees, running sessions, open terminals, protected folders). Nothing moves.
+   */
+  public plan<ThrowOnError extends boolean = false>(
+    parameters?: {
+      operatorLayoutPlanInput?: OperatorLayoutPlanInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ key: "operatorLayoutPlanInput", map: "body" }] }])
+    return (options?.client ?? this.client).post<OperatorLayoutPlanResponses, OperatorLayoutPlanErrors, ThrowOnError>({
+      url: "/operator/layout/plan",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Move folders
+   *
+   * Moves a plan's chosen items, one by one, with a journal: their instances stop, the folder is renamed, and every stored path is rewritten (database, namespace store, operator stores, snapshots); a failure rolls the item back. Progress comes as operator.layout.move events on the global stream. Config files that name the old folder aren't rewritten: the report lists them.
+   */
+  public move<ThrowOnError extends boolean = false>(
+    parameters?: {
+      operatorLayoutMoveInput?: OperatorLayoutMoveInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ key: "operatorLayoutMoveInput", map: "body" }] }])
+    return (options?.client ?? this.client).post<OperatorLayoutMoveResponses, OperatorLayoutMoveErrors, ThrowOnError>({
+      url: "/operator/layout/move",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * A move's report
+   *
+   * What a move did, by its id.
+   */
+  public moveReport<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
+    return (options?.client ?? this.client).get<
+      OperatorLayoutMoveReportResponses,
+      OperatorLayoutMoveReportErrors,
+      ThrowOnError
+    >({
+      url: "/operator/layout/move/{id}",
+      ...options,
+      ...params,
     })
   }
 }

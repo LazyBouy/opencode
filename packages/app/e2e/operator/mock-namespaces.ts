@@ -189,6 +189,9 @@ export interface PromptMock {
   workingDir: string | undefined
   /** Global's record, listed while the working directory is set. */
   readonly global: Namespace
+  /** Moves asked for (plans and moves), and what blocks the next plan's items. */
+  readonly moves: Array<{ path: string; body: unknown }>
+  moveBlockers?: Array<{ kind: string; message: string }>
 }
 
 // What OpenCode writes per request in the mock: generated layers by id (empty ones are not sent).
@@ -225,7 +228,10 @@ export function createPromptMock(
     writes: [],
     workingDir: "/workspace",
     global: { id: "global", name: "Global", purpose: "", createdAt: 0, updatedAt: 0 },
+    moves: [],
   }
+  // The last plan made, for the move that follows it.
+  let planned: Array<{ id: string; kind: string; name: string; from: string; to: string; namespace: string }> = []
   // Global first when separate; with a blank working directory OpenCode is Global.
   const listed = () => (state.workingDir ? [state.global, ...state.namespaces] : state.namespaces)
   const place = (namespace: Namespace) => {
@@ -616,6 +622,63 @@ export function createPromptMock(
       return json(route, agentPrompt(project, name))
     }
 
+    if (url.pathname === "/operator/layout/plan") {
+      state.moves.push({ path: url.pathname, body })
+      const input = body as { kind: string; project?: string; namespace: string; name?: string }
+      const namespace = listed().find((item) => item.id === input.namespace)
+      if (!namespace) return json(route, { name: "OperatorLayoutError", data: { message: "No namespace" } }, 400)
+      const where = place(namespace)
+      planned =
+        input.kind === "project"
+          ? [
+              {
+                id: "mi_1",
+                kind: "project",
+                name: input.project!.split("/").at(-1)!,
+                from: input.project!,
+                to: `${where.folder}/${input.name ?? input.project!.split("/").at(-1)}`,
+                namespace: namespace.id,
+              },
+            ]
+          : [
+              {
+                id: "mi_1",
+                kind: "namespace",
+                name: namespace.id,
+                from: where.folder,
+                to: where.target,
+                namespace: namespace.id,
+              },
+            ]
+      return json(route, {
+        id: "mp_1",
+        kind: input.kind,
+        items: planned.map((item) => ({ ...item, sessions: 2, size: 4096, blockers: state.moveBlockers ?? [] })),
+      })
+    }
+    if (url.pathname === "/operator/layout/move") {
+      state.moves.push({ path: url.pathname, body })
+      const input = body as { plan: string; items: string[] }
+      const chosen = planned.filter((item) => input.items.includes(item.id))
+      for (const item of chosen) {
+        if (item.kind === "project")
+          state.projects[item.from] = { ...state.projects[item.from]!, namespace: item.namespace }
+        else {
+          const namespace = state.namespaces.find((entry) => entry.id === item.namespace)
+          if (namespace) namespace.folder = item.to
+        }
+      }
+      return json(route, {
+        id: "mv_1",
+        plan: input.plan,
+        status: chosen.length ? "done" : "failed",
+        moved: chosen.map((item) => ({ item: item.id, name: item.name, from: item.from, to: item.to, sessions: 2 })),
+        skipped: [],
+        byHand: [],
+        startedAt: 1,
+        finishedAt: 2,
+      })
+    }
     if (url.pathname === "/operator/layout" || url.pathname === "/operator/layout/working-dir") {
       if (method === "PUT") {
         if (state.workingDir) return json(route, { name: "OperatorLayoutError", data: { message: "Already set" } }, 400)

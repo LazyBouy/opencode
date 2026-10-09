@@ -295,6 +295,8 @@ export const dict = {
   "operator.help.scopePicker": "The project this page shows. Agents, config and sessions belong to a project.",
   "operator.help.configProject":
     "The config this project uses: its own file if it has one, else its namespace's. Saving from here never changes the namespace's or Global's config: the first save gives the project its own copy.",
+  "operator.help.projectNamespaceMove":
+    "The namespace whose folder holds the project. Move to namespace… moves the folder; its sessions, settings and history go with it.",
   "operator.help.globalBase":
     "Global's config is the base under every namespace that inherits it. A value set here replaces Global's; removing it here doesn't remove Global's.",
   "operator.help.showHidden":
@@ -923,6 +925,31 @@ export const dict = {
   "operator.projectConfig.copyBody":
     "{{name}}'s config isn't changed. This project gets its own copy at {{file}}, with your change. From then on, changes to {{name}}'s config won't reach this project; you can go back to {{name}}'s config later. Lines {{name}} locks stay in its config and keep applying.",
   "operator.projectConfig.copyConfirm": "Save as project config",
+  "operator.move.toNamespace": "Move to namespace…",
+  "operator.move.intoOpenCode": "Move into OpenCode's folder",
+  "operator.move.intoNamespace": "Move into {{name}}'s folder",
+  "operator.move.intoPlace": "Move into place",
+  "operator.move.projectTitle": "Move {{name}}",
+  "operator.move.namespaceTitle": "Move {{name}} into place",
+  "operator.move.name": "Folder name",
+  "operator.move.check": "Check the move",
+  "operator.move.planning": "Checking what would move…",
+  "operator.move.planHint": "Nothing moves until you choose Move. A blocked folder is skipped, and says why.",
+  "operator.move.from": "From",
+  "operator.move.to": "To",
+  "operator.move.size": "Size",
+  "operator.move.blockers": "Blocked by",
+  "operator.move.choose": "Move {{name}}",
+  "operator.move.ready": "Ready",
+  "operator.move.waitIdle": "Wait for running sessions to finish (up to 10 minutes) instead of skipping their folders",
+  "operator.move.byHandHint":
+    "The folder's sessions, settings and history go with it. Config files that name the old folder aren't changed: the report lists them.",
+  "operator.move.moving": "Moving…",
+  "operator.move.move": "Move {{count}} folders",
+  "operator.move.moved": "Moved",
+  "operator.move.skipped": "Skipped",
+  "operator.move.byHand": "Update these by hand: they still name the old folder",
+  "operator.move.sessionsLinked": "{{count}} sessions re-linked",
 
   "operator.inbox.empty": "Nothing is waiting for approval",
   "operator.inbox.emptyHint": "Requests appear here as soon as an agent asks, in any project.",

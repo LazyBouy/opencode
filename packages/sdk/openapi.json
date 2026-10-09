@@ -3560,6 +3560,165 @@
         ]
       }
     },
+    "/operator/layout/plan": {
+      "post": {
+        "tags": ["operator layout"],
+        "operationId": "operator.layout.plan",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "What would move, and what blocks it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorLayoutPlan"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorLayoutError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorLayoutError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "A plan for moving a project into a namespace's folder (Move to namespace…, Move into OpenCode's folder), or a namespace into place: each item from → to, its size and sessions, and what blocks it (the target exists, the move crosses file systems, linked git worktrees, running sessions, open terminals, protected folders). Nothing moves.",
+        "summary": "Plan a move",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperatorLayoutPlanInput"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.layout.plan({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/layout/move": {
+      "post": {
+        "tags": ["operator layout"],
+        "operationId": "operator.layout.move",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "What moved, what was skipped, and files to update by hand",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorLayoutMoveReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorLayoutError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorLayoutError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Moves a plan's chosen items, one by one, with a journal: their instances stop, the folder is renamed, and every stored path is rewritten (database, namespace store, operator stores, snapshots); a failure rolls the item back. Progress comes as operator.layout.move events on the global stream. Config files that name the old folder aren't rewritten: the report lists them.",
+        "summary": "Move folders",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperatorLayoutMoveInput"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.layout.move({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/layout/move/{id}": {
+      "get": {
+        "tags": ["operator layout"],
+        "operationId": "operator.layout.moveReport",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A move's report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorLayoutMoveReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorLayoutError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorLayoutError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "What a move did, by its id.",
+        "summary": "A move's report",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.layout.moveReport({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/operator/namespace/{id}/config": {
       "get": {
         "tags": ["operator namespace config"],
@@ -31771,6 +31930,221 @@
         "required": ["name", "data"],
         "additionalProperties": false
       },
+      "OperatorLayoutPlanInput": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["project"]
+              },
+              "project": {
+                "type": "string"
+              },
+              "namespace": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": ["kind", "project", "namespace"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["namespace"]
+              },
+              "namespace": {
+                "type": "string"
+              }
+            },
+            "required": ["kind", "namespace"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "OperatorLayoutBlockerKind": {
+        "type": "string",
+        "enum": ["target-exists", "cross-device", "worktrees", "busy", "terminal", "protected", "name"]
+      },
+      "OperatorLayoutBlocker": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/OperatorLayoutBlockerKind"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["kind", "message"],
+        "additionalProperties": false
+      },
+      "OperatorLayoutMoveItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["project", "namespace"]
+          },
+          "name": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string",
+            "description": "project: the namespace it goes to; namespace: the one moving"
+          },
+          "size": {
+            "type": "number"
+          },
+          "sessions": {
+            "type": "number",
+            "description": "Sessions in the folder"
+          },
+          "blockers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorLayoutBlocker"
+            }
+          }
+        },
+        "required": ["id", "kind", "name", "from", "to", "namespace", "sessions", "blockers"],
+        "additionalProperties": false
+      },
+      "OperatorLayoutPlan": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["project", "namespace", "upgrade", "working-dir"]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorLayoutMoveItem"
+            }
+          }
+        },
+        "required": ["id", "kind", "items"],
+        "additionalProperties": false
+      },
+      "OperatorLayoutMoveInput": {
+        "type": "object",
+        "properties": {
+          "plan": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The plan's items to move"
+          },
+          "waitIdle": {
+            "type": "boolean"
+          }
+        },
+        "required": ["plan", "items"],
+        "additionalProperties": false
+      },
+      "OperatorLayoutMoveReport": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["running", "done", "partial", "failed"]
+          },
+          "moved": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "item": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "from": {
+                  "type": "string"
+                },
+                "to": {
+                  "type": "string"
+                },
+                "sessions": {
+                  "type": "number"
+                }
+              },
+              "required": ["item", "name", "from", "to", "sessions"],
+              "additionalProperties": false
+            }
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "item": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "from": {
+                  "type": "string"
+                },
+                "to": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": ["item", "name", "from", "to", "reason"],
+              "additionalProperties": false
+            }
+          },
+          "byHand": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Files that still name an old folder (config files aren't rewritten): update these by hand"
+          },
+          "startedAt": {
+            "type": "number"
+          },
+          "finishedAt": {
+            "type": "number"
+          }
+        },
+        "required": ["id", "plan", "status", "moved", "skipped", "byHand", "startedAt"],
+        "additionalProperties": false
+      },
       "OperatorNamespaceConfig": {
         "type": "object",
         "properties": {
@@ -33873,6 +34247,10 @@
           },
           "text": {
             "type": "string"
+          },
+          "variable": {
+            "type": "string",
+            "enum": ["OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG_CONTENT"]
           }
         },
         "required": ["kind", "path", "text"],

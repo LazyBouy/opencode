@@ -157,3 +157,29 @@ describe("choosing the working directory", () => {
     expect(await OperatorLayout.workingDirProblem(path.join(work.path, "ws"), roots)).toBeUndefined()
   })
 })
+
+describe("names a Global project can't take", () => {
+  test("every folder OpenCode reads in a config folder is reserved (derived from the code that reads them)", async () => {
+    const sources = ["config/agent.ts", "config/command.ts", "config/plugin.ts", "skill/index.ts", "tool/registry.ts"]
+    const read = new Set<string>()
+    for (const file of sources) {
+      const text = await fs.readFile(path.join(import.meta.dir, "..", "..", "src", file), "utf8")
+      for (const match of text.matchAll(/["']\{([a-z]+),([a-z]+)\}\//g)) {
+        read.add(match[1]!)
+        read.add(match[2]!)
+      }
+    }
+    expect(read.size).toBeGreaterThanOrEqual(10)
+    for (const name of read) expect(OperatorLayout.RESERVED_GLOBAL_NAMES).toContain(name)
+  })
+
+  test("reserved names, dot names and existing folders are refused", async () => {
+    expect(await OperatorLayout.globalNameProblem("agents")).toContain("OpenCode reads")
+    expect(await OperatorLayout.globalNameProblem("namespaces")).toContain("OpenCode reads")
+    expect(await OperatorLayout.globalNameProblem(".hidden")).toContain("dot")
+    expect(await OperatorLayout.globalNameProblem("a/b")).toContain("isn't a folder name")
+    await fs.mkdir(path.join(config, "notes"), { recursive: true })
+    expect(await OperatorLayout.globalNameProblem("notes")).toContain("already exists")
+    expect(await OperatorLayout.globalNameProblem("journal")).toBeUndefined()
+  })
+})

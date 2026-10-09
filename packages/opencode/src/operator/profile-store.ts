@@ -421,6 +421,14 @@ export async function restoreProject(key: string, settings: { project?: unknown;
     await writeJson(path.join(root(), "agents.json"), { ...(await readAgents()), [key]: settings.agents })
 }
 
+// A project's entry put back as it was (layout-move.ts, rolling a move back); undefined removes it.
+export async function putProject(key: string, entry: OperatorProfile.ProjectSetting | undefined) {
+  const projects = await readProjects()
+  if (entry) projects[key] = entry
+  else delete projects[key]
+  await writeJson(path.join(root(), "projects.json"), projects)
+}
+
 // The OpenCode namespace exists from the first start, with its record only. At the first start after
 // the layout came (global_and_opencode_namespaces_spec.md §9, §12.1) the working directory is set once:
 // OPENCODE_OPERATOR_WORKING_DIR, else the parent of OpenCode's folder, else blank. When Global and

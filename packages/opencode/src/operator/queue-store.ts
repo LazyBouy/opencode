@@ -65,6 +65,8 @@ export interface Backend {
   /** Agents (by project) with queued items. */
   pending(): Array<{ project: string; agent: string }>
   update(id: string, patch: Partial<Pick<Item, "status" | "deliveredAt" | "deliveredTo" | "error">>): Item | undefined
+  /** A folder moved (layout-move.ts): items of projects in it point at the new folder. The rows changed. */
+  movePaths(from: string, to: string): number
 }
 
 const RANK: Record<Priority, number> = { low: 0, normal: 1, high: 2, urgent: 3 }
@@ -200,6 +202,13 @@ export function sqlite(file: string): Backend {
           id,
         )
       return this.get(id)
+    },
+    movePaths(from, to) {
+      // By prefix, not LIKE: a folder name can hold `_` or `%`.
+      const prefix = `${from}/`
+      return db
+        .query("UPDATE queue_item SET project = ? || substr(project, ?) WHERE project = ? OR substr(project, 1, ?) = ?")
+        .run(to, from.length + 1, from, prefix.length, prefix).changes
     },
   }
 }

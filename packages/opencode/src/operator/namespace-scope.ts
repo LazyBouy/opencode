@@ -219,6 +219,12 @@ export function instancesOf(target: { namespace: string } | { project: string })
     .map(([directory]) => directory)
 }
 
+// The loaded instance folders in a folder (or the folder itself): a move stops them first.
+export function instancesUnder(folder: string) {
+  const root = path.resolve(folder)
+  return [...loaded.keys()].filter((directory) => directory === root || directory.startsWith(root + path.sep))
+}
+
 // An instance that is gone no longer needs reloading.
 export function forget(directory: string) {
   loaded.delete(directory)
