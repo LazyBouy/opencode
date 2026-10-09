@@ -164,8 +164,12 @@ const layer = Layer.effect(
           string,
           unknown
         >
+        // A namespace's entry goes back into that namespace's config, whichever project restores it.
         yield* instances
-          .provide({ directory: entry.project ?? process.cwd() }, config.update(value.scope, patch))
+          .provide(
+            { directory: entry.project ?? process.cwd() },
+            config.update(value.scope, patch, value.scope === "namespace" ? value.namespace : undefined),
+          )
           .pipe(Effect.mapError((error) => fail(error.message)))
       }
       for (const session of entry.archived ?? []) yield* unarchive(session)

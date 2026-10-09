@@ -4,18 +4,19 @@ import path from "path"
 import { parse } from "jsonc-parser"
 import { Context, Effect, Layer, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Global } from "@opencode-ai/core/global"
 import { InstanceState } from "@/effect/instance-state"
 import { Skill } from "@/skill"
 import { OperatorConfig } from "./config"
 import { OperatorMemory } from "./memory"
 import { OperatorProjects } from "./projects"
+import { OperatorScopes } from "./scopes"
 import { OperatorTrash } from "./trash"
 import { OperatorTrashFiles } from "./trash-files"
 
 // A project's own capabilities and memory files, moved to Trash: skills (their folder), commands and
 // custom tools (their file), MCP servers and commands defined in config (their entry, kept to write
-// back), and memory files. OpenCode's built-in ones, and ones from plugins or other folders, are not.
+// back), and memory files. They can be the project's, its namespace's or Global's (scopes.ts says
+// which); built-in ones, the environment's, and ones from plugins or other folders are not.
 
 export const ItemKind = Schema.Literals(["skill", "command", "tool", "mcp", "memory"]).annotate({
   identifier: "OperatorTrashItemKind",
@@ -31,12 +32,6 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorTrashItems") {}
 
-const inside = (file: string, folder: string) => {
-  const resolved = path.resolve(file)
-  const root = path.resolve(folder)
-  return resolved === root || resolved.startsWith(root + path.sep)
-}
-
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -50,14 +45,20 @@ const layer = Layer.effect(
         catch: (error) => fail(error instanceof Error ? error.message : String(error)),
       })
 
-    // The project's .opencode folder and the global config folder, where its own items live.
+    // The project's .opencode folder, its namespace's and Global's config folder, where its own items
+    // live, nearest first.
     const folders = Effect.fnUntraced(function* () {
       const ctx = yield* InstanceState.context
       const project = yield* Effect.promise(() => OperatorProjects.keyOf(ctx))
+      const layers = yield* config.layers()
       return {
         ctx,
         project,
-        own: [OperatorConfig.scopeDirectory("project", ctx), OperatorConfig.scopeDirectory("global", ctx)],
+        own: [
+          OperatorConfig.scopeDirectory("project", ctx),
+          ...(layers.folders.namespace ? [layers.folders.namespace] : []),
+          OperatorConfig.scopeDirectory("global", ctx),
+        ],
       }
     })
 
@@ -73,7 +74,8 @@ const layer = Layer.effect(
         return undefined
       })
 
-    // A config entry (`section`.`name`) in the project's or the global config file, and its value.
+    // A config entry (`section`.`name`) in the project's, its namespace's or Global's config file, and
+    // its value; the nearest one.
     const configEntry = Effect.fnUntraced(function* (section: string, name: string) {
       const layers = yield* config.layers()
       const find = (kinds: ReadonlyArray<string>) =>
@@ -85,6 +87,8 @@ const layer = Layer.effect(
           .findLast((value) => value !== undefined)
       const project = find(["project", "directory"])
       if (project !== undefined) return { scope: "project" as const, value: project }
+      const namespace = find(["namespace"])
+      if (namespace !== undefined) return { scope: "namespace" as const, value: namespace, namespace: layers.namespace }
       const global = find(["global"])
       if (global !== undefined) return { scope: "global" as const, value: global }
       return undefined
@@ -97,15 +101,17 @@ const layer = Layer.effect(
       directory: string,
     ) {
       const entry = yield* configEntry(section, name)
-      if (!entry) return yield* fail(`${name} is not defined in this project's or the global config`)
+      if (!entry) return yield* fail(`${name} is not defined in this project's, its namespace's or Global's config`)
+      const namespace = "namespace" in entry ? entry.namespace : undefined
       yield* config
-        .update(entry.scope, { [section]: { [name]: null } })
+        .update(entry.scope, { [section]: { [name]: null } }, namespace)
         .pipe(Effect.mapError((error) => fail(error.message)))
       return yield* put({
         kind,
         name,
         project: directory,
-        config: { scope: entry.scope, key: [section, name], value: entry.value },
+        ...(namespace ? { namespace } : {}),
+        config: { scope: entry.scope, ...(namespace ? { namespace } : {}), key: [section, name], value: entry.value },
       })
     })
 
@@ -116,7 +122,9 @@ const layer = Layer.effect(
         const skill = (yield* skills.all()).find((item) => item.name === name)
         if (!skill) return yield* fail(`No skill named ${name}`)
         if (skill.location === "<built-in>") return yield* fail(`${name} is built in`)
-        if (![project, Global.Path.config].some((folder) => inside(skill.location, folder)))
+        // The project's, its namespace's or Global's; not the environment's or another folder's.
+        const scope = (yield* Effect.promise(() => OperatorScopes.of(skill.location, [project]))).kind
+        if (scope !== "project" && scope !== "namespace" && scope !== "global")
           return yield* fail(`${name} comes from ${skill.location}; remove it there`)
         return yield* put({ kind: "skill", name, project: ctx.directory, paths: [path.dirname(skill.location)] })
       }

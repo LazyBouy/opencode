@@ -167,7 +167,7 @@ export const Namespace = Schema.Struct({
   }),
   inheritGlobal: Schema.optional(Schema.Boolean).annotate({
     description:
-      "Whether the namespace's projects get the global config's capabilities (commands, skills, tools, MCP servers, agents, plugins, instructions, permissions, references); on unless set to false, and always on for OpenCode",
+      "Whether the namespace's projects get Global's capabilities (commands, skills, tools, MCP servers, agents, plugins, instructions, permissions, references); on unless set to false. Every namespace has the switch, OpenCode's included",
   }),
   createdAt: Schema.Finite,
   updatedAt: Schema.Finite,

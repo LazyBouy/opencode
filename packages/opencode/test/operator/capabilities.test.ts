@@ -273,6 +273,30 @@ describe("a namespace's own capabilities", () => {
     expect(await fs.stat(file).catch(() => undefined)).toBeUndefined()
   })
 
+  test("a namespace's config entry deleted to Trash is restored into that namespace's config, not Global's", async () => {
+    await using folder = await tmpdir()
+    await using own = await tmpdir({ git: true })
+    await acme(folder.path, [own.path])
+    const file = path.join(folder.path, ".opencode", "opencode.jsonc")
+    await write(file, JSON.stringify({ mcp: { docs: { type: "remote", url: "https://example.com/mcp" } } }))
+    const globalFile = path.join(Global.Path.config, "opencode.jsonc")
+    const globalBefore = await fs.readFile(globalFile, "utf8").catch(() => "")
+    const removed = await app().request(`/operator/capability/remove${where(own.path)}`, {
+      method: "POST",
+      headers: json,
+      body: JSON.stringify({ namespace: "acme", kind: "mcp", name: "docs" }),
+    })
+    expect(removed.status).toBe(200)
+    expect((parse(await fs.readFile(file, "utf8")) as { mcp?: object }).mcp ?? {}).not.toHaveProperty("docs")
+    type Entry = { id: string; name: string; config?: { scope: string; namespace?: string } }
+    const entries = (await (await app().request("/operator/trash")).json()) as Entry[]
+    const entry = entries.find((item) => item.name === "docs")!
+    expect(entry.config).toMatchObject({ scope: "namespace", namespace: "acme" })
+    expect((await app().request(`/operator/trash/${entry.id}/restore`, { method: "POST" })).status).toBe(200)
+    expect((parse(await fs.readFile(file, "utf8")) as { mcp: Record<string, unknown> }).mcp).toHaveProperty("docs")
+    expect(await fs.readFile(globalFile, "utf8").catch(() => "")).toBe(globalBefore)
+  })
+
   test("a namespace's own command is edited in place and copied to another namespace", async () => {
     await using folder = await tmpdir()
     await using other = await tmpdir()

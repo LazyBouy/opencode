@@ -44,7 +44,7 @@ test("a project's Permissions: its own lines, locked for every level below", asy
   await page.goto(`/operator/projects?project=${encodeURIComponent(directory)}&psec=permissions`)
   const section = page.getByTestId("level-permissions-project")
   await expect(section).toContainText(".opencode/opencode.jsonc")
-  await expect(section.getByRole("row", { name: /question/ })).toContainText("OpenCode default")
+  await expect(section.getByRole("row", { name: /question/ })).toContainText("Built-in default")
 
   await section.getByRole("button", { name: "Edit permissions" }).click()
   // OpenCode's own lines can't be deleted in the OpenCode namespace.

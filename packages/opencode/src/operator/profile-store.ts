@@ -647,11 +647,6 @@ const layer = Layer.effect(
       },
     ) {
       const catalog = yield* load(id)
-      yield* refuse(
-        id === OperatorProfile.OPENCODE && input.inheritGlobal === false
-          ? "OpenCode always gets the global capabilities"
-          : undefined,
-      )
       if (input.name !== undefined) yield* refuse(input.name.trim() ? undefined : "A namespace needs a name")
       const folder =
         input.folder === undefined ? undefined : yield* Effect.promise(() => namespaceFolder(input.folder!))

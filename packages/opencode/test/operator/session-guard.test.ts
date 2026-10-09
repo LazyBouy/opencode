@@ -1,3 +1,4 @@
+import os from "os"
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
@@ -5,6 +6,9 @@ import { OperatorProjects } from "../../src/operator/projects"
 import { Server } from "../../src/server/server"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
+
+// Folders are registered in temporary folders: they are the workspace here.
+process.env.OPENCODE_WORKSPACE_ROOTS ??= os.tmpdir()
 
 // The fork's session guard runs before upstream's routes: a session starts only in a project (a git
 // repository, or a registered folder outside git, with their subfolders). Upstream's test suite runs

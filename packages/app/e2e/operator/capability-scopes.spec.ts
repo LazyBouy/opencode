@@ -28,7 +28,7 @@ test("rows show their scope and state; a namespace command is disabled, reverted
   const deploy = table.getByRole("row", { name: /deploy/ })
   await expect(deploy).toContainText("Namespace")
   await expect(deploy).toContainText("Inherited")
-  await expect(table.getByRole("row", { name: /review/ })).toContainText("OpenCode")
+  await expect(table.getByRole("row", { name: /review/ })).toContainText("Built in")
 
   await deploy.click()
   const overlay = page.getByRole("dialog")
@@ -85,7 +85,7 @@ test("agents and plugins have their own lists", async ({ page }) => {
   await page.goto(`/operator/capabilities${dir}`)
   await page.getByRole("tab", { name: /Agents/ }).click()
   await expect(page.locator('[data-component="operator-table"]').getByRole("row", { name: /build/ })).toContainText(
-    "OpenCode",
+    "Built in",
   )
   await page.getByRole("tab", { name: /Plugins/ }).click()
   await expect(

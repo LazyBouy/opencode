@@ -2558,7 +2558,8 @@ export type OperatorTrashEntry = {
     stored: string
   }>
   config?: {
-    scope: "global" | "project"
+    scope: "global" | "namespace" | "project"
+    namespace?: string
     key: Array<string>
     value: unknown
   }
@@ -3268,7 +3269,10 @@ export type WorkspaceWarpError = {
 }
 
 export type OperatorConfigSource = {
-  kind: "global" | "namespace" | "custom" | "project" | "directory" | "env"
+  /**
+   * global: Global's config (and `~/.opencode`, part of the Global base); namespace: the namespace's; project and directory: the project's files and `.opencode` folders; env: OPENCODE_CONFIG, OPENCODE_CONFIG_DIR or OPENCODE_CONFIG_CONTENT, never written by the console
+   */
+  kind: "global" | "namespace" | "project" | "directory" | "env"
   path: string
   text: string
 }
@@ -3302,7 +3306,7 @@ export type OperatorConfigLayers = {
    * For each top-level key, the kind of source that sets it last (the one in effect)
    */
   origins: {
-    [key: string]: "global" | "namespace" | "custom" | "project" | "directory" | "env"
+    [key: string]: "global" | "namespace" | "project" | "directory" | "env"
   }
 }
 
@@ -3346,7 +3350,7 @@ export type OperatorModelSource = {
    */
   source: "agent" | "default" | "recent" | "ranking" | "small" | "small-family" | "none" | "chosen"
   path?: string
-  how?: "project" | "global" | "opencode"
+  how?: "project" | "namespace" | "global" | "environment" | "default"
   unavailable?: boolean
   agent?: OperatorAgentModel
 }
@@ -3610,9 +3614,11 @@ export type OperatorPurposeDraft = {
   text: string
 }
 
+export type OperatorScopeKind = "project" | "namespace" | "global" | "environment" | "outside"
+
 export type OperatorMemoryFile = {
   kind: "instructions" | "nested" | "url" | "skill" | "profile"
-  scope: OperatorConfigScope
+  scope: OperatorScopeKind
   path: string
   size?: number
   modified?: number
@@ -3653,7 +3659,7 @@ export type OperatorMemoryOverview = {
    * Where an AGENTS.md can be created that OpenCode would read, when there is none yet
    */
   creatable: Array<{
-    scope: OperatorConfigScope
+    scope: OperatorScopeKind
     path: string
   }>
 }
@@ -4824,7 +4830,7 @@ export type OperatorQueueInvalidError = {
 
 export type OperatorCapabilityKind = "command" | "skill" | "tool" | "mcp" | "agent" | "plugin"
 
-export type OperatorCapabilityOrigin = "opencode" | "global" | "namespace" | "project"
+export type OperatorCapabilityOrigin = "opencode" | "global" | "namespace" | "project" | "environment"
 
 export type OperatorCapabilityState = "local" | "inherited" | "overridden" | "disabled"
 

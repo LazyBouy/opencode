@@ -9,6 +9,7 @@ import { OperatorProjectSessions } from "@/operator/project-sessions"
 import { OperatorProjectRecords } from "@/operator/project-records"
 import { OperatorProjects } from "@/operator/projects"
 import { OperatorReloadWhenIdle } from "@/operator/reload-when-idle"
+import { OperatorScopes } from "@/operator/scopes"
 import { InstanceStore } from "@/project/instance-store"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -123,6 +124,11 @@ export const operatorNamespaceHandlers = HttpApiBuilder.group(OperatorRootApi, "
             return yield* invalid(`${source} is not a project`)
           const from = source ? (yield* store.projects()).find((item) => item.key === source) : undefined
           const namespace = ctx.payload.namespace ?? from?.namespace ?? OperatorProfile.OPENCODE
+          // Only inside the workspace roots, or Global's folder (global_and_opencode_namespaces_spec.md §4.3).
+          const place = yield* Effect.promise(() => OperatorFolders.locate(directory))
+          const global = OperatorScopes.classify(place.resolved, { projects: [], namespaces: [] }).kind === "global"
+          if (!place.root && !global)
+            return yield* invalid(`${place.resolved} is outside the workspace (${place.roots.join(", ")})`)
           yield* Effect.tryPromise({
             try: () => fs.mkdir(directory, { recursive: true }),
             catch: () => invalid(`${directory} cannot be created`),

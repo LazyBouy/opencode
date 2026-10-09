@@ -189,7 +189,7 @@ const layer = Layer.effect(
         lines: {
           global: inherit ? of(["global"]) : [],
           namespace: [...of(["namespace"]), ...drafted("namespace")],
-          project: [...of(["custom", "project", "directory", "env"]), ...drafted("project"), ...env],
+          project: [...of(["project", "directory", "env"]), ...drafted("project"), ...env],
         },
         marks: {
           namespace:

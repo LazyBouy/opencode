@@ -18,7 +18,8 @@ import { Global } from "@opencode-ai/core/global"
 // A namespace can also leave out the global capabilities (§6, "Inherit global capabilities" off): the
 // global capability folders (`~/.config/opencode`, `~/.opencode`; `~/.claude/skills` and
 // `~/.agents/skills` in skill/index.ts) and the global config's capability keys. The global config's
-// other settings (providers, model, username, keybinds, …) always apply. OpenCode always inherits.
+// other settings (providers, model, username, keybinds, …) always apply. Every namespace has the
+// switch, OpenCode's included (global_and_opencode_namespaces_spec.md §6); it is on unless turned off.
 
 const CONFIG_DIR = ".opencode"
 const OPENCODE = "opencode"
@@ -87,7 +88,7 @@ export async function layerOf(directory: string, worktree?: string): Promise<Lay
   const record = await readJson(path.join(store(), namespace, "namespace.json"))
   const folder = typeof record.folder === "string" && record.folder ? record.folder : undefined
   const dir = folder ? path.join(folder, CONFIG_DIR) : undefined
-  const inherit = namespace === OPENCODE || record.inheritGlobal !== false
+  const inherit = record.inheritGlobal !== false
   loaded.set(directory, { project, namespace })
   if (!dir || !(await exists(dir))) return { namespace, project, inherit }
   owned.add(dir)
@@ -102,7 +103,23 @@ export async function namespaceLayer(namespace: string) {
   const target = folder ? path.join(folder, CONFIG_DIR) : undefined
   const dir = target && (await exists(target)) ? target : undefined
   if (dir) owned.add(dir)
-  return { namespace, dir, target, inherit: namespace === OPENCODE || record.inheritGlobal !== false }
+  return { namespace, dir, target, inherit: record.inheritGlobal !== false }
+}
+
+// Every namespace that has a folder, by id (scopes.ts classifies paths with them).
+export async function namespaceFolders(): Promise<Array<{ id: string; folder: string }>> {
+  const ids = await fs.readdir(store(), { withFileTypes: true }).catch(() => [])
+  const found = await Promise.all(
+    ids
+      .filter((entry) => entry.isDirectory())
+      .map(async (entry) => {
+        const record = await readJson(path.join(store(), entry.name, "namespace.json"))
+        return typeof record.folder === "string" && record.folder
+          ? [{ id: entry.name, folder: path.resolve(record.folder) }]
+          : []
+      }),
+  )
+  return found.flat()
 }
 
 // The global folders that hold capability files (for telling scopes apart).

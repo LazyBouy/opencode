@@ -61,7 +61,7 @@ test("memory lists files and the database, and edits AGENTS.md", async ({ page }
   await expect(table).toContainText("Folder instructions")
   await expect(table).toContainText("When the agent asks for it")
   await expect(table).toContainText("1.5 KB")
-  await expect(page.getByRole("button", { name: "Create global AGENTS.md" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Create Global's AGENTS.md" })).toBeVisible()
 
   // A file opens in the overlay, read-only; Edit, then Save.
   await table.getByRole("row", { name: /SmokeProject\/AGENTS\.md/ }).click()

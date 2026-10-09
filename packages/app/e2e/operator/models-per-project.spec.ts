@@ -15,7 +15,7 @@ test("each project's small model is set on its own, after saying which file it w
   const state = await mockOperator(page)
   await page.goto(`/operator/models${dir}`)
   const table = page.getByTestId("models-per-project")
-  await expect(table.getByTestId("models-row-global")).toContainText("All projects (global)")
+  await expect(table.getByTestId("models-row-global")).toContainText("All projects (Global's config)")
   const row = table.locator(`[data-testid="models-row"][data-project="${directory}"]`)
   // How each was chosen, always shown.
   await expect(row).toContainText("OpenCode's own choice")
@@ -29,7 +29,7 @@ test("each project's small model is set on its own, after saying which file it w
   const write = new URL(state.writes[0]!.url)
   expect(write.searchParams.get("scope")).toBe("project")
   expect(write.searchParams.get("directory")).toBe(directory)
-  // Only the small model: the default stays OpenCode's choice.
+  // Only the small model: the default model stays Default (not set).
   expect(state.writes[0]!.body).toEqual({ small_model: "opencode/claude-opus-4-6" })
 
   // All projects: the global file.

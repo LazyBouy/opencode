@@ -30882,7 +30882,10 @@
             "properties": {
               "scope": {
                 "type": "string",
-                "enum": ["global", "project"]
+                "enum": ["global", "namespace", "project"]
+              },
+              "namespace": {
+                "type": "string"
               },
               "key": {
                 "type": "array",
@@ -32917,7 +32920,8 @@
         "properties": {
           "kind": {
             "type": "string",
-            "enum": ["global", "namespace", "custom", "project", "directory", "env"]
+            "enum": ["global", "namespace", "project", "directory", "env"],
+            "description": "global: Global's config (and `~/.opencode`, part of the Global base); namespace: the namespace's; project and directory: the project's files and `.opencode` folders; env: OPENCODE_CONFIG, OPENCODE_CONFIG_DIR or OPENCODE_CONFIG_CONTENT, never written by the console"
           },
           "path": {
             "type": "string"
@@ -32981,7 +32985,8 @@
             "type": "object",
             "additionalProperties": {
               "type": "string",
-              "enum": ["global", "namespace", "custom", "project", "directory", "env"]
+              "enum": ["global", "namespace", "project", "directory", "env"],
+              "description": "global: Global's config (and `~/.opencode`, part of the Global base); namespace: the namespace's; project and directory: the project's files and `.opencode` folders; env: OPENCODE_CONFIG, OPENCODE_CONFIG_DIR or OPENCODE_CONFIG_CONTENT, never written by the console"
             },
             "description": "For each top-level key, the kind of source that sets it last (the one in effect)"
           }
@@ -33082,7 +33087,7 @@
           },
           "how": {
             "type": "string",
-            "enum": ["project", "global", "opencode"]
+            "enum": ["project", "namespace", "global", "environment", "default"]
           },
           "unavailable": {
             "type": "boolean"
@@ -33663,6 +33668,10 @@
         "required": ["text"],
         "additionalProperties": false
       },
+      "OperatorScopeKind": {
+        "type": "string",
+        "enum": ["project", "namespace", "global", "environment", "outside"]
+      },
       "OperatorMemoryFile": {
         "type": "object",
         "properties": {
@@ -33671,7 +33680,7 @@
             "enum": ["instructions", "nested", "url", "skill", "profile"]
           },
           "scope": {
-            "$ref": "#/components/schemas/OperatorConfigScope"
+            "$ref": "#/components/schemas/OperatorScopeKind"
           },
           "path": {
             "type": "string"
@@ -33768,7 +33777,7 @@
               "type": "object",
               "properties": {
                 "scope": {
-                  "$ref": "#/components/schemas/OperatorConfigScope"
+                  "$ref": "#/components/schemas/OperatorScopeKind"
                 },
                 "path": {
                   "type": "string"
@@ -36610,7 +36619,7 @@
       },
       "OperatorCapabilityOrigin": {
         "type": "string",
-        "enum": ["opencode", "global", "namespace", "project"]
+        "enum": ["opencode", "global", "namespace", "project", "environment"]
       },
       "OperatorCapabilityState": {
         "type": "string",

@@ -7,6 +7,7 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
 import { MessageTable, PartTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { Config } from "@/config/config"
@@ -15,6 +16,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Instruction } from "@/session/instruction"
 import { Skill } from "@/skill"
 import { OperatorConfig } from "./config"
+import { OperatorScopes } from "./scopes"
 
 // Everything OpenCode remembers today, in one view: the files added to prompts (instruction files,
 // nested AGENTS.md, skills, prompt profile files) and what the database keeps
@@ -23,7 +25,7 @@ import { OperatorConfig } from "./config"
 export const FileKind = Schema.Literals(["instructions", "nested", "url", "skill", "profile"])
 export const File = Schema.Struct({
   kind: FileKind,
-  scope: OperatorConfig.Scope,
+  scope: OperatorScopes.Kind,
   path: Schema.String,
   size: Schema.optional(Schema.Finite),
   modified: Schema.optional(Schema.Finite),
@@ -54,7 +56,7 @@ export const Overview = Schema.Struct({
     tables: Schema.Array(Table),
   }),
   summaries: Schema.Array(Summary).annotate({ description: "The latest compaction summaries in this project" }),
-  creatable: Schema.Array(Schema.Struct({ scope: OperatorConfig.Scope, path: Schema.String })).annotate({
+  creatable: Schema.Array(Schema.Struct({ scope: OperatorScopes.Kind, path: Schema.String })).annotate({
     description: "Where an AGENTS.md can be created that OpenCode would read, when there is none yet",
   }),
 }).annotate({ identifier: "OperatorMemoryOverview" })
@@ -75,7 +77,7 @@ export interface Interface {
   readonly write: (
     file: string,
     text: string,
-  ) => Effect.Effect<{ kind: typeof FileKind.Type; scope: OperatorConfig.Scope }, NotAllowedError>
+  ) => Effect.Effect<{ kind: typeof FileKind.Type; scope: OperatorScopes.Kind }, NotAllowedError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorMemory") {}
@@ -102,8 +104,8 @@ const layer = Layer.effect(
     const files = Effect.fnUntraced(function* () {
       const ctx = yield* InstanceState.context
       const root = OperatorConfig.projectRoot(ctx)
-      const scopeOf = (file: string): OperatorConfig.Scope =>
-        file === root || file.startsWith(root + path.sep) ? "project" : "global"
+      const layout = yield* Effect.promise(() => OperatorScopes.layout([root]))
+      const scopeOf = (file: string) => OperatorScopes.classify(file, layout).kind
 
       const always = [...(yield* instruction.systemPaths().pipe(Effect.orDie))]
       const urls = ((yield* config.get()).instructions ?? []).filter((item) => /^https?:\/\//.test(item))
@@ -164,10 +166,13 @@ const layer = Layer.effect(
       ]
     })
 
-    // The two places OpenCode reads an AGENTS.md from on its own.
+    // The two places OpenCode reads an AGENTS.md from on its own: the project's root, and Global's
+    // config folder, which OPENCODE_CONFIG_DIR replaces when set (session/instruction.ts).
     const candidates = (ctx: { directory: string; worktree: string }) => [
       { path: path.join(OperatorConfig.projectRoot(ctx), "AGENTS.md"), scope: "project" as const },
-      { path: path.join(Global.Path.config, "AGENTS.md"), scope: "global" as const },
+      Flag.OPENCODE_CONFIG_DIR
+        ? { path: path.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.md"), scope: "environment" as const }
+        : { path: path.join(Global.Path.config, "AGENTS.md"), scope: "global" as const },
     ]
 
     const overview = Effect.fn("OperatorMemory.overview")(function* () {

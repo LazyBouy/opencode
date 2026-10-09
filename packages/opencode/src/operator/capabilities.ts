@@ -45,7 +45,9 @@ export const Kind = Schema.Literals(["command", "skill", "tool", "mcp", "agent",
 })
 export type Kind = typeof Kind.Type
 
-export const Origin = Schema.Literals(["opencode", "global", "namespace", "project"]).annotate({
+// opencode: built in (OpenCode's own); environment: OPENCODE_CONFIG or OPENCODE_CONFIG_DIR, never Global
+// and never written by the console (global_and_opencode_namespaces_spec.md §3, §13 #5).
+export const Origin = Schema.Literals(["opencode", "global", "namespace", "project", "environment"]).annotate({
   identifier: "OperatorCapabilityOrigin",
 })
 export type Origin = typeof Origin.Type
@@ -168,7 +170,7 @@ export type CreateInput = typeof CreateInput.Type
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorCapabilities") {}
 
-type Scope = "global" | "namespace" | "project"
+type Scope = "global" | "namespace" | "project" | "environment"
 // A place definitions are read from, in load order: a config file, or a config folder.
 type Source = { scope: Scope; json?: string; dir?: string }
 // A definition found, with what override needs to copy it.
@@ -185,7 +187,6 @@ type Off = Definition & { kind: Kind; name: string }
 const BUILTIN = "<built-in>"
 const JSON_NAMES = ["opencode.json", "opencode.jsonc"]
 const GLOBAL_JSON = ["config.json", "opencode.json", "opencode.jsonc"]
-const RANK: Record<Origin, number> = { opencode: 0, global: 1, namespace: 2, project: 3 }
 
 const exists = (file: string) =>
   fs
@@ -481,11 +482,13 @@ const layer = Layer.effect(
             Effect.orDie,
           )
       const classify = (dir: string): Scope =>
-        OperatorNamespaceScope.isGlobalFolder(dir) || dir === Flag.OPENCODE_CONFIG_DIR
-          ? "global"
-          : OperatorNamespaceScope.owns(dir)
-            ? "namespace"
-            : "project"
+        dir === Flag.OPENCODE_CONFIG_DIR
+          ? "environment"
+          : OperatorNamespaceScope.isGlobalFolder(dir)
+            ? "global"
+            : OperatorNamespaceScope.owns(dir)
+              ? "namespace"
+              : "project"
       const sources: Source[] = [
         ...(scope.inherit
           ? GLOBAL_JSON.map((name) => ({ scope: "global" as const, json: path.join(Global.Path.config, name) }))
@@ -493,7 +496,7 @@ const layer = Layer.effect(
         ...(scope.dir
           ? JSON_NAMES.map((name) => ({ scope: "namespace" as const, json: path.join(scope.dir!, name) }))
           : []),
-        ...(Flag.OPENCODE_CONFIG ? [{ scope: "global" as const, json: Flag.OPENCODE_CONFIG }] : []),
+        ...(Flag.OPENCODE_CONFIG ? [{ scope: "environment" as const, json: Flag.OPENCODE_CONFIG }] : []),
         ...files.map((file) => ({ scope: "project" as const, json: file })),
         ...dirs.flatMap((dir): Source[] => {
           const scope = classify(dir)
@@ -863,11 +866,11 @@ const layer = Layer.effect(
           name: input.name,
           ...(target.project ? { project: target.project } : {}),
           ...(target.namespace ? { namespace: target.namespace } : {}),
-          config: {
-            scope: target.view === "namespace" ? "global" : "project",
-            key: [section, input.name],
-            value: own.value,
-          },
+          // Written back where it was: the namespace's config, or the project's.
+          config:
+            target.view === "namespace" && target.namespace
+              ? { scope: "namespace", namespace: target.namespace, key: [section, input.name], value: own.value }
+              : { scope: "project", key: [section, input.name], value: own.value },
         }),
       )
       yield* target.patch({ [section]: { [input.name]: null } })

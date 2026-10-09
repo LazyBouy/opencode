@@ -162,8 +162,8 @@ test("an agent's permission lines in force are listed, each with its level and w
   await expect(rows).toHaveCount(5)
   await expect(rows.nth(2)).toContainText("*.env")
   await expect(rows.nth(2)).toContainText("Ask")
-  await expect(rows.nth(2)).toContainText("OpenCode default")
-  await expect(rows.nth(3)).toContainText("OpenCode truncation folder")
+  await expect(rows.nth(2)).toContainText("Built-in default")
+  await expect(rows.nth(3)).toContainText("Built-in truncation folder")
   await expect(rows.nth(4)).toContainText("Project · Config permission")
 })
 

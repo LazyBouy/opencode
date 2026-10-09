@@ -13,8 +13,8 @@ import { FieldHelp } from "./field-help"
 import { useModelSourceText } from "./prompt-trace"
 
 // The default and small model per project (fixes_spec.md §8): for every project, and for all of them
-// (the global config), a picker for each — OpenCode's choice (no setting) or any model of a connected
-// provider — and how each was chosen: set for this project, set globally, or OpenCode's choice with the
+// (Global's config), a picker for each — Default (no setting: OpenCode decides) or any model of a connected
+// provider — and how each was chosen: set for this project, its namespace, Global or the environment, or Default with the
 // rule that picked it. A change says which file it writes before saving it.
 
 const OPENCODE = "@opencode"
@@ -68,15 +68,16 @@ export function useHowText() {
   const sourceText = useModelSourceText()
   return (source: OperatorModelSource | undefined) => {
     if (!source) return ""
-    if (source.how === "project")
-      return language.t("operator.modelDefaults.how.project", { path: shortPath(source.path ?? "") })
-    if (source.how === "global")
-      return language.t("operator.modelDefaults.how.global", { path: shortPath(source.path ?? "") })
-    return language.t("operator.modelDefaults.how.opencode", { rule: sourceText(source) })
+    const path = shortPath(source.path ?? "")
+    if (source.how === "project") return language.t("operator.modelDefaults.how.project", { path })
+    if (source.how === "namespace") return language.t("operator.modelDefaults.how.namespace", { path })
+    if (source.how === "global") return language.t("operator.modelDefaults.how.global", { path })
+    if (source.how === "environment") return language.t("operator.modelDefaults.how.environment", { path })
+    return language.t("operator.modelDefaults.how.default", { rule: sourceText(source) })
   }
 }
 
-// One picker: OpenCode's choice or a model; changing it writes the key to the scope's file, after
+// One picker: Default or a model; changing it writes the key to the scope's file, after
 // saying which file.
 function ModelPicker(props: {
   label: string

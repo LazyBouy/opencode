@@ -930,8 +930,8 @@ export async function mockOperator(page: Page) {
       return json(route, { plugins: [{ spec: "opencode-wakatime", source: `${directory}/opencode.json` }] })
     if (url.pathname === "/operator/model")
       return json(route, {
-        model: { model: "opencode/claude-opus-4-6", source: "ranking", how: "opencode" },
-        small: { model: "opencode/claude-haiku-4-5", source: "small-family", how: "opencode" },
+        model: { model: "opencode/claude-opus-4-6", source: "ranking", how: "default" },
+        small: { model: "opencode/claude-haiku-4-5", source: "small-family", how: "default" },
         global: { path: "/home/me/.config/opencode/opencode.jsonc" },
       })
     if (url.pathname === "/operator/folder/roots") return json(route, [workspace])

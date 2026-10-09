@@ -1,9 +1,13 @@
+import os from "os"
 import { afterEach, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Server } from "../../src/server/server"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
+
+// Folders are registered in temporary folders: they are the workspace here.
+process.env.OPENCODE_WORKSPACE_ROOTS ??= os.tmpdir()
 
 // Every delete in the operator pages goes to Trash, from where it can be restored or deleted for good.
 afterEach(async () => {

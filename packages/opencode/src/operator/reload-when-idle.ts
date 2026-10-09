@@ -7,6 +7,8 @@ import { Config } from "@/config/config"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceStore } from "@/project/instance-store"
 import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
+import { OperatorNamespaceScope } from "./namespace-scope"
+import { OperatorScopes } from "./scopes"
 
 // A project reloads to read a file just written (an agent's rules, its config), but only when none of
 // its sessions is running: reloading a project stops the turns running in it. Until then what was
@@ -18,6 +20,11 @@ export type Reload = "now" | "when-idle"
 export interface Interface {
   /** Reloads the project in `directory` (or every project) when none of its sessions is running. */
   readonly want: (target: { directory: string } | "global") => Effect.Effect<Reload>
+  /**
+   * Reloads what reads a file just written, by where it belongs (scopes.ts): Global's and the
+   * environment's feed every project; a namespace's, its projects; a project's, the project in `directory`.
+   */
+  readonly wantFile: (file: string, directory: string) => Effect.Effect<Reload>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorReloadWhenIdle") {}
@@ -94,7 +101,20 @@ const layer = Layer.effect(
       return "now" as const
     })
 
-    return Service.of({ want })
+    const wantFile = Effect.fn("OperatorReloadWhenIdle.wantFile")(function* (file: string, directory: string) {
+      const scope = yield* Effect.promise(() => OperatorScopes.of(file, [directory]))
+      if (scope.kind === "global" || scope.kind === "environment") return yield* want("global")
+      if (scope.kind === "namespace") {
+        const reloads = yield* Effect.forEach(
+          OperatorNamespaceScope.instancesOf({ namespace: scope.namespace }),
+          (item) => want({ directory: item }),
+        )
+        return reloads.includes("when-idle") ? ("when-idle" as const) : ("now" as const)
+      }
+      return yield* want({ directory })
+    })
+
+    return Service.of({ want, wantFile })
   }),
 )
 

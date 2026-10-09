@@ -89,7 +89,7 @@ export default function MemoryPage() {
                 <For each={memory.data?.creatable ?? []}>
                   {(item) => (
                     <ButtonV2 size="small" variant="outline" onClick={() => setParams({ file: item.path })}>
-                      {language.t(`operator.memory.create.${item.scope}`)}
+                      {language.t(`operator.memory.create.${item.scope as "project" | "global" | "environment"}`)}
                     </ButtonV2>
                   )}
                 </For>
@@ -131,7 +131,10 @@ export default function MemoryPage() {
                   optional: true,
                   header: language.t("operator.scope.label"),
                   value: (row) => row.scope,
-                  cell: (row) => language.t(`operator.scope.${row.scope}`),
+                  cell: (row) =>
+                    row.scope === "namespace"
+                      ? language.t("operator.scope.namespaceShort")
+                      : language.t(`operator.scope.${row.scope}`),
                 },
                 {
                   id: "loaded",

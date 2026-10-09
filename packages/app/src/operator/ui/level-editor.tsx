@@ -39,7 +39,8 @@ export function useLineFrom() {
   const levelText = useLevelText()
   return (row: OperatorPermissionRow) => {
     const text = origin(row.from)
-    const level = levelText(row.level)
+    // A built-in line's origin already says so.
+    const level = row.level === "opencode" ? "" : levelText(row.level)
     return level && !text.startsWith(level) ? `${level} · ${text}` : text
   }
 }

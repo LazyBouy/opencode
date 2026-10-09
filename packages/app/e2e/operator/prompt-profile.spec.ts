@@ -296,7 +296,7 @@ test("All namespaces: each item's namespace, built-ins in OpenCode and each name
   // Built-ins belong to OpenCode; Acme has its own copy of each.
   const base = page.locator('[data-section="base"]').getByRole("row", { name: /base\.default/ })
   await expect(base).toHaveCount(2)
-  await expect(base.filter({ hasText: "OpenCode (built in)" })).toHaveCount(1)
+  await expect(base.filter({ hasText: "Built in" })).toHaveCount(1)
   await expect(base.filter({ hasText: "Acme" })).toHaveCount(1)
 
   await purpose.getByRole("row", { name: /Ship tools/ }).click()

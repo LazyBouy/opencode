@@ -55,7 +55,7 @@ test("Tool Prompt lists the tools sent and not sent, and a tool opens with its t
   const overlay = page.getByTestId("tool-overlay")
   await expect(overlay.getByTestId("tool-trace")).toContainText("OpenCode's text")
   await expect(overlay.getByTestId("tool-trace")).toContainText("File: packages/opencode/src/tool/read.txt")
-  await expect(overlay.getByTestId("tool-overlay-rules")).toContainText("OpenCode default")
+  await expect(overlay.getByTestId("tool-overlay-rules")).toContainText("Built-in default")
   await expect(overlay.getByTestId("decisive-rule")).toHaveCount(1)
   await expect(overlay.getByRole("row", { name: /\*\.env/ })).toContainText("Decides")
   await page.keyboard.press("Escape")

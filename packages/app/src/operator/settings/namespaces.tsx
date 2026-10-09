@@ -231,7 +231,7 @@ function NamespaceRecord(props: {
             purpose: store.purpose,
             ...(folder && folder !== current()?.namespace.folder ? { folder } : {}),
             defaultProject: store.defaultProject === FIRST ? "" : store.defaultProject,
-            ...(store.selected === OPENCODE ? {} : { inheritGlobal: store.inheritGlobal }),
+            inheritGlobal: store.inheritGlobal,
           })
     await request
       .then(async (result) => {
@@ -319,11 +319,9 @@ function NamespaceRecord(props: {
                   help={language.t("operator.help.namespaceInheritGlobal")}
                 >
                   <span data-testid="namespace-inherit-global">
-                    {found().namespace.id === OPENCODE
-                      ? language.t("settings.namespaces.inheritAlways")
-                      : found().namespace.inheritGlobal === false
-                        ? language.t("settings.namespaces.inheritOff")
-                        : language.t("settings.namespaces.inheritOn")}
+                    {found().namespace.inheritGlobal === false
+                      ? language.t("settings.namespaces.inheritOff")
+                      : language.t("settings.namespaces.inheritOn")}
                   </span>
                 </RecordField>
               </dl>
@@ -404,8 +402,7 @@ function NamespaceRecord(props: {
         <span class="inline-flex items-center">
           <CheckboxV2
             label={language.t("settings.namespaces.inheritGlobal")}
-            checked={store.selected === OPENCODE || store.inheritGlobal}
-            disabled={store.selected === OPENCODE}
+            checked={store.inheritGlobal}
             onChange={(checked: boolean) => setStore("inheritGlobal", checked)}
           />
           <FieldHelp

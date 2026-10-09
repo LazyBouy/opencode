@@ -40,7 +40,10 @@ export const Entry = Schema.Struct({
   }),
   config: Schema.optional(
     Schema.Struct({
-      scope: Schema.Literals(["global", "project"]),
+      scope: Schema.Literals(["global", "namespace", "project"]),
+      namespace: Schema.optional(Schema.String).annotate({
+        description: "namespace: the namespace whose config it was in",
+      }),
       key: Schema.Array(Schema.String),
       value: Schema.Unknown,
     }),

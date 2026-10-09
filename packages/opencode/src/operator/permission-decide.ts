@@ -2,7 +2,6 @@ export * as OperatorPermissionDecide from "./permission-decide"
 
 import { Context, Effect, Layer, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Global } from "@opencode-ai/core/global"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
@@ -180,9 +179,7 @@ const layer = Layer.effect(
                 .save({ agent, scope: "project", rules: next, confirmOrder: true })
                 .pipe(Effect.mapError((error) => new RefusedError({ message: error.message })))
               yield* live.written({ directory: entry.directory, agent, rules: next })
-              const reload = yield* reloads.want(
-                saved.path.startsWith(Global.Path.config) ? "global" : { directory: entry.directory },
-              )
+              const reload = yield* reloads.wantFile(saved.path, entry.directory)
               const draft = { decision: "allow-agent" as const, via: input.via }
               decisions.expect(requestID, {
                 ...draft,

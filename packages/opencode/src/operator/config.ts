@@ -26,7 +26,10 @@ export const WriteScope = Schema.Literals(["global", "namespace", "project"]).an
 export type WriteScope = typeof WriteScope.Type
 
 export const Source = Schema.Struct({
-  kind: Schema.Literals(["global", "namespace", "custom", "project", "directory", "env"]),
+  kind: Schema.Literals(["global", "namespace", "project", "directory", "env"]).annotate({
+    description:
+      "global: Global's config (and `~/.opencode`, part of the Global base); namespace: the namespace's; project and directory: the project's files and `.opencode` folders; env: OPENCODE_CONFIG, OPENCODE_CONFIG_DIR or OPENCODE_CONFIG_CONTENT, never written by the console",
+  }),
   path: Schema.String,
   text: Schema.String,
 }).annotate({ identifier: "OperatorConfigSource" })
@@ -129,7 +132,8 @@ const layer = Layer.effect(
             read("namespace", path.join(own.dir!, name)),
           )
         : []
-      const custom = Flag.OPENCODE_CONFIG ? yield* read("custom", Flag.OPENCODE_CONFIG) : []
+      // The environment's files are "env" (global_and_opencode_namespaces_spec.md §13 #5).
+      const custom = Flag.OPENCODE_CONFIG ? yield* read("env", Flag.OPENCODE_CONFIG) : []
       const project = Flag.OPENCODE_DISABLE_PROJECT_CONFIG
         ? []
         : yield* Effect.forEach(
@@ -139,8 +143,15 @@ const layer = Layer.effect(
       const directories = (yield* ConfigPaths.directories(ctx.directory, ctx.worktree).pipe(Effect.orDie)).filter(
         (dir) => (dir.endsWith(".opencode") && !OperatorNamespaceScope.owns(dir)) || dir === Flag.OPENCODE_CONFIG_DIR,
       )
+      // `~/.opencode` is part of the Global base; OPENCODE_CONFIG_DIR is the environment's.
+      const kindOf = (dir: string) =>
+        dir === Flag.OPENCODE_CONFIG_DIR
+          ? ("env" as const)
+          : OperatorNamespaceScope.isGlobalFolder(dir)
+            ? ("global" as const)
+            : ("directory" as const)
       const directory = yield* Effect.forEach(directories, (dir) =>
-        Effect.forEach(["opencode.json", "opencode.jsonc"], (name) => read("directory", path.join(dir, name))),
+        Effect.forEach(["opencode.json", "opencode.jsonc"], (name) => read(kindOf(dir), path.join(dir, name))),
       )
       const env = Flag.OPENCODE_CONFIG_CONTENT
         ? [{ kind: "env" as const, path: "OPENCODE_CONFIG_CONTENT", text: Flag.OPENCODE_CONFIG_CONTENT }]

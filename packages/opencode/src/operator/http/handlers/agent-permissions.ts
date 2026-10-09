@@ -1,4 +1,3 @@
-import { Global } from "@opencode-ai/core/global"
 import { InstanceState } from "@/effect/instance-state"
 import { OperatorAgentPermissions } from "@/operator/agent-permissions"
 import { OperatorPermissionLive } from "@/operator/permission-live"
@@ -57,11 +56,7 @@ export const operatorAgentPermissionsHandlers = HttpApiBuilder.group(
                 Effect.gen(function* () {
                   const ctx2 = yield* InstanceState.context
                   yield* live.written({ directory: ctx2.directory, agent: ctx.params.name, rules: ctx.payload.rules })
-                  const reload = yield* reloads.want(
-                    written.path.startsWith(Global.Path.config) || ctx.payload.scope === "global"
-                      ? "global"
-                      : { directory: ctx2.directory },
-                  )
+                  const reload = yield* reloads.wantFile(written.path, ctx2.directory)
                   return { ...written, reload }
                 }),
               ),

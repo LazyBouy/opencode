@@ -202,13 +202,25 @@ describe("the namespace layer", () => {
     expect(await commands(own.path)).toContain("ghello")
   })
 
-  test("OpenCode always gets the global capabilities", async () => {
-    const off = await app().request("/operator/namespaces/opencode", {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ inheritGlobal: false }),
-    })
-    expect(off.status).toBe(400)
-    expect(JSON.stringify(await off.json())).toContain("OpenCode always gets the global capabilities")
+  test("OpenCode has the inherit switch too: off, its projects lose Global's capabilities", async () => {
+    await using opencode = await tmpdir({ git: true })
+    await global("commands/ghello.md", command("Global hello"))
+    const commands = async () => (await get<Command[]>("/command", opencode.path)).map((item) => item.name)
+    expect(await commands()).toContain("ghello")
+    const patch = (inheritGlobal: boolean) =>
+      app().request("/operator/namespaces/opencode", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ inheritGlobal }),
+      })
+    try {
+      expect((await patch(false)).status).toBe(200)
+      for (let attempt = 0; attempt < 50 && (await commands()).includes("ghello"); attempt++)
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      expect(await commands()).not.toContain("ghello")
+      expect(await Effect.runPromise(OperatorNamespaceScope.inheritsGlobal(opencode.path, opencode.path))).toBe(false)
+    } finally {
+      expect((await patch(true)).status).toBe(200)
+    }
   })
 })

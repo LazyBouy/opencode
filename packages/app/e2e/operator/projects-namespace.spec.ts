@@ -232,7 +232,7 @@ test("a namespace's default project is its first project until another is chosen
   await expect(record.getByTestId("namespace-default-project")).toHaveText("site")
 })
 
-test("a new namespace can leave out the global capabilities; OpenCode always gets them", async ({ page }) => {
+test("a new namespace can leave out the global capabilities; OpenCode has the switch too", async ({ page }) => {
   const state = await mockOperator(page)
   await page.goto("/operator")
   await page.getByRole("navigation", { name: "Operator" }).getByRole("button", { name: "Settings" }).click()
@@ -240,9 +240,11 @@ test("a new namespace can leave out the global capabilities; OpenCode always get
   await settings.getByRole("tab", { name: "Namespaces" }).click()
   await settings.locator('[data-slot="settings-namespace"]', { hasText: "OpenCode" }).click()
   const record = page.getByRole("dialog").last()
-  await expect(record.getByTestId("namespace-inherit-global")).toHaveText("Always, for OpenCode")
+  await expect(record.getByTestId("namespace-inherit-global")).toHaveText(
+    "Yes: Global's commands, skills, tools, MCP servers, agents and plugins too",
+  )
   await record.getByRole("button", { name: "Edit", exact: true }).click()
-  await expect(record.getByRole("checkbox", { name: "Inherit global capabilities" })).toBeDisabled()
+  await expect(record.getByRole("checkbox", { name: "Inherit global capabilities" })).toBeEnabled()
   await record.getByRole("button", { name: "Cancel", exact: true }).click()
   await expect(record.getByTestId("namespace-view")).toBeVisible()
   // Focus is back in the record, so Escape closes it and leaves Settings open.
@@ -260,7 +262,7 @@ test("a new namespace can leave out the global capabilities; OpenCode always get
     .click()
   await created.getByRole("button", { name: "Create namespace" }).click()
   await expect.poll(() => state.prompt.namespaces.find((item) => item.id === "plain")?.inheritGlobal).toBe(false)
-  await expect(created.getByTestId("namespace-inherit-global")).toContainText("No: only OpenCode's built-ins")
+  await expect(created.getByTestId("namespace-inherit-global")).toContainText("No: only the built-in ones")
 })
 
 test("a new namespace starts with the capabilities ticked in its Capabilities step", async ({ page }) => {

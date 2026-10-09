@@ -19,6 +19,7 @@ import { asList, ready, useOperatorClient } from "../data"
 import { useMoveToTrash } from "../ui/confirm"
 import { FieldHelp } from "../ui/field-help"
 import { ALL, useNamespaceScope } from "../ui/namespace-picker"
+import { useScopedProject } from "../project"
 import { requestError } from "./config-helpers"
 
 // The Capabilities page's scope (capability_scopes_spec.md §9): a project's effective set, or a
@@ -42,9 +43,13 @@ type Language = ReturnType<typeof useLanguage>
 export function useCapabilityScope() {
   const [params, setParams] = useSearchParams<{ cscope?: string }>()
   const namespaces = useNamespaceScope()
+  const directory = useScopedProject()
   const view = (): View => (params.cscope === "namespace" ? "namespace" : "project")
-  // The namespace view needs one namespace: with all of them in scope, OpenCode.
-  const namespace = () => (namespaces.ns() === ALL ? "opencode" : namespaces.ns())
+  // The namespace view needs one namespace: with all of them in scope, the current project's (a project
+  // in no other namespace is OpenCode's). "All namespaces" never means OpenCode by itself.
+  const projectNamespace = () =>
+    namespaces.namespaces().find((item) => item.projects.includes(directory() ?? ""))?.namespace.id ?? "opencode"
+  const namespace = () => (namespaces.ns() === ALL ? projectNamespace() : namespaces.ns())
   return {
     view,
     namespace,
