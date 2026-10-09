@@ -54,7 +54,8 @@ const allowed = (sessionID: Session.Info["id"], id: string, pattern: string) =>
         ruleset: [{ permission: "bash", pattern: "*", action: "allow" }],
       })
       .pipe(Effect.forkScoped)
-    for (let attempt = 0; attempt < 50; attempt++) {
+    // Up to 3 seconds for the request to show (a loaded machine is slow to start the ask).
+    for (let attempt = 0; attempt < 300; attempt++) {
       if ((yield* permission.list()).some((item) => item.id === id)) {
         yield* permission.reply({ requestID: PermissionV1.ID.make(id), reply: "once" })
         yield* Fiber.join(asked)

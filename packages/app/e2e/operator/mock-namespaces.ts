@@ -192,6 +192,8 @@ export interface PromptMock {
   /** Moves asked for (plans and moves), and what blocks the next plan's items. */
   readonly moves: Array<{ path: string; body: unknown }>
   moveBlockers?: Array<{ kind: string; message: string }>
+  /** The upgrade's confirmation waits (§12.3). */
+  upgrade: { waiting: boolean; needsWorkingDir: boolean; suggested?: string }
 }
 
 // What OpenCode writes per request in the mock: generated layers by id (empty ones are not sent).
@@ -229,6 +231,7 @@ export function createPromptMock(
     workingDir: "/workspace",
     global: { id: "global", name: "Global", purpose: "", createdAt: 0, updatedAt: 0 },
     moves: [],
+    upgrade: { waiting: false, needsWorkingDir: false },
   }
   // The last plan made, for the move that follows it.
   let planned: Array<{ id: string; kind: string; name: string; from: string; to: string; namespace: string }> = []
@@ -546,12 +549,26 @@ export function createPromptMock(
       return json(route, { directory: folder, ...(key ? { project: { key, git: false } } : {}) })
     }
     if (url.pathname === "/operator/project-settings/register") {
-      const input = body as { directory: string; git?: boolean; namespace?: string; from?: string; sessions?: boolean }
+      const input = body as {
+        directory?: string
+        name?: string
+        git?: boolean
+        namespace?: string
+        from?: string
+        sessions?: boolean
+      }
+      // A new project at <namespace folder>/<name>; a folder given joins the namespace whose folder holds it.
+      const target = listed().find((item) => item.id === (input.namespace ?? "opencode"))
+      const directory = input.directory ?? `${target ? place(target).folder : ""}/${input.name}`
+      const byLocation = listed()
+        .map((item) => ({ id: item.id, folder: place(item).folder }))
+        .filter((item) => item.folder && (directory === item.folder || directory.startsWith(`${item.folder}/`)))
+        .toSorted((a, b) => b.folder.length - a.folder.length)[0]?.id
       const namespace =
-        input.namespace ?? (input.from ? state.projects[input.from]?.namespace : undefined) ?? "opencode"
-      state.projects[input.directory] = { namespace }
+        input.namespace ?? (input.from ? state.projects[input.from]?.namespace : undefined) ?? byLocation ?? "opencode"
+      state.projects[directory] = { namespace }
       return json(route, {
-        project: { key: input.directory, name: nameOf(input.directory), namespace, registered: true },
+        project: { key: directory, name: nameOf(directory), namespace, registered: true },
         // A copy brings the source's agents and tools, and its sessions when asked.
         ...(input.from
           ? {
@@ -625,6 +642,24 @@ export function createPromptMock(
     if (url.pathname === "/operator/layout/plan") {
       state.moves.push({ path: url.pathname, body })
       const input = body as { kind: string; project?: string; namespace: string; name?: string }
+      // The upgrade: every namespace not at <working directory>/<id>.
+      if (input.kind === "upgrade") {
+        planned = listed()
+          .filter((item) => !place(item).inPlace)
+          .map((item, index) => ({
+            id: `mi_${index + 1}`,
+            kind: "namespace",
+            name: item.id,
+            from: place(item).folder,
+            to: place(item).target,
+            namespace: item.id,
+          }))
+        return json(route, {
+          id: "mp_1",
+          kind: "upgrade",
+          items: planned.map((item) => ({ ...item, sessions: 0, blockers: [] })),
+        })
+      }
       const namespace = listed().find((item) => item.id === input.namespace)
       if (!namespace) return json(route, { name: "OperatorLayoutError", data: { message: "No namespace" } }, 400)
       const where = place(namespace)
@@ -668,6 +703,7 @@ export function createPromptMock(
           if (namespace) namespace.folder = item.to
         }
       }
+      state.upgrade = { ...state.upgrade, waiting: false }
       return json(route, {
         id: "mv_1",
         plan: input.plan,
@@ -678,6 +714,10 @@ export function createPromptMock(
         startedAt: 1,
         finishedAt: 2,
       })
+    }
+    if (url.pathname === "/operator/layout/upgrade/later") {
+      state.upgrade = { ...state.upgrade, waiting: false }
+      return json(route, true)
     }
     if (url.pathname === "/operator/layout" || url.pathname === "/operator/layout/working-dir") {
       if (method === "PUT") {
@@ -699,20 +739,27 @@ export function createPromptMock(
         flagged: Object.entries(state.projects).flatMap(([key, setting]) =>
           setting.flag ? [{ project: key, name: nameOf(key), namespace: setting.namespace, flag: setting.flag }] : [],
         ),
+        upgrade: { ...state.upgrade, namespaces: 0, projects: 0 },
       })
+    }
+
+    if (url.pathname === "/operator/namespace-folder") {
+      const name = url.searchParams.get("name") ?? ""
+      if (!state.workingDir) return invalid(route, "Set a working directory first: namespaces live in it.")
+      const id = free(state.namespaces, name)
+      return json(route, { id, folder: `${state.workingDir}/${id}`, exists: false, empty: true })
     }
 
     const parts = url.pathname.slice("/operator/namespaces".length).split("/").filter(Boolean).map(decodeURIComponent)
     if (parts.length === 0) {
       if (method === "GET") return json(route, listed().map(summary))
+      // A new namespace lives at <working directory>/<id>: its record names no folder.
       const name = String(body?.name ?? "")
-      const folder = String(body?.folder ?? "")
-      if (!folder.startsWith("/")) return invalid(route, "A namespace needs a folder")
+      if (!state.workingDir) return invalid(route, "Set a working directory first: namespaces live in it.")
       const namespace = {
         id: free(state.namespaces, name),
         name,
         purpose: String(body?.purpose ?? ""),
-        folder,
         ...(body?.inheritGlobal === false ? { inheritGlobal: false } : {}),
         createdAt: 1,
         updatedAt: 1,

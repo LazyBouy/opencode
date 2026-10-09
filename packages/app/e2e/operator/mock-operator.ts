@@ -610,6 +610,7 @@ export async function mockOperator(page: Page) {
     if (
       url.pathname.startsWith("/operator/namespaces") ||
       url.pathname.startsWith("/operator/layout") ||
+      url.pathname === "/operator/namespace-folder" ||
       url.pathname.startsWith("/operator/project-settings") ||
       url.pathname.startsWith("/operator/agent-prompt/") ||
       url.pathname === "/operator/prompt/preview" ||

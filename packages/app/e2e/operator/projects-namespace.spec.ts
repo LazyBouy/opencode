@@ -94,7 +94,7 @@ test("a project opens in the overlay; Move to namespace… moves it after a plan
   await move.getByRole("button", { name: "Move 1 folders" }).click()
   await expect(move.getByTestId("move-report")).toContainText("Moved")
   expect(state.prompt.moves.map((item) => item.path)).toEqual(["/operator/layout/plan", "/operator/layout/move"])
-  await move.getByRole("button", { name: "Close" }).click()
+  await move.getByRole("button", { name: "Done" }).click()
   await expect(overlay.getByRole("button", { name: "Prompt settings", exact: true })).toBeVisible()
   await expect(overlay.locator('[data-component="record-fields"]')).toContainText("Acme")
 
@@ -103,7 +103,7 @@ test("a project opens in the overlay; Move to namespace… moves it after a plan
   await pick(page, "Default profile", "Spec")
   await overlay.getByRole("button", { name: "Save", exact: true }).click()
   await expect(overlay.getByRole("button", { name: "Prompt settings", exact: true })).toBeVisible()
-  expect(state.prompt.writes[0]!.body).toEqual({
+  expect(state.prompt.writes.at(-1)!.body).toEqual({
     key: directory,
     purpose: "ship",
     // The project is in Acme now: Acme's own copy of the Spec profile.
@@ -135,7 +135,9 @@ test("a folder outside git is its own row in OpenCode, marked when it is not a p
   await expect(overlay.getByRole("tab", { name: "Config", exact: true })).toHaveCount(0)
 })
 
-test("Add project asks for the namespace, starts in its folder and puts the new project there", async ({ page }) => {
+test("Add project asks for the namespace and makes the project in its folder, or adds a folder already there", async ({
+  page,
+}) => {
   const state = await mockOperator(page)
   acme(state)
   await page.goto("/operator/projects")
@@ -144,8 +146,21 @@ test("Add project asks for the namespace, starts in its folder and puts the new 
     .locator('[data-component="menu-v2-item"]')
     .filter({ hasText: /^Acme$/ })
     .click()
-  const browser = page.getByRole("dialog")
+  const dialog = page.getByRole("dialog")
   // Acme's folder is where its new projects go.
+  await dialog.getByLabel("Name", { exact: true }).fill("site2")
+  await expect(dialog.getByTestId("new-project-path")).toHaveText(`${workspace}/apps/site2`)
+  await dialog.getByRole("button", { name: "Create project" }).click()
+  await expect.poll(() => state.prompt.projects[`${workspace}/apps/site2`]).toEqual({ namespace: "acme" })
+
+  // A folder already in Acme's folder is added where it is.
+  await page.getByRole("button", { name: "Add project" }).click()
+  await page
+    .locator('[data-component="menu-v2-item"]')
+    .filter({ hasText: /^Acme$/ })
+    .click()
+  await page.getByRole("dialog").getByRole("button", { name: "Add an existing folder…" }).click()
+  const browser = page.getByRole("dialog").last()
   await expect(browser.getByRole("navigation", { name: "Folder path" })).toContainText("apps")
   await browser.getByRole("textbox", { name: "New folder name" }).fill("tool")
   await browser.getByRole("button", { name: "Create folder" }).click()
@@ -258,7 +273,8 @@ test("a new namespace can leave out the global capabilities; OpenCode has the sw
   await settings.getByRole("button", { name: "New namespace" }).click()
   const created = page.getByRole("dialog").last()
   await created.getByLabel("Name", { exact: true }).fill("Plain")
-  await created.getByLabel("Folder", { exact: true }).fill(`${workspace}/plain`)
+  // Its folder is derived from its name: <working directory>/<id> (§10.1).
+  await expect(created.getByTestId("namespace-new-folder")).toContainText(`${workspace}/plain`)
   await created
     .locator('[data-slot="checkbox-v2"]', { hasText: "Inherit global capabilities" })
     .locator('[data-slot="checkbox-v2-control"]')
@@ -277,7 +293,7 @@ test("a new namespace starts with the capabilities ticked in its Capabilities st
   await settings.getByRole("button", { name: "New namespace" }).click()
   const record = page.getByRole("dialog").last()
   await record.getByLabel("Name", { exact: true }).fill("Acme")
-  await record.getByLabel("Folder", { exact: true }).fill(`${workspace}/acme`)
+  await expect(record.getByTestId("namespace-new-folder")).toContainText(`${workspace}/acme`)
   const items = record.getByTestId("namespace-start-items")
   // From OpenCode: its own layer's items and its copyable built-ins, all ticked, and its settings.
   await expect(items.getByRole("checkbox", { name: "/deploy" })).toBeChecked()

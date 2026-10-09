@@ -16,41 +16,49 @@ test.beforeEach(async ({ page }) => {
   })
 })
 
-test("add project browses the workspace, creates a git folder and opens it", async ({ page }) => {
+test("Add project makes <namespace folder>/<name>, a git repository by default, and opens it", async ({ page }) => {
   const state = await mockOperator(page)
   await page.goto("/operator/projects")
   await page.getByRole("button", { name: "Add project" }).click()
-
+  // Global and OpenCode are both namespaces: Add project asks which.
+  await page
+    .locator('[data-component="menu-v2-item"]')
+    .filter({ hasText: /^OpenCode$/ })
+    .click()
   const dialog = page.getByRole("dialog")
-  const folders = dialog.getByRole("list", { name: "Folders" })
-  await expect(folders).toContainText("apps")
-  await expect(folders.getByRole("listitem").filter({ hasText: "site" })).toContainText("git")
-  await folders.getByRole("button", { name: "apps" }).click()
-  await expect(dialog.getByRole("navigation", { name: "Folder path" })).toContainText("apps")
-  await expect(dialog).toContainText("not a git repository")
-
-  await dialog.getByRole("textbox", { name: "New folder name" }).fill("demo")
-  await dialog.getByRole("button", { name: "Create folder" }).click()
-  await expect.poll(() => state.folderWrites.length).toBe(1)
-  expect(state.folderWrites[0].body).toEqual({ parent: `${workspace}/apps`, name: "demo", git: true })
-  await expect(dialog.getByRole("navigation", { name: "Folder path" })).toContainText("demo")
-  await expect(dialog).not.toContainText("not a git repository")
-
-  await dialog.getByRole("button", { name: "Use this folder" }).click()
-  await expect.poll(() => state.projectsOpened).toContain(`${workspace}/apps/demo`)
+  await expect(dialog.getByRole("heading", { name: "New project in OpenCode" })).toBeVisible()
+  await dialog.getByLabel("Name", { exact: true }).fill("demo")
+  await expect(dialog.getByTestId("new-project-path")).toHaveText(`${workspace}/opencode/demo`)
+  await expect(dialog.getByRole("checkbox", { name: "Create a git repository" })).toBeChecked()
+  await dialog.getByRole("button", { name: "Create project" }).click()
+  await expect.poll(() => state.prompt.writes.at(-1)?.body).toEqual({ namespace: "opencode", name: "demo", git: true })
+  await expect.poll(() => state.projectsOpened).toContain(`${workspace}/opencode/demo`)
   await expect(dialog).toBeHidden()
 })
 
-test("an existing folder can be made a git project", async ({ page }) => {
+test("Add an existing folder… browses the workspace; a folder can be made a git project there", async ({ page }) => {
   const state = await mockOperator(page)
   await page.goto("/operator/projects")
   await page.getByRole("button", { name: "Add project" }).click()
-  const dialog = page.getByRole("dialog")
-  await dialog.getByRole("list", { name: "Folders" }).getByRole("button", { name: "apps" }).click()
-  await dialog.getByRole("button", { name: "Make this folder a git project" }).click()
+  await page
+    .locator('[data-component="menu-v2-item"]')
+    .filter({ hasText: /^OpenCode$/ })
+    .click()
+  await page.getByRole("dialog").getByRole("button", { name: "Add an existing folder…" }).click()
+  const browser = page.getByRole("dialog").last()
+  const folders = browser.getByRole("list", { name: "Folders" })
+  await expect(folders.getByRole("listitem").filter({ hasText: "site" })).toContainText("git")
+  await folders.getByRole("button", { name: "apps" }).click()
+  await browser.getByRole("button", { name: "Make this folder a git project" }).click()
   await expect.poll(() => state.folderWrites.length).toBe(1)
   expect(state.folderWrites[0].body).toEqual({ path: `${workspace}/apps` })
-  await expect(dialog).not.toContainText("not a git repository")
+  await expect(browser).not.toContainText("not a git repository")
+  // Outside OpenCode's folder: moved into it, or added as it is.
+  await browser.getByRole("button", { name: "Use this folder" }).click()
+  const choice = page.getByTestId("new-project-outside")
+  await expect(choice).toContainText(`${workspace}/apps isn't in OpenCode's folder.`)
+  await choice.getByRole("button", { name: "Add it to OpenCode as it is" }).click()
+  await expect.poll(() => state.projectsOpened).toContain(`${workspace}/apps`)
 })
 
 test("memory lists files and the database, and edits AGENTS.md", async ({ page }) => {

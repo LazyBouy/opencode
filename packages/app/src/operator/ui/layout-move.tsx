@@ -24,18 +24,24 @@ import { useNamespaces } from "../pages/profile-data"
 // its sessions and size, and what blocks it), nothing moving until "Move N folders"; then the report.
 // Used by Move to namespace…, Move into OpenCode's folder and a misplaced namespace's Move into place.
 
-export type MoveTarget = { project: string; name: string } | { namespace: string }
+export type MoveTarget =
+  | { project: string; name: string }
+  | { namespace: string }
+  // The upgrade's moves (§12): "Not now" instead of Cancel.
+  | { upgrade: true }
+  // A new working directory: every namespace folder but Global's moves into it (§9).
+  | { workingDir: string }
 
 /** Opens the move dialog: a project (choosing its namespace, or straight to `namespace`), or a namespace. */
 export function useLayoutMove() {
   const dialog = useDialog()
-  return (target: MoveTarget & { namespace?: string }, onDone?: () => void) => {
+  return (target: MoveTarget | (MoveTarget & { namespace?: string }), onDone?: () => void) => {
     const open = dialog.active ? dialog.push : dialog.show
     void open(() => <MoveDialog target={target} onDone={onDone} />)
   }
 }
 
-function MoveDialog(props: { target: MoveTarget & { namespace?: string }; onDone?: () => void }) {
+function MoveDialog(props: { target: MoveTarget | (MoveTarget & { namespace?: string }); onDone?: () => void }) {
   const language = useLanguage()
   const dialog = useDialog()
   const api = useOperatorClient()
@@ -43,7 +49,7 @@ function MoveDialog(props: { target: MoveTarget & { namespace?: string }; onDone
   const namespaces = useNamespaces()
   const project = "project" in props.target ? props.target : undefined
   const [store, setStore] = createStore({
-    namespace: props.target.namespace ?? "",
+    namespace: ("namespace" in props.target ? props.target.namespace : undefined) ?? "",
     name: project?.name ?? "",
     plan: undefined as OperatorLayoutPlan | undefined,
     chosen: [] as string[],
@@ -53,14 +59,27 @@ function MoveDialog(props: { target: MoveTarget & { namespace?: string }; onDone
     report: undefined as OperatorLayoutMoveReport | undefined,
   })
   // Choosing the namespace and name first (Move to namespace…), unless the target names one.
-  const [choosing] = createSignal(!!project && !props.target.namespace)
+  const [choosing] = createSignal(!!project && !("namespace" in props.target && props.target.namespace))
 
-  const planInput = (): OperatorLayoutPlanInput | undefined =>
-    project
-      ? store.namespace
-        ? { kind: "project", project: project.project, namespace: store.namespace, name: store.name.trim() }
-        : undefined
-      : { kind: "namespace", namespace: (props.target as { namespace: string }).namespace }
+  const upgrade = "upgrade" in props.target
+  const workingDir = "workingDir" in props.target ? props.target.workingDir : undefined
+  const planInput = (): OperatorLayoutPlanInput | undefined => {
+    if (upgrade) return { kind: "upgrade" }
+    if (workingDir) return { kind: "working-dir", workingDir }
+    if (!project) return { kind: "namespace", namespace: (props.target as { namespace: string }).namespace }
+    return store.namespace
+      ? { kind: "project", project: project.project, namespace: store.namespace, name: store.name.trim() }
+      : undefined
+  }
+  // "Not now": the upgrade's confirmation comes back at the next server start; nothing moves.
+  const later = async () => {
+    await api
+      .client()
+      .operator.layout.later()
+      .catch(() => undefined)
+    await queryClient.invalidateQueries({ queryKey: api.key("layout") })
+    dialog.close()
+  }
 
   const check = async () => {
     const input = planInput()
@@ -118,9 +137,13 @@ function MoveDialog(props: { target: MoveTarget & { namespace?: string }; onDone
     <Dialog size="large">
       <DialogHeader>
         <DialogTitle>
-          {project
-            ? language.t("operator.move.projectTitle", { name: project.name })
-            : language.t("operator.move.namespaceTitle", { name: nsName(store.namespace) })}
+          {upgrade
+            ? language.t("operator.move.upgradeTitle")
+            : workingDir
+              ? language.t("operator.move.workingDirTitle", { folder: workingDir })
+              : project
+                ? language.t("operator.move.projectTitle", { name: project.name })
+                : language.t("operator.move.namespaceTitle", { name: nsName(store.namespace) })}
         </DialogTitle>
       </DialogHeader>
       <DialogBody>
@@ -163,6 +186,12 @@ function MoveDialog(props: { target: MoveTarget & { namespace?: string }; onDone
           <Show when={!store.report && store.plan}>
             {(plan) => (
               <>
+                <Show when={upgrade}>
+                  <p data-slot="operator-note">{language.t("operator.move.upgradeHint")}</p>
+                </Show>
+                <Show when={!plan().items.length}>
+                  <p data-slot="operator-note">{language.t("operator.move.nothing")}</p>
+                </Show>
                 <p data-slot="operator-note">{language.t("operator.move.planHint")}</p>
                 <table data-component="operator-table" data-testid="move-plan">
                   <thead>
@@ -244,16 +273,16 @@ function MoveDialog(props: { target: MoveTarget & { namespace?: string }; onDone
           when={!store.report}
           fallback={
             <ButtonV2 variant="contrast" onClick={() => dialog.close()}>
-              {language.t("common.close")}
+              {language.t("operator.move.done")}
             </ButtonV2>
           }
         >
-          <ButtonV2 variant="neutral" onClick={() => dialog.close()}>
-            {language.t("common.cancel")}
+          <ButtonV2 variant="neutral" onClick={() => (upgrade ? void later() : dialog.close())}>
+            {upgrade ? language.t("operator.move.later") : language.t("common.cancel")}
           </ButtonV2>
           <ButtonV2
             variant="contrast"
-            disabled={store.busy || !store.plan || !store.chosen.length}
+            disabled={store.busy || !store.plan || (!store.chosen.length && !workingDir)}
             onClick={() => void move()}
           >
             {language.t("operator.move.move", { count: store.chosen.length })}

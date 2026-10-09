@@ -3,6 +3,7 @@ import path from "path"
 import { OperatorFolders } from "@/operator/folders"
 import { OperatorNamespaceScope } from "@/operator/namespace-scope"
 import { OperatorProfile } from "@/operator/profile"
+import { OperatorLayout } from "@/operator/layout"
 import { OperatorProfileStore } from "@/operator/profile-store"
 import { OperatorProjectCopy } from "@/operator/project-copy"
 import { OperatorProjectSessions } from "@/operator/project-sessions"
@@ -41,6 +42,11 @@ export const operatorNamespaceHandlers = HttpApiBuilder.group(OperatorRootApi, "
     return handlers
       .handle("list", () => store.namespaces())
       .handle("create", (ctx) => store.createNamespace(ctx.payload).pipe(Effect.mapError(apiError)))
+      .handle("folderPreview", (ctx) =>
+        Effect.promise(() => OperatorProfileStore.namespacePreview(ctx.query.name)).pipe(
+          Effect.flatMap((found) => ("error" in found ? Effect.fail(invalid(found.error!)) : Effect.succeed(found))),
+        ),
+      )
       .handle("get", (ctx) =>
         store.catalog(ctx.params.ns).pipe(
           Effect.map((catalog) => catalog.namespace),
@@ -115,7 +121,35 @@ export const operatorNamespaceHandlers = HttpApiBuilder.group(OperatorRootApi, "
       )
       .handle("projectRegister", (ctx) =>
         Effect.gen(function* () {
-          const directory = path.resolve(ctx.payload.directory)
+          const layout = yield* Effect.promise(() => OperatorLayout.snapshot())
+          // A new project is made at <namespace folder>/<name> (§10.2); an existing folder is registered
+          // where it is, and joins the namespace whose folder holds it (else OpenCode's, flagged).
+          const made = ctx.payload.directory === undefined
+          let git = ctx.payload.git === true
+          let directory: string
+          if (made) {
+            const target = OperatorLayout.placeOf(ctx.payload.namespace ?? OperatorProfile.OPENCODE, layout)
+            if (!target) return yield* invalid(`No namespace ${ctx.payload.namespace}`)
+            const name = (ctx.payload.name ?? "").trim()
+            const problem = target.global
+              ? yield* Effect.promise(() => OperatorLayout.globalNameProblem(name))
+              : !name || name.includes("/") || name.startsWith(".")
+                ? `"${name}" isn't a folder name for a project`
+                : undefined
+            if (problem) return yield* invalid(problem)
+            // Global's projects sit next to its config: a git repository stops upstream walking up into it.
+            if (target.global) git = true
+            directory = path.join(target.folder, name)
+            if (
+              yield* Effect.promise(() =>
+                fs.stat(directory).then(
+                  () => true,
+                  () => false,
+                ),
+              )
+            )
+              return yield* invalid(`${directory} already exists`)
+          } else directory = path.resolve(ctx.payload.directory!)
           const current = yield* Effect.promise(() => OperatorProjects.projectOf(directory))
           if (current?.git) return yield* invalid(`${directory} is already in the git repository ${current.key}`)
           if (current) return yield* invalid(`${directory} is already part of the project ${current.key}`)
@@ -123,7 +157,8 @@ export const operatorNamespaceHandlers = HttpApiBuilder.group(OperatorRootApi, "
           if (source && (yield* Effect.promise(() => OperatorProjects.projectOf(source)))?.key !== source)
             return yield* invalid(`${source} is not a project`)
           const from = source ? (yield* store.projects()).find((item) => item.key === source) : undefined
-          const namespace = ctx.payload.namespace ?? from?.namespace ?? OperatorProfile.OPENCODE
+          const namespace =
+            ctx.payload.namespace ?? from?.namespace ?? OperatorLayout.membership(directory, layout).namespace
           // Only inside the workspace roots, or Global's folder (global_and_opencode_namespaces_spec.md §4.3).
           const place = yield* Effect.promise(() => OperatorFolders.locate(directory))
           const global = OperatorScopes.classify(place.resolved, { projects: [], namespaces: [] }).kind === "global"
@@ -133,7 +168,7 @@ export const operatorNamespaceHandlers = HttpApiBuilder.group(OperatorRootApi, "
             try: () => fs.mkdir(directory, { recursive: true }),
             catch: () => invalid(`${directory} cannot be created`),
           })
-          if (ctx.payload.git) yield* folders.init(directory).pipe(Effect.mapError((error) => invalid(error.message)))
+          if (git) yield* folders.init(directory).pipe(Effect.mapError((error) => invalid(error.message)))
           // Outside git, the project is its entry in projects.json; a git project gets one for a
           // namespace other than OpenCode, or for the prompt settings of the project it copies.
           const copied = source
@@ -147,7 +182,7 @@ export const operatorNamespaceHandlers = HttpApiBuilder.group(OperatorRootApi, "
                 return { files: files.copied, kept: files.kept, items: settings.copied, sessions: 0 }
               })
             : undefined
-          if (!source && (!ctx.payload.git || namespace !== OperatorProfile.OPENCODE))
+          if (!source && (!git || namespace !== OperatorProfile.OPENCODE))
             yield* store.setProject(directory, { namespace }).pipe(Effect.mapError(apiError))
           // An instance loaded before is reloaded with the folder's new project, agents and config.
           yield* instances.disposeDirectory(directory)

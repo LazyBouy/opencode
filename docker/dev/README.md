@@ -16,10 +16,14 @@ installed on the host. All commands run from the repository root.
 docker compose -f docker/dev/compose.yaml up -d --build server web
 ```
 
-Open http://127.0.0.1:4444. Add a project with **Add project**; the server sees your projects at the
-same paths as the host (default `/root/projects`, change with `WORKSPACE`). **Operator → Projects →
-Add project** browses that folder and can create new sub-folders there (as git repositories, so each is
-its own project). They are written to the mounted host folder, so they persist.
+Open http://127.0.0.1:4444. The server sees your projects at the same paths as the host (default
+`/root/projects`, change with `WORKSPACE`). Every namespace but Global lives in the working directory
+(`OPENCODE_WORKING_DIR`, below), at `<working dir>/<namespace>`; **Operator → Projects → Add project**
+makes a project at `<namespace folder>/<name>` (a git repository by default, so it is its own project),
+or adds a folder that exists. They are written to the mounted host folder, so they persist. Global's
+folder (`~/.config/opencode`) is in the `opencode-config` volume, a different file system from the
+mounted folder: moving a project between Global and another namespace is refused as crossing file
+systems (the move plan says so).
 
 Connect a model provider for OpenCode's own agents under **Settings → Providers**. Credentials are kept
 in the `opencode-data` volume.

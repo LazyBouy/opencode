@@ -3,6 +3,7 @@ export * as OperatorFolders from "./folders"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
+import { Global } from "@opencode-ai/core/global"
 import { Context, Effect, Layer, Schema, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -90,6 +91,9 @@ const layer = Layer.effect(
 
     const inside = Effect.fnUntraced(function* (folder: string) {
       const found = yield* Effect.promise(() => locate(folder))
+      // Global's folder is always allowed (global_and_opencode_namespaces_spec.md §4.3): its projects live there.
+      const global = yield* Effect.promise(() => real(Global.Path.config))
+      if (!found.root && rootOf([global], found.resolved)) return { resolved: found.resolved, root: global }
       if (!found.root)
         return yield* new OutsideError({
           message: `${found.resolved} is outside the workspace (${found.roots.join(", ")})`,

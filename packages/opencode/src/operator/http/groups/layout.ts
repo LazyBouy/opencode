@@ -11,6 +11,7 @@ export const OperatorLayoutPaths = {
   plan: "/operator/layout/plan",
   move: "/operator/layout/move",
   report: "/operator/layout/move/:id",
+  later: "/operator/layout/upgrade/later",
 } as const
 
 export class ApiLayoutError extends Schema.ErrorClass<{
@@ -48,6 +49,17 @@ export const Layout = Schema.Struct({
   flagged: Schema.Array(LayoutFlagged).annotate({
     description: "Projects outside OpenCode's folder, and projects not yet in their namespace's folder",
   }),
+  upgrade: Schema.Struct({
+    waiting: Schema.Boolean.annotate({
+      description: "The upgrade's moves wait for a confirmation (shown once per server start, until confirmed)",
+    }),
+    namespaces: Schema.Finite,
+    projects: Schema.Finite,
+    needsWorkingDir: Schema.Boolean.annotate({
+      description: "Other namespaces exist but the working directory is blank: it is asked for first",
+    }),
+    suggested: Schema.optional(Schema.String).annotate({ description: "The folder the namespaces' folders share" }),
+  }).annotate({ identifier: "OperatorLayoutUpgrade" }),
 }).annotate({ identifier: "OperatorLayout" })
 
 const doc = (identifier: string, summary: string, description: string) =>
@@ -97,6 +109,15 @@ export const OperatorLayoutGroup = HttpApiGroup.make("operatorLayout")
         "operator.layout.move",
         "Move folders",
         "Moves a plan's chosen items, one by one, with a journal: their instances stop, the folder is renamed, and every stored path is rewritten (database, namespace store, operator stores, snapshots); a failure rolls the item back. Progress comes as operator.layout.move events on the global stream. Config files that name the old folder aren't rewritten: the report lists them.",
+      ),
+    ),
+    HttpApiEndpoint.post("later", OperatorLayoutPaths.later, {
+      success: described(Schema.Boolean, "true"),
+    }).annotateMerge(
+      doc(
+        "operator.layout.later",
+        "Not now",
+        "The upgrade's confirmation isn't shown again until the server starts again; nothing moves.",
       ),
     ),
     HttpApiEndpoint.get("report", OperatorLayoutPaths.report, {

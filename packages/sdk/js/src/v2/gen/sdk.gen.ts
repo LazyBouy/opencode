@@ -211,6 +211,8 @@ import type {
   OperatorFolderSessionsMoveResponses,
   OperatorLayoutGetErrors,
   OperatorLayoutGetResponses,
+  OperatorLayoutLaterErrors,
+  OperatorLayoutLaterResponses,
   OperatorLayoutMoveErrors,
   OperatorLayoutMoveInput,
   OperatorLayoutMoveReportErrors,
@@ -239,6 +241,8 @@ import type {
   OperatorNamespaceCopyResponses,
   OperatorNamespaceCreateErrors,
   OperatorNamespaceCreateResponses,
+  OperatorNamespaceFolderPreviewErrors,
+  OperatorNamespaceFolderPreviewResponses,
   OperatorNamespaceGetErrors,
   OperatorNamespaceGetResponses,
   OperatorNamespaceGroupCreateErrors,
@@ -2475,13 +2479,13 @@ export class Namespace extends HeyApiClient {
   /**
    * Create a namespace
    *
-   * Create a namespace as a copy of OpenCode: it gets its own copies of OpenCode's built-in layers, groups and profiles (built-ins belong to OpenCode), and of OpenCode's own types, layers, groups and profiles. It starts with no projects, in its own folder.
+   * Create a namespace as a copy of OpenCode: it gets its own copies of OpenCode's built-in layers, groups and profiles (built-ins belong to OpenCode), and of OpenCode's own types, layers, groups and profiles. It starts with no projects, in its folder <working directory>/<id> (needs a working directory).
    */
   public create<ThrowOnError extends boolean = false>(
     parameters?: {
       name?: string
       purpose?: string
-      folder?: string
+      adopt?: boolean
       inheritGlobal?: boolean
     },
     options?: Options<never, ThrowOnError>,
@@ -2493,7 +2497,7 @@ export class Namespace extends HeyApiClient {
           args: [
             { in: "body", key: "name" },
             { in: "body", key: "purpose" },
-            { in: "body", key: "folder" },
+            { in: "body", key: "adopt" },
             { in: "body", key: "inheritGlobal" },
           ],
         },
@@ -2512,6 +2516,29 @@ export class Namespace extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Where a new namespace goes
+   *
+   * The id and folder (<working directory>/<id>) a namespace with this name would get, and whether a folder is there already.
+   */
+  public folderPreview<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "name" }] }])
+    return (options?.client ?? this.client).get<
+      OperatorNamespaceFolderPreviewResponses,
+      OperatorNamespaceFolderPreviewErrors,
+      ThrowOnError
+    >({
+      url: "/operator/namespace-folder",
+      ...options,
+      ...params,
     })
   }
 
@@ -2787,6 +2814,7 @@ export class ProjectSettings extends HeyApiClient {
   public register<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
+      name?: string
       git?: boolean
       namespace?: string
       from?: string
@@ -2800,6 +2828,7 @@ export class ProjectSettings extends HeyApiClient {
         {
           args: [
             { in: "body", key: "directory" },
+            { in: "body", key: "name" },
             { in: "body", key: "git" },
             { in: "body", key: "namespace" },
             { in: "body", key: "from" },
@@ -3160,6 +3189,17 @@ export class Layout extends HeyApiClient {
         ...params.headers,
       },
     })
+  }
+
+  /**
+   * Not now
+   *
+   * The upgrade's confirmation isn't shown again until the server starts again; nothing moves.
+   */
+  public later<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<OperatorLayoutLaterResponses, OperatorLayoutLaterErrors, ThrowOnError>(
+      { url: "/operator/layout/upgrade/later", ...options },
+    )
   }
 
   /**

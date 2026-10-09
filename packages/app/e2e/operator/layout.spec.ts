@@ -144,3 +144,32 @@ test("a namespace that isn't in place moves into place from its record", async (
   await expect(move.getByTestId("move-report")).toContainText("Moved")
   expect(state.prompt.namespaces.find((item) => item.id === "acme")!.folder).toBe("/workspace/acme")
 })
+
+test("after an upgrade, the folders to move wait for a confirmation; Not now moves nothing", async ({ page }) => {
+  const state = await mockOperator(page)
+  state.prompt.namespaces.push({
+    id: "acme",
+    name: "Acme",
+    purpose: "",
+    folder: "/elsewhere/acme",
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  state.prompt.items.acme = { types: [], layers: [], groups: [], profiles: [] }
+  state.prompt.upgrade = { waiting: true, needsWorkingDir: false }
+  await page.goto("/operator")
+  const dialog = page.getByRole("dialog").filter({ hasText: "Folders to move after the upgrade" })
+  await expect(dialog.getByTestId("move-row")).toContainText("/workspace/acme")
+  await dialog.getByRole("button", { name: "Not now" }).click()
+  await expect(dialog).toHaveCount(0)
+  expect(state.prompt.moves.map((item) => item.path)).toEqual(["/operator/layout/plan"])
+  expect(state.prompt.upgrade.waiting).toBe(false)
+})
+
+test("without a working directory there is no New namespace; it says why", async ({ page }) => {
+  const state = await mockOperator(page)
+  state.prompt.workingDir = undefined
+  const settings = await namespaces(page)
+  await expect(settings.getByRole("button", { name: "New namespace", exact: true })).toBeDisabled()
+  await expect(settings.getByRole("button", { name: "About New namespace" })).toBeVisible()
+})

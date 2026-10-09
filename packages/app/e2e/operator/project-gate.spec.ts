@@ -44,7 +44,8 @@ test("the folder can be made a project from the same question", async ({ page })
   expect(state.prompt.writes.at(-1)).toMatchObject({
     method: "POST",
     path: "/operator/project-settings/register",
-    body: { directory: notes, git: false, namespace: "opencode" },
+    // Its namespace is the one whose folder holds it: the server decides (§10.2).
+    body: { directory: notes, git: false },
   })
 })
 
@@ -60,7 +61,7 @@ test("a folder that is not a project can be made one from its overlay on Project
   await overlay.getByRole("button", { name: "A git repository", exact: true }).click()
   await overlay.getByRole("button", { name: "Make it a project" }).click()
   await expect.poll(() => state.prompt.writes.length).toBe(1)
-  expect(state.prompt.writes[0]!.body).toEqual({ directory: notes, git: true, namespace: "opencode" })
+  expect(state.prompt.writes[0]!.body).toEqual({ directory: notes, git: true })
   await expect(overlay.getByRole("button", { name: "Edit project", exact: true })).toBeVisible()
   await overlay.getByRole("button", { name: "Close" }).click()
   await expect(row).not.toContainText("Not a project")
@@ -87,7 +88,7 @@ test("the folder can be made a copy of another project, with its sessions only w
   await expect(dialog.getByRole("status")).toContainText("2 files, 0 prompt items and 2 sessions copied.")
   expect(state.prompt.writes.at(-1)).toMatchObject({
     path: "/operator/project-settings/register",
-    body: { directory: notes, git: false, namespace: "opencode", from: fixture.directory, sessions: true },
+    body: { directory: notes, git: false, from: fixture.directory, sessions: true },
   })
   await dialog.getByRole("button", { name: "Continue" }).click()
   await expect(dialog).toBeHidden()
@@ -101,13 +102,15 @@ test("a project is copied to a new folder from its overlay; sessions stay behind
   await overlay.getByRole("button", { name: "Copy project" }).click()
   await expect(overlay.getByRole("heading", { name: "Copy smoke-project" })).toBeVisible()
   await expect(overlay.getByRole("button", { name: "Next record" })).toBeDisabled()
-  await overlay.getByLabel("Folder", { exact: true }).fill("/home/me/smoke-copy")
+  // A copy goes to <namespace folder>/<name> (global_and_opencode_namespaces_spec.md §10.2).
+  await overlay.getByLabel("Name", { exact: true }).fill("smoke-copy")
+  await expect(overlay.getByTestId("register-path")).toHaveText("/workspace/opencode/smoke-copy")
   await overlay.getByRole("button", { name: "Copy the project" }).click()
   await expect.poll(() => state.prompt.writes.length).toBe(1)
   expect(state.prompt.writes[0]!.body).toEqual({
-    directory: "/home/me/smoke-copy",
-    git: false,
+    name: "smoke-copy",
     namespace: "opencode",
+    git: false,
     from: fixture.directory,
     sessions: false,
   })

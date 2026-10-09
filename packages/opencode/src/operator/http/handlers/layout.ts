@@ -12,6 +12,31 @@ import { OperatorRootApi } from "../groups/overview"
 
 const fail = (message: string) => new ApiLayoutError({ name: "OperatorLayoutError", data: { message } })
 
+// "Not now" on the upgrade's confirmation: until the server starts again (§12.3).
+let later = false
+
+// Whether the upgrade's confirmation waits (§12.2, §12.3): moves to make, not confirmed yet, not put off.
+async function upgradeState(layout: OperatorLayout.Snapshot) {
+  const settings = await OperatorLayout.readSettings()
+  const projects = await OperatorProfileStore.readProjects()
+  const found = OperatorLayout.upgradeItems(
+    layout,
+    Object.fromEntries(Object.entries(projects).map(([key, value]) => [key, value.namespace])),
+  )
+  // A blank working directory with other namespaces than OpenCode: one is asked for first.
+  const others = layout.places.filter((place) => !place.global && place.id !== OperatorLayout.OPENCODE)
+  const needsWorkingDir = layout.merged && others.length > 0
+  const suggested = needsWorkingDir ? OperatorLayout.sharedParent(others.map((place) => place.folder)) : undefined
+  const count = found.namespaces.length + found.projects.length
+  return {
+    waiting: !settings.upgradeDone && !later && (count > 0 || needsWorkingDir),
+    namespaces: found.namespaces.length,
+    projects: found.projects.length,
+    needsWorkingDir,
+    ...(suggested ? { suggested } : {}),
+  }
+}
+
 export const operatorLayoutHandlers = HttpApiBuilder.group(OperatorRootApi, "operatorLayout", (handlers) =>
   Effect.gen(function* () {
     const store = yield* OperatorProfileStore.Service
@@ -39,6 +64,7 @@ export const operatorLayoutHandlers = HttpApiBuilder.group(OperatorRootApi, "ope
         flagged: projects.flatMap((item) =>
           item.flag ? [{ project: item.key, name: item.name, namespace: item.namespace, flag: item.flag }] : [],
         ),
+        upgrade: yield* Effect.promise(() => upgradeState(layout)),
       }
     })
 
@@ -46,6 +72,12 @@ export const operatorLayoutHandlers = HttpApiBuilder.group(OperatorRootApi, "ope
       .handle("plan", (ctx) => moves.plan(ctx.payload).pipe(Effect.mapError(moveError)))
       .handle("move", (ctx) => moves.move(ctx.payload).pipe(Effect.mapError(moveError)))
       .handle("report", (ctx) => moves.report(ctx.params.id).pipe(Effect.mapError(moveError)))
+      .handle("later", () =>
+        Effect.sync(() => {
+          later = true
+          return true
+        }),
+      )
       .handle("get", () => view())
       .handle("workingDir", (ctx) =>
         Effect.gen(function* () {

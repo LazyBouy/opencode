@@ -113,10 +113,16 @@ type Failure = InvalidError | NotFoundError
 export interface Interface {
   readonly namespaces: () => Effect.Effect<ReadonlyArray<typeof NamespaceSummary.Type>>
   /** A new namespace needs a folder inside the workspace roots; it is created if missing. */
+  /**
+   * A new namespace, at `<working directory>/<id>` (global_and_opencode_namespaces_spec.md §10.1). A folder
+   * already there that isn't empty is used only with `adopt` (its `.opencode/` and `.memory/` as they are).
+   */
   readonly createNamespace: (input: {
     name: string
     purpose?: string
-    folder: string
+    adopt?: boolean
+    /** A folder of its own instead of the derived one (code and tests; the console never sends it). */
+    folder?: string
     inheritGlobal?: boolean
   }) => Effect.Effect<OperatorProfile.Namespace, Failure>
   /** An empty `defaultProject` clears the choice, so the first project is the default. */
@@ -421,6 +427,14 @@ export async function restoreProject(key: string, settings: { project?: unknown;
     await writeJson(path.join(root(), "agents.json"), { ...(await readAgents()), [key]: settings.agents })
 }
 
+// A namespace that stays where it is while the working directory changes (layout-move.ts): its record names
+// its folder, so it is "Not in place" until it moves.
+export async function pinFolder(id: string, folder: string) {
+  const record = await readNamespaceRecord(id)
+  if (!record || record.folder === folder) return
+  await writeNamespace({ ...record, folder })
+}
+
 // A project's entry put back as it was (layout-move.ts, rolling a move back); undefined removes it.
 export async function putProject(key: string, entry: OperatorProfile.ProjectSetting | undefined) {
   const projects = await readProjects()
@@ -510,6 +524,23 @@ export function defaultProjectOf(namespace: OperatorProfile.Namespace, projects:
 }
 
 // A namespace's folder: absolute, inside the workspace roots, created if missing.
+/**
+ * Where a new namespace called `name` goes (§10.1): its id, `<working directory>/<id>`, and whether a
+ * folder is there already (and why it can't be used, if it can't).
+ */
+export async function namespacePreview(name: string) {
+  const settings = await OperatorLayout.readSettings()
+  if (!settings.workingDir) return { error: "Set a working directory first: namespaces live in it." }
+  const id = await freeId(root(), name, "", [OperatorLayout.GLOBAL, OperatorProfile.OPENCODE])
+  const folder = path.join(settings.workingDir, id)
+  const entries = await fs.readdir(folder).catch(() => undefined)
+  const problem =
+    entries !== undefined && (await OperatorLayout.insideGit(folder))
+      ? `${folder} is in a git repository: a namespace folder can't be a project`
+      : undefined
+  return { id, folder, exists: entries !== undefined, empty: !entries?.length, ...(problem ? { problem } : {}) }
+}
+
 async function namespaceFolder(folder: string) {
   const given = folder.trim()
   if (!given) return { error: "A namespace needs a folder" }
@@ -686,21 +717,44 @@ const layer = Layer.effect(
     const createNamespace = Effect.fn("OperatorProfileStore.createNamespace")(function* (input: {
       name: string
       purpose?: string
-      folder: string
+      adopt?: boolean
+      folder?: string
       inheritGlobal?: boolean
     }) {
       yield* refuse(input.name.trim() ? undefined : "A namespace needs a name")
-      const folder = yield* Effect.promise(() => namespaceFolder(input.folder))
-      yield* refuse(folder.error)
+      const given = input.folder === undefined ? undefined : yield* Effect.promise(() => namespaceFolder(input.folder!))
+      yield* refuse(given?.error)
+      const where = given?.folder
+        ? {
+            id: yield* Effect.promise(() => freeId(root(), input.name, "")),
+            folder: given.folder,
+            exists: false,
+            empty: true,
+          }
+        : yield* Effect.promise(() => namespacePreview(input.name))
+      if ("error" in where) return yield* new InvalidError({ message: where.error ?? "No working directory" })
+      if (where.exists && !where.empty) {
+        yield* refuse(
+          input.adopt
+            ? undefined
+            : `A folder ${where.folder} already exists. Use it for this namespace, or choose another name.`,
+        )
+        yield* refuse("problem" in where ? where.problem : undefined)
+      }
+      yield* Effect.tryPromise({
+        try: () => fs.mkdir(where.folder, { recursive: true }),
+        catch: (cause) => new InvalidError({ message: `${where.folder} cannot be created: ${String(cause)}` }),
+      })
       const source = yield* load(OperatorProfile.OPENCODE)
-      const id = yield* Effect.promise(() => freeId(root(), input.name, ""))
+      const id = where.id
       const now = Date.now()
+      // The folder is derived (<working directory>/<id>): the record names none, unless one was given.
       const namespace: OperatorProfile.Namespace = {
         id,
         name: input.name.trim(),
         purpose: input.purpose ?? "",
         ...(source.namespace.defaultProfile ? { defaultProfile: source.namespace.defaultProfile } : {}),
-        folder: folder.folder,
+        ...(given?.folder ? { folder: given.folder } : {}),
         ...(input.inheritGlobal === false ? { inheritGlobal: false } : {}),
         createdAt: now,
         updatedAt: now,

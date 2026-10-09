@@ -15,7 +15,6 @@ import { useOperatorClient } from "../data"
 import { formatAgo, formatCost, formatCount, shortPath } from "../format"
 import { DataTable } from "../ui/data-table"
 import { Field } from "../ui/field"
-import { useFolderBrowser } from "../ui/folder-browser"
 import { NamespaceAction, NamespacePicker, useNamespaceScope } from "../ui/namespace-picker"
 import { PageHeader } from "../ui/page-header"
 import { type DetailSection, DetailOverlay } from "../ui/detail-overlay"
@@ -41,6 +40,7 @@ import {
 } from "./project-sections"
 import { useOverlayParams } from "../ui/overlay-nav"
 import { useLayoutMove } from "../ui/layout-move"
+import { useNewProject } from "../ui/new-project"
 
 // A project as the page lists it: a git project the server knows, or a folder outside git — a
 // project once registered (it has prompt settings), else "not a project". Folders outside git that
@@ -236,7 +236,7 @@ export default function ProjectsPage() {
   const queryClient = useQueryClient()
   const server = useServer()
   const global = useGlobal()
-  const browse = useFolderBrowser()
+  const newProject = useNewProject()
   const data = useProjectRows()
   const locale = () => language.intl()
   const [params, setParams] = useSearchParams<Params>()
@@ -272,16 +272,25 @@ export default function ProjectsPage() {
         showToast({ title: language.t("operator.projects.addFailed"), description: requestError(error) }),
       )
   }
-  // Any folder in the server's workspace, including new ones created in the browser. The browser
-  // starts in the namespace's folder, where its new projects go.
-  const choose = async (ns: string) => {
-    const folder = data.scope.namespaces().find((item) => item.namespace.id === ns)?.namespace.folder
-    const directory = await browse({ start: folder })
-    if (directory) add(directory, ns)
+  // A new project at <namespace folder>/<name>, or an existing folder (global_and_opencode_namespaces_spec.md
+  // §10.2): new-project.tsx.
+  const choose = (ns: string) => {
+    const found = data.scope.namespaces().find((item) => item.namespace.id === ns)
+    if (!found) return
+    newProject(
+      {
+        id: found.namespace.id,
+        name:
+          found.global && found.namespace.id === OPENCODE
+            ? language.t("settings.namespaces.globalOpenCode")
+            : found.namespace.name,
+        folder: found.namespace.folder ?? "",
+        global: found.global,
+      },
+      add,
+    )
   }
-  // Where Add project can add: not Global (when it is a namespace of its own) until Global projects can
-  // be created (global_and_opencode_namespaces_spec.md §4.4).
-  const addable = () => data.scope.namespaces().filter((item) => !item.global || item.namespace.id === OPENCODE)
+  const addable = () => data.scope.namespaces()
   // One namespace in scope (or only one at all): Add project adds there; else it asks which.
   const addIn = () => {
     if (addable().length <= 1) return OPENCODE

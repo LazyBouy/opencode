@@ -2386,6 +2386,14 @@ export type OperatorProfileNotFoundError = {
   }
 }
 
+export type OperatorNamespaceFolderPreview = {
+  id: string
+  folder: string
+  exists: boolean
+  empty: boolean
+  problem?: string
+}
+
 export type OperatorPromptGroupType = {
   id: string
   name: string
@@ -2637,6 +2645,20 @@ export type OperatorLayoutFlagged = {
   flag: "outside-opencode" | "not-in-place"
 }
 
+export type OperatorLayoutUpgrade = {
+  /**
+   * The upgrade's moves wait for a confirmation (shown once per server start, until confirmed)
+   */
+  waiting: boolean
+  namespaces: number
+  projects: number
+  /**
+   * Other namespaces exist but the working directory is blank: it is asked for first
+   */
+  needsWorkingDir: boolean
+  suggested?: string
+}
+
 export type OperatorLayout = {
   workingDir?: string
   /**
@@ -2648,6 +2670,7 @@ export type OperatorLayout = {
    * Projects outside OpenCode's folder, and projects not yet in their namespace's folder
    */
   flagged: Array<OperatorLayoutFlagged>
+  upgrade: OperatorLayoutUpgrade
 }
 
 export type OperatorLayoutError = {
@@ -2667,6 +2690,13 @@ export type OperatorLayoutPlanInput =
   | {
       kind: "namespace"
       namespace: string
+    }
+  | {
+      kind: "upgrade"
+    }
+  | {
+      kind: "working-dir"
+      workingDir: string
     }
 
 export type OperatorLayoutBlockerKind =
@@ -2705,6 +2735,7 @@ export type OperatorLayoutPlan = {
   id: string
   kind: "project" | "namespace" | "upgrade" | "working-dir"
   items: Array<OperatorLayoutMoveItem>
+  workingDir?: string
 }
 
 export type OperatorLayoutMoveInput = {
@@ -10282,10 +10313,7 @@ export type OperatorNamespaceCreateData = {
   body?: {
     name: string
     purpose?: string
-    /**
-     * An absolute folder inside the workspace roots; it is created if missing
-     */
-    folder: string
+    adopt?: boolean
     inheritGlobal?: boolean
   }
   path?: never
@@ -10314,6 +10342,39 @@ export type OperatorNamespaceCreateResponses = {
 }
 
 export type OperatorNamespaceCreateResponse = OperatorNamespaceCreateResponses[keyof OperatorNamespaceCreateResponses]
+
+export type OperatorNamespaceFolderPreviewData = {
+  body?: never
+  path?: never
+  query: {
+    name: string
+  }
+  url: "/operator/namespace-folder"
+}
+
+export type OperatorNamespaceFolderPreviewErrors = {
+  /**
+   * OperatorProfileInvalidError | InvalidRequestError
+   */
+  400: OperatorProfileInvalidError | InvalidRequestError
+  /**
+   * OperatorProfileNotFoundError
+   */
+  404: OperatorProfileNotFoundError
+}
+
+export type OperatorNamespaceFolderPreviewError =
+  OperatorNamespaceFolderPreviewErrors[keyof OperatorNamespaceFolderPreviewErrors]
+
+export type OperatorNamespaceFolderPreviewResponses = {
+  /**
+   * Where the namespace would go
+   */
+  200: OperatorNamespaceFolderPreview
+}
+
+export type OperatorNamespaceFolderPreviewResponse =
+  OperatorNamespaceFolderPreviewResponses[keyof OperatorNamespaceFolderPreviewResponses]
 
 export type OperatorNamespaceRemoveData = {
   body?: never
@@ -11093,10 +11154,8 @@ export type OperatorProjectSettingsResolveResponse =
 
 export type OperatorProjectSettingsRegisterData = {
   body?: {
-    /**
-     * A folder outside git
-     */
-    directory: string
+    directory?: string
+    name?: string
     git?: boolean
     namespace?: string
     from?: string
@@ -11475,6 +11534,31 @@ export type OperatorLayoutMoveResponses = {
 }
 
 export type OperatorLayoutMoveResponse = OperatorLayoutMoveResponses[keyof OperatorLayoutMoveResponses]
+
+export type OperatorLayoutLaterData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/operator/layout/upgrade/later"
+}
+
+export type OperatorLayoutLaterErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorLayoutLaterError = OperatorLayoutLaterErrors[keyof OperatorLayoutLaterErrors]
+
+export type OperatorLayoutLaterResponses = {
+  /**
+   * true
+   */
+  200: boolean
+}
+
+export type OperatorLayoutLaterResponse = OperatorLayoutLaterResponses[keyof OperatorLayoutLaterResponses]
 
 export type OperatorLayoutMoveReportData = {
   body?: never

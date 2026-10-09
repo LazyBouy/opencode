@@ -13,6 +13,7 @@ import {
   createUniqueId,
   For,
   on,
+  onCleanup,
   onMount,
   Show,
 } from "solid-js"
@@ -27,15 +28,15 @@ import { shortPath } from "../format"
 import { requestError } from "../pages/config-helpers"
 import { PurposeDraft } from "../pages/purpose-draft"
 import { FieldHelp } from "../ui/field-help"
-import { useFolderBrowser } from "../ui/folder-browser"
 import { NamespaceStart, type Start } from "./namespace-start"
 import { LevelPermissions } from "../ui/level-permissions"
 import { NamespaceConfigEditor, takeRequestedNamespace } from "./namespace-config"
-import { WorkingDirectory } from "./working-dir"
+import { useLayout, WorkingDirectory } from "./working-dir"
 import { RecordField } from "../ui/record-overlay"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
 import { useLayoutMove } from "../ui/layout-move"
+import { ready } from "../data"
 
 const OPENCODE = "opencode"
 // The Default project choice that means "the namespace's first project".
@@ -55,6 +56,7 @@ function defaultProjectText(item: OperatorNamespaceSummary, t: ReturnType<typeof
 // starts as a copy of OpenCode.
 export const SettingsNamespacesV2: Component = () => {
   const language = useLanguage()
+  const layout = useLayout()
   const dialog = useDialog()
   const serverSdk = useServerSDK()
   const client = () => serverSdk().client.operator.namespace
@@ -99,9 +101,18 @@ export const SettingsNamespacesV2: Component = () => {
         <h2 class="settings-v2-tab-title">{language.t("settings.namespaces.title")}</h2>
         <div class="flex items-center justify-between gap-3 w-full">
           <p class="text-12-regular text-v2-text-text-muted">{language.t("settings.namespaces.description")}</p>
-          <ButtonV2 size="small" variant="outline" class="shrink-0" onClick={() => open("new")}>
-            {language.t("settings.namespaces.new")}
-          </ButtonV2>
+          <span class="inline-flex items-center shrink-0">
+            {/* Namespaces live in the working directory (global_and_opencode_namespaces_spec.md §10.1). */}
+            <ButtonV2 size="small" variant="outline" disabled={!ready(layout)?.workingDir} onClick={() => open("new")}>
+              {language.t("settings.namespaces.new")}
+            </ButtonV2>
+            <Show when={ready(layout) && !ready(layout)?.workingDir}>
+              <FieldHelp
+                field={language.t("settings.namespaces.new")}
+                text={language.t("settings.namespaces.newNeedsWorkingDir")}
+              />
+            </Show>
+          </span>
         </div>
       </div>
 
@@ -170,17 +181,20 @@ function NamespaceRecord(props: {
   const id = createUniqueId()
   const serverSdk = useServerSDK()
   const client = () => serverSdk().client.operator.namespace
-  const browse = useFolderBrowser()
   const [store, setStore] = createStore({
     selected: props.selected,
     editing: props.selected === "new",
     name: "",
     purpose: "",
-    folder: "",
     defaultProject: FIRST,
     inheritGlobal: true,
     busy: false,
     confirming: false,
+    // A new namespace's folder, derived from its name (<working directory>/<id>), and whether to use a
+    // folder that is there already.
+    preview: undefined as { id: string; folder: string; exists: boolean; empty: boolean; problem?: string } | undefined,
+    previewError: "",
+    adopt: false,
   })
   const list = {
     get latest() {
@@ -193,6 +207,28 @@ function NamespaceRecord(props: {
   const current = createMemo(() =>
     store.selected === "new" ? undefined : props.list().find((item) => item.namespace.id === store.selected),
   )
+  // A new namespace's folder follows its name, as it is typed.
+  let previewTimer: ReturnType<typeof setTimeout> | undefined
+  createEffect(
+    on(
+      () => [store.selected, store.name] as const,
+      ([selected, name]) => {
+        clearTimeout(previewTimer)
+        if (selected !== "new" || !name.trim()) return setStore({ preview: undefined, previewError: "", adopt: false })
+        previewTimer = setTimeout(() => {
+          void client()
+            .folderPreview({ name: name.trim() })
+            .then((result) => setStore({ preview: result.data ?? undefined, previewError: "", adopt: false }))
+            .catch((error: unknown) => setStore({ preview: undefined, previewError: requestError(error) }))
+        }, 250)
+      },
+    ),
+  )
+  onCleanup(() => clearTimeout(previewTimer))
+  const creatable = () => {
+    const where = store.preview
+    return !!where && !where.problem && (!where.exists || where.empty || store.adopt)
+  }
   // The form follows the namespace; a new one starts empty.
   createEffect(
     on([() => store.selected, current], () => {
@@ -200,7 +236,6 @@ function NamespaceRecord(props: {
       setStore({
         name: found?.namespace.name ?? "",
         purpose: found?.namespace.purpose ?? "",
-        folder: found?.namespace.folder ?? "",
         // A chosen project that left the namespace is no longer a choice.
         defaultProject:
           found?.namespace.defaultProject && found.projects.includes(found.namespace.defaultProject)
@@ -243,20 +278,18 @@ function NamespaceRecord(props: {
 
   const save = async () => {
     setStore("busy", true)
-    const folder = store.folder.trim()
     const request =
       store.selected === "new"
         ? client().create({
             name: store.name.trim(),
             purpose: store.purpose,
-            folder,
+            ...(store.adopt ? { adopt: true } : {}),
             inheritGlobal: store.inheritGlobal,
           })
         : client().update({
             ns: store.selected,
             name: store.name.trim(),
             purpose: store.purpose,
-            ...(folder && folder !== current()?.namespace.folder ? { folder } : {}),
             defaultProject: store.defaultProject === FIRST ? "" : store.defaultProject,
             inheritGlobal: store.inheritGlobal,
           })
@@ -419,37 +452,42 @@ function NamespaceRecord(props: {
           when={!current()?.global}
           fallback={<p data-slot="operator-note">{language.t("settings.namespaces.globalFolder")}</p>}
         >
-          <div class="flex flex-col gap-1">
-            <div class="flex items-center">
-              <label class="text-12-medium" for={`${id}-folder`}>
-                {language.t("settings.namespaces.folder")}
-              </label>
-              <FieldHelp
-                field={language.t("settings.namespaces.folder")}
-                text={language.t("operator.help.namespaceFolder")}
-              />
-            </div>
-            <div class="flex items-center gap-2">
-              <TextInputV2
-                id={`${id}-folder`}
-                class="flex-1"
-                appearance="base"
-                value={store.folder}
-                placeholder="/"
-                onInput={(event) => setStore("folder", event.currentTarget.value)}
-              />
-              <ButtonV2
-                variant="outline"
-                onClick={() =>
-                  void browse({ start: store.folder.trim() || undefined, over: true }).then(
-                    (folder) => folder && setStore("folder", folder),
-                  )
+          {/* The folder is derived from the name: <working directory>/<id> (§10.1). */}
+          <Show when={store.selected === "new"}>
+            <div class="flex flex-col gap-1" data-testid="namespace-new-folder">
+              <div class="flex items-center">
+                <span class="text-12-medium">{language.t("settings.namespaces.folder")}</span>
+                <FieldHelp
+                  field={language.t("settings.namespaces.folder")}
+                  text={language.t("settings.namespaces.folderDerived")}
+                />
+              </div>
+              <Show
+                when={store.preview}
+                fallback={
+                  <p data-slot="operator-note">{store.previewError || language.t("settings.namespaces.folderTyped")}</p>
                 }
               >
-                {language.t("settings.namespaces.chooseFolder")}
-              </ButtonV2>
+                {(where) => (
+                  <>
+                    <code class="text-12-regular">{where().folder}</code>
+                    <Show when={where().exists && !where().empty}>
+                      <p data-slot="operator-note" data-testid="namespace-folder-exists">
+                        {where().problem ?? language.t("settings.namespaces.folderExists", { folder: where().folder })}
+                      </p>
+                      <Show when={!where().problem}>
+                        <CheckboxV2
+                          label={language.t("settings.namespaces.adopt")}
+                          checked={store.adopt}
+                          onChange={(checked: boolean) => setStore("adopt", checked)}
+                        />
+                      </Show>
+                    </Show>
+                  </>
+                )}
+              </Show>
             </div>
-          </div>
+          </Show>
         </Show>
         <span class="inline-flex items-center">
           <CheckboxV2
@@ -466,7 +504,7 @@ function NamespaceRecord(props: {
         <Show when={store.selected === "new"}>
           <NamespaceStart
             namespaces={props.list()}
-            folder={store.folder.trim()}
+            folder={store.preview?.folder ?? ""}
             onChange={(next) => {
               start = next
             }}
@@ -591,8 +629,7 @@ function NamespaceRecord(props: {
           </ButtonV2>
           <ButtonV2
             variant="contrast"
-            disabled={store.busy || !store.name.trim() || (!store.folder.trim() && store.selected === "new")}
-            title={!store.folder.trim() ? language.t("settings.namespaces.folderRequired") : undefined}
+            disabled={store.busy || !store.name.trim() || (store.selected === "new" && !creatable())}
             onClick={() => void save()}
           >
             {store.selected === "new"

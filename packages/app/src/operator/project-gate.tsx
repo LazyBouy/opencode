@@ -140,7 +140,8 @@ export function RegisterProject(props: { directory?: string; from?: string; onDo
   const namespaces = useNamespaces()
   const settings = useProjectSettings()
   const [store, setStore] = createStore({
-    folder: "",
+    // A copy's folder name, in the chosen namespace's folder (global_and_opencode_namespaces_spec.md §10.2).
+    name: "",
     how: "folder" as "folder" | "git",
     from: NONE,
     namespace: undefined as string | undefined,
@@ -157,7 +158,11 @@ export function RegisterProject(props: { directory?: string; from?: string; onDo
   const source = () => props.from ?? (store.from === NONE ? undefined : store.from)
   const sourceProject = () => projects().find((item) => item.key === source())
   const namespace = () => store.namespace ?? sourceProject()?.namespace ?? OPENCODE
-  const directory = () => props.directory ?? store.folder.trim()
+  const nsFolder = () => list().find((item) => item.namespace.id === namespace())?.namespace.folder ?? ""
+  // A folder given is made a project where it is (its namespace is the one whose folder holds it); a copy
+  // is made at <namespace folder>/<name>.
+  const directory = () =>
+    props.directory ?? (store.name.trim() ? `${nsFolder().replace(/\/+$/, "")}/${store.name.trim()}` : "")
   const projectLabel = (key: string) => {
     const found = projects().find((item) => item.key === key)
     return found ? `${found.name} · ${shortPath(found.key)}` : key
@@ -169,9 +174,10 @@ export function RegisterProject(props: { directory?: string; from?: string; onDo
     await api
       .client()
       .operator.projectSettings.register({
-        directory: directory(),
+        ...(props.directory !== undefined
+          ? { directory: props.directory }
+          : { name: store.name.trim(), namespace: namespace() }),
         git: store.how === "git",
-        namespace: namespace(),
         ...(from ? { from, sessions: store.sessions } : {}),
       })
       .then((result) => {
@@ -224,14 +230,16 @@ export function RegisterProject(props: { directory?: string; from?: string; onDo
     >
       <div data-component="operator-form">
         <Show when={props.directory === undefined}>
-          <Field label={language.t("operator.gate.folder")} hint={language.t("operator.help.gateFolder")}>
+          <Field label={language.t("operator.newProject.name")} hint={language.t("operator.newProject.nameHint")}>
             <TextInputV2
               appearance="base"
-              value={store.folder}
-              placeholder="/path/to/project"
-              onInput={(event) => setStore("folder", event.currentTarget.value)}
+              value={store.name}
+              onInput={(event) => setStore("name", event.currentTarget.value)}
             />
           </Field>
+          <p data-slot="operator-note" data-testid="register-path">
+            <code>{directory() || `${nsFolder()}/…`}</code>
+          </p>
         </Show>
         <Show when={props.from === undefined && projects().length > 0}>
           <Field group label={language.t("operator.gate.from")} hint={language.t("operator.help.gateFrom")}>
@@ -254,7 +262,7 @@ export function RegisterProject(props: { directory?: string; from?: string; onDo
             <SegmentedControlItemV2 value="git">{language.t("operator.gate.asGit")}</SegmentedControlItemV2>
           </SegmentedControlV2>
         </Field>
-        <Show when={list().length > 1}>
+        <Show when={props.directory === undefined && list().length > 1}>
           <Field
             group
             label={language.t("operator.column.namespace")}

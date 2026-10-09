@@ -29,6 +29,8 @@ export type Settings = {
   workingDir?: string
   /** OpenCode's MCP logins were copied to their own keys when it became separate from Global. */
   mcpLoginsCopied?: boolean
+  /** The upgrade's moves were confirmed once (§12.3); what wasn't moved stays flagged "Not in place". */
+  upgradeDone?: boolean
 }
 
 const readJson = (file: string): Promise<Record<string, unknown>> =>
@@ -43,6 +45,7 @@ export async function readSettings(): Promise<Settings> {
   return {
     ...(typeof data.workingDir === "string" && data.workingDir ? { workingDir: data.workingDir } : {}),
     ...(data.mcpLoginsCopied === true ? { mcpLoginsCopied: true } : {}),
+    ...(data.upgradeDone === true ? { upgradeDone: true } : {}),
   }
 }
 
@@ -200,7 +203,8 @@ export async function workingDirProblem(folder: string, roots: ReadonlyArray<str
   return undefined
 }
 
-async function insideGit(folder: string): Promise<boolean> {
+/** Whether a folder is in a git repository (it, or a folder above it, has `.git`). */
+export async function insideGit(folder: string): Promise<boolean> {
   let current = folder
   for (;;) {
     if (
@@ -252,4 +256,31 @@ export async function globalNameProblem(name: string) {
   )
     return `${path.join(Global.Path.config, name)} already exists`
   return undefined
+}
+
+/**
+ * What the upgrade would move (§12.2): each namespace not at `<working dir>/<id>`, and each project
+ * `projects.json` assigns to another namespace than OpenCode that isn't inside that namespace's folder (a
+ * project inside a namespace folder that moves goes with it). OpenCode's unassigned projects outside its
+ * folder aren't moved: they are flagged.
+ */
+export function upgradeItems(layout: Snapshot, assigned: Record<string, string | undefined>) {
+  const namespaces = layout.merged
+    ? []
+    : layout.places.filter((place) => !place.global && !place.inPlace).map((place) => place.id)
+  const projects = Object.entries(assigned).flatMap(([project, namespace]) => {
+    if (!namespace || resolveId(namespace, layout) === OPENCODE) return []
+    const place = placeOf(namespace, layout)
+    if (!place || place.global || contains(place.folder, project)) return []
+    return [{ project, namespace: place.id, to: path.join(place.target, path.basename(project)) }]
+  })
+  return { namespaces, projects }
+}
+
+/** The folder the namespaces' folders share, if they share one (a working directory to suggest). */
+export function sharedParent(folders: ReadonlyArray<string>) {
+  if (!folders.length) return undefined
+  const parents = folders.map((folder) => path.dirname(path.resolve(folder)))
+  const first = parents[0]!
+  return parents.every((parent) => parent === first) ? first : undefined
 }

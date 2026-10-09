@@ -8,6 +8,7 @@ import { described } from "@/server/routes/instance/httpapi/groups/metadata"
 // OperatorRootApi. `/operator/profile` and `/operator/projects` are web pages, so these paths differ.
 export const OperatorNamespacePaths = {
   namespaces: "/operator/namespaces",
+  folderPreview: "/operator/namespace-folder",
   namespace: "/operator/namespaces/:ns",
   catalog: "/operator/namespaces/:ns/catalog",
   types: "/operator/namespaces/:ns/types",
@@ -100,8 +101,9 @@ export const OperatorNamespaceGroup = HttpApiGroup.make("operatorNamespace")
       payload: Schema.Struct({
         name: Schema.String,
         purpose: Schema.optional(Schema.String),
-        folder: Schema.String.annotate({
-          description: "An absolute folder inside the workspace roots; it is created if missing",
+        adopt: Schema.optional(Schema.Boolean).annotate({
+          description:
+            "Use the folder <working directory>/<id> although it exists and isn't empty (its .opencode/ and .memory/ as they are)",
         }),
         inheritGlobal: Schema.optional(Schema.Boolean).annotate({
           description: "Whether its projects get the global config's capabilities (default true)",
@@ -113,7 +115,27 @@ export const OperatorNamespaceGroup = HttpApiGroup.make("operatorNamespace")
       doc(
         "operator.namespace.create",
         "Create a namespace",
-        "Create a namespace as a copy of OpenCode: it gets its own copies of OpenCode's built-in layers, groups and profiles (built-ins belong to OpenCode), and of OpenCode's own types, layers, groups and profiles. It starts with no projects, in its own folder.",
+        "Create a namespace as a copy of OpenCode: it gets its own copies of OpenCode's built-in layers, groups and profiles (built-ins belong to OpenCode), and of OpenCode's own types, layers, groups and profiles. It starts with no projects, in its folder <working directory>/<id> (needs a working directory).",
+      ),
+    ),
+    HttpApiEndpoint.get("folderPreview", OperatorNamespacePaths.folderPreview, {
+      query: Schema.Struct({ name: Schema.String }),
+      success: described(
+        Schema.Struct({
+          id: Schema.String,
+          folder: Schema.String,
+          exists: Schema.Boolean,
+          empty: Schema.Boolean,
+          problem: Schema.optional(Schema.String),
+        }).annotate({ identifier: "OperatorNamespaceFolderPreview" }),
+        "Where the namespace would go",
+      ),
+      error: errors,
+    }).annotateMerge(
+      doc(
+        "operator.namespace.folderPreview",
+        "Where a new namespace goes",
+        "The id and folder (<working directory>/<id>) a namespace with this name would get, and whether a folder is there already.",
       ),
     ),
     HttpApiEndpoint.get("get", OperatorNamespacePaths.namespace, {
@@ -365,12 +387,19 @@ export const OperatorNamespaceGroup = HttpApiGroup.make("operatorNamespace")
     ),
     HttpApiEndpoint.post("projectRegister", OperatorNamespacePaths.register, {
       payload: Schema.Struct({
-        directory: Schema.String.annotate({ description: "A folder outside git" }),
+        directory: Schema.optional(Schema.String).annotate({
+          description: "A folder outside git; without it, `name` makes a new one in the namespace's folder",
+        }),
+        name: Schema.optional(Schema.String).annotate({
+          description:
+            "A new project's folder name: <namespace folder>/<name> (global_and_opencode_namespaces_spec.md §10.2); always a git repository in Global",
+        }),
         git: Schema.optional(Schema.Boolean).annotate({
           description: "Make it a git repository (git init) instead of registering it as it is",
         }),
         namespace: Schema.optional(Schema.String).annotate({
-          description: "Its namespace; by default the source project's, or OpenCode",
+          description:
+            "Its namespace: with name, where it is made; else by default the namespace whose folder holds it (or the source project's)",
         }),
         from: Schema.optional(Schema.String).annotate({
           description:

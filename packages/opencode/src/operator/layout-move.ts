@@ -70,6 +70,9 @@ export const Plan = Schema.Struct({
   id: Schema.String,
   kind: Schema.Literals(["project", "namespace", "upgrade", "working-dir"]),
   items: Schema.Array(Item),
+  workingDir: Schema.optional(Schema.String).annotate({
+    description: "working-dir: the new working directory, saved once the move has run",
+  }),
 }).annotate({ identifier: "OperatorLayoutPlan" })
 export type Plan = typeof Plan.Type
 
@@ -81,6 +84,8 @@ export const PlanInput = Schema.Union([
     name: Schema.optional(Schema.String).annotate({ description: "The folder name there (default: its name now)" }),
   }),
   Schema.Struct({ kind: Schema.Literal("namespace"), namespace: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("upgrade") }),
+  Schema.Struct({ kind: Schema.Literal("working-dir"), workingDir: Schema.String }),
 ]).annotate({ identifier: "OperatorLayoutPlanInput" })
 export type PlanInput = typeof PlanInput.Type
 
@@ -354,7 +359,59 @@ const layer = Layer.effect(
           }),
         )
       }
-      const result: Plan = { id: newID("mp"), kind: input.kind, items }
+      if (input.kind === "upgrade") {
+        const assigned = Object.fromEntries(
+          Object.entries(yield* Effect.promise(() => OperatorProfileStore.readProjects())).map(([key, value]) => [
+            key,
+            value.namespace,
+          ]),
+        )
+        const found = OperatorLayout.upgradeItems(layout, assigned)
+        for (const id of found.namespaces) {
+          const place = OperatorLayout.placeOf(id, layout)!
+          if (!(yield* Effect.promise(() => exists(place.folder)))) continue
+          items.push(
+            yield* itemOf({ kind: "namespace", name: id, from: place.folder, to: place.target, namespace: id }),
+          )
+        }
+        for (const item of found.projects) {
+          if (!(yield* Effect.promise(() => exists(item.project)))) continue
+          items.push(
+            yield* itemOf({
+              kind: "project",
+              name: path.basename(item.project),
+              from: item.project,
+              to: item.to,
+              namespace: item.namespace,
+            }),
+          )
+        }
+      }
+      let workingDir: string | undefined
+      if (input.kind === "working-dir") {
+        workingDir = path.resolve(input.workingDir)
+        if (!layout.workingDir)
+          return yield* new MoveError({ message: "The working directory is blank: set it, nothing moves" })
+        if (workingDir === layout.workingDir)
+          return yield* new MoveError({ message: `The working directory is ${workingDir} already` })
+        const problem = yield* Effect.promise(() =>
+          OperatorLayout.workingDirProblem(workingDir!, OperatorFolders.workspaceRoots()),
+        )
+        if (problem) return yield* new MoveError({ message: problem })
+        for (const place of layout.places) {
+          if (place.global || !(yield* Effect.promise(() => exists(place.folder)))) continue
+          items.push(
+            yield* itemOf({
+              kind: "namespace",
+              name: place.id,
+              from: place.folder,
+              to: path.join(workingDir, place.id),
+              namespace: place.id,
+            }),
+          )
+        }
+      }
+      const result: Plan = { id: newID("mp"), kind: input.kind, items, ...(workingDir ? { workingDir } : {}) }
       plans.set(result.id, result)
       return result
     })
@@ -586,6 +643,7 @@ const layer = Layer.effect(
         }
         yield* moveOne(journal, entry)
       }
+      yield* afterMove(found, journal)
       for (const item of found.items.filter((item) => !input.items.includes(item.id)))
         journal.report = {
           ...journal.report,
@@ -604,6 +662,23 @@ const layer = Layer.effect(
       yield* emit(journal)
       plans.delete(found.id)
       return journal.report
+    })
+
+    // What a plan does once its folders have moved: a new working directory is saved (the namespaces that
+    // didn't move keep their folders, named in their records, "Not in place"); the upgrade is done.
+    const afterMove = Effect.fnUntraced(function* (plan: Plan, journal: Journal) {
+      if (plan.kind === "working-dir" && plan.workingDir) {
+        const moved = new Set(journal.entries.filter((entry) => entry.step === "done").map((entry) => entry.namespace))
+        for (const item of plan.items)
+          if (!moved.has(item.namespace))
+            yield* Effect.promise(() => OperatorProfileStore.pinFolder(item.namespace, item.from))
+        const settings = yield* Effect.promise(() => OperatorLayout.readSettings())
+        yield* Effect.promise(() => OperatorLayout.writeSettings({ ...settings, workingDir: plan.workingDir }))
+      }
+      if (plan.kind === "upgrade") {
+        const settings = yield* Effect.promise(() => OperatorLayout.readSettings())
+        yield* Effect.promise(() => OperatorLayout.writeSettings({ ...settings, upgradeDone: true }))
+      }
     })
 
     const report = Effect.fn("OperatorLayoutMove.report")(function* (id: string) {

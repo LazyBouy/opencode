@@ -1,7 +1,6 @@
 // Route scenarios for this fork's endpoints (merge, operator console). Kept out of index.ts so
 // upstream changes to the shared scenario list merge without conflicts.
 import os from "os"
-import path from "path"
 import { Effect } from "effect"
 import { array, boolean, check, isRecord, object } from "./assertions"
 import { http, route } from "./dsl"
@@ -12,7 +11,6 @@ import { type Scenario } from "./types"
 process.env.OPENCODE_PROJECT_GUARD ??= "off"
 // Namespace folders must be inside the workspace roots; the exerciser creates them in the temp folder.
 process.env.OPENCODE_WORKSPACE_ROOTS ??= os.tmpdir()
-const namespaceFolder = path.join(os.tmpdir(), `opencode-httpapi-namespace-${process.pid}`)
 
 export const operatorScenarios: Scenario[] = [
   http.protected
@@ -722,6 +720,10 @@ export const operatorScenarios: Scenario[] = [
     .at((ctx) => ({ path: "/operator/layout/move", headers: ctx.headers(), body: { plan: "mp_missing", items: [] } }))
     .status(400),
   http.protected
+    .post("/operator/layout/upgrade/later", "operator.layout.later")
+    .at((ctx) => ({ path: "/operator/layout/upgrade/later", headers: ctx.headers() }))
+    .json(200, (body) => check(body === true, "the upgrade's confirmation waits for the next start")),
+  http.protected
     .get("/operator/layout/move/{id}", "operator.layout.moveReport")
     .at((ctx) => ({ path: route("/operator/layout/move/{id}", { id: "mv_missing" }), headers: ctx.headers() }))
     .status(400),
@@ -732,23 +734,20 @@ export const operatorScenarios: Scenario[] = [
       "OpenCode should be the first namespace",
     )
   }),
+  // A namespace lives at <working directory>/<id>: with the exerciser's blank working directory, creating
+  // one (and its folder's preview) is refused. Creating one is tested in test/operator/namespace-create.test.ts.
   http.protected
     .post("/operator/namespaces", "operator.namespace.create")
-    .mutating()
     .at((ctx) => ({
       path: "/operator/namespaces",
       headers: ctx.headers(),
-      body: { name: "HttpApi team", purpose: "Test.", folder: namespaceFolder },
+      body: { name: "HttpApi team", purpose: "Test." },
     }))
-    .json(
-      200,
-      (body) => {
-        object(body)
-        check(body.id === "httpapi-team" && body.purpose === "Test.", "the namespace should be created")
-        check(typeof body.folder === "string" && body.folder.length > 0, "the namespace should have its folder")
-      },
-      "status",
-    ),
+    .status(400),
+  http.protected
+    .get("/operator/namespace-folder", "operator.namespace.folderPreview")
+    .at((ctx) => ({ path: "/operator/namespace-folder?name=HttpApi%20team", headers: ctx.headers() }))
+    .status(400),
   http.protected
     .get("/operator/namespaces/{ns}", "operator.namespace.get")
     .at((ctx) => ({ path: route("/operator/namespaces/{ns}", { ns: "opencode" }), headers: ctx.headers() }))

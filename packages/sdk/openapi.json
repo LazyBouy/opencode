@@ -1186,7 +1186,7 @@
             }
           }
         },
-        "description": "Create a namespace as a copy of OpenCode: it gets its own copies of OpenCode's built-in layers, groups and profiles (built-ins belong to OpenCode), and of OpenCode's own types, layers, groups and profiles. It starts with no projects, in its own folder.",
+        "description": "Create a namespace as a copy of OpenCode: it gets its own copies of OpenCode's built-in layers, groups and profiles (built-ins belong to OpenCode), and of OpenCode's own types, layers, groups and profiles. It starts with no projects, in its folder <working directory>/<id> (needs a working directory).",
         "summary": "Create a namespace",
         "requestBody": {
           "content": {
@@ -1200,15 +1200,14 @@
                   "purpose": {
                     "type": "string"
                   },
-                  "folder": {
-                    "type": "string",
-                    "description": "An absolute folder inside the workspace roots; it is created if missing"
+                  "adopt": {
+                    "type": "boolean"
                   },
                   "inheritGlobal": {
                     "type": "boolean"
                   }
                 },
-                "required": ["name", "folder"],
+                "required": ["name"],
                 "additionalProperties": false
               }
             }
@@ -1218,6 +1217,69 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespace.create({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/namespace-folder": {
+      "get": {
+        "tags": ["operator namespaces"],
+        "operationId": "operator.namespace.folderPreview",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Where the namespace would go",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorNamespaceFolderPreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProfileInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProfileInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProfileNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProfileNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The id and folder (<working directory>/<id>) a namespace with this name would get, and whether a folder is there already.",
+        "summary": "Where a new namespace goes",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespace.folderPreview({\n  ...\n})"
           }
         ]
       }
@@ -2965,8 +3027,10 @@
                 "type": "object",
                 "properties": {
                   "directory": {
-                    "type": "string",
-                    "description": "A folder outside git"
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
                   },
                   "git": {
                     "type": "boolean"
@@ -2981,7 +3045,6 @@
                     "type": "boolean"
                   }
                 },
-                "required": ["directory"],
                 "additionalProperties": false
               }
             }
@@ -3662,6 +3725,44 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.layout.move({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/layout/upgrade/later": {
+      "post": {
+        "tags": ["operator layout"],
+        "operationId": "operator.layout.later",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "true",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "true"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The upgrade's confirmation isn't shown again until the server starts again; nothing moves.",
+        "summary": "Not now",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.layout.later({\n  ...\n})"
           }
         ]
       }
@@ -31287,6 +31388,28 @@
         "required": ["name", "data"],
         "additionalProperties": false
       },
+      "OperatorNamespaceFolderPreview": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "folder": {
+            "type": "string"
+          },
+          "exists": {
+            "type": "boolean"
+          },
+          "empty": {
+            "type": "boolean"
+          },
+          "problem": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "folder", "exists", "empty"],
+        "additionalProperties": false
+      },
       "OperatorPromptGroupType": {
         "type": "object",
         "properties": {
@@ -31882,6 +32005,30 @@
         "required": ["project", "name", "namespace", "flag"],
         "additionalProperties": false
       },
+      "OperatorLayoutUpgrade": {
+        "type": "object",
+        "properties": {
+          "waiting": {
+            "type": "boolean",
+            "description": "The upgrade's moves wait for a confirmation (shown once per server start, until confirmed)"
+          },
+          "namespaces": {
+            "type": "number"
+          },
+          "projects": {
+            "type": "number"
+          },
+          "needsWorkingDir": {
+            "type": "boolean",
+            "description": "Other namespaces exist but the working directory is blank: it is asked for first"
+          },
+          "suggested": {
+            "type": "string"
+          }
+        },
+        "required": ["waiting", "namespaces", "projects", "needsWorkingDir"],
+        "additionalProperties": false
+      },
       "OperatorLayout": {
         "type": "object",
         "properties": {
@@ -31904,9 +32051,12 @@
               "$ref": "#/components/schemas/OperatorLayoutFlagged"
             },
             "description": "Projects outside OpenCode's folder, and projects not yet in their namespace's folder"
+          },
+          "upgrade": {
+            "$ref": "#/components/schemas/OperatorLayoutUpgrade"
           }
         },
-        "required": ["merged", "namespaces", "flagged"],
+        "required": ["merged", "namespaces", "flagged", "upgrade"],
         "additionalProperties": false
       },
       "OperatorLayoutError": {
@@ -31964,6 +32114,31 @@
               }
             },
             "required": ["kind", "namespace"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["upgrade"]
+              }
+            },
+            "required": ["kind"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["working-dir"]
+              },
+              "workingDir": {
+                "type": "string"
+              }
+            },
+            "required": ["kind", "workingDir"],
             "additionalProperties": false
           }
         ]
@@ -32040,6 +32215,9 @@
             "items": {
               "$ref": "#/components/schemas/OperatorLayoutMoveItem"
             }
+          },
+          "workingDir": {
+            "type": "string"
           }
         },
         "required": ["id", "kind", "items"],
