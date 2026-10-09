@@ -10,6 +10,7 @@ import { Global } from "@opencode-ai/core/global"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { Glob } from "@opencode-ai/core/util/glob"
 import { OperatorFolders } from "./folders"
+import { OperatorLayout } from "./layout"
 import { OperatorProfile } from "./profile"
 import { OperatorTrashFiles } from "./trash-files"
 
@@ -44,6 +45,10 @@ export const ProjectInfo = Schema.Struct({
   registered: Schema.optional(Schema.Boolean).annotate({
     description: "A git project, or a folder outside git registered as a project",
   }),
+  flag: Schema.optional(Schema.Literals(["outside-opencode", "not-in-place"])).annotate({
+    description:
+      "outside-opencode: an OpenCode project outside OpenCode's folder; not-in-place: assigned to a namespace whose folder it isn't in yet",
+  }),
 }).annotate({ identifier: "OperatorPromptProject" })
 export type ProjectInfo = typeof ProjectInfo.Type
 
@@ -69,7 +74,13 @@ export const AgentPrompt = Schema.Struct({
 export type AgentPrompt = typeof AgentPrompt.Type
 
 export const NamespaceSummary = Schema.Struct({
-  namespace: OperatorProfile.Namespace,
+  namespace: OperatorProfile.Namespace.annotate({ description: "Its record; `folder` is the folder it uses now" }),
+  target: Schema.String.annotate({ description: "Where its folder belongs: Global's folder, or <working dir>/<id>" }),
+  inPlace: Schema.Boolean.annotate({ description: "Its folder is its target (else it moves there later)" }),
+  global: Schema.Boolean.annotate({
+    description: "Global (or, with a blank working directory, Global · OpenCode): its config is Global's own file",
+  }),
+  configFile: Schema.String.annotate({ description: "Its config file" }),
   projects: Schema.Array(Schema.String).annotate({ description: "Keys of the namespace's projects" }),
   defaultProject: Schema.optional(Schema.String).annotate({
     description:
@@ -184,7 +195,9 @@ export async function forProject(key: string) {
   await ensure()
   const projects = await readProjects()
   const project = projects[key]
-  const catalog = (await readNamespace(project?.namespace ?? OperatorProfile.OPENCODE)) ??
+  // The namespace the project is in (layout.ts): by where its folder is.
+  const member = OperatorLayout.membership(key, await OperatorLayout.snapshot(), project?.namespace)
+  const catalog = (await readNamespace(member.namespace)) ??
     (await readNamespace(OperatorProfile.OPENCODE)) ??
       // The config folder cannot be written: OpenCode as it is.
       {
@@ -196,7 +209,8 @@ export async function forProject(key: string) {
       }
   return {
     catalog,
-    project: project && catalog.namespace.id === project.namespace ? project : undefined,
+    // Its settings name items of the namespace they were made in: kept only there.
+    project: project && catalog.namespace.id === (project.namespace ?? OperatorProfile.OPENCODE) ? project : undefined,
     agents: (await readAgents())[key] ?? {},
   }
 }
@@ -407,10 +421,12 @@ export async function restoreProject(key: string, settings: { project?: unknown;
     await writeJson(path.join(root(), "agents.json"), { ...(await readAgents()), [key]: settings.agents })
 }
 
-// The OpenCode namespace exists from the first start, with its record only. This installation's
-// folder and default project for it come from the server's environment
-// (OPENCODE_OPERATOR_NAMESPACE_FOLDER, OPENCODE_OPERATOR_DEFAULT_PROJECT) and are set once, while
-// the record has no folder.
+// The OpenCode namespace exists from the first start, with its record only. At the first start after
+// the layout came (global_and_opencode_namespaces_spec.md §9, §12.1) the working directory is set once:
+// OPENCODE_OPERATOR_WORKING_DIR, else the parent of OpenCode's folder, else blank. When Global and
+// OpenCode are separate, Global gets its own record (its items are copied lazily, as for any namespace)
+// and OpenCode's MCP logins are copied to their own keys once (§12.4). OPENCODE_OPERATOR_DEFAULT_PROJECT
+// sets OpenCode's default project once.
 const settled = new Set<string>()
 export async function ensure(env: NodeJS.ProcessEnv = process.env) {
   const file = path.join(root(), OperatorProfile.OPENCODE, "namespace.json")
@@ -426,18 +442,56 @@ export async function ensure(env: NodeJS.ProcessEnv = process.env) {
   }
   if (settled.has(file)) return
   settled.add(file)
-  const folder = env.OPENCODE_OPERATOR_NAMESPACE_FOLDER?.trim()
-  const project = env.OPENCODE_OPERATOR_DEFAULT_PROJECT?.trim()
-  if (!folder || !path.isAbsolute(folder)) return
   const current = await readNamespaceRecord(OperatorProfile.OPENCODE)
-  if (!current || current.folder) return
-  await writeNamespace({
-    ...current,
-    folder: path.resolve(folder),
-    ...(project && path.isAbsolute(project) && !current.defaultProject
-      ? { defaultProject: path.resolve(project) }
-      : {}),
-  }).catch(() => undefined)
+  const settingsFile = path.join(root(), "settings.json")
+  if (!(await Bun.file(settingsFile).exists())) {
+    const derived = OperatorLayout.derivedWorkingDir(env, current?.folder)
+    await writeJson(settingsFile, { workingDir: derived ?? "" }).catch(() => undefined)
+  }
+  await settleLayout()
+  const project = env.OPENCODE_OPERATOR_DEFAULT_PROJECT?.trim()
+  if (current && project && path.isAbsolute(project) && !current.defaultProject)
+    await writeNamespace({ ...current, defaultProject: path.resolve(project) }).catch(() => undefined)
+}
+
+// With a working directory, Global is a namespace of its own: its record, and OpenCode's MCP logins
+// copied to their own keys once. Run at the start and when the working directory is set.
+export async function settleLayout() {
+  const settings = await OperatorLayout.readSettings()
+  if (settings.workingDir) {
+    if (!(await readNamespaceRecord(OperatorLayout.GLOBAL))) {
+      const now = Date.now()
+      await writeJson(path.join(root(), OperatorLayout.GLOBAL, "namespace.json"), {
+        id: OperatorLayout.GLOBAL,
+        name: "Global",
+        purpose: "",
+        createdAt: now,
+        updatedAt: now,
+      }).catch(() => undefined)
+    }
+    if (!settings.mcpLoginsCopied) {
+      await copyMcpLogins().catch(() => undefined)
+      await OperatorLayout.writeSettings({ ...(await OperatorLayout.readSettings()), mcpLoginsCopied: true }).catch(
+        () => undefined,
+      )
+    }
+  }
+}
+
+// MCP logins kept under a bare server name are Global's; OpenCode, once separate, uses
+// `opencode/<server>` (mcp-auth-scope.ts). They are copied, not moved: Global and the CLI keep theirs.
+async function copyMcpLogins() {
+  const file = path.join(Global.Path.data, "mcp-auth.json")
+  const logins = (await Bun.file(file)
+    .json()
+    .catch(() => undefined)) as Record<string, unknown> | undefined
+  if (!logins) return
+  const next = { ...logins }
+  for (const [name, value] of Object.entries(logins))
+    if (!name.includes("/") && !(`${OperatorProfile.OPENCODE}/${name}` in next))
+      next[`${OperatorProfile.OPENCODE}/${name}`] = value
+  if (Object.keys(next).length === Object.keys(logins).length) return
+  await fs.writeFile(file, JSON.stringify(next, null, 2), { mode: 0o600 })
 }
 
 // The namespace's default project among its projects (in the order they were added): the chosen
@@ -504,13 +558,20 @@ const layer = Layer.effect(
       const keys = [...new Set([...names.keys(), ...Object.keys(settings), ...Object.keys(agents)])].filter(
         (key) => !trashed.has(key),
       )
+      // Each project is in the namespace whose folder holds it (layout.ts).
+      const layout = yield* Effect.promise(() => OperatorLayout.snapshot())
       const projects: ProjectInfo[] = keys
-        .map((key) => ({
-          key,
-          name: names.get(key) ?? path.basename(key),
-          ...(settings[key] ?? { namespace: OperatorProfile.OPENCODE }),
-          registered: names.has(key) || key in settings,
-        }))
+        .map((key) => {
+          const member = OperatorLayout.membership(key, layout, settings[key]?.namespace)
+          return {
+            key,
+            name: names.get(key) ?? path.basename(key),
+            ...settings[key],
+            namespace: member.namespace,
+            ...(member.flag ? { flag: member.flag } : {}),
+            registered: names.has(key) || key in settings,
+          }
+        })
         .toSorted((a, b) => a.name.localeCompare(b.name))
       const created = new Map(rows.map((row) => [String(row.worktree), Number(row.created)]))
       const registeredAt = [...Object.keys(settings), ...Object.keys(agents)]
@@ -572,27 +633,41 @@ const layer = Layer.effect(
       return users.length ? users.join(", ") : undefined
     })
 
+    const rank = (id: string) => (id === OperatorLayout.GLOBAL ? 0 : id === OperatorProfile.OPENCODE ? 1 : 2)
     const namespaces = Effect.fn("OperatorProfileStore.namespaces")(function* () {
       yield* Effect.promise(() => ensure())
       const ids = yield* Effect.promise(() => fs.readdir(root()).catch(() => [] as string[]))
       const records = yield* Effect.promise(() => Promise.all(ids.map(readNamespaceRecord)))
       const { projects, added } = yield* inventory()
-      return records
-        .filter((item): item is OperatorProfile.Namespace => item !== undefined)
-        .toSorted((a, b) =>
-          a.id === OperatorProfile.OPENCODE ? -1 : b.id === OperatorProfile.OPENCODE ? 1 : a.name.localeCompare(b.name),
-        )
-        .map((namespace) => {
-          const own = new Set(projects.filter((item) => item.namespace === namespace.id).map((item) => item.key))
-          const order = added.filter((key) => own.has(key))
-          const chosen = defaultProjectOf(namespace, order)
-          return {
-            namespace,
-            projects: projects.filter((item) => own.has(item.key)).map((item) => item.key),
-            ...(chosen ? { defaultProject: chosen } : {}),
-            ...(order[0] ? { firstProject: order[0] } : {}),
-          }
-        })
+      const layout = yield* Effect.promise(() => OperatorLayout.snapshot())
+      const globalFile = yield* Effect.promise(() => OperatorLayout.globalConfigFile())
+      return (
+        records
+          .filter((item): item is OperatorProfile.Namespace => item !== undefined)
+          // With a blank working directory, Global is OpenCode: no record of its own is listed.
+          .filter((item) => OperatorLayout.resolveId(item.id, layout) === item.id)
+          .toSorted(
+            (a, b) =>
+              // Global first, then OpenCode, then the others by name.
+              rank(a.id) - rank(b.id) || a.name.localeCompare(b.name),
+          )
+          .map((namespace) => {
+            const own = new Set(projects.filter((item) => item.namespace === namespace.id).map((item) => item.key))
+            const order = added.filter((key) => own.has(key))
+            const chosen = defaultProjectOf(namespace, order)
+            const place = OperatorLayout.placeOf(namespace.id, layout)
+            return {
+              namespace: { ...namespace, ...(place ? { folder: place.folder } : {}) },
+              target: place?.target ?? namespace.folder ?? "",
+              inPlace: place?.inPlace ?? true,
+              global: place?.global ?? false,
+              configFile: place?.global ? globalFile : path.join(place?.configDir ?? "", "opencode.jsonc"),
+              projects: projects.filter((item) => own.has(item.key)).map((item) => item.key),
+              ...(chosen ? { defaultProject: chosen } : {}),
+              ...(order[0] ? { firstProject: order[0] } : {}),
+            }
+          })
+      )
     })
 
     const defaultProject = Effect.fn("OperatorProfileStore.defaultProject")(function* (ns: string) {
@@ -648,6 +723,17 @@ const layer = Layer.effect(
     ) {
       const catalog = yield* load(id)
       if (input.name !== undefined) yield* refuse(input.name.trim() ? undefined : "A namespace needs a name")
+      const layout = yield* Effect.promise(() => OperatorLayout.snapshot())
+      yield* refuse(
+        input.inheritGlobal === false && OperatorLayout.isGlobal(id, layout)
+          ? "Global can't leave out its own capabilities"
+          : undefined,
+      )
+      yield* refuse(
+        input.folder !== undefined && OperatorLayout.isGlobal(id, layout)
+          ? `Global's folder is always ${Global.Path.config}`
+          : undefined,
+      )
       const folder =
         input.folder === undefined ? undefined : yield* Effect.promise(() => namespaceFolder(input.folder!))
       yield* refuse(folder?.error)
@@ -682,7 +768,13 @@ const layer = Layer.effect(
     })
 
     const removeNamespace = Effect.fn("OperatorProfileStore.removeNamespace")(function* (id: string) {
-      yield* refuse(id === OperatorProfile.OPENCODE ? "OpenCode is built in and cannot be deleted" : undefined)
+      yield* refuse(
+        id === OperatorProfile.OPENCODE
+          ? "OpenCode can't be deleted: it holds every project that isn't in another namespace"
+          : id === OperatorLayout.GLOBAL
+            ? "Global can't be deleted"
+            : undefined,
+      )
       const catalog = yield* load(id)
       const projects = (yield* known()).filter((item) => item.namespace === id)
       yield* refuse(

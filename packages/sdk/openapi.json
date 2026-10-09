@@ -3462,6 +3462,104 @@
         ]
       }
     },
+    "/operator/layout": {
+      "get": {
+        "tags": ["operator layout"],
+        "operationId": "operator.layout.get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The working directory, each namespace's folder, and the flagged projects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorLayout"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The working directory; each namespace (Global's included) with its folder, its target, whether it's in place, its config file and inheritance; and the projects flagged \"Outside OpenCode's folder\" or \"Not in place\".",
+        "summary": "The layout",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.layout.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/layout/working-dir": {
+      "put": {
+        "tags": ["operator layout"],
+        "operationId": "operator.layout.workingDir",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The layout with the working directory set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorLayout"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorLayoutError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorLayoutError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Sets the working directory while it's blank: Global and OpenCode become separate namespaces, OpenCode's folder is <working dir>/opencode, and Global gets its own record. It must be inside the workspace roots, outside Global's folder and outside any git repository; it is created if missing. Changing it once set moves every namespace folder, which comes with the move procedure; clearing it isn't offered.",
+        "summary": "Set the working directory",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "workingDir": {
+                    "type": "string",
+                    "description": "An absolute folder"
+                  }
+                },
+                "required": ["workingDir"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.layout.workingDir({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/operator/project-records": {
       "get": {
         "tags": ["operator project records"],
@@ -30393,6 +30491,22 @@
           "namespace": {
             "$ref": "#/components/schemas/OperatorNamespace"
           },
+          "target": {
+            "type": "string",
+            "description": "Where its folder belongs: Global's folder, or <working dir>/<id>"
+          },
+          "inPlace": {
+            "type": "boolean",
+            "description": "Its folder is its target (else it moves there later)"
+          },
+          "global": {
+            "type": "boolean",
+            "description": "Global (or, with a blank working directory, Global · OpenCode): its config is Global's own file"
+          },
+          "configFile": {
+            "type": "string",
+            "description": "Its config file"
+          },
           "projects": {
             "type": "array",
             "items": {
@@ -30407,7 +30521,7 @@
             "type": "string"
           }
         },
-        "required": ["namespace", "projects"],
+        "required": ["namespace", "target", "inPlace", "global", "configFile", "projects"],
         "additionalProperties": false
       },
       "OperatorProfileInvalidError": {
@@ -30598,6 +30712,10 @@
           },
           "registered": {
             "type": "boolean"
+          },
+          "flag": {
+            "type": "string",
+            "enum": ["outside-opencode", "not-in-place"]
           }
         },
         "required": ["key", "name", "namespace"],
@@ -30951,6 +31069,108 @@
           }
         },
         "required": ["purged"],
+        "additionalProperties": false
+      },
+      "OperatorLayoutNamespace": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "folder": {
+            "type": "string",
+            "description": "The folder it uses now"
+          },
+          "target": {
+            "type": "string",
+            "description": "Where it belongs: Global's folder, or <working dir>/<id>"
+          },
+          "inPlace": {
+            "type": "boolean"
+          },
+          "global": {
+            "type": "boolean",
+            "description": "Global (or, with a blank working directory, Global · OpenCode)"
+          },
+          "configFile": {
+            "type": "string"
+          },
+          "inheritGlobal": {
+            "type": "boolean"
+          }
+        },
+        "required": ["id", "name", "folder", "target", "inPlace", "global", "configFile", "inheritGlobal"],
+        "additionalProperties": false
+      },
+      "OperatorLayoutFlagged": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "flag": {
+            "type": "string",
+            "enum": ["outside-opencode", "not-in-place"]
+          }
+        },
+        "required": ["project", "name", "namespace", "flag"],
+        "additionalProperties": false
+      },
+      "OperatorLayout": {
+        "type": "object",
+        "properties": {
+          "workingDir": {
+            "type": "string"
+          },
+          "merged": {
+            "type": "boolean",
+            "description": "The working directory is blank: Global and OpenCode are one namespace"
+          },
+          "namespaces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorLayoutNamespace"
+            }
+          },
+          "flagged": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorLayoutFlagged"
+            },
+            "description": "Projects outside OpenCode's folder, and projects not yet in their namespace's folder"
+          }
+        },
+        "required": ["merged", "namespaces", "flagged"],
+        "additionalProperties": false
+      },
+      "OperatorLayoutError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorLayoutError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
         "additionalProperties": false
       },
       "OperatorProjectStatus": {
@@ -50386,6 +50606,10 @@
     {
       "name": "operator trash",
       "description": "Trash routes."
+    },
+    {
+      "name": "operator layout",
+      "description": "Where namespaces and projects live."
     },
     {
       "name": "operator project records",

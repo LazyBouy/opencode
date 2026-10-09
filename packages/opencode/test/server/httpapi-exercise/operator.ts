@@ -639,6 +639,25 @@ export const operatorScenarios: Scenario[] = [
       body: { path: `${ctx.directory}/AGENTS.md`, text: "Written by the exerciser.\n" },
     }))
     .json(200, (body) => check(body === true, "AGENTS.md at the project root should be created"), "status"),
+  http.protected.get("/operator/layout", "operator.layout.get").json(200, (body) => {
+    object(body)
+    array(body.namespaces)
+    array(body.flagged)
+    check(typeof body.merged === "boolean", "the layout should say whether Global and OpenCode are one")
+    check(
+      body.namespaces.some((item) => isRecord(item) && item.global === true),
+      "Global (or Global · OpenCode) should be in the layout",
+    )
+  }),
+  // Setting it would split Global and OpenCode for every later scenario: only the refusal is exercised.
+  http.protected
+    .put("/operator/layout/working-dir", "operator.layout.workingDir")
+    .at((ctx) => ({
+      path: "/operator/layout/working-dir",
+      headers: ctx.headers(),
+      body: { workingDir: "relative/dir" },
+    }))
+    .status(400),
   http.protected.get("/operator/namespaces", "operator.namespace.list").json(200, (body) => {
     array(body)
     check(

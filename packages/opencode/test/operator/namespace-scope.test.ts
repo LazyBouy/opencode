@@ -213,6 +213,12 @@ describe("the namespace layer", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ inheritGlobal }),
       })
+    // With a working directory, Global and OpenCode are separate: OpenCode has the switch. (Blank, OpenCode
+    // is Global, which always has its own capabilities.)
+    await using work = await tmpdir()
+    const settings = path.join(store(), "settings.json")
+    const before = await fs.readFile(settings, "utf8").catch(() => undefined)
+    await write(settings, JSON.stringify({ workingDir: work.path }))
     try {
       expect((await patch(false)).status).toBe(200)
       for (let attempt = 0; attempt < 50 && (await commands()).includes("ghello"); attempt++)
@@ -221,6 +227,18 @@ describe("the namespace layer", () => {
       expect(await Effect.runPromise(OperatorNamespaceScope.inheritsGlobal(opencode.path, opencode.path))).toBe(false)
     } finally {
       expect((await patch(true)).status).toBe(200)
+      if (before === undefined) await fs.rm(settings, { force: true })
+      else await fs.writeFile(settings, before)
     }
+  })
+
+  test("with a blank working directory, OpenCode is Global and keeps Global's capabilities", async () => {
+    const off = await app().request("/operator/namespaces/opencode", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ inheritGlobal: false }),
+    })
+    expect(off.status).toBe(400)
+    expect(JSON.stringify(await off.json())).toContain("Global can't leave out its own capabilities")
   })
 })

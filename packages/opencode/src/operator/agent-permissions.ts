@@ -8,6 +8,7 @@ import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
 import { OperatorAgents } from "./agents"
 import { OperatorConfig } from "./config"
+import { OperatorLayout } from "./layout"
 import { OperatorPermissionLive } from "./permission-live"
 import { OperatorPermissionModel } from "./permission-model"
 import { OperatorPermissionRules } from "./permission-rules"
@@ -154,7 +155,10 @@ const layer = Layer.effect(
         agent: name,
         inherited: rowsOf(inherited.lines),
         levelRows: rowsOf(inForce.lines),
-        canDeleteOpenCode: (yield* operatorConfig.namespaceOf()) !== "opencode",
+        canDeleteOpenCode: !OperatorLayout.builtinsProtected(
+          yield* operatorConfig.namespaceOf(),
+          yield* Effect.promise(() => OperatorLayout.snapshot()),
+        ),
         rows: labelled.rows,
         own: labelled.own,
         written: OperatorPermissionRules.writtenRules(entry?.permission),

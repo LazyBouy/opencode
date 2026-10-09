@@ -25,7 +25,8 @@ services:
       # Operator → Projects → Add project browses and creates folders only inside these roots.
       OPENCODE_WORKSPACE_ROOTS: ${WORKSPACE:-/root/projects}
       # The OpenCode namespace's folder and default project, set on first start while it has no folder.
-      OPENCODE_OPERATOR_NAMESPACE_FOLDER: ${OPENCODE_NAMESPACE_FOLDER:-/root/projects/agent-harnesses/opencode}
+      # Every namespace but Global lives here, at <working dir>/<namespace>; OpenCode at <working dir>/opencode.
+      OPENCODE_OPERATOR_WORKING_DIR: ${OPENCODE_WORKING_DIR:-/root/projects/agent-harnesses}
       OPENCODE_OPERATOR_DEFAULT_PROJECT: ${OPENCODE_DEFAULT_PROJECT:-/root/projects/agent-harnesses/opencode/opencode}
     volumes:
       # Projects are mounted at the same path as on the host, so paths shown in the UI and the

@@ -71,7 +71,8 @@ test("a namespace, a moved project, a custom type and group, a profile, a projec
   await namespace.getByRole("button", { name: "Create namespace" }).click()
   await expect.poll(() => state.prompt.namespaces.map((item) => item.id)).toContain("acme")
   expect(state.prompt.namespaces.find((item) => item.id === "acme")?.folder).toBe("/workspace/apps")
-  await expect(namespace.getByTestId("namespace-folder")).toHaveText("/workspace/apps")
+  // Not at <working directory>/acme: it uses its folder and says so.
+  await expect(namespace.getByTestId("namespace-folder")).toContainText("/workspace/apps")
   await expect(namespace.getByTestId("namespace-view")).toContainText("We build developer tools.")
   await page.keyboard.press("Escape")
   await expect(settings.locator('[data-slot="settings-namespace"]', { hasText: "Acme" })).toBeVisible()

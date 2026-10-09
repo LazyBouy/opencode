@@ -15,6 +15,7 @@ import { operatorSessionPermissionsHandlers } from "./handlers/session-permissio
 import { operatorAgentSessionsHandlers } from "./handlers/agent-sessions"
 import { operatorQueueHandlers } from "./handlers/queue"
 import { operatorTrashHandlers, operatorTrashItemHandlers } from "./handlers/trash"
+import { operatorLayoutHandlers } from "./handlers/layout"
 import { operatorProjectRecordHandlers } from "./handlers/project-records"
 import { operatorPermissionDecisionHandlers } from "./handlers/permission-decisions"
 import { operatorCapabilityHandlers } from "./handlers/capabilities"
@@ -43,6 +44,7 @@ export const operatorRootHandlers = [
   operatorFolderHandlers,
   operatorNamespaceHandlers,
   operatorTrashHandlers,
+  operatorLayoutHandlers,
   operatorProjectRecordHandlers,
   operatorPermissionDecisionHandlers,
 ] as const

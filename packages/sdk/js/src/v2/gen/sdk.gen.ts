@@ -203,6 +203,10 @@ import type {
   OperatorFolderSessionsArchiveResponses,
   OperatorFolderSessionsMoveErrors,
   OperatorFolderSessionsMoveResponses,
+  OperatorLayoutGetErrors,
+  OperatorLayoutGetResponses,
+  OperatorLayoutWorkingDirErrors,
+  OperatorLayoutWorkingDirResponses,
   OperatorMemoryOverviewErrors,
   OperatorMemoryOverviewResponses,
   OperatorMemoryReadErrors,
@@ -3047,6 +3051,48 @@ export class Trash extends HeyApiClient {
   }
 }
 
+export class Layout extends HeyApiClient {
+  /**
+   * The layout
+   *
+   * The working directory; each namespace (Global's included) with its folder, its target, whether it's in place, its config file and inheritance; and the projects flagged "Outside OpenCode's folder" or "Not in place".
+   */
+  public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<OperatorLayoutGetResponses, OperatorLayoutGetErrors, ThrowOnError>({
+      url: "/operator/layout",
+      ...options,
+    })
+  }
+
+  /**
+   * Set the working directory
+   *
+   * Sets the working directory while it's blank: Global and OpenCode become separate namespaces, OpenCode's folder is <working dir>/opencode, and Global gets its own record. It must be inside the workspace roots, outside Global's folder and outside any git repository; it is created if missing. Changing it once set moves every namespace folder, which comes with the move procedure; clearing it isn't offered.
+   */
+  public workingDir<ThrowOnError extends boolean = false>(
+    parameters?: {
+      workingDir?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "workingDir" }] }])
+    return (options?.client ?? this.client).put<
+      OperatorLayoutWorkingDirResponses,
+      OperatorLayoutWorkingDirErrors,
+      ThrowOnError
+    >({
+      url: "/operator/layout/working-dir",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class ProjectRecord extends HeyApiClient {
   /**
    * List projects' records
@@ -5529,6 +5575,11 @@ export class Operator extends HeyApiClient {
   private _trash?: Trash
   get trash(): Trash {
     return (this._trash ??= new Trash({ client: this.client }))
+  }
+
+  private _layout?: Layout
+  get layout(): Layout {
+    return (this._layout ??= new Layout({ client: this.client }))
   }
 
   private _projectRecord?: ProjectRecord

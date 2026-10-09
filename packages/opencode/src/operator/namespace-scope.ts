@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import path from "path"
 import { Effect } from "effect"
 import { Global } from "@opencode-ai/core/global"
+import { OperatorLayout } from "./layout"
 
 // The namespace layer of a project's capabilities (capability_scopes_spec.md §4): the folder
 // `<namespace folder>/.opencode/`, laid out as a project's `.opencode` (opencode.jsonc, commands/,
@@ -22,7 +23,6 @@ import { Global } from "@opencode-ai/core/global"
 // switch, OpenCode's included (global_and_opencode_namespaces_spec.md §6); it is on unless turned off.
 
 const CONFIG_DIR = ".opencode"
-const OPENCODE = "opencode"
 // This module is imported by config/paths.ts, so it reads the namespace store's two small files itself
 // (profile-store.ts writes them) rather than importing the operator's services.
 const store = () => path.join(Global.Path.config, "namespaces")
@@ -76,50 +76,46 @@ function projectOf(directory: string, worktree: string, registered: ReadonlyArra
   )
 }
 
-// The namespace a folder's project is in, and that namespace's `.opencode` folder when it exists.
+// The namespace a folder's project is in (by location, layout.ts), and that namespace's `.opencode`
+// folder when it exists. Global's projects have no namespace layer: Global is already the base.
 export async function layerOf(directory: string, worktree?: string): Promise<Layer> {
   const settings = await readJson(path.join(store(), "projects.json"))
   const project = projectOf(directory, worktree ?? "/", Object.keys(settings))
   const entry = settings[project]
-  const namespace =
+  const assigned =
     entry && typeof entry === "object" && typeof (entry as { namespace?: unknown }).namespace === "string"
       ? (entry as { namespace: string }).namespace
-      : OPENCODE
-  const record = await readJson(path.join(store(), namespace, "namespace.json"))
-  const folder = typeof record.folder === "string" && record.folder ? record.folder : undefined
-  const dir = folder ? path.join(folder, CONFIG_DIR) : undefined
-  const inherit = record.inheritGlobal !== false
+      : undefined
+  const layout = await OperatorLayout.snapshot()
+  const namespace = OperatorLayout.membership(project, layout, assigned).namespace
+  const place = OperatorLayout.placeOf(namespace, layout)
+  const inherit = place?.inheritGlobal ?? true
   loaded.set(directory, { project, namespace })
+  const dir = place && !place.global ? place.configDir : undefined
   if (!dir || !(await exists(dir))) return { namespace, project, inherit }
   owned.add(dir)
   return { namespace, project, dir, inherit }
 }
 
 // A namespace's own layer by id (for its Capabilities page, outside any project): its `.opencode`
-// folder when it exists, where it would be, and whether it inherits the global capabilities.
+// folder when it exists, where it would be, and whether it inherits Global's capabilities. Global's
+// layer is Global's folder itself.
 export async function namespaceLayer(namespace: string) {
-  const record = await readJson(path.join(store(), namespace, "namespace.json"))
-  const folder = typeof record.folder === "string" && record.folder ? record.folder : undefined
-  const target = folder ? path.join(folder, CONFIG_DIR) : undefined
-  const dir = target && (await exists(target)) ? target : undefined
-  if (dir) owned.add(dir)
-  return { namespace, dir, target, inherit: record.inheritGlobal !== false }
+  const layout = await OperatorLayout.snapshot()
+  const place = OperatorLayout.placeOf(namespace, layout)
+  const id = OperatorLayout.resolveId(namespace, layout)
+  if (!place) return { namespace: id, inherit: true, global: false }
+  const target = place.configDir
+  const dir = (await exists(target)) ? target : undefined
+  if (dir && !place.global) owned.add(dir)
+  return { namespace: id, dir, target, inherit: place.inheritGlobal, global: place.global }
 }
 
-// Every namespace that has a folder, by id (scopes.ts classifies paths with them).
+// Every namespace's folder but Global's, by id (scopes.ts classifies paths with them; Global's folder
+// is Global's scope).
 export async function namespaceFolders(): Promise<Array<{ id: string; folder: string }>> {
-  const ids = await fs.readdir(store(), { withFileTypes: true }).catch(() => [])
-  const found = await Promise.all(
-    ids
-      .filter((entry) => entry.isDirectory())
-      .map(async (entry) => {
-        const record = await readJson(path.join(store(), entry.name, "namespace.json"))
-        return typeof record.folder === "string" && record.folder
-          ? [{ id: entry.name, folder: path.resolve(record.folder) }]
-          : []
-      }),
-  )
-  return found.flat()
+  const layout = await OperatorLayout.snapshot()
+  return layout.places.filter((place) => !place.global).map((place) => ({ id: place.id, folder: place.folder }))
 }
 
 // The global folders that hold capability files (for telling scopes apart).

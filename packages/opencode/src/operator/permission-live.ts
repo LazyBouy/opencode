@@ -11,6 +11,7 @@ import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { InstanceState } from "@/effect/instance-state"
 import { OperatorConfig } from "./config"
+import { OperatorLayout } from "./layout"
 import { OperatorNamespaceScope } from "./namespace-scope"
 import { OperatorPermissionEffective } from "./permission-effective"
 import { OperatorPermissionHook } from "./permission-hook"
@@ -166,6 +167,10 @@ const layer = Layer.effect(
       const ctx = yield* InstanceState.context
       const ns = yield* operatorConfig.namespaceOf(namespace)
       const inherit = (yield* Effect.promise(() => OperatorNamespaceScope.namespaceLayer(ns))).inherit
+      // Global's lines and marks are the Global level (for every namespace that inherits it); for Global
+      // itself (or "Global · OpenCode") they are its own level, and it has no namespace level.
+      const layout = yield* Effect.promise(() => OperatorLayout.snapshot())
+      const isGlobal = OperatorLayout.isGlobal(ns, layout)
       const layers = yield* operatorConfig.layers(namespace)
       const target = draft ? layers.targets[draft.level] : undefined
       const of = (kinds: ReadonlyArray<string>) =>
@@ -186,14 +191,22 @@ const layer = Layer.effect(
       const project = yield* Effect.promise(() => OperatorProjects.keyOf(ctx))
       return {
         namespace: ns,
+        protectBuiltins: OperatorLayout.builtinsProtected(ns, layout),
         lines: {
-          global: inherit ? of(["global"]) : [],
-          namespace: [...of(["namespace"]), ...drafted("namespace")],
+          global: inherit || isGlobal ? [...of(["global"]), ...(isGlobal ? drafted("namespace") : [])] : [],
+          namespace: isGlobal ? [] : [...of(["namespace"]), ...drafted("namespace")],
           project: [...of(["project", "directory", "env"]), ...drafted("project"), ...env],
         },
         marks: {
-          namespace:
-            draft?.level === "namespace"
+          global:
+            isGlobal && draft?.level === "namespace"
+              ? draft.marks
+              : inherit || isGlobal
+                ? yield* Effect.promise(() => OperatorPermissionMarks.namespaceMarks(OperatorLayout.globalId(layout)))
+                : OperatorPermissionMarks.EMPTY,
+          namespace: isGlobal
+            ? OperatorPermissionMarks.EMPTY
+            : draft?.level === "namespace"
               ? draft.marks
               : yield* Effect.promise(() => OperatorPermissionMarks.namespaceMarks(ns)),
           project:
@@ -250,7 +263,7 @@ const layer = Layer.effect(
             }))
       const levels: Model.Level<Meta>[] = [
         { lines: [...part("opencode"), ...part("truncation")] },
-        { lines: config.lines.global },
+        { lines: config.lines.global, ...config.marks.global },
         { lines: config.lines.namespace, ...config.marks.namespace },
         { lines: config.lines.project, ...config.marks.project },
         { lines: [...inherited, ...own], deleted: locked.deleted, locks: [...inherited, ...locked.keys] },
@@ -259,7 +272,7 @@ const layer = Layer.effect(
       const upTo = input.upTo ? LEVEL[input.upTo] : levels.length - 1
       // OpenCode's own lines can't be deleted in the OpenCode namespace.
       return Model.build<Meta>(levels.slice(0, upTo + 1), {
-        keep: (line) => config.namespace === "opencode" && line.level === LEVEL.opencode,
+        keep: (line) => config.protectBuiltins && line.level === LEVEL.opencode,
       })
     })
 

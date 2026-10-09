@@ -33,7 +33,15 @@ type Namespace = {
 type Items = { types: GroupType[]; layers: Layer[]; groups: Group[]; profiles: Profile[] }
 type Override = { group?: string; slots?: Record<string, string[]> }
 export type AgentSetting = { profile?: string; override?: Override }
-export type ProjectSetting = { namespace: string; purpose?: string; defaultProfile?: string }
+export type ProjectSetting = {
+  namespace: string
+  purpose?: string
+  defaultProfile?: string
+  flag?: "outside-opencode" | "not-in-place"
+}
+
+// Global's folder in the mock; the working directory starts set, as in the dev stack.
+export const GLOBAL_FOLDER = "/home/me/.config/opencode"
 
 const type = (id: string, name: string): GroupType => ({ id, name, description: "", builtin: true })
 const builtin = (id: string, name: string, type: string, section: string, origin: string, text = ""): Layer => ({
@@ -177,6 +185,10 @@ export interface PromptMock {
   readonly projects: Record<string, ProjectSetting>
   readonly agents: Record<string, AgentSetting>
   readonly writes: Array<{ method: string; path: string; body: unknown }>
+  /** Blank (undefined): Global and OpenCode are one namespace. */
+  workingDir: string | undefined
+  /** Global's record, listed while the working directory is set. */
+  readonly global: Namespace
 }
 
 // What OpenCode writes per request in the mock: generated layers by id (empty ones are not sent).
@@ -204,10 +216,41 @@ export function createPromptMock(
 ) {
   const state: PromptMock = {
     namespaces: [{ id: "opencode", name: "OpenCode", purpose: "", createdAt: 0, updatedAt: 0 }],
-    items: { opencode: { types: [], layers: [], groups: [], profiles: [] } },
+    items: {
+      opencode: { types: [], layers: [], groups: [], profiles: [] },
+      global: { types: [], layers: [], groups: [], profiles: [] },
+    },
     projects: Object.fromEntries(projects.map((project) => [project.key, { namespace: "opencode" }])),
     agents: {},
     writes: [],
+    workingDir: "/workspace",
+    global: { id: "global", name: "Global", purpose: "", createdAt: 0, updatedAt: 0 },
+  }
+  // Global first when separate; with a blank working directory OpenCode is Global.
+  const listed = () => (state.workingDir ? [state.global, ...state.namespaces] : state.namespaces)
+  const place = (namespace: Namespace) => {
+    const global = namespace.id === "global" || (!state.workingDir && namespace.id === "opencode")
+    const target = global
+      ? GLOBAL_FOLDER
+      : state.workingDir
+        ? `${state.workingDir}/${namespace.id}`
+        : (namespace.folder ?? "")
+    const folder = global ? GLOBAL_FOLDER : (namespace.folder ?? target)
+    return {
+      folder,
+      target,
+      inPlace: global || !state.workingDir || folder === target,
+      global,
+      configFile: global ? `${GLOBAL_FOLDER}/opencode.jsonc` : `${folder}/.opencode/opencode.jsonc`,
+    }
+  }
+  // Like the server: a project assigned to another namespace than OpenCode stays there until its folder
+  // is in the namespace's ("Outside OpenCode's folder" is only set by a test).
+  const notInPlace = (key: string, ns: string) => {
+    const namespace = ns === "opencode" ? undefined : listed().find((item) => item.id === ns)
+    if (!namespace) return false
+    const folder = place(namespace).folder
+    return !!folder && key !== folder && !key.startsWith(`${folder}/`)
   }
   const nameOf = (key: string) =>
     projects.find((project) => project.key === key)?.name ?? key.split("/").filter(Boolean).at(-1) ?? key
@@ -237,8 +280,10 @@ export function createPromptMock(
       .map(([key]) => key)
     const chosen =
       namespace.defaultProject && keys.includes(namespace.defaultProject) ? namespace.defaultProject : keys[0]
+    const { folder, ...where } = place(namespace)
     return {
-      namespace,
+      namespace: { ...namespace, folder },
+      ...where,
       projects: keys,
       ...(chosen ? { defaultProject: chosen } : {}),
       ...(keys[0] ? { firstProject: keys[0] } : {}),
@@ -263,7 +308,7 @@ export function createPromptMock(
     ),
   }
   const catalog = (ns: string) => {
-    const namespace = state.namespaces.find((item) => item.id === ns)!
+    const namespace = listed().find((item) => item.id === ns)!
     const items = state.items[ns]!
     const keys = summary(namespace).projects
     const opencode = ns === "opencode"
@@ -524,6 +569,7 @@ export function createPromptMock(
             key,
             name: nameOf(key),
             ...setting,
+            ...(!setting.flag && notInPlace(key, setting.namespace) ? { flag: "not-in-place" } : {}),
             registered: true,
           })),
         )
@@ -570,9 +616,32 @@ export function createPromptMock(
       return json(route, agentPrompt(project, name))
     }
 
+    if (url.pathname === "/operator/layout" || url.pathname === "/operator/layout/working-dir") {
+      if (method === "PUT") {
+        if (state.workingDir) return json(route, { name: "OperatorLayoutError", data: { message: "Already set" } }, 400)
+        const folder = String(body?.workingDir ?? "")
+        if (!folder.startsWith("/"))
+          return json(route, { name: "OperatorLayoutError", data: { message: "Must be absolute" } }, 400)
+        state.workingDir = folder
+      }
+      return json(route, {
+        ...(state.workingDir ? { workingDir: state.workingDir } : {}),
+        merged: !state.workingDir,
+        namespaces: listed().map((namespace) => ({
+          id: namespace.id,
+          name: namespace.name,
+          ...place(namespace),
+          inheritGlobal: place(namespace).global || namespace.inheritGlobal !== false,
+        })),
+        flagged: Object.entries(state.projects).flatMap(([key, setting]) =>
+          setting.flag ? [{ project: key, name: nameOf(key), namespace: setting.namespace, flag: setting.flag }] : [],
+        ),
+      })
+    }
+
     const parts = url.pathname.slice("/operator/namespaces".length).split("/").filter(Boolean).map(decodeURIComponent)
     if (parts.length === 0) {
-      if (method === "GET") return json(route, state.namespaces.map(summary))
+      if (method === "GET") return json(route, listed().map(summary))
       const name = String(body?.name ?? "")
       const folder = String(body?.folder ?? "")
       if (!folder.startsWith("/")) return invalid(route, "A namespace needs a folder")
@@ -590,7 +659,7 @@ export function createPromptMock(
       return json(route, namespace)
     }
     const [ns, kind, id, action] = parts as [string, string?, string?, string?]
-    const namespace = state.namespaces.find((item) => item.id === ns)
+    const namespace = listed().find((item) => item.id === ns)
     if (!namespace)
       return json(route, { name: "OperatorProfileNotFoundError", data: { message: `No namespace ${ns}` } }, 404)
     const items = state.items[ns]!

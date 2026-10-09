@@ -12,6 +12,7 @@ import { OperatorProjectRecordGroup } from "./project-records"
 import { OperatorNamespaceGroup } from "./namespaces"
 import { OperatorPermissionDecisionGroup } from "./permission-decisions"
 import { OperatorTrashGroup } from "./trash"
+import { OperatorLayoutGroup } from "./layout"
 
 export const OperatorOverviewPaths = {
   status: "/operator/status",
@@ -102,6 +103,7 @@ export const OperatorRootApi = HttpApi.make("operator-root")
   .add(OperatorFolderGroup)
   .add(OperatorNamespaceGroup)
   .add(OperatorTrashGroup)
+  .add(OperatorLayoutGroup)
   .add(OperatorProjectRecordGroup)
   .add(OperatorPermissionDecisionGroup)
   .middleware(SchemaErrorMiddleware)

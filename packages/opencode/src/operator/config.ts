@@ -13,6 +13,7 @@ import { ConfigPaths } from "@/config/paths"
 import { ConfigV2Compat } from "@/config/v2-compat"
 import { InstanceState } from "@/effect/instance-state"
 import { isRecord } from "@/util/record"
+import { OperatorLayout } from "./layout"
 import { OperatorNamespaceScope } from "./namespace-scope"
 
 export const Scope = Schema.Literals(["global", "project"]).annotate({ identifier: "OperatorConfigScope" })
@@ -111,6 +112,14 @@ const layer = Layer.effect(
     const namespaceFile = Effect.fnUntraced(function* (namespace?: string) {
       const id = yield* namespaceOf(namespace)
       const layer = yield* Effect.promise(() => OperatorNamespaceScope.namespaceLayer(id))
+      // Global's config is Global's own file (layout.ts); it is already read as the Global base.
+      if (layer.global)
+        return {
+          id: layer.namespace,
+          dir: layer.target,
+          file: yield* Effect.promise(() => OperatorLayout.globalConfigFile()),
+          global: true,
+        }
       if (!layer.target) return { id, dir: undefined, file: undefined }
       const existing = yield* Effect.forEach(["opencode.jsonc", "opencode.json"], (name) =>
         fs.existsSafe(path.join(layer.target!, name)).pipe(Effect.map((found) => (found ? name : undefined))),
@@ -127,11 +136,12 @@ const layer = Layer.effect(
         read("global", path.join(Global.Path.config, name)),
       )
       const own = yield* namespaceFile(namespace)
-      const ns = own.dir
-        ? yield* Effect.forEach(["opencode.json", "opencode.jsonc"], (name) =>
-            read("namespace", path.join(own.dir!, name)),
-          )
-        : []
+      const ns =
+        own.dir && !("global" in own)
+          ? yield* Effect.forEach(["opencode.json", "opencode.jsonc"], (name) =>
+              read("namespace", path.join(own.dir!, name)),
+            )
+          : []
       // The environment's files are "env" (global_and_opencode_namespaces_spec.md §13 #5).
       const custom = Flag.OPENCODE_CONFIG ? yield* read("env", Flag.OPENCODE_CONFIG) : []
       const project = Flag.OPENCODE_DISABLE_PROJECT_CONFIG

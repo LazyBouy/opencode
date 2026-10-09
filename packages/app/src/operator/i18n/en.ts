@@ -26,6 +26,19 @@ export const dict = {
   "settings.namespaces.title": "Namespaces",
   "settings.namespaces.description":
     "A namespace is an organization: its projects, and the group types, layers, groups and profiles their agents' prompts are built from. Every project is in OpenCode until it moves to another namespace.",
+  "settings.namespaces.workingDir": "Working directory",
+  "settings.namespaces.workingDirHint":
+    "Every namespace except Global lives here, at <working directory>/<namespace>/. Blank means Global and OpenCode are the same namespace.",
+  "settings.namespaces.workingDirBlank": "Blank: Global and OpenCode are one namespace",
+  "settings.namespaces.workingDirSet": "Set working directory",
+  "settings.namespaces.workingDirSetHint":
+    "Global and OpenCode become separate namespaces: OpenCode's folder is <working directory>/opencode, and Global keeps ~/.config/opencode.",
+  "settings.namespaces.workingDirFixed": "Changing it moves every namespace folder; that comes with moving folders.",
+  "settings.namespaces.workingDirFailed": "Couldn't set the working directory",
+  "settings.namespaces.globalOpenCode": "Global · OpenCode",
+  "settings.namespaces.notInPlace": "Not in place: it belongs at {{target}}",
+  "settings.namespaces.globalFolder": "Global's folder is always ~/.config/opencode",
+  "settings.namespaces.inheritGlobalSelf": "Always: Global's capabilities are its own",
   "settings.namespaces.new": "New namespace",
   "settings.namespaces.copyNote":
     "A new namespace starts as a copy of OpenCode: OpenCode's own types, layers, groups and profiles are copied, and built-in items stay shared. It has no projects until you move one in on the Projects page.",
@@ -1315,9 +1328,6 @@ export const dict = {
   "operator.profile.preview": "Preview",
 
   "operator.projects.add": "Add project",
-  "operator.projects.outsideFolder": "outside the namespace folder",
-  "operator.projects.outsideFolderHint":
-    "The project works normally. New projects of this namespace are created in its folder, {{folder}}.",
   "operator.projects.addFailed": "Couldn't add the project",
   "operator.projects.hint":
     "Each project has its own agents and settings in its .opencode folder. Built-in agents, and Global's in namespaces that inherit Global, are available in every project, and a project can change or turn them off. Each project is in one namespace; its agents use that namespace's prompt profiles.",
@@ -1326,6 +1336,12 @@ export const dict = {
   "operator.projects.globalHint": "Sessions started in folders that are not in a git repository",
   "operator.projects.newSession": "New session",
   "operator.projects.notProject": "Not a project",
+  "operator.projects.outsideOpenCode": "Outside OpenCode's folder",
+  "operator.projects.outsideOpenCodeHint":
+    "The project works normally and counts as OpenCode's. New OpenCode projects are created in its folder, {{folder}}.",
+  "operator.projects.notInPlace": "Not in place",
+  "operator.projects.notInPlaceHint":
+    "The project works normally and stays in its namespace until its folder moves into the namespace's folder, {{folder}}.",
   "operator.gate.title": "This folder is not a project",
   "operator.gate.body":
     "Every session, and the agents it runs, belongs to one project. {{folder}} is not part of one: start the session in a project, or make this folder a project.",

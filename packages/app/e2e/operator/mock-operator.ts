@@ -598,6 +598,7 @@ export async function mockOperator(page: Page) {
     }
     if (
       url.pathname.startsWith("/operator/namespaces") ||
+      url.pathname.startsWith("/operator/layout") ||
       url.pathname.startsWith("/operator/project-settings") ||
       url.pathname.startsWith("/operator/agent-prompt/") ||
       url.pathname === "/operator/prompt/preview" ||
@@ -935,8 +936,13 @@ export async function mockOperator(page: Page) {
         global: { path: "/home/me/.config/opencode/opencode.jsonc" },
       })
     if (url.pathname === "/operator/folder/roots") return json(route, [workspace])
-    if (url.pathname === "/operator/folder" && method === "GET")
-      return json(route, listing(url.searchParams.get("path") ?? workspace))
+    if (url.pathname === "/operator/folder" && method === "GET") {
+      const path = url.searchParams.get("path") ?? workspace
+      // Like the server, a folder that doesn't exist can't be listed.
+      if (path !== workspace && !state.folders.has(path))
+        return json(route, { name: "OperatorFolderInvalidError", data: { message: `${path} doesn't exist` } }, 400)
+      return json(route, listing(path))
+    }
     if (url.pathname === "/operator/folder" && method === "POST") {
       const body = route.request().postDataJSON() as { parent: string; name: string; git?: boolean }
       state.folderWrites.push({ url: url.toString(), body })

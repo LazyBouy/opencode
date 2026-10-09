@@ -8,13 +8,15 @@ import { InstanceRef } from "@/effect/instance-ref"
 import { McpAuth } from "@/mcp/auth"
 import { testEffect } from "../lib/effect"
 
-// MCP logins per namespace (capability_scopes_spec.md §8): OpenCode's keep upstream's keys (the server
-// name); another namespace's are `<namespace>/<server>`, so the same server has a login in each.
+// MCP logins per namespace (global_and_opencode_namespaces_spec.md §13 #3): Global's (here "Global ·
+// OpenCode": the working directory is blank) keep upstream's keys (the server name); another
+// namespace's are `<namespace>/<server>`, so the same server has a login in each.
 
 const it = testEffect(LayerNode.compile(McpAuth.node))
 const projects = () => path.join(Global.Path.config, "namespaces", "projects.json")
+const acmeRecord = () => path.join(Global.Path.config, "namespaces", "acme", "namespace.json")
 
-it.instance("a namespace's MCP logins are its own; OpenCode's keep the server name as key", () =>
+it.instance("a namespace's MCP logins are its own; Global's keep the server name as key", () =>
   Effect.gen(function* () {
     const instance = (yield* InstanceRef)!
     const auth = yield* McpAuth.Service
@@ -23,10 +25,14 @@ it.instance("a namespace's MCP logins are its own; OpenCode's keep the server na
       yield* auth.set("docs", { tokens: { accessToken: "opencode-token" } })
       expect((yield* auth.all()).docs?.tokens?.accessToken).toBe("opencode-token")
 
-      // The project is in Acme now.
+      // The project is in Acme now (Acme's folder is elsewhere: it is assigned, not in place yet).
       const key = instance.worktree === "/" ? instance.directory : instance.worktree
       yield* Effect.promise(async () => {
-        await fs.mkdir(path.dirname(projects()), { recursive: true })
+        await fs.mkdir(path.dirname(acmeRecord()), { recursive: true })
+        await fs.writeFile(
+          acmeRecord(),
+          JSON.stringify({ id: "acme", name: "Acme", purpose: "", folder: "/work/acme", createdAt: 1, updatedAt: 1 }),
+        )
         await fs.writeFile(projects(), JSON.stringify({ [key]: { namespace: "acme" } }))
       })
       expect(yield* auth.get("docs")).toBeUndefined()
@@ -41,6 +47,7 @@ it.instance("a namespace's MCP logins are its own; OpenCode's keep the server na
       expect((yield* auth.all()).docs).toBeDefined()
     } finally {
       yield* Effect.promise(async () => {
+        await fs.rm(path.dirname(acmeRecord()), { recursive: true, force: true })
         if (before === undefined) await fs.rm(projects(), { force: true })
         else await fs.writeFile(projects(), before)
       })

@@ -55,7 +55,9 @@ test("the table follows the namespace picker: a namespace's projects, under its 
   state.prompt.namespaces.push({ id: "acme", name: "Acme", purpose: "", createdAt: 1, updatedAt: 1 })
   await page.goto(`/operator/models?ns=*`)
   const table = page.getByTestId("models-per-project")
-  await expect(table.getByTestId("models-namespace")).toHaveText(["OpenCode", "Acme"])
+  // Global is a namespace of its own (the working directory is set).
+  await expect(table.getByTestId("models-namespace")).toHaveText(["Global", "OpenCode", "Acme"])
+  await expect(table).toContainText("Global has no projects yet.")
   await expect(table).toContainText("Acme has no projects yet.")
   await expect(table.locator(`[data-testid="models-row"][data-project="${directory}"]`)).toBeVisible()
 

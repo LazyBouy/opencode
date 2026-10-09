@@ -17,6 +17,7 @@ import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOve
 import { NamespacePicker, useNamespaceScope } from "../ui/namespace-picker"
 import { showToast } from "@/utils/toast"
 import { requestError } from "./config-helpers"
+import { OPENCODE } from "./profile-model"
 import { useOverlayParams } from "../ui/overlay-nav"
 import { ModelsPerProject } from "../ui/model-defaults"
 
@@ -28,7 +29,10 @@ type Row = Model & { providerName: string; isDefault: boolean; isSmall: boolean 
 function useModels() {
   const api = useOperatorClient()
   const scope = useNamespaceScope()
-  const namespace = () => (scope.all() ? scope.namespaces()[0] : scope.scoped()[0])
+  const namespace = () =>
+    scope.all()
+      ? (scope.namespaces().find((item) => item.namespace.id === OPENCODE) ?? scope.namespaces()[0])
+      : scope.scoped()[0]
   const directory = () => namespace()?.defaultProject
   const defaults = useQuery(() => ({
     queryKey: api.key("model-defaults", directory()),

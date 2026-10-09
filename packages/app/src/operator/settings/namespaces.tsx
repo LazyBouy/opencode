@@ -20,6 +20,7 @@ import { FieldHelp } from "../ui/field-help"
 import { useFolderBrowser } from "../ui/folder-browser"
 import { NamespaceStart, type Start } from "./namespace-start"
 import { LevelPermissions } from "../ui/level-permissions"
+import { WorkingDirectory } from "./working-dir"
 import { RecordField } from "../ui/record-overlay"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
@@ -88,6 +89,9 @@ export const SettingsNamespacesV2: Component = () => {
 
       <div class="settings-v2-tab-body" data-component="settings-namespaces">
         <div class="settings-v2-section">
+          <WorkingDirectory onChange={refetch} />
+        </div>
+        <div class="settings-v2-section">
           <SettingsListV2>
             <For each={list.latest ?? []}>
               {(item: OperatorNamespaceSummary) => (
@@ -110,8 +114,10 @@ export const SettingsNamespacesV2: Component = () => {
                     field={item.namespace.name}
                     title={
                       <span class="inline-flex items-center gap-2">
-                        {item.namespace.name}
-                        <Show when={item.namespace.id === OPENCODE}>
+                        {item.global && item.namespace.id === OPENCODE
+                          ? language.t("settings.namespaces.globalOpenCode")
+                          : item.namespace.name}
+                        <Show when={item.namespace.id === OPENCODE || item.global}>
                           <Tag title={language.t("operator.builtin.hint")}>{language.t("operator.builtin.label")}</Tag>
                         </Show>
                         <Tag>{language.t("settings.namespaces.projects", { count: item.projects.length })}</Tag>
@@ -302,8 +308,11 @@ function NamespaceRecord(props: {
                   label={language.t("settings.namespaces.folder")}
                   help={language.t("operator.help.namespaceFolder")}
                 >
-                  <span data-testid="namespace-folder">
+                  <span class="inline-flex items-center gap-2 flex-wrap" data-testid="namespace-folder">
                     {found().namespace.folder ?? language.t("settings.namespaces.noFolder")}
+                    <Show when={!found().inPlace}>
+                      <Tag>{language.t("settings.namespaces.notInPlace", { target: found().target })}</Tag>
+                    </Show>
                   </span>
                 </RecordField>
                 <RecordField
@@ -319,9 +328,11 @@ function NamespaceRecord(props: {
                   help={language.t("operator.help.namespaceInheritGlobal")}
                 >
                   <span data-testid="namespace-inherit-global">
-                    {found().namespace.inheritGlobal === false
-                      ? language.t("settings.namespaces.inheritOff")
-                      : language.t("settings.namespaces.inheritOn")}
+                    {found().global
+                      ? language.t("settings.namespaces.inheritGlobalSelf")
+                      : found().namespace.inheritGlobal === false
+                        ? language.t("settings.namespaces.inheritOff")
+                        : language.t("settings.namespaces.inheritOn")}
                   </span>
                 </RecordField>
               </dl>
@@ -368,41 +379,47 @@ function NamespaceRecord(props: {
             onInput={(event) => setStore("name", event.currentTarget.value)}
           />
         </div>
-        <div class="flex flex-col gap-1">
-          <div class="flex items-center">
-            <label class="text-12-medium" for={`${id}-folder`}>
-              {language.t("settings.namespaces.folder")}
-            </label>
-            <FieldHelp
-              field={language.t("settings.namespaces.folder")}
-              text={language.t("operator.help.namespaceFolder")}
-            />
+        <Show
+          when={!current()?.global}
+          fallback={<p data-slot="operator-note">{language.t("settings.namespaces.globalFolder")}</p>}
+        >
+          <div class="flex flex-col gap-1">
+            <div class="flex items-center">
+              <label class="text-12-medium" for={`${id}-folder`}>
+                {language.t("settings.namespaces.folder")}
+              </label>
+              <FieldHelp
+                field={language.t("settings.namespaces.folder")}
+                text={language.t("operator.help.namespaceFolder")}
+              />
+            </div>
+            <div class="flex items-center gap-2">
+              <TextInputV2
+                id={`${id}-folder`}
+                class="flex-1"
+                appearance="base"
+                value={store.folder}
+                placeholder="/"
+                onInput={(event) => setStore("folder", event.currentTarget.value)}
+              />
+              <ButtonV2
+                variant="outline"
+                onClick={() =>
+                  void browse({ start: store.folder.trim() || undefined, over: true }).then(
+                    (folder) => folder && setStore("folder", folder),
+                  )
+                }
+              >
+                {language.t("settings.namespaces.chooseFolder")}
+              </ButtonV2>
+            </div>
           </div>
-          <div class="flex items-center gap-2">
-            <TextInputV2
-              id={`${id}-folder`}
-              class="flex-1"
-              appearance="base"
-              value={store.folder}
-              placeholder="/"
-              onInput={(event) => setStore("folder", event.currentTarget.value)}
-            />
-            <ButtonV2
-              variant="outline"
-              onClick={() =>
-                void browse({ start: store.folder.trim() || undefined, over: true }).then(
-                  (folder) => folder && setStore("folder", folder),
-                )
-              }
-            >
-              {language.t("settings.namespaces.chooseFolder")}
-            </ButtonV2>
-          </div>
-        </div>
+        </Show>
         <span class="inline-flex items-center">
           <CheckboxV2
             label={language.t("settings.namespaces.inheritGlobal")}
-            checked={store.inheritGlobal}
+            checked={current()?.global || store.inheritGlobal}
+            disabled={current()?.global}
             onChange={(checked: boolean) => setStore("inheritGlobal", checked)}
           />
           <FieldHelp

@@ -159,11 +159,12 @@ test("a project outside its namespace's folder says so on its record", async ({ 
   await page.goto("/operator/projects")
   await page.getByRole("row", { name: /smoke-project/ }).click()
   const overlay = page.getByRole("dialog")
-  await expect(overlay).toContainText("outside the namespace folder")
+  // It stays in Acme until its folder moves into Acme's.
+  await expect(overlay.getByTestId("project-flag")).toHaveText("Not in place")
   state.prompt.namespaces.find((item) => item.id === "acme")!.folder = directory
   await page.reload()
   await expect(page.getByRole("dialog")).toContainText("Folder")
-  await expect(page.getByRole("dialog")).not.toContainText("outside the namespace folder")
+  await expect(page.getByRole("dialog").getByTestId("project-flag")).toHaveCount(0)
 })
 
 test("a project's record: goal, description, status, members, manager and groups", async ({ page }) => {

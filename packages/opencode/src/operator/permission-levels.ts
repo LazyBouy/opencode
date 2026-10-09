@@ -6,6 +6,7 @@ import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { InstanceState } from "@/effect/instance-state"
 import { OperatorAgentPermissions } from "./agent-permissions"
 import { OperatorConfig } from "./config"
+import { OperatorLayout } from "./layout"
 import { OperatorNamespaceScope } from "./namespace-scope"
 import { OperatorPermissionLive } from "./permission-live"
 import { OperatorPermissionMarks } from "./permission-marks"
@@ -113,33 +114,49 @@ const layer = Layer.effect(
       const project = level === "project" ? yield* Effect.promise(() => OperatorProjects.keyOf(ctx)) : undefined
       const layers = yield* operatorConfig.layers(id)
       const file = level === "project" ? layers.targets.project : layers.targets.namespace
-      return { ns, project, file }
+      // Global's lines are the Global level (the base under every namespace that inherits it); its marks
+      // are kept under its id (`opencode` when Global and OpenCode are one).
+      const layout = yield* Effect.promise(() => OperatorLayout.snapshot())
+      const global = level === "namespace" && OperatorLayout.isGlobal(ns, layout)
+      return {
+        ns,
+        project,
+        file,
+        global,
+        marksId: OperatorLayout.resolveId(ns, layout),
+        protect: OperatorLayout.builtinsProtected(ns, layout),
+        index: global ? OperatorPermissionLive.LEVEL.global : OperatorPermissionLive.LEVEL[level],
+        upTo: (global ? "global" : level) as OperatorPermissionRules.Level,
+        above: (level === "project" ? "namespace" : global ? "opencode" : "global") as OperatorPermissionRules.Level,
+      }
     })
+    type Where = Effect.Success<ReturnType<typeof where>>
 
-    const marksOf = (level: LevelName, ns: string, project?: string) =>
+    const marksOf = (level: LevelName, at: Where) =>
       Effect.promise(() =>
-        level === "project" && project
-          ? OperatorPermissionMarks.projectMarks(project)
-          : OperatorPermissionMarks.namespaceMarks(ns),
+        level === "project" && at.project
+          ? OperatorPermissionMarks.projectMarks(at.project)
+          : OperatorPermissionMarks.namespaceMarks(at.marksId),
       )
 
     // The lines down to the level, with a draft of the level in place of what is saved.
     const build = Effect.fnUntraced(function* (
       level: LevelName,
-      ns: string,
+      at: Where,
       draft?: { lines: ReadonlyArray<Rule>; marks: OperatorPermissionMarks.Marks },
     ) {
       return yield* live.lines({
-        upTo: level,
-        namespace: ns,
+        upTo: at.upTo,
+        namespace: at.ns,
         ...(draft ? { draft: { level, ...draft } } : {}),
       })
     })
 
     const view = Effect.fn("OperatorPermissionLevels.view")(function* (level: LevelName, namespace?: string) {
-      const { ns, project, file } = yield* where(level, namespace)
-      const marks = yield* marksOf(level, ns, project)
-      const built = yield* build(level, ns)
+      const at = yield* where(level, namespace)
+      const { ns, project, file } = at
+      const marks = yield* marksOf(level, at)
+      const built = yield* build(level, at)
       // The level's own lines as written in its file.
       const own = file
         ? OperatorPermissionRules.writtenRules(
@@ -152,7 +169,7 @@ const layer = Layer.effect(
           )
         : []
       // What the level inherits: the lines down to the level above. The deleted ones, as they were.
-      const above = yield* live.lines({ upTo: level === "project" ? "namespace" : "global", namespace: ns })
+      const above = yield* live.lines({ upTo: at.above, namespace: ns })
       const deleted = above.lines.filter((line) => marks.deleted.some((key) => Model.sameKey(key, line)))
       const editor = yield* agentPermissions.hints()
       return {
@@ -166,8 +183,8 @@ const layer = Layer.effect(
         inherited: Model.order(above.lines).map(rowOf),
         own,
         marks,
-        canDeleteOpenCode: ns !== "opencode",
-        blocked: blockedAt(built.blocked, OperatorPermissionLive.LEVEL[level]),
+        canDeleteOpenCode: !at.protect,
+        blocked: blockedAt(built.blocked, at.index),
         forms: editor.forms,
         known: editor.known,
       } satisfies View
@@ -178,7 +195,8 @@ const layer = Layer.effect(
       input: SaveInput,
       namespace?: string,
     ) {
-      const { ns, project, file } = yield* where(level, namespace)
+      const at = yield* where(level, namespace)
+      const { ns, project, file } = at
       if (!file)
         return yield* new InvalidError({
           message: `The namespace ${ns} has no folder; set one in Settings → Namespaces`,
@@ -190,8 +208,8 @@ const layer = Layer.effect(
       const marks = { deleted: [...input.deleted], locks: [...input.locks] }
       // Refused: a line or deletion a lock above sets aside, a line inside a locked line above that
       // decides otherwise, and a deletion of OpenCode's own lines in the OpenCode namespace.
-      const built = yield* build(level, ns, { lines, marks })
-      const index = OperatorPermissionLive.LEVEL[level]
+      const built = yield* build(level, at, { lines, marks })
+      const index = at.index
       const blocked = blockedAt(built.blocked, index)
       if (blocked.length) return yield* new LockedError({ message: blocked.map((item) => item.reason).join("\n") })
       const locked = built.lines.filter((line) => line.lockedAt !== undefined && line.lockedAt < index)
@@ -217,17 +235,20 @@ const layer = Layer.effect(
       yield* Effect.promise(() =>
         level === "project" && project
           ? OperatorPermissionMarks.writeProject(project, marks)
-          : OperatorPermissionMarks.writeNamespace(ns, marks),
+          : OperatorPermissionMarks.writeNamespace(at.marksId, marks),
       )
       // OpenCode reads the file when the project reloads, when none of its sessions is running; the fork
       // applies it now.
+      // Global's file is read by every project.
       const directories =
         level === "namespace"
           ? OperatorNamespaceScope.instancesOf({ namespace: ns })
           : [(yield* InstanceState.context).directory]
-      const reloaded = written.changed
-        ? yield* Effect.forEach(directories, (directory) => reloads.want({ directory }))
-        : []
+      const reloaded = !written.changed
+        ? []
+        : at.global
+          ? [yield* reloads.want("global")]
+          : yield* Effect.forEach(directories, (directory) => reloads.want({ directory }))
       const reload = reloaded.includes("when-idle") ? ("when-idle" as const) : ("now" as const)
       return { ...(yield* view(level, namespace)), reload }
     })

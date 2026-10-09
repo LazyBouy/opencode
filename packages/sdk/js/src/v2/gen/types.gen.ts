@@ -2349,6 +2349,22 @@ export type OperatorNamespace = {
 export type OperatorNamespaceSummary = {
   namespace: OperatorNamespace
   /**
+   * Where its folder belongs: Global's folder, or <working dir>/<id>
+   */
+  target: string
+  /**
+   * Its folder is its target (else it moves there later)
+   */
+  inPlace: boolean
+  /**
+   * Global (or, with a blank working directory, Global · OpenCode): its config is Global's own file
+   */
+  global: boolean
+  /**
+   * Its config file
+   */
+  configFile: string
+  /**
    * Keys of the namespace's projects
    */
   projects: Array<string>
@@ -2438,6 +2454,7 @@ export type OperatorPromptProject = {
   purpose?: string
   defaultProfile?: string
   registered?: boolean
+  flag?: "outside-opencode" | "not-in-place"
 }
 
 export type OperatorPromptOverride = {
@@ -2580,6 +2597,53 @@ export type OperatorTrashError = {
 
 export type OperatorTrashEmptied = {
   purged: number
+}
+
+export type OperatorLayoutNamespace = {
+  id: string
+  name: string
+  /**
+   * The folder it uses now
+   */
+  folder: string
+  /**
+   * Where it belongs: Global's folder, or <working dir>/<id>
+   */
+  target: string
+  inPlace: boolean
+  /**
+   * Global (or, with a blank working directory, Global · OpenCode)
+   */
+  global: boolean
+  configFile: string
+  inheritGlobal: boolean
+}
+
+export type OperatorLayoutFlagged = {
+  project: string
+  name: string
+  namespace: string
+  flag: "outside-opencode" | "not-in-place"
+}
+
+export type OperatorLayout = {
+  workingDir?: string
+  /**
+   * The working directory is blank: Global and OpenCode are one namespace
+   */
+  merged: boolean
+  namespaces: Array<OperatorLayoutNamespace>
+  /**
+   * Projects outside OpenCode's folder, and projects not yet in their namespace's folder
+   */
+  flagged: Array<OperatorLayoutFlagged>
+}
+
+export type OperatorLayoutError = {
+  name: "OperatorLayoutError"
+  data: {
+    message: string
+  }
 }
 
 export type OperatorProjectStatus = "draft" | "active" | "paused" | "completed" | "archived"
@@ -11083,6 +11147,62 @@ export type OperatorTrashPurgeResponses = {
 }
 
 export type OperatorTrashPurgeResponse = OperatorTrashPurgeResponses[keyof OperatorTrashPurgeResponses]
+
+export type OperatorLayoutGetData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/operator/layout"
+}
+
+export type OperatorLayoutGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorLayoutGetError = OperatorLayoutGetErrors[keyof OperatorLayoutGetErrors]
+
+export type OperatorLayoutGetResponses = {
+  /**
+   * The working directory, each namespace's folder, and the flagged projects
+   */
+  200: OperatorLayout
+}
+
+export type OperatorLayoutGetResponse = OperatorLayoutGetResponses[keyof OperatorLayoutGetResponses]
+
+export type OperatorLayoutWorkingDirData = {
+  body?: {
+    /**
+     * An absolute folder
+     */
+    workingDir: string
+  }
+  path?: never
+  query?: never
+  url: "/operator/layout/working-dir"
+}
+
+export type OperatorLayoutWorkingDirErrors = {
+  /**
+   * OperatorLayoutError | InvalidRequestError
+   */
+  400: OperatorLayoutError | InvalidRequestError
+}
+
+export type OperatorLayoutWorkingDirError = OperatorLayoutWorkingDirErrors[keyof OperatorLayoutWorkingDirErrors]
+
+export type OperatorLayoutWorkingDirResponses = {
+  /**
+   * The layout with the working directory set
+   */
+  200: OperatorLayout
+}
+
+export type OperatorLayoutWorkingDirResponse =
+  OperatorLayoutWorkingDirResponses[keyof OperatorLayoutWorkingDirResponses]
 
 export type OperatorProjectRecordListData = {
   body?: never

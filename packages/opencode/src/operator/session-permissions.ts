@@ -13,6 +13,7 @@ import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { OperatorAgentPermissions } from "./agent-permissions"
 import { OperatorPermissionHook } from "./permission-hook"
+import { OperatorLayout } from "./layout"
 import { OperatorNamespaceScope } from "./namespace-scope"
 import { OperatorPermissionLive } from "./permission-live"
 import { OperatorPermissionLocks } from "./permission-locks"
@@ -264,8 +265,10 @@ const layer = Layer.effect(
         known: editor.known,
         locked,
         allLocked: labelled.rows.length > 0 && labelled.rows.every((row) => keys.some((lock) => sameKey(lock, row))),
-        canDeleteOpenCode:
-          (yield* Effect.promise(() => OperatorNamespaceScope.layerOf(info.directory))).namespace !== "opencode",
+        canDeleteOpenCode: !OperatorLayout.builtinsProtected(
+          (yield* Effect.promise(() => OperatorNamespaceScope.layerOf(info.directory))).namespace,
+          yield* Effect.promise(() => OperatorLayout.snapshot()),
+        ),
       }
     })
 

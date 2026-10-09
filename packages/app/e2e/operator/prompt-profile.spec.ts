@@ -293,10 +293,11 @@ test("All namespaces: each item's namespace, built-ins in OpenCode and each name
   await expect(purpose.getByRole("row")).toHaveCount(3)
   await expect(purpose.getByRole("row", { name: /Ship tools/ })).toContainText("Acme")
   await expect(purpose.getByRole("row", { name: /Ship goal/ })).toContainText("OpenCode")
-  // Built-ins belong to OpenCode; Acme has its own copy of each.
+  // Built-ins belong to OpenCode; Global and Acme have their own copy of each.
   const base = page.locator('[data-section="base"]').getByRole("row", { name: /base\.default/ })
-  await expect(base).toHaveCount(2)
+  await expect(base).toHaveCount(3)
   await expect(base.filter({ hasText: "Built in" })).toHaveCount(1)
+  await expect(base.filter({ hasText: "Global" })).toHaveCount(1)
   await expect(base.filter({ hasText: "Acme" })).toHaveCount(1)
 
   await purpose.getByRole("row", { name: /Ship tools/ }).click()

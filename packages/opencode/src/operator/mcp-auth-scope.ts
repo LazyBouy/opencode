@@ -2,19 +2,22 @@ export * as OperatorMcpAuthScope from "./mcp-auth-scope"
 
 import { Effect } from "effect"
 import { InstanceRef } from "@/effect/instance-ref"
+import { OperatorLayout } from "./layout"
 import { OperatorNamespaceScope } from "./namespace-scope"
 
-// MCP logins are kept per namespace (capability_scopes_spec.md §8): in the OpenCode namespace by
-// server name, as upstream keeps them; in another namespace as `<namespace>/<server>`, so the same server
-// name in two namespaces has two logins. The namespace is the one of the instance the call runs in;
-// without an instance (a CLI command outside any project) the key is the server name. One line in
-// mcp/auth.ts wraps the store's methods with this.
+// MCP logins are kept per namespace (global_and_opencode_namespaces_spec.md §13 #3): Global's by server
+// name, as upstream keeps them; every other namespace's, OpenCode's included, as `<namespace>/<server>`,
+// so the same server name in two namespaces has two logins. With a blank working directory, "Global ·
+// OpenCode" uses the server name. The namespace is the one of the instance the call runs in; without an
+// instance (a CLI command outside any project) the key is the server name. One line in mcp/auth.ts wraps
+// the store's methods with this.
 
 export const keyOf = Effect.fnUntraced(function* (mcpName: string) {
   const instance = yield* InstanceRef
   if (!instance) return mcpName
   const layer = yield* Effect.promise(() => OperatorNamespaceScope.layerOf(instance.directory, instance.worktree))
-  return layer.namespace === "opencode" ? mcpName : `${layer.namespace}/${mcpName}`
+  const global = OperatorLayout.isGlobal(layer.namespace, yield* Effect.promise(() => OperatorLayout.snapshot()))
+  return global ? mcpName : `${layer.namespace}/${mcpName}`
 })
 
 // The store's methods that take a server name first.

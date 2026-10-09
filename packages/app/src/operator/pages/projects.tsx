@@ -44,7 +44,13 @@ import { useOverlayParams } from "../ui/overlay-nav"
 // A project as the page lists it: a git project the server knows, or a folder outside git — a
 // project once registered (it has prompt settings), else "not a project". Folders outside git that
 // are not projects belong to OpenCode.
-type Row = OperatorProject & { key: string; ns: string; registered: boolean }
+type Row = OperatorProject & {
+  key: string
+  ns: string
+  registered: boolean
+  // Where it is against its namespace's folder (layout.ts on the server).
+  flag?: "outside-opencode" | "not-in-place"
+}
 type Params = { project?: string; block?: string; edit?: string; psec?: string }
 
 function useProjectRows() {
@@ -101,6 +107,7 @@ function useProjectRows() {
         key,
         ns: known ? settingOf(key).namespace : OPENCODE,
         registered: known,
+        ...(known && settingOf(key).flag ? { flag: settingOf(key).flag } : {}),
       }
       const same = rows.get(key)
       rows.set(
@@ -132,6 +139,7 @@ function useProjectRows() {
         key: item.key,
         ns: item.namespace,
         registered: true,
+        ...(item.flag ? { flag: item.flag } : {}),
       }))
     return [...listed, ...idle]
   })
@@ -164,9 +172,6 @@ function useProjectRows() {
 }
 
 // Whether a folder is `parent` or inside it.
-const within = (parent: string, folder: string) =>
-  folder === parent || folder.startsWith(parent.endsWith("/") ? parent : `${parent}/`)
-
 // The registered folder a folder outside git is in (itself, or the nearest one above it).
 function registeredRoot(folder: string, registered: ReadonlyArray<string>) {
   return registered
@@ -179,7 +184,7 @@ const nameOf = (row: { name?: string; worktree: string }) =>
   row.name ?? row.worktree.split("/").filter(Boolean).at(-1) ?? row.worktree
 
 // A project's tags: git or no git, and "not a project" for a folder that is not one.
-function ProjectTags(props: { row: Row }) {
+function ProjectTags(props: { row: Row; flag?: boolean }) {
   const language = useLanguage()
   return (
     <>
@@ -190,7 +195,34 @@ function ProjectTags(props: { row: Row }) {
       <Show when={!props.row.registered}>
         <Tag>{language.t("operator.projects.notProject")}</Tag>
       </Show>
+      <Show when={props.flag !== false}>
+        <FlagTag row={props.row} />
+      </Show>
     </>
+  )
+}
+
+// "Outside OpenCode's folder" or "Not in place" (global_and_opencode_namespaces_spec.md §5, §12.3).
+function FlagTag(props: { row: Row; folder?: string }) {
+  const language = useLanguage()
+  return (
+    <Show when={props.row.flag}>
+      {(flag) => (
+        <Tag
+          data-testid="project-flag"
+          title={language.t(
+            flag() === "outside-opencode"
+              ? "operator.projects.outsideOpenCodeHint"
+              : "operator.projects.notInPlaceHint",
+            { folder: props.folder ?? "" },
+          )}
+        >
+          {language.t(
+            flag() === "outside-opencode" ? "operator.projects.outsideOpenCode" : "operator.projects.notInPlace",
+          )}
+        </Tag>
+      )}
+    </Show>
   )
 }
 
@@ -246,11 +278,14 @@ export default function ProjectsPage() {
     const directory = await browse({ start: folder })
     if (directory) add(directory, ns)
   }
+  // Where Add project can add: not Global (when it is a namespace of its own) until Global projects can
+  // be created (global_and_opencode_namespaces_spec.md §4.4).
+  const addable = () => data.scope.namespaces().filter((item) => !item.global || item.namespace.id === OPENCODE)
   // One namespace in scope (or only one at all): Add project adds there; else it asks which.
   const addIn = () => {
-    const all = data.scope.namespaces()
-    if (all.length <= 1) return OPENCODE
-    return data.scope.all() ? undefined : data.scope.ns()
+    if (addable().length <= 1) return OPENCODE
+    if (data.scope.all()) return undefined
+    return addable().some((item) => item.namespace.id === data.scope.ns()) ? data.scope.ns() : undefined
   }
 
   return (
@@ -264,7 +299,7 @@ export default function ProjectsPage() {
             <NamespaceAction
               label={language.t("operator.projects.add")}
               ns={addIn()}
-              namespaces={data.scope.namespaces()}
+              namespaces={addable()}
               size="small"
               variant="contrast"
               run={(ns) => void choose(ns)}
@@ -591,7 +626,8 @@ function ProjectRecord(props: {
           title={
             <>
               {name()}
-              <ProjectTags row={props.row} />
+              {/* The record says it beside the folder, with the namespace's folder. */}
+              <ProjectTags row={props.row} flag={false} />
             </>
           }
           actions={
@@ -623,11 +659,7 @@ function ProjectRecord(props: {
             >
               <span class="inline-flex items-center gap-2 flex-wrap">
                 {props.row.worktree}
-                <Show when={props.nsFolder && !within(props.nsFolder, props.row.key)}>
-                  <Tag title={language.t("operator.projects.outsideFolderHint", { folder: props.nsFolder! })}>
-                    {language.t("operator.projects.outsideFolder")}
-                  </Tag>
-                </Show>
+                <FlagTag row={props.row} folder={props.nsFolder} />
               </span>
             </RecordField>
             <RecordField

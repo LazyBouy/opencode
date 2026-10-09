@@ -283,7 +283,7 @@ it.instance("items in use cannot be deleted, and the error says by what", () =>
       expect(yield* refused(items.store.remove("opencode", "profile", `${P}profile.opencode`))).toContain(
         "OpenCode's own",
       )
-      expect(yield* refused(items.store.removeNamespace("opencode"))).toContain("cannot be deleted")
+      expect(yield* refused(items.store.removeNamespace("opencode"))).toContain("can't be deleted")
 
       const team = yield* items.store.createNamespace({ name: "Team", folder: yield* folderFor("Team") })
       yield* items.store.setProject(key, { namespace: team.id })
@@ -471,21 +471,32 @@ it.instance("a namespace's default project is the chosen one while it is there, 
   ),
 )
 
-it.instance("OpenCode's folder and default project come from the server's environment on first start", () =>
-  withGlobal(() =>
-    Effect.gen(function* () {
-      const env = {
-        OPENCODE_OPERATOR_NAMESPACE_FOLDER: "/work",
-        OPENCODE_OPERATOR_DEFAULT_PROJECT: "/work/opencode",
-      }
-      yield* Effect.promise(() => OperatorProfileStore.ensure(env))
-      const store = yield* OperatorProfileStore.Service
-      const opencode = (yield* store.namespaces())[0]!
-      expect(opencode.namespace).toMatchObject({ id: "opencode", folder: "/work", defaultProject: "/work/opencode" })
-      // Set once: a later change is kept.
-      yield* store.updateNamespace("opencode", { defaultProject: "" })
-      yield* Effect.promise(() => OperatorProfileStore.ensure(env))
-      expect((yield* store.namespaces())[0]!.namespace.defaultProject).toBeUndefined()
-    }),
-  ),
+it.instance(
+  "the working directory and OpenCode's default project come from the server's environment on first start",
+  () =>
+    withGlobal(() =>
+      Effect.gen(function* () {
+        const env = {
+          OPENCODE_OPERATOR_WORKING_DIR: "/work",
+          OPENCODE_OPERATOR_DEFAULT_PROJECT: "/work/opencode/app",
+        }
+        yield* Effect.promise(() => OperatorProfileStore.ensure(env))
+        const store = yield* OperatorProfileStore.Service
+        const byId = (id: string) =>
+          store.namespaces().pipe(Effect.map((list) => list.find((item) => item.namespace.id === id)!))
+        // OpenCode's folder is derived: <working dir>/opencode.
+        expect(yield* byId("opencode")).toMatchObject({
+          namespace: { id: "opencode", folder: "/work/opencode", defaultProject: "/work/opencode/app" },
+          target: "/work/opencode",
+          inPlace: true,
+          global: false,
+        })
+        // Global is a namespace of its own, at Global's folder.
+        expect(yield* byId("global")).toMatchObject({ namespace: { id: "global", name: "Global" }, global: true })
+        // Set once: a later change is kept.
+        yield* store.updateNamespace("opencode", { defaultProject: "" })
+        yield* Effect.promise(() => OperatorProfileStore.ensure(env))
+        expect((yield* byId("opencode")).namespace.defaultProject).toBeUndefined()
+      }),
+    ),
 )
