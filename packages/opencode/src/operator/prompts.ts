@@ -66,6 +66,8 @@ export const Sample = Schema.Struct({
   trace: Schema.Array(OperatorProfile.TraceStep).annotate({
     description: "How the text was resolved, down to the file it is in",
   }),
+  resolution: OperatorProfile.AssembledSection.fields.resolution,
+  parity: OperatorProfile.AssembledSection.fields.parity,
 }).annotate({ identifier: "OperatorPromptSample" })
 
 // External plugins: they run after the prompt profile's and can change any prompt.
@@ -251,7 +253,14 @@ const layer = Layer.effect(
         input.layer,
       )
       if (!found) return yield* new NotFoundError({ message: `No layer "${input.layer}"` })
-      return { ...head, text: found.text, source: found.source, trace: yield* complete(found.trace, ns, agent) }
+      return {
+        ...head,
+        text: found.text,
+        source: found.source,
+        trace: yield* complete(found.trace, ns, agent),
+        ...(found.resolution ? { resolution: found.resolution } : {}),
+        ...(found.parity ? { parity: found.parity } : {}),
+      }
     })
 
     const preview = Effect.fn("OperatorPrompts.preview")(function* (input: {

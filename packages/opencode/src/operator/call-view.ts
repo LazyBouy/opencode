@@ -5,6 +5,7 @@ import { OperatorCallFormat } from "./call-format"
 import type { OperatorCallStore } from "./call-store"
 import { OperatorCallAccounting } from "./call-accounting"
 import { OperatorCallPieces } from "./call-pieces"
+import { OperatorResolver } from "./resolver"
 
 // Formats recorded calls (call-store.ts) for the Transcript view: each call's place in the session
 // (exchange, step, retry), what it sent compared with earlier calls (system text and tools: the same,
@@ -188,6 +189,16 @@ export const Message = Schema.Struct({
   content: Schema.Unknown.annotate({ description: "The message as sent, in the provider's format" }),
 }).annotate({ identifier: "OperatorCallMessage" })
 
+// A Dynamic layer of the request, as the pipeline resolved it (dynamic-layers.ts, profile.ts).
+export const Resolution = Schema.Struct({
+  layer: Schema.String,
+  name: Schema.String,
+  parity: Schema.optional(Schema.Literals(["same", "differs"])).annotate({
+    description: "One of OpenCode's layers: whether the pipeline's text was OpenCode's (when not, OpenCode's was sent)",
+  }),
+  resolution: OperatorResolver.Trace,
+}).annotate({ identifier: "OperatorCallResolution" })
+
 export const Detail = Schema.Struct({
   ...Summary.fields,
   systemText: Schema.optional(Schema.String),
@@ -210,6 +221,9 @@ export const Detail = Schema.Struct({
   warnings: Schema.Array(Schema.Literals(["reasoning-not-stored", "text-differs", "tool-calls-differ"])),
   accounting: Schema.optional(OperatorCallAccounting.Accounting).annotate({
     description: "Every billed token of the call, by item",
+  }),
+  resolutions: Schema.optional(Schema.Array(Resolution)).annotate({
+    description: "How the request's Dynamic layers were resolved: every candidate, and why it was chosen or not",
   }),
 }).annotate({ identifier: "OperatorCallDetail" })
 export type Detail = typeof Detail.Type

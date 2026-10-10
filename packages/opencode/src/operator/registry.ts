@@ -16,6 +16,8 @@ export const calls: {
     providerID: string
     modelID: string
     userMessageID?: string
+    /** The request's Dynamic layers' resolutions (plugins.ts), stored with the call for the Transcript. */
+    resolutions?: ReadonlyArray<unknown>
   }) => Promise<string | undefined>
 } = {}
 

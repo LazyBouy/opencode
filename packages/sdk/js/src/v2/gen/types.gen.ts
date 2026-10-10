@@ -4001,6 +4001,8 @@ export type OperatorPromptSample = {
    * How the text was resolved, down to the file it is in
    */
   trace: Array<OperatorPromptTraceStep>
+  resolution?: OperatorResolverTrace
+  parity?: "same" | "differs"
 }
 
 export type OperatorPromptGenerateError = {
@@ -4782,6 +4784,13 @@ export type OperatorCallAccounting = {
   }
 }
 
+export type OperatorCallResolution = {
+  layer: string
+  name: string
+  parity?: "same" | "differs"
+  resolution: OperatorResolverTrace
+}
+
 export type OperatorCallDetail = {
   callID: string
   /**
@@ -4872,6 +4881,7 @@ export type OperatorCallDetail = {
   received?: OperatorCallReceived
   warnings: Array<"reasoning-not-stored" | "text-differs" | "tool-calls-differ">
   accounting?: OperatorCallAccounting
+  resolutions?: Array<OperatorCallResolution>
 }
 
 export type OperatorCallNotFoundError = {

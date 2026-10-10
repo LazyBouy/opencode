@@ -8,6 +8,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { OperatorCallFormat } from "@/operator/call-format"
 import { OperatorCallStore } from "@/operator/call-store"
 import { OperatorCalls } from "@/operator/calls"
+import { OperatorDynamicLayers } from "@/operator/dynamic-layers"
 import { OperatorProviderTap } from "@/operator/provider-tap"
 import { Session } from "@/session/session"
 import { SessionPrompt } from "@/session/prompt"
@@ -341,4 +342,44 @@ unix("response assembly per format: OpenAI responses and Google streams", () =>
     // An unknown format keeps the raw text, not parsed.
     expect(OperatorCallFormat.assemble("other", "raw bytes")).toEqual({ parsed: false, blocks: [], raw: "raw bytes" })
   }),
+)
+
+// The request's Dynamic layers, as the pipeline resolved them, are stored with the call for the
+// Transcript (dynamic_layer_resolution_spec.md §2.6): once, as a blob.
+const resolving = testEffect(
+  LayerNode.compile(LayerNode.group([root, OperatorCalls.node, OperatorDynamicLayers.node]), replacements),
+)
+;(process.platform !== "win32" ? resolving.instance : resolving.instance.skip)(
+  "each agent call keeps its Dynamic layers' resolutions: every candidate, and why",
+  () =>
+    Effect.gen(function* () {
+      const { directory, fake } = yield* setup()
+      yield* Effect.promise(() => fs.writeFile(path.join(directory, "AGENTS.md"), "Project rules"))
+      yield* Effect.promise(() => fs.writeFile(path.join(directory, "CONTEXT.md"), "Glossary"))
+      const session = yield* (yield* Session.Service).create({})
+      fake.reply({ tool: "glob", input: { pattern: "*.md" } }, { text: "Done." })
+      yield* ask(session.id, "Look around", "build")
+      const calls = yield* recorded(session.id, () => fake.hits.length)
+      const steps = calls.filter((call) => call.kind === "agent")
+      expect(steps.length).toBe(2)
+      // Both steps resolved the same way: one blob.
+      expect(steps[0]!.resolutions).toBeDefined()
+      expect(steps[1]!.resolutions).toBe(steps[0]!.resolutions)
+      const detail = yield* (yield* OperatorCalls.Service).detail(session.id, steps[0]!.callID)
+      const layers = detail.resolutions!.map((item) => item.layer)
+      expect(layers).toEqual(
+        expect.arrayContaining([
+          "opencode:slot.agent-or-base",
+          "opencode:generated.environment",
+          "opencode:generated.instructions",
+          "opencode:generated.skills",
+        ]),
+      )
+      expect(detail.resolutions!.every((item) => item.parity !== "differs")).toBe(true)
+      const instructions = detail.resolutions!.find((item) => item.layer === "opencode:generated.instructions")!
+      const of = (name: string) =>
+        instructions.resolution.candidates.find((item) => item.location === path.join(directory, name))
+      expect(of("AGENTS.md")?.selected).toBe(true)
+      expect(of("CONTEXT.md")?.why).toBe("lost to AGENTS.md (precedence (name))")
+    }),
 )

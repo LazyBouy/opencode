@@ -7,6 +7,7 @@ import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import type {
   OperatorCallDetail,
   OperatorCallList,
+  OperatorCallResolution,
   OperatorCallSummary,
   OperatorTurn,
 } from "@opencode-ai/sdk/v2/client"
@@ -30,6 +31,7 @@ import { useServerSDK } from "@/context/server-sdk"
 import { showToast } from "@/utils/toast"
 import { ready, useOperatorClient } from "../data"
 import { requestError } from "../pages/config-helpers"
+import { Resolution } from "../ui/resolution"
 import {
   AccountingTable,
   ChangesPart,
@@ -766,6 +768,9 @@ function CallCard(props: {
                     </dl>
                   </Show>
                 </section>
+                <Show when={data().resolutions?.length}>
+                  <ResolutionsPart callID={props.call.callID} resolutions={data().resolutions!} />
+                </Show>
                 <section data-slot="operator-call-section" data-testid="call-received">
                   <h4>
                     {props.call.receiving
@@ -817,6 +822,41 @@ function CallCard(props: {
         </Suspense>
       </Show>
     </article>
+  )
+}
+
+// How the request's Dynamic layers were resolved (dynamic_layer_resolution_spec.md §2.6), as stored with
+// the call: each layer's candidates, and why each was chosen or not.
+function ResolutionsPart(props: { callID: string; resolutions: ReadonlyArray<OperatorCallResolution> }) {
+  const language = useLanguage()
+  const [open, setOpen] = useOpen(() => `resolutions:${props.callID}`)
+  const differs = () => props.resolutions.filter((item) => item.parity === "differs").length
+  return (
+    <section data-slot="operator-call-section" data-testid="call-resolutions">
+      <button
+        type="button"
+        data-slot="operator-call-item-head"
+        aria-expanded={open()}
+        onClick={(event) => keepInPlace(event.currentTarget, () => setOpen(!open()))}
+      >
+        <h4>{language.t("operator.transcript.resolutions", { count: props.resolutions.length })}</h4>
+        <Show when={differs()}>
+          <span data-slot="operator-note" data-warning="">
+            {language.t("operator.transcript.resolutionsDiffer", { count: differs() })}
+          </span>
+        </Show>
+      </button>
+      <Show when={open()}>
+        <For each={props.resolutions}>
+          {(item) => (
+            <div data-testid="call-resolution" data-layer={item.layer}>
+              <h5>{item.name}</h5>
+              <Resolution trace={item.resolution} parity={item.parity} />
+            </div>
+          )}
+        </For>
+      </Show>
+    </section>
   )
 }
 

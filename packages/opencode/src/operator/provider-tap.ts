@@ -30,6 +30,8 @@ export type Registration = {
   retryOf?: string
   model?: string
   providerID?: string
+  /** The request's Dynamic layers' resolutions (stored once, as a blob). */
+  resolutions?: ReadonlyArray<unknown>
   /** Not recorded (a helper call with no real session): the header is still removed. */
   skip?: boolean
 }
@@ -109,6 +111,9 @@ function recordRequest(
   input: { url: string; body: string; headers: Record<string, string>; started: number },
 ) {
   const split = OperatorCallFormat.split(input.body)
+  const resolutions = reg.resolutions?.length ? JSON.stringify(reg.resolutions) : undefined
+  const resolutionsKey = resolutions ? OperatorCallFormat.hash(resolutions) : undefined
+  if (resolutions && resolutionsKey) split.blobs.set(resolutionsKey, resolutions)
   const call: OperatorCallStore.Call = {
     callID: reg.callID,
     sessionID: reg.sessionID,
@@ -121,6 +126,7 @@ function recordRequest(
     ...(reg.retryOf ? { retryOf: reg.retryOf } : {}),
     ...(reg.model ? { model: reg.model } : {}),
     ...(reg.providerID ? { providerID: reg.providerID } : {}),
+    ...(resolutionsKey ? { resolutions: resolutionsKey } : {}),
     endpoint: endpointOf(input.url),
     format: OperatorCallFormat.detect(input.url, split.parsed),
     startedAt: input.started,

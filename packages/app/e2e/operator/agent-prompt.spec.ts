@@ -83,6 +83,33 @@ test("the Prompt tab shows the profile, and every section traced to its file, wi
   await expect(page.getByTestId("prompt-size")).toContainText(/Size: \d+ words · ≈ \d+ tokens · [\d,]+ characters/)
 })
 
+test("a Dynamic section shows how it was resolved: every candidate and why; a text that differs is flagged", async ({
+  page,
+}) => {
+  await mockOperator(page)
+  await page.goto(`/operator/agents/build${dir}&tab=prompt`)
+  const sections = page.locator('[data-slot="operator-prompt-section"]')
+  const instructions = sections.nth(2)
+  const resolved = instructions.getByTestId("prompt-resolution")
+  await expect(resolved).toContainText("How it was resolved")
+  await expect(resolved).toContainText("3 candidates · one · 24 characters")
+  const rows = resolved.getByTestId("resolution-candidate")
+  await expect(rows.first()).toBeHidden()
+  await resolved.locator("summary").click()
+  await expect(rows).toHaveCount(3)
+  await expect(rows.nth(0)).toContainText("missing")
+  await expect(rows.nth(0)).toContainText("filtered: not available (missing)")
+  await expect(rows.nth(1)).toContainText("AGENTS.md")
+  await expect(rows.nth(1)).toContainText("Selected")
+  await expect(rows.nth(2)).toContainText("lost to AGENTS.md (precedence (name))")
+  await expect(rows.nth(2).locator("td").nth(3)).toHaveAttribute("title", "precedence (name): 5")
+  await expect(instructions.getByTestId("resolution-differs")).toHaveCount(0)
+  // Skills: the pipeline's text differs from OpenCode's for this request, so OpenCode's was sent.
+  await expect(sections.nth(3).getByTestId("resolution-differs")).toContainText("so OpenCode's was sent")
+  // Sections that are not resolved by the pipeline have no resolution.
+  await expect(sections.nth(1).getByTestId("prompt-resolution")).toHaveCount(0)
+})
+
 test("the title agent's Prompt tab declares the title request's text from OpenCode's code", async ({ page }) => {
   await mockOperator(page)
   await page.goto(`/operator/agents/title${dir}&tab=prompt`)

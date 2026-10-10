@@ -63,6 +63,26 @@ test("sections open and close on their own, and what is open inside them is kept
   await expect(page.getByTestId("transcript-call").nth(2).getByTestId("call-raw-request")).toBeVisible()
 })
 
+test("a call shows how its Dynamic layers were resolved, as stored with it", async ({ page }) => {
+  await page.goto(transcriptURL)
+  const transcript = page.getByTestId("transcript")
+  const third = transcript.getByTestId("transcript-call").nth(2)
+  await third.scrollIntoViewIfNeeded()
+  const part = third.getByTestId("call-resolutions")
+  await expect(part).toContainText("Dynamic layers: how they were resolved (2)")
+  await expect(part).toContainText("1 sent as OpenCode wrote them")
+  await expect(part.getByTestId("call-resolution")).toHaveCount(0)
+  await part.getByRole("button", { name: /Dynamic layers/ }).click()
+  const layers = part.getByTestId("call-resolution")
+  await expect(layers).toHaveCount(2)
+  await expect(layers.nth(0)).toHaveAttribute("data-layer", "opencode:generated.instructions")
+  await layers.nth(0).getByTestId("prompt-resolution").locator("summary").click()
+  await expect(layers.nth(0)).toContainText("lost to AGENTS.md (precedence (name))")
+  await expect(layers.nth(1).getByTestId("resolution-differs")).toBeVisible()
+  // The title call resolved none: no part.
+  await expect(transcript.getByTestId("transcript-call").nth(0).getByTestId("call-resolutions")).toHaveCount(0)
+})
+
 test("a session from before recording says why each section has no details, and shows its stored totals", async ({
   page,
 }) => {

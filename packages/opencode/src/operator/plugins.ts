@@ -51,6 +51,9 @@ const PromptPlugin: Plugin = async (input) => {
         const instance = fiber ? Context.getReferenceUnsafe(fiber.context, InstanceRef) : undefined
         const begin = OperatorRegistry.calls.begin
         if (!begin) return
+        // The resolutions system.transform made for this request, in this same fiber.
+        const resolutions = fiber ? requestResolutions.get(fiber) : undefined
+        if (fiber) requestResolutions.delete(fiber)
         const callID = await begin({
           instance,
           sessionID: hook.sessionID,
@@ -58,6 +61,7 @@ const PromptPlugin: Plugin = async (input) => {
           providerID: hook.model.providerID,
           modelID: hook.model.id,
           userMessageID: hook.message?.id,
+          ...(resolutions?.length ? { resolutions } : {}),
         })
         if (callID) output.headers[OperatorProviderTap.HEADER] = callID
       } catch {
@@ -110,6 +114,22 @@ const PromptPlugin: Plugin = async (input) => {
         dynamic: await written(instance, hook.sessionID, loaded, hook.agent),
         ...(resolved ? { resolved: resolved as OperatorProfile.AssembleInput["resolved"] } : {}),
       })
+      if (fiber)
+        requestResolutions.set(
+          fiber,
+          result.sections.flatMap((section) =>
+            section.resolution
+              ? [
+                  {
+                    layer: section.layer,
+                    name: section.layerName,
+                    ...(section.parity ? { parity: section.parity } : {}),
+                    resolution: section.resolution,
+                  },
+                ]
+              : [],
+          ),
+        )
       promptAudit.listen?.({
         agent: hook.agent,
         upstream: [...output.system],
@@ -181,6 +201,10 @@ async function written(
   const texts = await dynamic({ instance, sessionID, layers }).catch(() => ({}))
   return new Map(Object.entries(texts))
 }
+
+// Each request's Dynamic layers' resolutions, from system.transform to chat.headers (the same request's
+// fiber), where they are registered with the recorded call (calls.ts).
+const requestResolutions = new WeakMap<object, ReadonlyArray<unknown>>()
 
 const GENERATOR = OperatorPromptText.BUILTINS.find((item) => item.id === "helper.agent-generator")!.text
 

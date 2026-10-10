@@ -79,6 +79,7 @@ export interface Interface {
     providerID: string
     modelID: string
     userMessageID?: string
+    resolutions?: ReadonlyArray<unknown>
   }) => Effect.Effect<string | undefined>
 }
 
@@ -99,6 +100,7 @@ const layer = Layer.effect(
       providerID: string
       modelID: string
       userMessageID?: string
+      resolutions?: ReadonlyArray<unknown>
     }) {
       const cfg = yield* config.get()
       const record = cfg.operatorRecordCalls !== false
@@ -142,6 +144,7 @@ const layer = Layer.effect(
         ...(retryOf ? { retryOf } : {}),
         model: `${input.providerID}/${input.modelID}`,
         providerID: input.providerID,
+        ...(input.resolutions?.length ? { resolutions: input.resolutions } : {}),
       })
       if (assistantMessageID) lastCall.set(assistantMessageID, callID)
       return callID
@@ -353,6 +356,22 @@ const layer = Layer.effect(
       return { ...all, calls: filter?.limit ? picked.slice(0, filter.limit) : picked }
     })
 
+    // The request's Dynamic layers' resolutions, as stored with the call (an old or unreadable blob: none).
+    const decodeResolutions = Schema.decodeUnknownOption(Schema.Array(OperatorCallView.Resolution))
+    const resolutionsOf = Effect.fnUntraced(function* (call: OperatorCallStore.Call | undefined) {
+      if (!call?.resolutions) return undefined
+      const text = yield* Effect.promise(() => OperatorCallStore.blob(call.sessionID, call.resolutions!))
+      if (text === undefined) return undefined
+      const parsed = (() => {
+        try {
+          return JSON.parse(text) as unknown
+        } catch {
+          return undefined
+        }
+      })()
+      return Option.getOrUndefined(decodeResolutions(parsed))
+    })
+
     const detail = Effect.fn("OperatorCalls.detail")(function* (sessionID: string, callID: string) {
       const loaded = yield* load(sessionID)
       const found = OperatorCallView.detail(loaded.input, callID)
@@ -360,9 +379,11 @@ const layer = Layer.effect(
       const { base, accountings } = yield* accounted(sessionID, loaded, callID)
       const at = base.calls.findIndex((call) => call.callID === callID)
       const accounting = accountings[at]
+      const resolutions = yield* resolutionsOf(loaded.loaded.find((item) => item.call.callID === callID)?.call)
       return {
         ...found,
         ...(accounting ? { billing: OperatorCallView.billingOf(accounting), accounting } : {}),
+        ...(resolutions ? { resolutions } : {}),
       }
     })
 

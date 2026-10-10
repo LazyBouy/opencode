@@ -2,6 +2,8 @@
 // exchange; the second step sends the same system text and tools as the first, the first message again,
 // and a reminder OpenCode added in memory.
 
+import { candidate, resolution } from "./mock-namespaces"
+
 const t0 = 1_760_000_000_000
 const usage = { input: 7104, output: 122, reasoning: 80, cacheRead: 6912 }
 
@@ -371,6 +373,30 @@ export function callFor(sessionID: string, callID: string) {
     },
     warnings: [],
     accounting: accountingFor(index),
+    // The agent steps' Dynamic layers, as the pipeline resolved them (Skills: OpenCode's text was sent).
+    ...(index > 1
+      ? {
+          resolutions: [
+            {
+              layer: "opencode:generated.instructions",
+              name: "Instructions",
+              parity: "same",
+              resolution: resolution([
+                candidate("/repo/AGENTS.md", "project", { selected: true, why: "selected", score: 10 }),
+                candidate("/repo/CLAUDE.md", "project", { why: "lost to AGENTS.md (precedence (name))", score: 5 }),
+              ]),
+            },
+            {
+              layer: "opencode:generated.skills",
+              name: "Skills",
+              parity: "differs",
+              resolution: resolution([
+                candidate("/skills/review/SKILL.md", undefined, { selected: true, why: "selected" }),
+              ]),
+            },
+          ],
+        }
+      : {}),
   }
 }
 

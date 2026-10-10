@@ -25,6 +25,8 @@ export type Call = {
   retryOf?: string
   model?: string
   providerID?: string
+  /** The blob of the request's Dynamic layers' resolutions (dynamic-layers.ts), when the profile resolved any. */
+  resolutions?: string
   endpoint: string
   format: OperatorCallFormat.Format
   startedAt: number

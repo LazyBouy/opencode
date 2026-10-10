@@ -214,6 +214,32 @@ const generated = (directory: string): Record<string, { text: string; source: st
   },
 })
 
+// A Dynamic layer's resolution trace (resolver.ts), for the mocked preview and calls.
+export const candidate = (
+  location: string,
+  group: string | undefined,
+  fields: { read?: string; filtered?: string; selected?: boolean; why: string; score?: number },
+) => ({
+  source: 0,
+  kind: "file",
+  location,
+  name: location.split("/").at(-1),
+  ...(group ? { group } : {}),
+  read: fields.read ?? "ok",
+  chars: 12,
+  ...(fields.filtered ? { filtered: fields.filtered } : {}),
+  score: fields.score ?? 0,
+  parts: fields.score ? [{ rule: "precedence (name)", points: fields.score }] : [],
+  selected: fields.selected ?? false,
+  why: fields.why,
+})
+export const resolution = (candidates: ReturnType<typeof candidate>[]) => ({
+  policy: "one",
+  candidates,
+  chars: 24,
+  overBudget: 0,
+})
+
 export function createPromptMock(
   projects: Array<{ key: string; name: string }>,
   // An agent's own prompt, if it has one.
@@ -410,7 +436,35 @@ export function createPromptMock(
         { kind: "file", path: `/home/me/.config/opencode/namespaces/${link.namespace}/layers/${layer.id}.md` },
       ]
     }
+    // OpenCode's per-request layers, as the pipeline resolved them (Skills: a text that differs from upstream's).
+    const resolutionOf = (entry: string) => {
+      if (entry === `${PREFIX}generated.instructions`)
+        return {
+          parity: "same",
+          resolution: resolution([
+            candidate("/home/me/.config/opencode/AGENTS.md", "global", {
+              read: "missing",
+              filtered: "available",
+              why: "filtered: not available (missing)",
+            }),
+            candidate(`${project}/AGENTS.md`, "project", { selected: true, why: "selected", score: 10 }),
+            candidate(`${project}/CLAUDE.md`, "project", {
+              why: "lost to AGENTS.md (precedence (name))",
+              score: 5,
+            }),
+          ]),
+        }
+      if (entry === `${PREFIX}generated.skills`)
+        return {
+          parity: "differs",
+          resolution: resolution([
+            candidate("/skills/review/SKILL.md", undefined, { selected: true, why: "selected" }),
+          ]),
+        }
+      return {}
+    }
     const section = (type: string, entry: string, layer: Layer, text: string, source: string, automatic = false) => ({
+      ...resolutionOf(entry),
       type,
       typeName: typeName(type),
       layer: layer.id,

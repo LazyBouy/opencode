@@ -13,6 +13,7 @@ import { useConfirm } from "../ui/confirm"
 import { Field } from "../ui/field"
 import { FieldHelp } from "../ui/field-help"
 import { TraceList, useModelSourceText } from "../ui/prompt-trace"
+import { Resolution } from "../ui/resolution"
 import { requestError } from "./config-helpers"
 import { useAllLayers, usePromptCatalog, useProfileNames } from "./profile-data"
 import { SlotEditor, type SlotValue } from "./profile-editor"
@@ -427,6 +428,7 @@ function Preview(props: {
                       </span>
                     </div>
                     <TraceList trace={section.trace} />
+                    <Resolution trace={section.resolution} parity={section.parity} />
                     <pre data-component="operator-code">{section.text}</pre>
                   </section>
                 )}

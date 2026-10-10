@@ -35519,6 +35519,13 @@
               "$ref": "#/components/schemas/OperatorPromptTraceStep"
             },
             "description": "How the text was resolved, down to the file it is in"
+          },
+          "resolution": {
+            "$ref": "#/components/schemas/OperatorResolverTrace"
+          },
+          "parity": {
+            "type": "string",
+            "enum": ["same", "differs"]
           }
         },
         "required": ["agent", "model", "layer", "text", "source", "modelSource", "trace"],
@@ -37417,6 +37424,26 @@
         "required": ["version", "tokenizer", "order", "input", "output", "cost"],
         "additionalProperties": false
       },
+      "OperatorCallResolution": {
+        "type": "object",
+        "properties": {
+          "layer": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "parity": {
+            "type": "string",
+            "enum": ["same", "differs"]
+          },
+          "resolution": {
+            "$ref": "#/components/schemas/OperatorResolverTrace"
+          }
+        },
+        "required": ["layer", "name", "resolution"],
+        "additionalProperties": false
+      },
       "OperatorCallDetail": {
         "type": "object",
         "properties": {
@@ -37625,6 +37652,12 @@
           },
           "accounting": {
             "$ref": "#/components/schemas/OperatorCallAccounting"
+          },
+          "resolutions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorCallResolution"
+            }
           }
         },
         "required": [

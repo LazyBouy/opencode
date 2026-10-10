@@ -19,6 +19,7 @@ import { DataTable } from "../ui/data-table"
 import { Field } from "../ui/field"
 import { NamespaceAction } from "../ui/namespace-picker"
 import { TraceList } from "../ui/prompt-trace"
+import { Resolution } from "../ui/resolution"
 import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOverlay } from "../ui/record-overlay"
 import { requestError } from "./config-helpers"
 import { usePromptRefresh, useProfileNames, useScopeCatalogs, useToolLayers } from "./profile-data"
@@ -843,6 +844,7 @@ function LayerSample(props: { layer: Layer; catalog: Catalog; onSelect: (id: str
               <pre data-component="operator-code">{sample().text}</pre>
             </Show>
             <TraceList trace={sample().trace} label={language.t("operator.profile.cameFrom")} />
+            <Resolution trace={sample().resolution} parity={sample().parity} />
             <p data-slot="operator-note">
               {language.t(
                 isWrittenDynamic(props.layer) ? "operator.profile.sampleNoteWritten" : "operator.profile.sampleNote",
