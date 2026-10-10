@@ -10,6 +10,7 @@ import { SettingsProvidersV2 } from "./providers"
 import { SettingsModelsV2 } from "./models"
 import { SettingsAdaptersV2 } from "@/operator/settings/adapters"
 import { SettingsNamespacesV2 } from "@/operator/settings/namespaces"
+import { SettingsMaximize } from "@/operator/settings/settings-maximize"
 import "./settings-v2.css"
 import { SettingsServersV2 } from "./servers"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -45,6 +46,7 @@ export const DialogSettings: Component<{
 
   return (
     <Dialog size="x-large" variant="settings" class="settings-v2-dialog">
+      <SettingsMaximize />
       <TabsV2
         orientation="vertical"
         variant="settings"

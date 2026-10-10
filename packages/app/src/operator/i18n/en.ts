@@ -268,6 +268,8 @@ export const dict = {
   "operator.overlay.close": "Close",
   "operator.overlay.fullScreen": "Full screen",
   "operator.overlay.exitFullScreen": "Exit full screen",
+  "operator.settings.maximize": "Maximize",
+  "operator.settings.restore": "Restore",
   "operator.overlay.back": "Back",
   "operator.overlay.trail": "How you got here",
   "operator.overlay.trailMore": "Earlier steps",

@@ -1,0 +1,13 @@
+/* Settings' Maximize (settings-maximize.tsx): a button at the top right of the Settings dialog. Maximized,
+   the dialog's container takes record overlays' full-window class (record-overlay.css). */
+[data-slot="dialog-container"]:has(> [data-slot="dialog-content"] > [data-component="operator-settings-maximize"]) {
+  position: relative;
+}
+
+/* Above the panel's sticky tab header (z-index 10), in its empty top padding. */
+[data-component="operator-settings-maximize"] {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 11;
+}
