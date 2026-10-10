@@ -125,7 +125,7 @@ export const dict = {
   "operator.levels.level.agent": "Agent",
   "operator.levels.level.session": "Session",
   "operator.levels.how":
-    "The most specific line that matches decides, at any level and in any order: `bash git * allow` beats `bash * deny`. Where two lines only partly overlap, the stricter one wins at the same level, and the lower level's line across levels. A locked line binds every level below. Nothing matches: denied.",
+    "A call is checked from the specific to the broad, tool first: the lines for its tool decide before the lines for every tool (`read * allow` beats `* *.env deny` for read), then the most specific of them, at any level and in any order (`bash git * allow` beats `bash * deny`). So write lines per tool: a line for every tool gives way to any line for the tool. Where two lines only partly overlap, the stricter one wins at the same level, and the lower level's line across levels. A locked line binds every level below, and above it only a line more specific in both tool and pattern beats it. Nothing matches: denied.",
   "operator.levels.inherited": "Inherited",
   "operator.levels.inheritsNothing": "Nothing is inherited.",
   "operator.levels.own": "Added at this level ({{level}})",

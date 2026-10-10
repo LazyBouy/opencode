@@ -16,8 +16,9 @@ import { type Action, hintOf, type PatternForm, type Rule } from "./rules"
 const ACTIONS: Action[] = ["allow", "ask", "deny"]
 
 // Permissions in levels (tool_prompt_from_permission.md §3, §7), one editor for every level: Namespace,
-// Project, Agent, Session. The most specific line that matches decides, at any level and in any order
-// (the server's permission-model.ts), so lines are kept in the order they were added. A level starts from
+// Project, Agent, Session. A call is checked tool first, then the most specific line that matches decides,
+// at any level and in any order (the server's permission-model.ts), so lines are kept in the order they
+// were added. A level starts from
 // what it inherits and can change an inherited line's action (a line of its own with the same permission
 // and pattern), delete it, lock it ("Can be overridden below: no", binding every level below), and add
 // lines. A line a level above locked can't be changed, deleted or locked again here.

@@ -4,18 +4,24 @@ import { Wildcard } from "@opencode-ai/core/util/wildcard"
 import { OperatorPermissionReach as Reach } from "./permission-reach"
 
 // How permission lines decide, in levels (tool_prompt_from_permission.md §3, with the rules the user set
-// on 2026-10-08). The levels, highest first: OpenCode (its defaults, then the built-in agent's rules),
-// Global config, Namespace, Project, Agent, Session.
+// on 2026-10-08 and 2026-10-10). The levels, highest first: OpenCode (its defaults, then the built-in
+// agent's rules), Global config, Namespace, Project, Agent, Session.
 //
-// - The most specific line that matches decides, at any level and in any order. Line A is more specific
-//   than B when A's permission and pattern both fall inside B's (as wildcard languages).
+// - A call is checked from the specific to the broad, tool first: of the lines that match it, only those
+//   naming the tool most narrowly decide (a `read` line before a `re*` line before a `*` line, at any
+//   level). Among those, the most specific line decides: line A is more specific than B when A's permission
+//   and pattern both fall inside B's (as wildcard languages); in any order.
+//   Why tool first: tools read their patterns differently (a path, a command, a URL, `VERB(target)`), so a
+//   line written for every tool (`* *.env deny`) can't say what it means for each; a line names its tool.
 // - A lower level's line with the same permission and pattern replaces the inherited one (it keeps its
 //   place in the list); a level can also delete inherited lines.
 // - Two matching lines where neither falls inside the other: at the same level the stricter action wins
 //   (deny, then ask, then allow: "AND"); across levels the lower level's line wins ("OR": the line above
 //   can be overridden below).
 // - A locked line ("Can be overridden below: no") binds every level below the level that locked it: for
-//   an input it matches, only the lines of that level and above decide.
+//   an input it matches, only the lines of that level and above decide, and tool first doesn't apply
+//   ("locks hold"): a line beats the lock only when it is more specific in both tool and pattern, so a
+//   namespace's locked `* /secret/* deny` still stops OpenCode's `read * allow`.
 // - An input no line matches is denied. (OpenCode's own `* *` line always matches, except in a namespace
 //   that deletes it.)
 //
@@ -150,6 +156,11 @@ export function intersects(a: string, b: string) {
   return result
 }
 
+/** A's permission falls inside B's, and not the other way round: A names the tool more narrowly. */
+export function narrowerTool(a: Key, b: Key) {
+  return contains(b.permission, a.permission) && !contains(a.permission, b.permission)
+}
+
 /** A falls inside B (both its permission and its pattern), and not the other way round. */
 export function moreSpecific(a: Key, b: Key) {
   const inside = contains(b.permission, a.permission) && contains(b.pattern, a.pattern)
@@ -176,7 +187,9 @@ function resolve<T>(matched: ReadonlyArray<Line<T>>, fallback: Action): Decision
   )
   const kept = lock ? matched.filter((line) => line.level <= lock.lockedAt!) : matched
   if (!kept.length) return { action: fallback, ...(lock ? { lock } : {}) }
-  const most = kept.filter((line) => !kept.some((other) => other !== line && moreSpecific(other, line)))
+  // Tool first, unless a lock binds the input.
+  const tool = lock ? kept : kept.filter((line) => !kept.some((other) => narrowerTool(other, line)))
+  const most = tool.filter((line) => !tool.some((other) => other !== line && moreSpecific(other, line)))
   const lowest = Math.max(...most.map((line) => line.level))
   const line = most
     .filter((item) => item.level === lowest)
@@ -293,6 +306,11 @@ export function verbs<T>(lines: ReadonlyArray<Line<T>>, permission: string, name
 function beats(a: Line<unknown>, b: Line<unknown>) {
   if (b.lockedAt !== undefined && a.level > b.lockedAt) return false
   if (a.lockedAt !== undefined && b.level > a.lockedAt) return true
+  // Tool first, except where a lock decides.
+  if (a.lockedAt === undefined && b.lockedAt === undefined) {
+    if (narrowerTool(a, b)) return true
+    if (narrowerTool(b, a)) return false
+  }
   if (moreSpecific(a, b)) return true
   if (moreSpecific(b, a)) return false
   if (a.level !== b.level) return a.level > b.level

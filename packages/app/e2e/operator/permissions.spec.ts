@@ -58,7 +58,7 @@ test("the Permissions tab shows each line's level and origin, and edits the agen
 
   await page.getByRole("button", { name: "Edit permissions" }).click()
   const editor = page.getByTestId("level-editor")
-  await expect(editor).toContainText("The most specific line that matches decides")
+  await expect(editor).toContainText("A call is checked from the specific to the broad, tool first")
   await expect(editor).toContainText("No lines added here.")
   await expect(page.getByTestId("agent-permissions-target")).toContainText(
     ".opencode/opencode.jsonc → agent.build.permission",

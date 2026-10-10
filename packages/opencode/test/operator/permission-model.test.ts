@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test"
 import { Wildcard } from "@opencode-ai/core/util/wildcard"
 import { OperatorPermissionModel as Model } from "@/operator/permission-model"
 
-// Permission levels (tool_prompt_from_permission.md §3, with the rules the user set on 2026-10-08): the
-// most specific line decides; a lower level's same line replaces the inherited one; at one level a
-// partial overlap goes to the stricter action, across levels to the lower level; a lock binds the levels
-// below; no line means deny.
+// Permission levels (tool_prompt_from_permission.md §3, with the rules the user set on 2026-10-08 and
+// 2026-10-10): tool first, then the most specific line decides; a lower level's same line replaces the
+// inherited one; at one level a partial overlap goes to the stricter action, across levels to the lower
+// level; a lock binds the levels below, and inside it tool first doesn't apply; no line means deny.
 
 const OPENCODE = 0
 const GLOBAL = 1
@@ -124,6 +124,56 @@ describe("the user's examples", () => {
     )
     expect(Model.decide(own, "bash", "git log").action).toBe("allow")
     expect(Model.decide(own, "bash", "ls").action).toBe("deny")
+  })
+
+  test("tool first: the lines for the tool decide before the lines for every tool, at any level", () => {
+    // The user's examples (2026-10-10). One level:
+    const env = levels({ [PROJECT]: [line("read", "*", "allow"), line("*", "*.env", "deny")] })
+    expect(Model.decide(env, "read", "/x/.env").action).toBe("allow")
+    // The `*` line still decides the tools that have no line of their own.
+    expect(Model.decide(env, "edit", "/x/.env").action).toBe("deny")
+    const git = levels({ [PROJECT]: [line("bash", "*", "allow"), line("*", "git *", "deny")] })
+    expect(Model.decide(git, "bash", "git status").action).toBe("allow")
+    // Across levels: OpenCode's own `read *` decides read; a `read` line is how to stop it.
+    const secret = levels({
+      [OPENCODE]: [line("*", "*", "allow"), line("read", "*", "allow")],
+      [PROJECT]: [line("*", "/p/secret/*", "deny")],
+    })
+    expect(Model.decide(secret, "read", "/p/secret/k").action).toBe("allow")
+    expect(Model.decide(secret, "edit", "/p/secret/k").action).toBe("deny")
+    const stopped = levels({
+      [OPENCODE]: [line("*", "*", "allow"), line("read", "*", "allow")],
+      [PROJECT]: [line("*", "/p/secret/*", "deny"), line("read", "/p/secret/*", "deny")],
+    })
+    expect(Model.decide(stopped, "read", "/p/secret/k").action).toBe("deny")
+    // Tool names with wildcards: the narrower name first.
+    const mcp = levels({ [PROJECT]: [line("mcp_github_*", "*", "allow")], [AGENT]: [line("mcp_*", "*", "deny")] })
+    expect(Model.decide(mcp, "mcp_github_search", "x").action).toBe("allow")
+    expect(Model.decide(mcp, "mcp_slack_post", "x").action).toBe("deny")
+    // Reachability follows the same rule: read can be allowed for .env files.
+    const found = Model.reach(env, "read")
+    expect(found.live.find((item) => item.example.endsWith(".env"))?.action ?? "allow").toBe("allow")
+    expect(found.live.every((item) => item.action === "allow")).toBe(true)
+  })
+
+  test("locks hold: a locked line decides unless a line at or above it is more specific in tool and pattern", () => {
+    const lines = levels(
+      {
+        [OPENCODE]: [line("*", "*", "allow"), line("read", "*", "allow"), line("read", "*.env", "ask")],
+        [NAMESPACE]: [line("*", "/p/secret/*", "deny"), line("read", "/p/secret/public/*", "allow")],
+        [PROJECT]: [line("read", "/p/secret/*", "allow")],
+      },
+      { [NAMESPACE]: { locks: [{ permission: "*", pattern: "/p/secret/*" }] } },
+    )
+    // The user's example D: OpenCode's `read *` doesn't undo the namespace's locked line.
+    const denied = Model.decide(lines, "read", "/p/secret/k")
+    expect(denied.action).toBe("deny")
+    expect(denied.lock).toMatchObject({ pattern: "/p/secret/*", lockedAt: NAMESPACE })
+    expect(Model.decide(lines, "read", "/p/secret/k.env").action).toBe("deny")
+    // A line at the lock's level, more specific in both, still decides inside it.
+    expect(Model.decide(lines, "read", "/p/secret/public/a").action).toBe("allow")
+    // Outside the lock, tool first.
+    expect(Model.decide(lines, "read", "/p/open/a.env").action).toBe("ask")
   })
 
   test("a broader line below doesn't beat a more specific one above (an agent's read: deny)", () => {
