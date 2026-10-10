@@ -12,6 +12,7 @@ import { Config } from "@/config/config"
 import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { OperatorAgentPermissions } from "./agent-permissions"
+import { OperatorFileCache } from "./file-cache"
 import { OperatorPermissionHook } from "./permission-hook"
 import { OperatorLayout } from "./layout"
 import { OperatorNamespaceScope } from "./namespace-scope"
@@ -92,7 +93,7 @@ export function forget(sessionID: string) {
 
 // The inherited lines a session deletes (tool_prompt_from_permission.md §3.2), by session, deleted with it.
 type Key = { permission: string; pattern: string }
-const deletionsFile = () => path.join(Global.Path.data, "operator", "session-permission-deletions.json")
+export const deletionsFile = () => path.join(Global.Path.data, "operator", "session-permission-deletions.json")
 const readDeleted = (): Promise<Record<string, Key[]>> =>
   Bun.file(deletionsFile())
     .json()
@@ -107,8 +108,11 @@ function changeDeleted(work: (store: Record<string, Key[]>) => void) {
   queue = next.catch(() => undefined)
   return next
 }
+// Read on every permission ask: through the file cache (frozen; copied for the caller). Writers read the
+// file themselves.
 export async function deletedOf(sessionID: string): Promise<Key[]> {
-  return (await readDeleted())[sessionID] ?? []
+  const store = ((await OperatorFileCache.json(deletionsFile())) ?? {}) as Record<string, Key[]>
+  return [...(store[sessionID] ?? [])]
 }
 function writeDeleted(sessionID: string, keys: ReadonlyArray<Key>) {
   return changeDeleted((store) => {

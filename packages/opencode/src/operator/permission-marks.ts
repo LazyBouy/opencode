@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import path from "path"
 import { Schema } from "effect"
 import { Global } from "@opencode-ai/core/global"
+import { OperatorFileCache } from "./file-cache"
 
 // What a namespace or project level marks on its lines (tool_prompt_from_permission.md §3.2): the
 // inherited lines it deletes, and the lines (its own or inherited) it locks ("Can be overridden below:
@@ -26,8 +27,8 @@ export type Marks = typeof Marks.Type
 export const EMPTY: Marks = { deleted: [], locks: [] }
 
 const root = () => path.join(Global.Path.config, "namespaces")
-const namespaceFile = (namespace: string) => path.join(root(), namespace, "permissions.json")
-const projectFile = () => path.join(root(), "project-permissions.json")
+export const namespaceFile = (namespace: string) => path.join(root(), namespace, "permissions.json")
+export const projectFile = () => path.join(root(), "project-permissions.json")
 
 const keys = (value: unknown): Key[] =>
   Array.isArray(value)
@@ -63,8 +64,9 @@ const writeJson = async (file: string, value: unknown) => {
   await fs.writeFile(file, JSON.stringify(value, null, 2) + "\n")
 }
 
+// Read on every permission ask: through the file cache. Writers read the file themselves.
 export async function namespaceMarks(namespace: string): Promise<Marks> {
-  return marksOf(await readJson(namespaceFile(namespace)))
+  return marksOf(await OperatorFileCache.json(namespaceFile(namespace)))
 }
 
 export function writeNamespace(namespace: string, marks: Marks) {
@@ -75,7 +77,7 @@ export function writeNamespace(namespace: string, marks: Marks) {
 }
 
 export async function projectMarks(project: string): Promise<Marks> {
-  const store = await readJson(projectFile())
+  const store = await OperatorFileCache.json(projectFile())
   return marksOf(store && typeof store === "object" ? (store as Record<string, unknown>)[project] : undefined)
 }
 

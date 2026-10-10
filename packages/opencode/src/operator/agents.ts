@@ -108,6 +108,8 @@ export class InvalidError extends Schema.TaggedErrorClass<InvalidError>()("Opera
 
 export interface Interface {
   readonly list: () => Effect.Effect<Info[]>
+  /** The agent's file, when it has one (cheaper than list: no models, no session counts). */
+  readonly fileOf: (name: string) => Effect.Effect<string | undefined>
   /** Writes a new agent at the scope, as an agent file or a config entry; returns the file written. */
   readonly create: (
     scope: OperatorConfig.Scope,
@@ -352,7 +354,11 @@ const layer = Layer.effect(
       return result.path
     })
 
-    return Service.of({ list, create, promptOrigin, update, remove })
+    const fileOf = Effect.fn("OperatorAgents.fileOf")(function* (name: string) {
+      return (yield* files()).get(name)
+    })
+
+    return Service.of({ list, fileOf, create, promptOrigin, update, remove })
   }),
 )
 

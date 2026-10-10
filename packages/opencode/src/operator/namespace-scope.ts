@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import path from "path"
 import { Effect } from "effect"
 import { Global } from "@opencode-ai/core/global"
+import { OperatorFileCache } from "./file-cache"
 import { OperatorLayout } from "./layout"
 
 // The namespace layer of a project's capabilities (capability_scopes_spec.md §4): the folder
@@ -27,10 +28,9 @@ const CONFIG_DIR = ".opencode"
 // (profile-store.ts writes them) rather than importing the operator's services.
 const store = () => path.join(Global.Path.config, "namespaces")
 const readJson = (file: string) =>
-  Bun.file(file)
-    .json()
-    .then((data: unknown) => (data && typeof data === "object" ? (data as Record<string, unknown>) : {}))
-    .catch(() => ({}) as Record<string, unknown>)
+  OperatorFileCache.json(file).then((data) =>
+    data && typeof data === "object" ? (data as Record<string, unknown>) : ({} as Record<string, unknown>),
+  )
 
 // The namespace `.opencode` folders handed out, so the folder loop can tell them apart.
 const owned = new Set<string>()

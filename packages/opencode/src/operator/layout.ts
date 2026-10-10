@@ -3,6 +3,7 @@ export * as OperatorLayout from "./layout"
 import fs from "fs/promises"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
+import { OperatorFileCache } from "./file-cache"
 
 // Where namespaces and projects live (global_and_opencode_namespaces_spec.md §4, §5, §9):
 // - Global is the namespace whose folder is `~/.config/opencode/` (its config sits directly in it).
@@ -33,12 +34,11 @@ export type Settings = {
   upgradeDone?: boolean
 }
 
+// Read on every permission ask: through the file cache (a file is read again only when it changed).
 const readJson = (file: string): Promise<Record<string, unknown>> =>
-  fs
-    .readFile(file, "utf8")
-    .then((text) => JSON.parse(text) as unknown)
-    .then((data) => (data && typeof data === "object" ? (data as Record<string, unknown>) : {}))
-    .catch(() => ({}))
+  OperatorFileCache.json(file).then((data) =>
+    data && typeof data === "object" ? (data as Record<string, unknown>) : {},
+  )
 
 export async function readSettings(): Promise<Settings> {
   const data = await readJson(settingsFile())
@@ -86,10 +86,10 @@ export async function snapshot(): Promise<Snapshot> {
   const settings = await readSettings()
   const workingDir = settings.workingDir ? path.resolve(settings.workingDir) : undefined
   const merged = !workingDir
-  const entries = await fs.readdir(store(), { withFileTypes: true }).catch(() => [])
+  const entries = await OperatorFileCache.entries(store())
   const records = await Promise.all(
     entries
-      .filter((entry) => entry.isDirectory())
+      .filter((entry) => entry.directory)
       .map(async (entry) => ({
         id: entry.name,
         record: await readJson(path.join(store(), entry.name, "namespace.json")),
@@ -121,6 +121,16 @@ export async function snapshot(): Promise<Snapshot> {
     })
   }
   return { ...(workingDir ? { workingDir } : {}), merged, places }
+}
+
+/** The files a snapshot reads: a change to any of them can change it. */
+export async function watched() {
+  const entries = await OperatorFileCache.entries(store())
+  return [
+    settingsFile(),
+    store(),
+    ...entries.filter((entry) => entry.directory).map((entry) => path.join(store(), entry.name, "namespace.json")),
+  ]
 }
 
 /** The id a namespace goes by: `global` is OpenCode's when the working directory is blank. */

@@ -1,7 +1,6 @@
 export * as OperatorPermissionRules from "./permission-rules"
 
 import os from "os"
-import fs from "fs/promises"
 import matter from "gray-matter"
 import { parse } from "jsonc-parser"
 import { Context, Effect, Layer, Schema } from "effect"
@@ -14,6 +13,7 @@ import { Permission } from "@/permission"
 import { Truncate } from "@/tool/truncate"
 import { OperatorAgents } from "./agents"
 import { OperatorConfig } from "./config"
+import { OperatorFileCache } from "./file-cache"
 
 // Where each rule of an agent's (or a session's) permission list comes from. Rules are one ordered
 // list, checked from the bottom up: the last rule that matches wins. An agent's list is built by
@@ -292,12 +292,11 @@ const layer = Layer.effect(
       name: string,
       parsed: ReadonlyArray<{ path: string; value: Record<string, unknown> }>,
     ) {
-      const file = (yield* operatorAgents.list()).find((item) => item.name === name)?.source.path
+      const file = yield* operatorAgents.fileOf(name)
       const data = file
         ? yield* Effect.promise(() =>
-            fs
-              .readFile(file, "utf8")
-              .then((text) => matter(text).data as Record<string, unknown>)
+            OperatorFileCache.text(file)
+              .then((text) => (text === undefined ? undefined : (matter(text).data as Record<string, unknown>)))
               .catch(() => undefined),
           )
         : undefined
@@ -308,11 +307,14 @@ const layer = Layer.effect(
       })?.path
     })
 
-    const own = Effect.fn("OperatorPermissionRules.own")(function* (name: string) {
+    const ownRules = Effect.fnUntraced(function* (name: string) {
       const cfg = yield* config.get()
       const entry = cfg.agent?.[name] as { permission?: Parameters<typeof Permission.fromConfig>[0] } | undefined
-      const rules = Permission.fromConfig(entry?.permission ?? {})
-      return { rules, path: yield* ownPath(name, yield* sources()) }
+      return Permission.fromConfig(entry?.permission ?? {})
+    })
+
+    const own = Effect.fn("OperatorPermissionRules.own")(function* (name: string) {
+      return { rules: yield* ownRules(name), path: yield* ownPath(name, yield* sources()) }
     })
 
     const agent = Effect.fn("OperatorPermissionRules.agent")(function* (name: string, draft?: ReadonlyArray<Rule>) {
@@ -321,7 +323,7 @@ const layer = Layer.effect(
       const cfg = yield* config.get()
       const parsed = yield* sources()
       const user = Permission.fromConfig(cfg.permission ?? {})
-      const ownRules = (yield* own(name)).rules
+      const own = yield* ownRules(name)
       const ownFile = yield* ownPath(name, parsed)
       const list = info.permission
       // The truncation folder allow, added last unless the agent denies it.
@@ -336,7 +338,7 @@ const layer = Layer.effect(
           ? 1
           : 0
       const ownEnd = list.length - truncation
-      const ownStart = Math.max(0, ownEnd - ownRules.length)
+      const ownStart = Math.max(0, ownEnd - own.length)
       const userStart = Math.max(0, ownStart - user.length)
       // OpenCode's defaults are what every agent's list starts with.
       const prefix = (item: Agent.Info) => item.permission.slice(0, userStart)

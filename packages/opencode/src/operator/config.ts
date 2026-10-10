@@ -13,6 +13,7 @@ import { ConfigPaths } from "@/config/paths"
 import { ConfigV2Compat } from "@/config/v2-compat"
 import { InstanceState } from "@/effect/instance-state"
 import { isRecord } from "@/util/record"
+import { OperatorFileCache } from "./file-cache"
 import { OperatorLayout } from "./layout"
 import { OperatorNamespaceScope } from "./namespace-scope"
 import { OperatorProjectConfig } from "./project-config"
@@ -118,9 +119,9 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
 
+    // Read for every permission ask and model request (permission-live.ts): through the file cache.
     const read = (kind: Source["kind"], file: string) =>
-      fs.readFileStringSafe(file).pipe(
-        Effect.orElseSucceed(() => undefined),
+      Effect.promise(() => OperatorFileCache.text(file)).pipe(
         Effect.map((text) => (text === undefined ? [] : [{ kind, path: file, text }])),
       )
 

@@ -1,16 +1,20 @@
 export * as OperatorPermissionLive from "./permission-live"
 
+import path from "path"
 import { parse } from "jsonc-parser"
 import { Context, Effect, Layer } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { Global } from "@opencode-ai/core/global"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Agent } from "@/agent/agent"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { InstanceState } from "@/effect/instance-state"
+import { OperatorAgents } from "./agents"
 import { OperatorConfig } from "./config"
+import { OperatorFileCache } from "./file-cache"
 import { OperatorLayout } from "./layout"
 import { OperatorNamespaceScope } from "./namespace-scope"
 import { OperatorPermissionEffective } from "./permission-effective"
@@ -94,6 +98,8 @@ export const locks: {
     keys: ReadonlyArray<Model.Key>
     deleted: ReadonlyArray<Model.Key>
     inherited: ReadonlyArray<Rule>
+    /** The files they are read from. */
+    files?: ReadonlyArray<string>
   }>
 } = {}
 
@@ -148,14 +154,23 @@ const layer = Layer.effect(
     const agents = yield* Agent.Service
     const rules = yield* OperatorPermissionRules.Service
     const operatorConfig = yield* OperatorConfig.Service
+    const operatorAgents = yield* OperatorAgents.Service
     const written = new Map<string, ReadonlyArray<Rule>>()
+
+    // What changes the kept levels besides files (below): an instance's reload, rules just written.
+    const onChange: Array<(directory?: string) => void> = []
 
     // A project that reloads has read what was written; every project, after a global reload.
     const onEvent = (event: GlobalEvent) => {
       const type = (event.payload as { type?: string } | undefined)?.type
-      if (type === "global.disposed") return written.clear()
+      if (type === "global.disposed") {
+        written.clear()
+        for (const change of onChange) change()
+        return
+      }
       if (type !== "server.instance.disposed" || !event.directory) return
       for (const key of written.keys()) if (key.startsWith(`${event.directory}\u0000`)) written.delete(key)
+      for (const change of onChange) change(event.directory)
     }
     yield* Effect.acquireRelease(
       Effect.sync(() => GlobalBus.on("event", onEvent)),
@@ -190,6 +205,29 @@ const layer = Layer.effect(
         ? configLines("OPENCODE_PERMISSION", JSON.stringify({ permission: safeJson(Flag.OPENCODE_PERMISSION) }))
         : []
       const project = yield* Effect.promise(() => OperatorProjects.keyOf(ctx))
+      // Every file these levels come from, and every place a config file could appear and be read: the
+      // walk from the folder up to its worktree (or the root, outside git), as upstream's loader walks.
+      const walk: string[] = []
+      for (let dir = path.resolve(ctx.directory); ; dir = path.dirname(dir)) {
+        walk.push(dir)
+        if (dir === ctx.worktree || dir === path.dirname(dir)) break
+      }
+      const configFile = (dir: string) => [path.join(dir, "opencode.json"), path.join(dir, "opencode.jsonc")]
+      const files = [
+        ...layers.sources.filter((source) => source.path !== "OPENCODE_CONFIG_CONTENT").map((source) => source.path),
+        path.join(Global.Path.config, "config.json"),
+        ...configFile(Global.Path.config),
+        ...configFile(path.join(Global.Path.home, ".opencode")),
+        ...(layers.targets.namespace ? configFile(path.dirname(layers.targets.namespace)) : []),
+        ...(Flag.OPENCODE_CONFIG ? [Flag.OPENCODE_CONFIG] : []),
+        ...(Flag.OPENCODE_CONFIG_DIR ? configFile(Flag.OPENCODE_CONFIG_DIR) : []),
+        ...walk.flatMap((dir) => [...configFile(dir), ...configFile(path.join(dir, ".opencode"))]),
+        ...(yield* Effect.promise(() => OperatorLayout.watched())),
+        path.join(Global.Path.config, "namespaces", "projects.json"),
+        OperatorPermissionMarks.namespaceFile(ns),
+        OperatorPermissionMarks.namespaceFile(OperatorLayout.globalId(layout)),
+        OperatorPermissionMarks.projectFile(),
+      ]
       const namespaceMarks = isGlobal
         ? OperatorPermissionMarks.EMPTY
         : draft?.level === "namespace"
@@ -212,6 +250,7 @@ const layer = Layer.effect(
         : [...of(["namespace"]), ...drafted("namespace")]
       return {
         namespace: ns,
+        files,
         protectBuiltins: OperatorLayout.builtinsProtected(ns, layout),
         lines: {
           global: inherit || isGlobal ? [...of(["global"]), ...(isGlobal ? drafted("namespace") : [])] : [],
@@ -234,9 +273,9 @@ const layer = Layer.effect(
       }
     })
 
-    const lines = Effect.fn("OperatorPermissionLive.lines")(function* (input: LinesInput) {
-      const ctx = yield* InstanceState.context
-      const directory = input.session?.directory ?? ctx.directory
+    // Levels 0-4 (OpenCode, Global, Namespace, Project, Agent): the same for every session of an agent in a
+    // folder, so built once and kept (the effective set is needed for every ask and every model request).
+    const baseLevels = Effect.fnUntraced(function* (input: LinesInput, directory: string) {
       // The agent's list as OpenCode loaded it, in parts (with a draft of its own rules, as saving it would
       // write them). Without an agent, OpenCode's defaults (the agent new sessions start with gives them).
       const agent = input.agent ?? (yield* agents.defaultAgent())
@@ -250,26 +289,88 @@ const layer = Layer.effect(
         ? pending.map((rule) => ({ ...plain(rule), part: "agent", from: { kind: "agent-written" } }))
         : part("agent")
       const config = yield* configLevels(input.namespace, input.draft)
+      const parentID = input.session?.parentID ?? input.parentID
       const locked =
         locks.of && input.agent
-          ? yield* locks.of({
-              directory,
-              agent: input.agent,
-              ...((input.session?.parentID ?? input.parentID)
-                ? { parentID: input.session?.parentID ?? input.parentID! }
-                : {}),
-            })
-          : { keys: [], deleted: [], inherited: [] }
-      const sessionDeleted =
-        input.sessionDeleted ??
-        (input.session && sessionMarks.deleted
-          ? yield* Effect.promise(() => sessionMarks.deleted!(input.session!.id)).pipe(Effect.orElseSucceed(() => []))
-          : [])
+          ? yield* locks.of({ directory, agent: input.agent, ...(parentID ? { parentID } : {}) })
+          : { keys: [], deleted: [], inherited: [], files: [] }
       const inherited = locked.inherited.map((rule) => ({
         ...plain(rule),
         part: "agent" as const,
         from: { kind: "lock" as const },
       }))
+      const file = yield* operatorAgents.fileOf(agent)
+      const levels: Model.Level<Meta>[] = [
+        { lines: [...part("opencode"), ...part("truncation")] },
+        { lines: config.lines.global, ...config.marks.global },
+        { lines: config.lines.namespace, ...config.marks.namespace },
+        { lines: config.lines.project, ...config.marks.project },
+        { lines: [...inherited, ...own], deleted: locked.deleted, locks: [...inherited, ...locked.keys] },
+      ]
+      return {
+        levels,
+        protectBuiltins: config.protectBuiltins,
+        files: [...config.files, ...(locked.files ?? []), ...(file ? [file] : [])],
+        // A parent's locks come from its session and its agent's lines: not kept.
+        keep: !locked.inherited.length,
+      }
+    })
+
+    // The kept base levels, by folder, agent and namespace view. One is used while every file it came from
+    // has the same stamp (OperatorFileCache: a change anywhere, a hand edit included, shows on the next
+    // ask) and its folder's generation is the same: the generation changes when the instance reloads (the
+    // agents and config OpenCode loaded) and when an agent's rules are written. Drafts are never kept.
+    type Base = {
+      levels: Model.Level<Meta>[]
+      protectBuiltins: boolean
+      files: ReadonlyArray<string>
+      keep: boolean
+    }
+    const bases = new Map<string, { base: Base; stamps: ReadonlyArray<string>; generation: string }>()
+    const generations = new Map<string, number>()
+    let generationAll = 0
+    const generationOf = (directory: string) => `${generationAll}:${generations.get(directory) ?? 0}`
+    const changed = (directory?: string) => {
+      if (directory === undefined) generationAll++
+      else generations.set(directory, (generations.get(directory) ?? 0) + 1)
+    }
+    onChange.push(changed)
+
+    const kept = Effect.fnUntraced(function* (input: LinesInput, directory: string) {
+      if (input.draft || input.agentRules) return yield* baseLevels(input, directory)
+      const parentID = input.session?.parentID ?? input.parentID ?? ""
+      const key = [
+        directory,
+        input.agent ?? "",
+        input.agent ? "agent" : "defaults",
+        input.namespace ?? "",
+        parentID,
+      ].join("\u0000")
+      const generation = generationOf(directory)
+      const found = bases.get(key)
+      if (found && found.generation === generation) {
+        const now = yield* Effect.promise(() => OperatorFileCache.stamps(found.base.files))
+        if (now.every((stamp, index) => stamp === found.stamps[index])) return found.base
+      }
+      const base = yield* baseLevels(input, directory)
+      // Stamped after the build: a file changed meanwhile shows as changed on the next ask.
+      const stamps = yield* Effect.promise(() => OperatorFileCache.stamps(base.files))
+      if (base.keep && generationOf(directory) === generation) {
+        if (bases.size >= 500) bases.clear()
+        bases.set(key, { base, stamps, generation })
+      }
+      return base
+    })
+
+    const lines = Effect.fn("OperatorPermissionLive.lines")(function* (input: LinesInput) {
+      const ctx = yield* InstanceState.context
+      const directory = input.session?.directory ?? ctx.directory
+      const base = yield* kept(input, directory)
+      const sessionDeleted =
+        input.sessionDeleted ??
+        (input.session && sessionMarks.deleted
+          ? yield* Effect.promise(() => sessionMarks.deleted!(input.session!.id)).pipe(Effect.orElseSucceed(() => []))
+          : [])
       const session: Array<Rule & Meta> =
         input.permission === "doom_loop"
           ? []
@@ -278,18 +379,11 @@ const layer = Layer.effect(
               part: rule.part ?? "session",
               from: rule.from ?? { kind: "session-opencode" },
             }))
-      const levels: Model.Level<Meta>[] = [
-        { lines: [...part("opencode"), ...part("truncation")] },
-        { lines: config.lines.global, ...config.marks.global },
-        { lines: config.lines.namespace, ...config.marks.namespace },
-        { lines: config.lines.project, ...config.marks.project },
-        { lines: [...inherited, ...own], deleted: locked.deleted, locks: [...inherited, ...locked.keys] },
-        { lines: session, deleted: sessionDeleted },
-      ]
+      const levels: Model.Level<Meta>[] = [...base.levels, { lines: session, deleted: sessionDeleted }]
       const upTo = input.upTo ? LEVEL[input.upTo] : levels.length - 1
       // OpenCode's own lines can't be deleted in the OpenCode namespace.
       return Model.build<Meta>(levels.slice(0, upTo + 1), {
-        keep: (line) => config.protectBuiltins && line.level === LEVEL.opencode,
+        keep: (line) => base.protectBuiltins && line.level === LEVEL.opencode,
       })
     })
 
@@ -349,7 +443,11 @@ const layer = Layer.effect(
     )
 
     return Service.of({
-      written: (input) => Effect.sync(() => written.set(keyOf(input.directory, input.agent), [...input.rules])),
+      written: (input) =>
+        Effect.sync(() => {
+          written.set(keyOf(input.directory, input.agent), [...input.rules])
+          for (const change of onChange) change(input.directory)
+        }),
       pending: (directory, agent) => written.get(keyOf(directory, agent)) ?? [],
       lines,
       decide: (sessionID, permission, input) =>
@@ -372,5 +470,5 @@ function safeJson(text: string) {
 export const node = LayerNode.make({
   service: Service,
   layer,
-  deps: [Session.node, Agent.node, OperatorPermissionRules.node, OperatorConfig.node],
+  deps: [Session.node, Agent.node, OperatorPermissionRules.node, OperatorConfig.node, OperatorAgents.node],
 })

@@ -2,7 +2,8 @@ export * as OperatorProjects from "./projects"
 
 import fs from "fs/promises"
 import path from "path"
-import { OperatorProfileStore } from "./profile-store"
+import { Global } from "@opencode-ai/core/global"
+import { OperatorFileCache } from "./file-cache"
 
 // Which project a folder belongs to. Every session and its agents belong to exactly one project:
 // - a git repository (any folder inside one belongs to the repository);
@@ -34,12 +35,23 @@ export function registeredRoot(folder: string, registered: ReadonlyArray<string>
     .toSorted((a, b) => b.length - a.length)[0]
 }
 
+// The folders registered as projects (projects.json, written by profile-store.ts), read on every
+// permission ask: through the file cache.
+async function registered() {
+  const data = await OperatorFileCache.json(path.join(Global.Path.config, "namespaces", "projects.json"))
+  // As OperatorProfileStore.readProjects counts them: entries that name a namespace.
+  return data && typeof data === "object"
+    ? Object.entries(data as Record<string, unknown>)
+        .filter(([, value]) => !!value && typeof (value as { namespace?: unknown }).namespace === "string")
+        .map(([key]) => key)
+    : []
+}
+
 // The project a folder belongs to, or undefined when it is not part of one.
 export async function projectOf(folder: string): Promise<Project | undefined> {
   const repository = await gitRoot(folder)
   if (repository) return { key: repository, git: true }
-  const registered = Object.keys(await OperatorProfileStore.readProjects())
-  const key = registeredRoot(folder, registered)
+  const key = registeredRoot(folder, await registered())
   return key ? { key, git: false } : undefined
 }
 
@@ -47,8 +59,7 @@ export async function projectOf(folder: string): Promise<Project | undefined> {
 // registered folder it is in (the folder itself when it is not in one).
 export async function keyOf(ctx: { directory: string; worktree: string }) {
   if (ctx.worktree !== "/") return ctx.worktree
-  const registered = Object.keys(await OperatorProfileStore.readProjects())
-  return registeredRoot(ctx.directory, registered) ?? ctx.directory
+  return registeredRoot(ctx.directory, await registered()) ?? ctx.directory
 }
 
 // Whether sessions are refused in folders that are not projects. Upstream's test suite (which

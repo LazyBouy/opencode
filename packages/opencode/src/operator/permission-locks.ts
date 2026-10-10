@@ -10,6 +10,7 @@ import { Agent } from "@/agent/agent"
 import { InstanceState } from "@/effect/instance-state"
 import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
+import { OperatorFileCache } from "./file-cache"
 import { OperatorPermissionLive } from "./permission-live"
 import { OperatorProjects } from "./projects"
 
@@ -48,15 +49,17 @@ export type Info = typeof Info.Type
 type Rule = PermissionV1.Rule
 type Store = Record<string, Record<string, Partial<Info>>>
 
-const file = () => path.join(Global.Path.data, "operator", "agent-permission-locks.json")
+export const file = () => path.join(Global.Path.data, "operator", "agent-permission-locks.json")
 const readStore = (): Promise<Store> =>
   Bun.file(file())
     .json()
     .catch(() => ({}))
 let queue: Promise<unknown> = Promise.resolve()
 
+// Read on every permission ask: through the file cache. Writers read the file themselves.
 export async function read(project: string, agent: string): Promise<Info> {
-  const entry = (await readStore())[project]?.[agent]
+  const store = ((await OperatorFileCache.json(file())) ?? {}) as Store
+  const entry = store[project]?.[agent]
   return { locks: entry?.locks ?? [], inherit: entry?.inherit ?? "own", deleted: entry?.deleted ?? [] }
 }
 
@@ -126,10 +129,15 @@ const layer = Layer.effect(
       agent: string,
       depth: number,
       parentID?: string,
-    ): Effect.Effect<{ keys: ReadonlyArray<Lock>; deleted: ReadonlyArray<Lock>; inherited: ReadonlyArray<Rule> }> =>
+    ): Effect.Effect<{
+      keys: ReadonlyArray<Lock>
+      deleted: ReadonlyArray<Lock>
+      inherited: ReadonlyArray<Rule>
+      files: ReadonlyArray<string>
+    }> =>
       Effect.gen(function* () {
         const info = yield* Effect.promise(async () => read(await projectKeyOf(directory), agent))
-        const own = { keys: info.locks, deleted: info.deleted ?? [] }
+        const own = { keys: info.locks, deleted: info.deleted ?? [], files: [file()] }
         if (info.inherit !== "parent" || !parentID || depth > 3) return { ...own, inherited: [] }
         const parent = yield* sessions.get(SessionID.make(parentID)).pipe(Effect.option)
         if (parent._tag === "None") return { ...own, inherited: [] }
@@ -143,7 +151,7 @@ const layer = Layer.effect(
             )
           : []
         return { ...own, inherited: [...above.inherited, ...lockedRules(rows, above.keys)] }
-      }).pipe(Effect.orElseSucceed(() => ({ keys: [], deleted: [], inherited: [] })))
+      }).pipe(Effect.orElseSucceed(() => ({ keys: [], deleted: [], inherited: [], files: [file()] })))
 
     yield* Effect.acquireRelease(
       Effect.sync(() => {
