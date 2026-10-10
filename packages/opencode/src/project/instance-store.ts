@@ -74,7 +74,13 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
         const exit = yield* Effect.exit(boot({ ...input, directory }))
         if (Exit.isFailure(exit)) yield* removeEntry(directory, entry)
         yield* Deferred.done(entry.deferred, exit).pipe(Effect.asVoid)
-      })
+      }).pipe(
+        // fork: a load interrupted by the store's scope closing (shutdown) still settles its entry, or
+        // disposeAll (this scope's finalizer) would wait for it forever.
+        Effect.onInterrupt(() =>
+          removeEntry(directory, entry).pipe(Effect.andThen(Deferred.interrupt(entry.deferred))),
+        ),
+      )
 
     const emitDisposed = (input: { directory: string; project?: string }) =>
       Effect.sync(() =>
