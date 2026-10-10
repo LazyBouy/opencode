@@ -67,6 +67,23 @@ test("a new agent is saved as an agent file or a config entry, and the form says
   expect(state.agentWrites[0].body).toMatchObject({ name: "docs", format: "config" })
 })
 
+test("a new agent works in agents/<name>/ unless its home is changed or cleared", async ({ page }) => {
+  const state = await mockOperator(page)
+  await page.goto(`/operator/agents/new${dir}`)
+  const home = page.getByLabel("Home folder", { exact: true })
+  await page.getByLabel("Name", { exact: true }).fill("docs")
+  await expect(home).toHaveValue("agents/docs/")
+  await page.getByLabel("Name", { exact: true }).fill("writer")
+  await expect(home).toHaveValue("agents/writer/")
+  // Cleared: it works at the project root, and the name no longer changes it.
+  await home.fill("")
+  await page.getByLabel("Name", { exact: true }).fill("editor")
+  await expect(home).toHaveValue("")
+  await page.getByRole("button", { name: "Create agent" }).click()
+  await expect.poll(() => state.agentWrites.length).toBe(1)
+  expect(state.agentWrites[0].body).not.toHaveProperty("home")
+})
+
 test("editing a built-in agent sends only what changed and resets cleared settings", async ({ page }) => {
   const state = await mockOperator(page)
   await page.goto(`/operator/agents/build/edit${dir}`)

@@ -227,6 +227,11 @@ import type {
   OperatorMemoryOverviewResponses,
   OperatorMemoryReadErrors,
   OperatorMemoryReadResponses,
+  OperatorMemorySaveSettingsErrors,
+  OperatorMemorySaveSettingsResponses,
+  OperatorMemorySettingsErrors,
+  OperatorMemorySettingsInput,
+  OperatorMemorySettingsResponses,
   OperatorMemoryWriteErrors,
   OperatorMemoryWriteResponses,
   OperatorModelDefaultsErrors,
@@ -4263,6 +4268,81 @@ export class Memory extends HeyApiClient {
     )
     return (options?.client ?? this.client).put<OperatorMemoryWriteResponses, OperatorMemoryWriteErrors, ThrowOnError>({
       url: "/operator/memory/file",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get memory settings
+   *
+   * Whether .memory folders are committed to git (the default and each project's choice, with its repository's state), and how much of each level's index prompts show.
+   */
+  public settings<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorMemorySettingsResponses,
+      OperatorMemorySettingsErrors,
+      ThrowOnError
+    >({
+      url: "/operator/memory/settings",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Save memory settings
+   *
+   * Change the commit default, a project's own choice (null: use the default) or the index limits. Repositories' .git/info/exclude follow at once; .gitignore is never edited.
+   */
+  public saveSettings<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      operatorMemorySettingsInput?: OperatorMemorySettingsInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "operatorMemorySettingsInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorMemorySaveSettingsResponses,
+      OperatorMemorySaveSettingsErrors,
+      ThrowOnError
+    >({
+      url: "/operator/memory/settings",
       ...options,
       ...params,
       headers: {

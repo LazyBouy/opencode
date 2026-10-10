@@ -1,4 +1,5 @@
 import { OperatorMemory } from "@/operator/memory"
+import { OperatorMemoryFolders } from "@/operator/memory-folders"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "@/server/routes/instance/httpapi/middleware/authorization"
@@ -13,6 +14,7 @@ import { described } from "@/server/routes/instance/httpapi/groups/metadata"
 export const OperatorMemoryPaths = {
   overview: "/operator/memory/overview",
   file: "/operator/memory/file",
+  settings: "/operator/memory/settings",
 } as const
 
 export class ApiMemoryNotAllowedError extends Schema.ErrorClass<{
@@ -60,6 +62,30 @@ export const OperatorMemoryApi = HttpApi.make("operator-memory")
             summary: "Write a memory file",
             description:
               "Write a file the memory overview lists, or create AGENTS.md at the project root or in the global config folder.",
+          }),
+        ),
+        HttpApiEndpoint.get("settings", OperatorMemoryPaths.settings, {
+          query: WorkspaceRoutingQuery,
+          success: described(OperatorMemoryFolders.SettingsView, "Memory settings"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.memory.settings",
+            summary: "Get memory settings",
+            description:
+              "Whether .memory folders are committed to git (the default and each project's choice, with its repository's state), and how much of each level's index prompts show.",
+          }),
+        ),
+        HttpApiEndpoint.put("saveSettings", OperatorMemoryPaths.settings, {
+          query: WorkspaceRoutingQuery,
+          payload: OperatorMemoryFolders.SettingsInput,
+          success: described(OperatorMemoryFolders.SettingsView, "Memory settings"),
+          error: ApiMemoryNotAllowedError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.memory.saveSettings",
+            summary: "Save memory settings",
+            description:
+              "Change the commit default, a project's own choice (null: use the default) or the index limits. Repositories' .git/info/exclude follow at once; .gitignore is never edited.",
           }),
         ),
       )

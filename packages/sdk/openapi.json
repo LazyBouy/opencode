@@ -15403,6 +15403,131 @@
         ]
       }
     },
+    "/operator/memory/settings": {
+      "get": {
+        "tags": ["operator memory"],
+        "operationId": "operator.memory.settings",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Memory settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorMemorySettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Whether .memory folders are committed to git (the default and each project's choice, with its repository's state), and how much of each level's index prompts show.",
+        "summary": "Get memory settings",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.memory.settings({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "tags": ["operator memory"],
+        "operationId": "operator.memory.saveSettings",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Memory settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorMemorySettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "OperatorMemoryNotAllowedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorMemoryNotAllowedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Change the commit default, a project's own choice (null: use the default) or the index limits. Repositories' .git/info/exclude follow at once; .gitignore is never edited.",
+        "summary": "Save memory settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperatorMemorySettingsInput"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.memory.saveSettings({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/operator/agent-prompt/{name}": {
       "get": {
         "tags": ["operator agent prompts"],
@@ -36119,6 +36244,83 @@
           }
         },
         "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorMemorySettings": {
+        "type": "object",
+        "properties": {
+          "commit": {
+            "type": "boolean",
+            "description": "Commit .memory folders to git (default: off)"
+          },
+          "indexLines": {
+            "type": "number",
+            "description": "Each level's index in prompts is cut at this many lines"
+          },
+          "indexChars": {
+            "type": "number",
+            "description": "… or at this many characters, whichever comes first"
+          },
+          "projects": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "override": {
+                  "type": "boolean"
+                },
+                "commits": {
+                  "type": "boolean",
+                  "description": "Whether its .memory folders are committed"
+                },
+                "repo": {
+                  "type": "string"
+                },
+                "excluded": {
+                  "type": "boolean"
+                }
+              },
+              "required": ["key", "name", "commits"],
+              "additionalProperties": false
+            },
+            "description": "The projects with a .memory folder or a choice of their own"
+          }
+        },
+        "required": ["commit", "indexLines", "indexChars", "projects"],
+        "additionalProperties": false
+      },
+      "OperatorMemorySettingsInput": {
+        "type": "object",
+        "properties": {
+          "commit": {
+            "type": "boolean"
+          },
+          "indexLines": {
+            "type": "number"
+          },
+          "indexChars": {
+            "type": "number"
+          },
+          "project": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "commit": {
+                "type": "boolean"
+              }
+            },
+            "required": ["key", "commit"],
+            "additionalProperties": false
+          }
+        },
         "additionalProperties": false
       },
       "OperatorAgentPrompt": {

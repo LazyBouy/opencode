@@ -20,6 +20,7 @@ import { requestError } from "./config-helpers"
 import { FieldHelp } from "../ui/field-help"
 import { ModelWithSource } from "../ui/prompt-trace"
 import { PermissionRequests } from "../ui/permission-requests"
+import { homeFolder } from "./agent-home"
 
 // Agents open in an overlay on the Agents page; this route (links to /operator/agents/<name>) opens it
 // there, keeping the tab and the folder.
@@ -102,11 +103,12 @@ export function AgentDetail(props: { name: string; directory: string; tab: strin
   const fail = (error: unknown) =>
     showToast({ title: language.t("operator.agent.actionFailed"), description: requestError(error) })
 
-  // A new session as this agent, in its home folder when it has one.
+  // A new session as this agent, in its home folder when it has one (relative to the project, as the
+  // server's ensureMain resolves it).
   const start = async (name: string, home: string | undefined) => {
     await api
       .client()
-      .session.create({ directory: home ?? directory(), agent: name })
+      .session.create({ directory: home ? homeFolder(directory(), home) : directory(), agent: name })
       .then((result) => openSession(result.data!.id))
       .catch(fail)
   }

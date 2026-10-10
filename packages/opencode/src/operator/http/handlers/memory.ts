@@ -1,5 +1,7 @@
 import { InstanceState } from "@/effect/instance-state"
 import { OperatorMemory } from "@/operator/memory"
+import { OperatorMemoryFolders } from "@/operator/memory-folders"
+import { OperatorProfileStore } from "@/operator/profile-store"
 import { OperatorReloadWhenIdle } from "@/operator/reload-when-idle"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
 import { Effect } from "effect"
@@ -10,11 +12,27 @@ export const operatorMemoryHandlers = HttpApiBuilder.group(InstanceHttpApi, "ope
   Effect.gen(function* () {
     const memory = yield* OperatorMemory.Service
     const reloads = yield* OperatorReloadWhenIdle.Service
+    const store = yield* OperatorProfileStore.Service
     const apiError = (error: OperatorMemory.NotAllowedError) =>
       new ApiMemoryNotAllowedError({ name: "OperatorMemoryNotAllowedError", data: { message: error.message } })
 
     return handlers
       .handle("overview", () => memory.overview())
+      .handle("settings", () =>
+        store.projects().pipe(Effect.flatMap((known) => Effect.promise(() => OperatorMemoryFolders.view(known)))),
+      )
+      .handle("saveSettings", (ctx) =>
+        Effect.flatMap(store.projects(), (known) =>
+          Effect.tryPromise({
+            try: () => OperatorMemoryFolders.update(ctx.payload, known),
+            catch: (error) =>
+              new ApiMemoryNotAllowedError({
+                name: "OperatorMemoryNotAllowedError",
+                data: { message: error instanceof Error ? error.message : String(error) },
+              }),
+          }),
+        ),
+      )
       .handle("read", (ctx) =>
         memory.read(ctx.query.path).pipe(
           Effect.map((text) => ({ path: ctx.query.path, text })),

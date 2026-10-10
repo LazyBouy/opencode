@@ -1045,7 +1045,7 @@ export const dict = {
   "operator.agentForm.hiddenHint": "Hide from the @ menu (subagents only)",
   "operator.agentForm.home": "Home folder",
   "operator.agentForm.homeHint":
-    "Sessions started as this agent open in this folder. It must be inside the agent's project, and is created if missing.",
+    "Sessions started as this agent open in this folder, relative to the project (or an absolute folder inside it); it is created if missing. Its memory is kept in its .memory folder. A new agent gets agents/<name>/; clear it to work at the project root (its memory is then in .memory/agents/<name>/).",
   "operator.agentForm.prompt": "Prompt",
   "operator.agentForm.promptHint":
     "The agent's own prompt. A profile sends it through its Agent prompt slots; OpenCode's profile sends it instead of the base prompt. The Prompt tab chooses the profile.",

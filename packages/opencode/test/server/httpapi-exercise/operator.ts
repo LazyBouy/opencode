@@ -700,6 +700,19 @@ export const operatorScenarios: Scenario[] = [
       body: { path: `${ctx.directory}/AGENTS.md`, text: "Written by the exerciser.\n" },
     }))
     .json(200, (body) => check(body === true, "AGENTS.md at the project root should be created"), "status"),
+  http.protected.get("/operator/memory/settings", "operator.memory.settings").json(200, (body) => {
+    object(body)
+    check(body.commit === false, ".memory folders should not be committed by default")
+    check(
+      body.indexLines === 200 && body.indexChars === 25000,
+      "the index limits should default to 200 lines, 25,000 characters",
+    )
+    array(body.projects)
+  }),
+  http.protected
+    .put("/operator/memory/settings", "operator.memory.saveSettings")
+    .at((ctx) => ({ path: "/operator/memory/settings", headers: ctx.headers(), body: { indexLines: 0 } }))
+    .status(403),
   http.protected.get("/operator/layout", "operator.layout.get").json(200, (body) => {
     object(body)
     array(body.namespaces)

@@ -5,7 +5,7 @@ import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
 import { useQuery, useQueryClient } from "@tanstack/solid-query"
-import { createEffect, createMemo, on, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { showToast } from "@/utils/toast"
@@ -103,6 +103,13 @@ export default function AgentFormPage() {
   }
 
   const set = <K extends keyof AgentForm>(key: K, value: AgentForm[K]) => setStore("form", key, value)
+  // A new agent works in agents/<name>/ of its project (its memory is kept there) unless its home is
+  // changed or cleared (memory_spec.md §2.3).
+  const [homeChanged, setHomeChanged] = createSignal(false)
+  const named = (name: string) => {
+    set("name", name)
+    if (!editing() && !homeChanged()) set("home", name.trim() ? `agents/${name.trim()}/` : "")
+  }
   const done = (name: string) => {
     void queryClient.invalidateQueries({ queryKey: api.key("agents", directory()) })
     void refresh(directory() ?? "")
@@ -200,7 +207,7 @@ export default function AgentFormPage() {
               <TextInputV2
                 appearance="base"
                 value={store.form.name}
-                onInput={(event) => set("name", event.currentTarget.value)}
+                onInput={(event) => named(event.currentTarget.value)}
               />
             </Field>
           </Show>
@@ -350,8 +357,11 @@ export default function AgentFormPage() {
             <TextInputV2
               appearance="base"
               value={store.form.home}
-              placeholder="/root/projects/docs"
-              onInput={(event) => set("home", event.currentTarget.value)}
+              placeholder="agents/<name>/"
+              onInput={(event) => {
+                setHomeChanged(true)
+                set("home", event.currentTarget.value)
+              }}
             />
           </Field>
           <Field label={language.t("operator.agentForm.prompt")} hint={language.t("operator.agentForm.promptHint")}>

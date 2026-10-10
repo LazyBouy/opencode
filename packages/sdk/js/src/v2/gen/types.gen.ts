@@ -4222,6 +4222,45 @@ export type OperatorMemoryNotAllowedError = {
   }
 }
 
+export type OperatorMemorySettings = {
+  /**
+   * Commit .memory folders to git (default: off)
+   */
+  commit: boolean
+  /**
+   * Each level's index in prompts is cut at this many lines
+   */
+  indexLines: number
+  /**
+   * … or at this many characters, whichever comes first
+   */
+  indexChars: number
+  /**
+   * The projects with a .memory folder or a choice of their own
+   */
+  projects: Array<{
+    key: string
+    name: string
+    override?: boolean
+    /**
+     * Whether its .memory folders are committed
+     */
+    commits: boolean
+    repo?: string
+    excluded?: boolean
+  }>
+}
+
+export type OperatorMemorySettingsInput = {
+  commit?: boolean
+  indexLines?: number
+  indexChars?: number
+  project?: {
+    key: string
+    commit: boolean
+  }
+}
+
 export type OperatorAgentPrompt = {
   profile?: string
   override?: OperatorPromptOverride
@@ -16698,6 +16737,67 @@ export type OperatorMemoryWriteResponses = {
 }
 
 export type OperatorMemoryWriteResponse = OperatorMemoryWriteResponses[keyof OperatorMemoryWriteResponses]
+
+export type OperatorMemorySettingsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/memory/settings"
+}
+
+export type OperatorMemorySettingsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorMemorySettingsError = OperatorMemorySettingsErrors[keyof OperatorMemorySettingsErrors]
+
+export type OperatorMemorySettingsResponses = {
+  /**
+   * Memory settings
+   */
+  200: OperatorMemorySettings
+}
+
+export type OperatorMemorySettingsResponse = OperatorMemorySettingsResponses[keyof OperatorMemorySettingsResponses]
+
+export type OperatorMemorySaveSettingsData = {
+  body?: OperatorMemorySettingsInput
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/memory/settings"
+}
+
+export type OperatorMemorySaveSettingsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * OperatorMemoryNotAllowedError
+   */
+  403: OperatorMemoryNotAllowedError
+}
+
+export type OperatorMemorySaveSettingsError = OperatorMemorySaveSettingsErrors[keyof OperatorMemorySaveSettingsErrors]
+
+export type OperatorMemorySaveSettingsResponses = {
+  /**
+   * Memory settings
+   */
+  200: OperatorMemorySettings
+}
+
+export type OperatorMemorySaveSettingsResponse =
+  OperatorMemorySaveSettingsResponses[keyof OperatorMemorySaveSettingsResponses]
 
 export type OperatorAgentPromptGetData = {
   body?: never
