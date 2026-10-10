@@ -88,7 +88,12 @@ unix("OpenCode is unchanged: every agent sends upstream's system prompt, tools a
       const { directory, llm } = yield* configure()
       yield* write(path.join(directory, "AGENTS.md"), "Use Bun for everything.\n")
       yield* write(path.join(directory, ".opencode", "agent", "triage.md"), "---\nmode: primary\n---\nTriage issues.\n")
-      const seen: Array<{ agent: string; upstream: string[]; sent: string[] }> = []
+      const seen: Array<{
+        agent: string
+        upstream: string[]
+        sent: string[]
+        sections?: ReadonlyArray<OperatorProfile.AssembledSection>
+      }> = []
       promptAudit.listen = (entry) => seen.push(entry)
       for (let index = 0; index < 10; index++) yield* llm.text("ok")
 
@@ -122,6 +127,21 @@ unix("OpenCode is unchanged: every agent sends upstream's system prompt, tools a
       ])
       for (const item of seen)
         expect({ agent: item.agent, system: item.sent }).toEqual({ agent: item.agent, system: item.upstream })
+      // The pipeline's own texts are OpenCode's (dynamic_layer_resolution_spec.md §8): no section fell back.
+      const piped = seen.flatMap((item) =>
+        (item.sections ?? []).filter((section) => section.parity).map((section) => ({ agent: item.agent, ...section })),
+      )
+      expect(new Set(piped.map((section) => section.layer))).toEqual(
+        new Set([
+          `${P}slot.agent-or-base`,
+          `${P}generated.environment`,
+          `${P}generated.instructions`,
+          `${P}generated.skills`,
+        ]),
+      )
+      expect(
+        piped.filter((section) => section.parity !== "same").map((section) => [section.agent, section.layer]),
+      ).toEqual([])
 
       // Tool descriptions are the registry's own, and the plan reminder is OpenCode's.
       const inputs = yield* llm.inputs
@@ -282,6 +302,36 @@ unix("a Dynamic layer's sample is what it fills in for the agent", () =>
       expect(base.source).toBe(preview.base)
       const title = yield* prompts.sample({ agent: "title", layer: `${P}helper.title` })
       expect(title.text).toStartWith("You are a title generator.")
+    }),
+  ),
+)
+
+unix("a Dynamic layer's resolution: Instructions keeps AGENTS.md, the rest lost to it; the base prompt by rule", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      const { directory } = yield* configure()
+      yield* write(path.join(directory, "AGENTS.md"), "Use Bun for everything.\n")
+      yield* write(path.join(directory, "CLAUDE.md"), "Claude's rules.\n")
+      yield* write(path.join(directory, "CONTEXT.md"), "Old context.\n")
+      const prompts = yield* OperatorPrompts.Service
+      const preview = yield* prompts.preview({ agent: "build" })
+      const instructions = preview.sections.find((item) => item.layer === `${P}generated.instructions`)!
+      expect(instructions.parity).toBe("same")
+      expect(instructions.text).toBe(
+        `Instructions from: ${path.join(directory, "AGENTS.md")}\nUse Bun for everything.\n`,
+      )
+      const of = (name: string) =>
+        instructions.resolution!.candidates.find((item) => item.location === path.join(directory, name))
+      expect(of("AGENTS.md")).toMatchObject({ selected: true, why: "selected" })
+      expect(of("CLAUDE.md")).toMatchObject({ selected: false, why: "lost to AGENTS.md (precedence (name))" })
+      expect(of("CONTEXT.md")).toMatchObject({ selected: false, why: "lost to AGENTS.md (precedence (name))" })
+      // The base prompt: the family the model's rule chose, OpenCode's text, the same as upstream's.
+      const base = preview.sections.find((item) => item.entry === `${P}slot.agent-or-base`)!
+      expect(base.parity).toBe("same")
+      expect(base.resolution!.inner!.candidates.find((item) => item.selected)?.name).toBe(
+        `base.${preview.base.slice(5)}`,
+      )
+      expect(base.trace[1]).toMatchObject({ kind: "model-rule", detail: "no other rule matches" })
     }),
   ),
 )

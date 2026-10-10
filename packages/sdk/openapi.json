@@ -35164,6 +35164,136 @@
         "required": ["kind"],
         "additionalProperties": false
       },
+      "OperatorResolverSourceKind": {
+        "type": "string",
+        "enum": ["text", "agent-field", "file", "config", "url", "live", "registry", "memory", "helper"]
+      },
+      "OperatorResolverScorePart": {
+        "type": "object",
+        "properties": {
+          "rule": {
+            "type": "string"
+          },
+          "points": {
+            "type": "number"
+          }
+        },
+        "required": ["rule", "points"],
+        "additionalProperties": false
+      },
+      "OperatorResolverCandidateTrace": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "number",
+            "description": "The source's index in the resolver"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/OperatorResolverSourceKind"
+          },
+          "location": {
+            "type": "string"
+          },
+          "group": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "read": {
+            "type": "string",
+            "enum": ["ok", "missing", "unreadable", "empty"]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "filtered": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number"
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorResolverScorePart"
+            }
+          },
+          "selected": {
+            "type": "boolean"
+          },
+          "why": {
+            "type": "string",
+            "description": "Why it was or wasn't selected"
+          },
+          "chars": {
+            "type": "number"
+          },
+          "cut": {
+            "type": "boolean"
+          }
+        },
+        "required": ["source", "kind", "location", "read", "score", "parts", "selected", "why", "chars"],
+        "additionalProperties": false
+      },
+      "OperatorResolverInnerTrace": {
+        "type": "object",
+        "properties": {
+          "policy": {
+            "type": "string",
+            "enum": ["one", "top", "all"]
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorResolverCandidateTrace"
+            }
+          },
+          "chars": {
+            "type": "number"
+          },
+          "overBudget": {
+            "type": "number"
+          },
+          "off": {
+            "type": "string"
+          },
+          "layer": {
+            "type": "string"
+          }
+        },
+        "required": ["policy", "candidates", "chars", "overBudget", "layer"],
+        "additionalProperties": false
+      },
+      "OperatorResolverTrace": {
+        "type": "object",
+        "properties": {
+          "policy": {
+            "type": "string",
+            "enum": ["one", "top", "all"]
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorResolverCandidateTrace"
+            }
+          },
+          "chars": {
+            "type": "number"
+          },
+          "overBudget": {
+            "type": "number"
+          },
+          "off": {
+            "type": "string"
+          },
+          "inner": {
+            "$ref": "#/components/schemas/OperatorResolverInnerTrace"
+          }
+        },
+        "required": ["policy", "candidates", "chars", "overBudget"],
+        "additionalProperties": false
+      },
       "OperatorPromptAssembledSection": {
         "type": "object",
         "properties": {
@@ -35202,6 +35332,13 @@
               "$ref": "#/components/schemas/OperatorPromptTraceStep"
             },
             "description": "How the section was resolved, down to its file"
+          },
+          "resolution": {
+            "$ref": "#/components/schemas/OperatorResolverTrace"
+          },
+          "parity": {
+            "type": "string",
+            "enum": ["same", "differs"]
           },
           "text": {
             "type": "string"

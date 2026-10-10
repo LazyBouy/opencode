@@ -59,6 +59,12 @@ export const Filter = Schema.Union([
     attribute: Schema.String,
     present: Schema.Boolean.annotate({ description: "Keep candidates that have it (true) or don't (false)" }),
   }),
+  // A yes/no the source's reader worked out (an MCP server: can the agent use any of its tools).
+  Schema.Struct({
+    kind: Schema.Literal("flag"),
+    attribute: Schema.String,
+    reason: Schema.String.annotate({ description: "Why a candidate whose flag is not yes is left out" }),
+  }),
 ]).annotate({ identifier: "OperatorResolverFilter" })
 export type Filter = typeof Filter.Type
 
@@ -112,6 +118,13 @@ export const Template = Schema.Struct({
   }),
   separator: Schema.String.annotate({ description: "Between items" }),
   footer: Schema.optional(Schema.String).annotate({ description: "Put after the items as it is" }),
+  keepEmpty: Schema.optional(Schema.Boolean).annotate({
+    description: "Render selected candidates with no text too (OpenCode's MCP instructions); else they add nothing",
+  }),
+  empty: Schema.optional(Schema.String).annotate({
+    description:
+      'The text when nothing is selected (OpenCode\'s skills: "No skills are currently available."); else nothing',
+  }),
 }).annotate({ identifier: "OperatorResolverTemplate" })
 export type Template = typeof Template.Type
 
@@ -157,17 +170,31 @@ export const CandidateTrace = Schema.Struct({
 }).annotate({ identifier: "OperatorResolverCandidateTrace" })
 export type CandidateTrace = typeof CandidateTrace.Type
 
-export const Trace = Schema.Struct({
+const traceFields = {
   policy: Select.fields.policy,
   candidates: Schema.Array(CandidateTrace),
   chars: Schema.Finite,
   overBudget: Schema.Finite,
+  off: Schema.optional(Schema.String).annotate({ description: "Why the whole layer adds nothing" }),
+}
+
+// The resolution of a selected candidate that is a layer itself (Agent prompt, else base prompt: the base
+// prompt by model). One level.
+export const InnerTrace = Schema.Struct({ ...traceFields, layer: Schema.String }).annotate({
+  identifier: "OperatorResolverInnerTrace",
+})
+
+export const Trace = Schema.Struct({
+  ...traceFields,
+  inner: Schema.optional(InnerTrace),
 }).annotate({ identifier: "OperatorResolverTrace" })
 export type Trace = typeof Trace.Type
 
 export type Context = {
   /** Values a `match` rule can name with `$name` (the model's family, the agent, …). */
   readonly values?: Readonly<Record<string, string | undefined>>
+  /** The whole layer adds nothing, and why (OpenCode's skills when the agent may not use the skill tool). */
+  readonly off?: string
   /** The permission decision for a candidate's name (the permission filter). */
   readonly decide?: (permission: string, input: string) => "allow" | "ask" | "deny"
 }
@@ -233,6 +260,7 @@ function filterOf(rules: ReadonlyArray<Filter>, item: Scored, context: Context):
       const has = attribute(item, rule.attribute) !== undefined
       if (has !== rule.present) return `${rule.attribute}: ${rule.present ? "none" : "set"}`
     }
+    if (rule.kind === "flag" && attribute(item, rule.attribute) !== "yes") return rule.reason
   }
   return undefined
 }
@@ -308,6 +336,11 @@ function differing(winner: Scored, loser: Scored) {
 
 /** Resolves a layer: its candidates (read from its sources, in order) into its text and trace. */
 export function run(resolver: Resolver, candidates: ReadonlyArray<Candidate>, context: Context = {}) {
+  if (context.off !== undefined)
+    return {
+      text: "",
+      trace: { policy: resolver.select.policy, candidates: [], chars: 0, overBudget: 0, off: context.off } as Trace,
+    }
   const items: Scored[] = candidates.map((candidate, index) => {
     const spec = resolver.sources[candidate.source] ?? { kind: "text" as const, location: candidate.location }
     return {
@@ -389,7 +422,7 @@ export function run(resolver: Resolver, candidates: ReadonlyArray<Candidate>, co
 
   const t = resolver.template
   const pieces = rendered
-    .filter(({ text }) => text !== "")
+    .filter(({ text }) => t.keepEmpty || text !== "")
     .map(({ item, text }) =>
       fill(t.item, {
         ...item.candidate.attributes,
@@ -400,8 +433,8 @@ export function run(resolver: Resolver, candidates: ReadonlyArray<Candidate>, co
     )
   const overflow = over && resolver.select.overflow ? [fill(resolver.select.overflow, { count: over })] : []
   const body = [...pieces, ...overflow]
-  // An empty selection renders nothing: no header, footer or separator.
-  const text = body.length ? (t.header ?? "") + body.join(t.separator) + (t.footer ?? "") : ""
+  // An empty selection renders nothing (no header, footer or separator), or the template's empty text.
+  const text = body.length ? (t.header ?? "") + body.join(t.separator) + (t.footer ?? "") : (t.empty ?? "")
 
   const cutSet = new Set(rendered.filter((item) => item.cut).map((item) => item.item))
   const trace: Trace = {

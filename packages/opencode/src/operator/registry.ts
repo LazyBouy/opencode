@@ -28,3 +28,19 @@ export const helperTexts: {
     layers: ReadonlyArray<string>
   }) => Promise<Record<string, string>>
 } = {}
+
+export const dynamicLayers: {
+  /**
+   * OpenCode's per-request Dynamic layers (Environment, References, Instructions, MCP, Skills) resolved
+   * through the pipeline for a request, by layer id, each with its text and trace (dynamic-layers.ts).
+   */
+  resolve?: (input: {
+    instance: unknown
+    agent: string
+    model: unknown
+    sessionID?: string
+    sessionPermission?: unknown
+    /** Upstream's instruction texts for this request (URLs are not fetched again). */
+    instructions?: ReadonlyArray<string>
+  }) => Promise<ReadonlyMap<string, { text: string; trace: unknown }>>
+} = {}

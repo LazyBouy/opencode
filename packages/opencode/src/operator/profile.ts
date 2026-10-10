@@ -2,6 +2,8 @@ export * as OperatorProfile from "./profile"
 
 import { Schema } from "effect"
 import { OperatorPromptText } from "./prompt-text"
+import { OperatorResolver } from "./resolver"
+import { OperatorResolverBuiltins as B } from "./resolver-builtins"
 
 // Prompt profiles (spec: specs/docs/feedbacks/after iteration 4/prompt_profile_redesign_v2.md).
 //
@@ -211,6 +213,8 @@ export type Parts = {
   readonly output?: string
   readonly user?: string
   readonly extra?: ReadonlyArray<string>
+  /** OpenCode's base prompt for the request's model, as upstream chose it (the pipeline's is compared). */
+  readonly base?: ReadonlyArray<string>
 }
 
 export const builtinTypes: GroupType[] = BUILTIN_TYPES.map((item) => ({
@@ -457,6 +461,13 @@ export const AssembledSection = Schema.Struct({
   changed: Schema.Boolean.annotate({ description: "From a slot the agent's override changed" }),
   source: Schema.String.annotate({ description: "A file path, or what wrote the text" }),
   trace: Schema.Array(TraceStep).annotate({ description: "How the section was resolved, down to its file" }),
+  resolution: Schema.optional(OperatorResolver.Trace).annotate({
+    description: "A Dynamic layer's resolution: every candidate, read, filtered, scored, selected or not, and why",
+  }),
+  parity: Schema.optional(Schema.Literals(["same", "differs"])).annotate({
+    description:
+      "One of OpenCode's Dynamic layers: whether the pipeline's text is the one OpenCode wrote for this request (when it differs, OpenCode's is sent)",
+  }),
   text: Schema.String,
 }).annotate({ identifier: "OperatorPromptAssembledSection" })
 export type AssembledSection = typeof AssembledSection.Type
@@ -473,6 +484,8 @@ export type AssembleInput = {
   // The texts of your Dynamic layers for this request (written per session); a layer without one adds
   // nothing.
   readonly dynamic?: ReadonlyMap<string, string>
+  // OpenCode's per-request Dynamic layers resolved through the pipeline (dynamic-layers.ts), by layer id.
+  readonly resolved?: ReadonlyMap<string, { readonly text: string; readonly trace: OperatorResolver.Trace }>
 }
 
 // Builds a request's system prompt (spec §5): the profile's group in order, each type's slot in
@@ -506,6 +519,8 @@ export function assemble(input: AssembleInput) {
         changed: shape.changed.includes(type),
         source: item.source,
         trace: item.trace,
+        ...(item.resolution ? { resolution: item.resolution } : {}),
+        ...(item.parity ? { parity: item.parity } : {}),
         text: item.text,
       }))
   })
@@ -550,6 +565,8 @@ export function sample(input: AssembleInput, id: string) {
     text: items.map((item) => item.text).join("\n"),
     source: items[0]?.source ?? "",
     trace: [...none, ...items.flatMap((item) => item.trace)],
+    ...(items[0]?.resolution ? { resolution: items[0].resolution } : {}),
+    ...(items[0]?.parity ? { parity: items[0].parity } : {}),
   }
 }
 
@@ -617,7 +634,14 @@ function copiesIn(catalog: Catalog, slots: Slots) {
   )
 }
 
-type Found = { layer: Layer; text: string; source: string; trace: TraceStep[] }
+type Found = {
+  layer: Layer
+  text: string
+  source: string
+  trace: TraceStep[]
+  resolution?: OperatorResolver.Trace
+  parity?: "same" | "differs"
+}
 
 // The layer a text is in: OpenCode's (with its file), a namespace's own version of one, a copy made
 // with Edit a copy, or a layer of yours. The store's file of a namespace's layer is added by the caller.
@@ -691,24 +715,77 @@ function resolve(input: AssembleInput, copies: Map<string, Layer>, entry: string
       trace: copy ? traced(copy) : original ? traced(original) : [],
     }
   }
-  const model = () => {
+  // The base prompt for the model, through the pipeline (resolver-builtins.ts): every family's texts (the
+  // profile's copy, the namespace's version, OpenCode's), the family the model's rule chose winning, a
+  // copy first. When OpenCode's own text wins it must be the one upstream chose for this request; if not
+  // (an upstream release changed the rules), upstream's is sent and the section says so.
+  const model = (): Found[] => {
     const id = base(OperatorPromptText.baseFor(input.model).id)
-    const chosen = family(id)
+    const list = BUILTIN_LAYERS.filter((item) => item.section === "base" && item.origin === "builtin").flatMap(
+      (original) => {
+        const render = (text: string) =>
+          original.id === base("base.meta") ? OperatorPromptText.renderMeta(text, input.model) : text
+        const copy = copies.get(original.id)
+        const version = isOpenCode(input.catalog)
+          ? undefined
+          : input.catalog.layers.find((item) => item.id === own(original.id))
+        return [
+          ...(copy ? [{ family: original.id, origin: "profile" as const, layer: copy }] : []),
+          ...(version && version !== copy
+            ? [{ family: original.id, origin: "namespace" as const, layer: version }]
+            : []),
+          { family: original.id, origin: "opencode" as const, layer: original },
+        ].map((item) => ({
+          ...item,
+          text: render(item.layer.text),
+          name: item.origin === "opencode" ? own(item.family) : item.layer.name,
+        }))
+      },
+    )
+    const done = OperatorResolver.run(B.RESOLVERS[B.BASE]!, B.bases(list), { values: { family: id } })
+    const winner = list[done.trace.candidates.findIndex((item) => item.selected)]
     const rule: TraceStep = {
       kind: "model-rule",
       name: `${input.model.providerID}/${input.model.api.id}`,
       detail: OperatorPromptText.baseRule(input.model),
     }
+    if (!winner) return []
+    const upstream = winner.origin === "opencode" ? input.parts.base?.[0] : undefined
+    const parity =
+      upstream === undefined ? undefined : upstream === done.text ? ("same" as const) : ("differs" as const)
     return one(
-      chosen.text,
-      chosen.layer?.name ?? id.slice(PREFIX.length),
-      [rule, ...chosen.trace],
-      chosen.layer ?? listed,
-    )
+      parity === "differs" ? upstream : done.text,
+      winner.origin === "opencode" ? id.slice(PREFIX.length) : winner.layer.name,
+      [rule, ...traced(winner.layer)],
+      winner.origin === "opencode" ? listed : winner.layer,
+    ).map((item) => ({ ...item, resolution: done.trace, ...(parity ? { parity } : {}) }))
   }
   // The agent's own prompt; where it is defined (its agent file, a config file, OpenCode's own
   // definition) is named by the caller, which can read them.
-  const agentPrompt = () => one(input.agent.prompt, input.agent.name, [{ kind: "agent-own", name: input.agent.name }])
+  const agentPrompt = () =>
+    one(input.agent.prompt, input.agent.name, [{ kind: "agent-own", name: input.agent.name }]).map((item) => ({
+      ...item,
+      resolution: OperatorResolver.run(B.RESOLVERS[B.AGENT]!, B.agentOrBase(input.agent.prompt, "").slice(0, 1)).trace,
+    }))
+  // OpenCode's per-request layers: the pipeline's text (dynamic-layers.ts) when it is the one OpenCode wrote
+  // for this request, else OpenCode's, and the section says so.
+  const piped = (id: string, upstream: string | undefined) => {
+    const done = input.resolved?.get(id)
+    if (!done) return { text: upstream }
+    const same = done.text === (upstream ?? "")
+    return {
+      text: same ? done.text : upstream,
+      resolution: done.trace,
+      parity: same ? ("same" as const) : ("differs" as const),
+    }
+  }
+  const withPipe =
+    (found: ReturnType<typeof piped>) =>
+    (item: Found): Found => ({
+      ...item,
+      ...(found.resolution ? { resolution: found.resolution } : {}),
+      ...(found.parity ? { parity: found.parity } : {}),
+    })
   // Copies stand in for their built-in where it is used; on their own they add nothing.
   // A helper agent's prompt is its helper layer, a copy or OpenCode's.
   if (found.type === HELPER)
@@ -728,20 +805,55 @@ function resolve(input: AssembleInput, copies: Map<string, Layer>, entry: string
   }
   if (found.id === base("slot.base")) return model()
   if (found.id === base("slot.agent")) return agentPrompt()
-  if (found.id === base("slot.agent-or-base"))
-    return input.agent.prompt
-      ? agentPrompt()
-      : model().map((item) => ({
-          ...item,
-          trace: [{ kind: "agent-none" as const, name: input.agent.name }, ...item.trace],
-        }))
+  if (found.id === base("slot.agent-or-base")) {
+    // The agent's prompt when it has one, else the base prompt for the model.
+    const fromBase = input.agent.prompt ? [] : model()
+    const done = OperatorResolver.run(
+      B.RESOLVERS[B.AGENT_OR_BASE]!,
+      B.agentOrBase(input.agent.prompt, fromBase[0]?.text ?? ""),
+    )
+    if (input.agent.prompt) return agentPrompt().map((item) => ({ ...item, resolution: done.trace }))
+    return fromBase.map((item) => ({
+      ...item,
+      trace: [{ kind: "agent-none" as const, name: input.agent.name }, ...item.trace],
+      resolution: {
+        ...done.trace,
+        ...(item.resolution ? { inner: { ...item.resolution, layer: "Base prompt (by model)" } } : {}),
+      },
+    }))
+  }
   const written: TraceStep[] = [{ kind: "written" }]
-  if (found.id === base("generated.environment")) return one(input.parts.environment[0], "generated", written)
-  if (found.id === base("generated.references"))
-    return one(input.parts.environment[1], "generated", [{ kind: "references" }])
-  if (found.id === base("generated.mcp")) return one(input.parts.mcp, "generated", partTrace("mcp", input.parts.mcp))
-  if (found.id === base("generated.skills"))
-    return one(input.parts.skills, "generated", partTrace("skill", input.parts.skills))
+  if (found.id === base("generated.environment")) {
+    const done = piped(B.ENVIRONMENT, input.parts.environment[0])
+    return one(done.text, "generated", written).map(withPipe(done))
+  }
+  if (found.id === base("generated.references")) {
+    const done = piped(B.REFERENCES, input.parts.environment[1])
+    return one(done.text, "generated", [{ kind: "references" }]).map(withPipe(done))
+  }
+  if (found.id === base("generated.mcp")) {
+    const done = piped(B.MCP, input.parts.mcp)
+    return one(done.text, "generated", partTrace("mcp", done.text)).map(withPipe(done))
+  }
+  if (found.id === base("generated.skills")) {
+    const done = piped(B.SKILLS, input.parts.skills)
+    return one(done.text, "generated", partTrace("skill", done.text)).map(withPipe(done))
+  }
+  // Instructions through the pipeline: one section, traced to each file and URL it took.
+  if (found.id === base("generated.instructions") && input.resolved?.has(B.INSTRUCTIONS)) {
+    const done = piped(B.INSTRUCTIONS, input.parts.instructions.join("\n"))
+    const taken =
+      done.parity === "same" ? (done.resolution?.candidates ?? []).filter((item) => item.selected && item.chars) : []
+    const fromParts = input.parts.instructions.flatMap((text) => {
+      const from = text.match(/^Instructions from: ([^\n]*)/)?.[1]
+      return from ? [from] : []
+    })
+    const steps: TraceStep[] = (taken.length ? taken.map((item) => item.location) : fromParts).map((where) => ({
+      kind: /^https?:\/\//.test(where) ? "instruction-url" : "instruction-file",
+      path: where,
+    }))
+    return one(done.text, steps[0]?.path ?? "generated", steps).map(withPipe(done))
+  }
   if (found.id === base("generated.instructions"))
     return input.parts.instructions.flatMap((text) => {
       const from = text.match(/^Instructions from: ([^\n]*)/)?.[1]

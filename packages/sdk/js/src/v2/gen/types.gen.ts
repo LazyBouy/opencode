@@ -3842,6 +3842,63 @@ export type OperatorPromptTraceStep = {
   detail?: string
 }
 
+export type OperatorResolverSourceKind =
+  | "text"
+  | "agent-field"
+  | "file"
+  | "config"
+  | "url"
+  | "live"
+  | "registry"
+  | "memory"
+  | "helper"
+
+export type OperatorResolverScorePart = {
+  rule: string
+  points: number
+}
+
+export type OperatorResolverCandidateTrace = {
+  /**
+   * The source's index in the resolver
+   */
+  source: number
+  kind: OperatorResolverSourceKind
+  location: string
+  group?: string
+  name?: string
+  read: "ok" | "missing" | "unreadable" | "empty"
+  reason?: string
+  filtered?: string
+  score: number
+  parts: Array<OperatorResolverScorePart>
+  selected: boolean
+  /**
+   * Why it was or wasn't selected
+   */
+  why: string
+  chars: number
+  cut?: boolean
+}
+
+export type OperatorResolverInnerTrace = {
+  policy: "one" | "top" | "all"
+  candidates: Array<OperatorResolverCandidateTrace>
+  chars: number
+  overBudget: number
+  off?: string
+  layer: string
+}
+
+export type OperatorResolverTrace = {
+  policy: "one" | "top" | "all"
+  candidates: Array<OperatorResolverCandidateTrace>
+  chars: number
+  overBudget: number
+  off?: string
+  inner?: OperatorResolverInnerTrace
+}
+
 export type OperatorPromptAssembledSection = {
   type: string
   typeName: string
@@ -3870,6 +3927,8 @@ export type OperatorPromptAssembledSection = {
    * How the section was resolved, down to its file
    */
   trace: Array<OperatorPromptTraceStep>
+  resolution?: OperatorResolverTrace
+  parity?: "same" | "differs"
   text: string
 }
 

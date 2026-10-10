@@ -16,6 +16,7 @@ import { SystemPrompt } from "@/session/system"
 import { ToolRegistry } from "@/tool/registry"
 import { OperatorAgents } from "./agents"
 import { OperatorConfig } from "./config"
+import { OperatorDynamicLayers } from "./dynamic-layers"
 import { OperatorGenerate } from "./generate"
 import { OperatorHelperTexts } from "./helper-texts"
 import { OperatorModels } from "./models"
@@ -125,6 +126,7 @@ const layer = Layer.effect(
     const operatorConfig = yield* OperatorConfig.Service
     const models = yield* OperatorModels.Service
     const config = yield* Config.Service
+    const dynamicLayers = yield* OperatorDynamicLayers.Service
 
     // The project's tools with their own descriptions; prompt profiles override them.
     const catalog = Effect.fn("OperatorPrompts.catalog")(function* () {
@@ -140,7 +142,7 @@ const layer = Layer.effect(
       if (!agent) return yield* new NotFoundError({ message: `No agent named "${input.agent}"` })
       // The model chosen for the preview, else the one the agent's requests use (the agent's own, else
       // the default; the small model for title), with where it is set.
-      const file = (yield* operatorAgents.list()).find((item) => item.name === agent.name)?.source.path
+      const file = yield* operatorAgents.fileOf(agent.name)
       const modelSource: OperatorModels.Source =
         input.providerID && input.modelID
           ? { model: `${input.providerID}/${input.modelID}`, source: "chosen" }
@@ -163,8 +165,17 @@ const layer = Layer.effect(
           ])
       const key = yield* Effect.promise(() => OperatorProjects.keyOf(ctx))
       const loaded = yield* Effect.promise(() => OperatorProfileStore.forProject(key))
-      const parts: OperatorProfile.Parts = { environment: env, instructions: files, mcp, skills, extra: [] }
-      return { ctx, agent, model, modelSource, key, loaded, parts }
+      const parts: OperatorProfile.Parts = {
+        environment: env,
+        instructions: files,
+        mcp,
+        skills,
+        extra: [],
+        base: SystemPrompt.provider(model),
+      }
+      // OpenCode's per-request Dynamic layers through the pipeline, as a request resolves them.
+      const resolved = helper ? undefined : yield* dynamicLayers.resolve({ agent, model, instructions: files })
+      return { ctx, agent, model, modelSource, key, loaded, parts, resolved }
     })
 
     // Completes a trace with what needs reading: where an agent's prompt is defined (its agent file or a
@@ -210,7 +221,7 @@ const layer = Layer.effect(
       providerID?: string
       modelID?: string
     }) {
-      const { agent, model, modelSource, loaded, parts } = yield* request(input)
+      const { agent, model, modelSource, loaded, parts, resolved } = yield* request(input)
       const ns = loaded.catalog.namespace.id
       const head = { agent: agent.name, model: `${model.providerID}/${model.id}`, layer: input.layer, modelSource }
       // Your Dynamic layers are written by the dynamic generator, here without a session.
@@ -235,6 +246,7 @@ const layer = Layer.effect(
           setting: loaded.agents[agent.name],
           model,
           parts,
+          ...(resolved ? { resolved } : {}),
         },
         input.layer,
       )
@@ -249,7 +261,7 @@ const layer = Layer.effect(
       profile?: string
       override?: OperatorProfile.Override | null
     }) {
-      const { ctx, agent, model, modelSource, key, loaded, parts } = yield* request(input)
+      const { ctx, agent, model, modelSource, key, loaded, parts, resolved } = yield* request(input)
       if (input.profile && !OperatorProfile.profiles(loaded.catalog).some((item) => item.id === input.profile))
         return yield* new NotFoundError({
           message: `No profile "${input.profile}" in ${loaded.catalog.namespace.name}`,
@@ -267,6 +279,7 @@ const layer = Layer.effect(
         model,
         parts,
         dynamic: written(loaded.catalog),
+        ...(resolved ? { resolved } : {}),
       })
       const ns = loaded.catalog.namespace.id
       const sections = yield* Effect.forEach(result.sections, (section) =>
@@ -322,5 +335,6 @@ export const node = LayerNode.make({
     OperatorConfig.node,
     OperatorModels.node,
     Config.node,
+    OperatorDynamicLayers.node,
   ],
 })

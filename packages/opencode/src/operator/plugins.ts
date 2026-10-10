@@ -87,6 +87,19 @@ const PromptPlugin: Plugin = async (input) => {
       if (!hook.agent) return
       const loaded = await context()
       const setting = loaded.agents[hook.agent]
+      // OpenCode's per-request Dynamic layers through the pipeline (dynamic-layers.ts); without it, as
+      // upstream wrote them.
+      const resolved = instance
+        ? await OperatorRegistry.dynamicLayers
+            .resolve?.({
+              instance,
+              agent: hook.agent,
+              model: hook.model,
+              ...(hook.sessionID ? { sessionID: hook.sessionID } : {}),
+              instructions: hook.parts.instructions,
+            })
+            .catch(() => undefined)
+        : undefined
       const result = OperatorProfile.assemble({
         catalog: loaded.catalog,
         project: loaded.project,
@@ -95,8 +108,14 @@ const PromptPlugin: Plugin = async (input) => {
         model: hook.model,
         parts: hook.parts,
         dynamic: await written(instance, hook.sessionID, loaded, hook.agent),
+        ...(resolved ? { resolved: resolved as OperatorProfile.AssembleInput["resolved"] } : {}),
       })
-      promptAudit.listen?.({ agent: hook.agent, upstream: [...output.system], sent: result.system })
+      promptAudit.listen?.({
+        agent: hook.agent,
+        upstream: [...output.system],
+        sent: result.system,
+        sections: result.sections,
+      })
       output.system.splice(0, output.system.length, ...result.system)
     },
     "experimental.chat.messages.transform": async (_hook, output) => {
@@ -167,7 +186,12 @@ const GENERATOR = OperatorPromptText.BUILTINS.find((item) => item.id === "helper
 
 // For tests: sees each request's system prompt as upstream built it and as it is sent.
 export const promptAudit: {
-  listen?: (input: { agent: string; upstream: string[]; sent: string[] }) => void
+  listen?: (input: {
+    agent: string
+    upstream: string[]
+    sent: string[]
+    sections?: ReadonlyArray<OperatorProfile.AssembledSection>
+  }) => void
 } = {}
 
 // Built-in plugins this fork adds; upstream's plugin service registers them with its own once.
