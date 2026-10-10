@@ -1,4 +1,5 @@
 import { OperatorProfile } from "@/operator/profile"
+import { OperatorResolver } from "@/operator/resolver"
 import { OperatorProfileStore } from "@/operator/profile-store"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
@@ -51,6 +52,10 @@ const LayerInput = Schema.Struct({
   text: Schema.String,
   prompt: Schema.optional(Schema.String).annotate({
     description: "Dynamic layers: what the dynamic generator writes for each session (their text is not used)",
+  }),
+  resolver: Schema.optional(Schema.NullOr(OperatorResolver.Resolver)).annotate({
+    description:
+      "Your Dynamic layers, and copies of OpenCode's per-request layers: their own rules (null: back to the default, the helper's or OpenCode's)",
   }),
 })
 const GroupInput = Schema.Struct({ name: Schema.String, types: Schema.Array(Schema.String) })

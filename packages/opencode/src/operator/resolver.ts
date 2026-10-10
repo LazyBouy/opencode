@@ -7,7 +7,7 @@ import { Schema } from "effect"
 //   Sources → Read → Filter → Score → Select → Render → Trace
 //
 // This module is the pure part: a layer's resolver (what it reads and how it chooses), and `run`, which
-// takes the candidates its sources gave (read elsewhere: resolver-sources.ts for the built-in layers) and
+// takes the candidates its sources gave (read elsewhere: dynamic-layers.ts) and
 // returns the layer's text with a trace of every candidate. Nothing here reads files or depends on the
 // current message, so the same candidates always give the same text (the prompt stays cacheable).
 
@@ -36,6 +36,7 @@ export const Source = Schema.Struct({
   }),
   name: Schema.optional(Schema.String),
   priority: Schema.optional(Schema.Finite).annotate({ description: "For the priority rule" }),
+  text: Schema.optional(Schema.String).annotate({ description: "A text source's own text" }),
 }).annotate({ identifier: "OperatorResolverSource" })
 export type Source = typeof Source.Type
 

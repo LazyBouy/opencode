@@ -12,6 +12,8 @@ import { Glob } from "@opencode-ai/core/util/glob"
 import { OperatorFolders } from "./folders"
 import { OperatorLayout } from "./layout"
 import { OperatorProfile } from "./profile"
+import { OperatorResolver } from "./resolver"
+import { OperatorResolverBuiltins } from "./resolver-builtins"
 import { OperatorTrashFiles } from "./trash-files"
 
 // Prompt profile data is server-wide, in the global config folder; nothing goes into a project:
@@ -99,6 +101,16 @@ export const CatalogInfo = Schema.Struct({
   profiles: Schema.Array(OperatorProfile.Profile),
   projects: Schema.Array(ProjectInfo).annotate({ description: "The namespace's projects" }),
   agents: Schema.Array(AgentInfo).annotate({ description: "Prompt settings of the agents of those projects" }),
+  resolvers: Schema.Record(Schema.String, OperatorResolver.Resolver).annotate({
+    description:
+      "OpenCode's rules for its Dynamic layers, by layer id (read-only; a copy of a per-request layer follows them until it has its own)",
+  }),
+  editableRules: Schema.Array(Schema.String).annotate({
+    description: "OpenCode's layers whose copies can have rules of their own",
+  }),
+  helperRules: OperatorResolver.Resolver.annotate({
+    description: "The rules your Dynamic layers have by default: one helper source that writes from the layer's prompt",
+  }),
 }).annotate({ identifier: "OperatorPromptCatalog" })
 export type CatalogInfo = typeof CatalogInfo.Type
 
@@ -149,7 +161,15 @@ export interface Interface {
   readonly saveLayer: (
     ns: string,
     id: string | undefined,
-    input: { name: string; type: string; section?: OperatorProfile.Section; text: string; prompt?: string },
+    input: {
+      name: string
+      type: string
+      section?: OperatorProfile.Section
+      text: string
+      prompt?: string
+      /** A Dynamic layer's own rules; null: back to the default (the helper's, OpenCode's). */
+      resolver?: OperatorResolver.Resolver | null
+    },
   ) => Effect.Effect<OperatorProfile.Layer, Failure>
   /** Makes an editable copy of one of OpenCode's texts; `text` gives a tool description's text. */
   readonly copyBuiltin: (ns: string, id: string, text?: string) => Effect.Effect<OperatorProfile.Layer, Failure>
@@ -883,6 +903,9 @@ const layer = Layer.effect(
             ...agent[1],
           })),
         ),
+        resolvers: OperatorResolverBuiltins.RESOLVERS,
+        editableRules: OperatorResolverBuiltins.EDITABLE,
+        helperRules: OperatorResolverBuiltins.HELPER_RESOLVER,
       }
     })
 
@@ -917,14 +940,30 @@ const layer = Layer.effect(
     const saveLayer = Effect.fn("OperatorProfileStore.saveLayer")(function* (
       ns: string,
       id: string | undefined,
-      input: { name: string; type: string; section?: OperatorProfile.Section; text: string; prompt?: string },
+      input: {
+        name: string
+        type: string
+        section?: OperatorProfile.Section
+        text: string
+        prompt?: string
+        resolver?: OperatorResolver.Resolver | null
+      },
     ) {
       const found = yield* load(ns)
       const before = yield* existing(found.layers, "layer", id)
       // Your Dynamic layers hold a prompt; the dynamic generator writes their text for each session.
       // (A namespace's copy of one of OpenCode's per-request layers holds nothing.)
       const written = (before?.type ?? input.type) === OperatorProfile.DYNAMIC && !before?.replaces
-      yield* refuse(written && !input.prompt?.trim() ? "A Dynamic layer needs a prompt" : undefined)
+      // Rules of its own (spec §6): kept unless given; the default ones are not kept (the layer follows them).
+      const shape = { type: before?.type ?? input.type, replaces: before?.replaces }
+      const given = input.resolver === undefined ? before?.resolver : (input.resolver ?? undefined)
+      if (input.resolver) yield* refuse(OperatorProfile.checkResolver(shape, input.resolver))
+      const rules =
+        given && !OperatorProfile.sameRules(given, OperatorProfile.defaultResolver(shape)) ? given : undefined
+      // The prompt is what a helper source writes from.
+      const helper =
+        written && (rules ?? OperatorResolverBuiltins.HELPER_RESOLVER).sources.some((s) => s.kind === "helper")
+      yield* refuse(helper && !input.prompt?.trim() ? "A Dynamic layer needs a prompt" : undefined)
       // A copy keeps its type and section; a layer's type changes only in Custom.
       const type = before?.replaces ? before.type : input.type
       // Helper and Dynamic layers have sections of their own.
@@ -951,7 +990,8 @@ const layer = Layer.effect(
         ...(before?.replaces ? { replaces: before.replaces } : {}),
         ...(before?.basedOn ? { basedOn: before.basedOn } : {}),
         text: written ? "" : input.text,
-        ...(written ? { prompt: input.prompt!.trim() } : {}),
+        ...(written ? { prompt: input.prompt?.trim() ?? "" } : {}),
+        ...(rules ? { resolver: rules } : written ? { resolver: OperatorResolverBuiltins.HELPER_RESOLVER } : {}),
         origin: "user",
       }
       yield* Effect.promise(() => writeItem(ns, "layer", next))
@@ -1459,6 +1499,10 @@ async function writeItem(
       section: value.section,
       ...(value.replaces ? { replaces: value.replaces } : {}),
       ...(value.basedOn ? { basedOn: value.basedOn } : {}),
+      // A Dynamic layer's own rules (the default ones, the helper's or OpenCode's, are not written).
+      ...(value.resolver && !OperatorProfile.sameRules(value.resolver, OperatorProfile.defaultResolver(value))
+        ? { resolver: value.resolver }
+        : {}),
     }
     // A Dynamic layer's file holds its prompt.
     // One newline is added here and taken off when read, so texts keep their own last newline (a
@@ -1513,6 +1557,15 @@ async function readLayers(dir: string): Promise<OperatorProfile.Layer[]> {
       const basedOn = typeof data.basedOn === "string" ? data.basedOn : undefined
       // Your Dynamic layers hold a prompt; copies of OpenCode's per-request layers hold nothing.
       const written = type === OperatorProfile.DYNAMIC && !replaces
+      // Rules of its own (your Dynamic layers; copies of OpenCode's per-request ones); yours without
+      // any are written by a helper from their prompt.
+      const decoded = Schema.decodeUnknownOption(OperatorResolver.Resolver)(data.resolver)
+      const rules =
+        decoded._tag === "Some" && !OperatorProfile.checkResolver({ type, replaces }, decoded.value)
+          ? decoded.value
+          : written
+            ? OperatorResolverBuiltins.HELPER_RESOLVER
+            : undefined
       return {
         id: path.basename(file, ".md"),
         name: typeof data.name === "string" ? data.name : path.basename(file, ".md"),
@@ -1520,6 +1573,7 @@ async function readLayers(dir: string): Promise<OperatorProfile.Layer[]> {
         section: section._tag === "Some" ? section.value : "custom",
         ...(replaces ? { replaces } : {}),
         ...(written ? { text: "", prompt: body } : { text: body }),
+        ...(rules ? { resolver: rules } : {}),
         ...(original?.delivery ? { delivery: original.delivery } : {}),
         ...(basedOn ? { basedOn } : {}),
         // OpenCode changed its text since this copy was made (a release).

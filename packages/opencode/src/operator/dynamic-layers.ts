@@ -1,5 +1,6 @@
 export * as OperatorDynamicLayers from "./dynamic-layers"
 
+import { stat } from "fs/promises"
 import path from "path"
 import { Context, Effect, Layer } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -22,31 +23,44 @@ import { Permission } from "@/permission"
 import type { Provider } from "@/provider/provider"
 import { Skill } from "@/skill"
 import { OperatorFileCache } from "./file-cache"
+import { OperatorHelperTexts } from "./helper-texts"
 import { OperatorPermissionEffective } from "./permission-effective"
+import type { OperatorProfile } from "./profile"
 import { OperatorRegistry } from "./registry"
 import { OperatorResolver } from "./resolver"
+import { OperatorResolutions } from "./resolutions"
 import { OperatorResolverBuiltins as B } from "./resolver-builtins"
 
 // Reads the sources of OpenCode's per-request Dynamic layers and resolves them through the pipeline
 // (resolver.ts, resolver-builtins.ts): Environment, References, Instructions, MCP instructions, Skills.
 // The reads mirror upstream's (session/system.ts, session/instruction.ts) so the texts are the same;
-// each candidate it found or didn't is in the trace. The prompt plugin (through OperatorRegistry) and the
-// agent page's preview both use it.
+// each candidate it found or didn't is in the trace. Layers with rules of their own (yours; a copy of
+// one of OpenCode's with edited rules) are read source by source (`readSource`): files and globs, config
+// values, URLs, live values, the registries, the agent's fields, texts and the helper. The prompt plugin
+// (through OperatorRegistry) and the agent page's preview both use it.
 
 export type Resolution = { readonly text: string; readonly trace: OperatorResolver.Trace }
 export type Resolved = ReadonlyMap<string, Resolution>
 
+// A layer resolved by its own rules: yours (a helper source writes from its prompt), or a copy of one of
+// OpenCode's per-request layers with edited rules.
+export type Custom = { readonly layer: OperatorProfile.Layer; readonly resolver: OperatorResolver.Resolver }
+
 export type Input = {
   readonly agent: Agent.Info
   readonly model: Provider.Model
+  /** Layers with rules of their own, resolved by their id. */
+  readonly custom?: ReadonlyArray<Custom>
   /** The request's session: its effective permissions decide the skills and MCP servers listed. */
   readonly sessionID?: string
   /** The session's own rules (MCP instructions follow them, as upstream's do). */
   readonly sessionPermission?: PermissionV1.Ruleset
   /** Upstream's instruction texts for this request: URLs are not fetched again. */
   readonly instructions?: ReadonlyArray<string>
-  /** Only these layers (default: all of them). */
+  /** Only these of OpenCode's layers (default: all of them). */
   readonly layers?: ReadonlyArray<string>
+  /** Helper sources: written (the default), or a placeholder (the agent page's preview calls no model). */
+  readonly helper?: "write" | "placeholder"
 }
 
 export interface Interface {
@@ -57,6 +71,14 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Op
 
 const ALL = [B.ENVIRONMENT, B.REFERENCES, B.INSTRUCTIONS, B.MCP, B.SKILLS]
 const isURL = (value: string) => value.startsWith("https://") || value.startsWith("http://")
+const GLOB = /[*?[\]{}]/
+const URL_TIMEOUT = 5000
+
+// A config value by its dotted key (`instructions`, `experimental.foo`).
+const valueAt = (config: unknown, key: string) =>
+  key
+    .split(".")
+    .reduce<unknown>((value, part) => (value && typeof value === "object" ? (value as any)[part] : undefined), config)
 
 const layer = Layer.effect(
   Service,
@@ -69,6 +91,15 @@ const layer = Layer.effect(
     const mcp = yield* McpService.Service
     const locations = yield* LocationServiceMap.Service
     const agents = yield* Agent.Service
+    const helpers = yield* OperatorHelperTexts.Service
+
+    // `~/.config/opencode/` is the global config folder (wherever it is), `~/` the home folder.
+    const expand = (location: string) =>
+      location.startsWith("~/.config/opencode/")
+        ? path.join(global.config, location.slice("~/.config/opencode/".length))
+        : location.startsWith("~/")
+          ? path.join(global.home, location.slice(2))
+          : location
 
     // The agent's rules as a request of this session applies them (permission-effective.ts), as upstream's
     // skills and MCP lists get them in the session loop.
@@ -139,6 +170,13 @@ const layer = Layer.effect(
               ),
             ),
           )).flat()
+      return B.instructions({ global: globalFound, project, config: yield* configInstructions(fetched) })
+    })
+
+    // Config's `instructions`: its files (globs from the folder up), then its URLs, as upstream reads them.
+    const configInstructions = Effect.fnUntraced(function* (fetched: ReadonlyArray<string> | undefined) {
+      const ctx = yield* InstanceState.context
+      const config = yield* cfg.get()
       const relative = (instruction: string) =>
         (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
           ? fs.globUp(instruction, ctx.directory, ctx.worktree)
@@ -163,14 +201,31 @@ const layer = Layer.effect(
       const configFiles = yield* Effect.forEach(files.flat(), (match) =>
         read(path.resolve(match)).pipe(Effect.map((text) => ({ path: path.resolve(match), text }))),
       )
-      // URLs: what upstream fetched for this request (not fetched twice).
-      const urls = configured.filter(isURL).map((url) => {
+      // URLs: what upstream fetched for this request (not fetched twice); else fetched here.
+      const urls = yield* Effect.forEach(configured.filter(isURL), (url) => {
         const prefix = `Instructions from: ${url}\n`
         const entry = fetched?.find((item) => item.startsWith(prefix))
-        return { path: url, text: entry ? entry.slice(prefix.length) : "", url: true }
+        if (entry || fetched)
+          return Effect.succeed({ path: url, text: entry ? entry.slice(prefix.length) : "", url: true })
+        return fetchURL(url, undefined).pipe(Effect.map((text) => ({ path: url, text: text ?? "", url: true })))
       })
-      return B.instructions({ global: globalFound, project, config: [...configFiles, ...urls] })
+      return [...configFiles, ...urls]
     })
+
+    // A URL's text, fetched once per session (resolutions.ts; a failed fetch is not kept); undefined when it
+    // can't be fetched.
+    const fetchURL = (url: string, sessionID: string | undefined) =>
+      Effect.promise(() =>
+        OperatorResolutions.reuse(sessionID, `url:${url}`, url, async () => {
+          const response = await fetch(url, { signal: AbortSignal.timeout(URL_TIMEOUT) })
+          if (!response.ok) throw new Error(`HTTP ${response.status}`)
+          const text = await response.text()
+          return { text, trace: { policy: "one" as const, candidates: [], chars: text.length, overBudget: 0 } }
+        }).then(
+          (done) => done.text as string | undefined,
+          () => undefined,
+        ),
+      )
 
     const mcpServers = Effect.fnUntraced(function* (
       agent: Agent.Info,
@@ -201,6 +256,143 @@ const layer = Layer.effect(
       }
     })
 
+    // One source of a layer with rules of its own: its candidates (`source` is its index), and why the
+    // whole source adds nothing when it can't be used (the skill tool is denied).
+    type Read = { candidates: OperatorResolver.Candidate[]; off?: string }
+    const readSource = Effect.fnUntraced(function* (
+      source: OperatorResolver.Source,
+      index: number,
+      input: Input,
+      layer: OperatorProfile.Layer,
+    ) {
+      const at = (list: ReadonlyArray<OperatorResolver.Candidate>): Read => ({
+        candidates: list.map((item) => ({ ...item, source: index })),
+      })
+      const none = (reason: string): Read => at([{ source: index, location: source.location, reason }])
+      const ctx = yield* InstanceState.context
+      switch (source.kind) {
+        case "file": {
+          const where = expand(source.location)
+          const found = yield* (
+            path.isAbsolute(where)
+              ? GLOB.test(where)
+                ? fs.glob(path.basename(where), { cwd: path.dirname(where), absolute: true, include: "file" })
+                : fs.existsSafe(where).pipe(Effect.map((exists) => (exists ? [where] : [])))
+              : Flag.OPENCODE_DISABLE_PROJECT_CONFIG
+                ? Effect.succeed([] as string[])
+                : GLOB.test(where)
+                  ? fs.globUp(where, ctx.directory, ctx.worktree)
+                  : fs.findUp(where, ctx.directory, ctx.worktree)
+          ).pipe(Effect.catch(() => Effect.succeed([] as string[])))
+          if (!found.length)
+            return path.isAbsolute(where) && !GLOB.test(where)
+              ? at([{ source: index, location: where, reason: "missing" }])
+              : none("missing")
+          return at(
+            yield* Effect.forEach(found, (match) =>
+              Effect.promise(async () => {
+                const file = path.resolve(match)
+                const info = await stat(file).catch(() => undefined)
+                return {
+                  source: index,
+                  location: file,
+                  // As upstream reads instruction files: one that can't be read is empty.
+                  text: (await OperatorFileCache.text(file)) ?? "",
+                  attributes: {
+                    path: file,
+                    name: path.basename(file),
+                    ...(info ? { updated: info.mtimeMs, size: info.size } : {}),
+                  },
+                }
+              }),
+            ),
+          )
+        }
+        case "config": {
+          if (source.location === "instructions") {
+            const list = yield* configInstructions(input.instructions)
+            return at(B.instructions({ global: [], project: [], config: list }))
+          }
+          if (source.location === "references") return at(yield* references())
+          const value = valueAt(yield* cfg.get(), source.location)
+          if (value === undefined) return none("missing")
+          const text = typeof value === "string" ? value : JSON.stringify(value, null, 2)
+          return at([{ source: index, location: source.location, text, attributes: { name: source.location } }])
+        }
+        case "url": {
+          const text = yield* fetchURL(source.location, input.sessionID)
+          if (text === undefined) return none("unreadable")
+          return at([{ source: index, location: source.location, text, attributes: { path: source.location } }])
+        }
+        case "live":
+          if (source.location === "environment") return at(yield* environment(input.model))
+          return none(`no live value "${source.location}"`)
+        case "registry": {
+          if (source.location === "mcp")
+            return at(yield* mcpServers(input.agent, input.sessionID, input.sessionPermission))
+          if (source.location !== "skills") return none(`no registry "${source.location}"`)
+          const found = yield* skills(input.agent, input.sessionID)
+          return {
+            candidates: at(found.candidates).candidates,
+            ...(found.context.off ? { off: found.context.off } : {}),
+          }
+        }
+        case "agent-field": {
+          const field = source.location === "description" ? input.agent.description : input.agent.prompt
+          if (!field) return none("missing")
+          return at([{ source: index, location: source.location, text: field, attributes: { name: input.agent.name } }])
+        }
+        case "text":
+          return at([
+            {
+              source: index,
+              location: source.location,
+              text: source.text ?? "",
+              attributes: { name: source.name ?? source.location },
+            },
+          ])
+        case "helper": {
+          // Written once per session from the layer's prompt; without a session, a sample now.
+          if (input.helper === "placeholder")
+            return at([
+              {
+                source: index,
+                location: layer.name,
+                text: `‹${layer.name}: written for each session by the dynamic generator›`,
+                attributes: { name: layer.name },
+              },
+            ])
+          const text = input.sessionID
+            ? (yield* helpers.dynamic({ sessionID: input.sessionID, layers: [layer.id] }))[layer.id]
+            : yield* helpers.sample(layer).pipe(Effect.orElseSucceed(() => undefined))
+          if (text === undefined) return none("unreadable")
+          return at([{ source: index, location: layer.name, text, attributes: { name: layer.name } }])
+        }
+        case "memory":
+          return none("memory layers are not read yet")
+      }
+    })
+
+    // A layer with rules of its own, read source by source and resolved.
+    const resolveCustom = Effect.fnUntraced(function* (input: Input, custom: Custom) {
+      const reads = yield* Effect.forEach(custom.resolver.sources, (source, index) =>
+        readSource(source, index, input, custom.layer),
+      )
+      const offs = reads.flatMap((read) => (read.off ? [read.off] : []))
+      const rules = custom.resolver.filter.some((filter) => filter.kind === "permission")
+        ? yield* effective(input.agent, input.sessionID)
+        : []
+      return OperatorResolver.run(
+        custom.resolver,
+        reads.flatMap((read) => read.candidates),
+        {
+          values: { agent: input.agent.name, model: input.model.api.id, provider: input.model.providerID },
+          ...(offs.length === reads.length && offs.length ? { off: offs[0] } : {}),
+          decide: (permission: string, value: string) => Permission.evaluate(permission, value, rules).action,
+        },
+      )
+    })
+
     const resolve = Effect.fn("OperatorDynamicLayers.resolve")(function* (input: Input) {
       const wanted = input.layers ? ALL.filter((id) => input.layers!.includes(id)) : ALL
       const result = new Map<string, Resolution>()
@@ -220,6 +412,7 @@ const layer = Layer.effect(
           result.set(id, OperatorResolver.run(resolver, found.candidates, found.context))
         }
       }
+      for (const custom of input.custom ?? []) result.set(custom.layer.id, yield* resolveCustom(input, custom))
       return result
     })
 
@@ -237,6 +430,7 @@ const layer = Layer.effect(
               ? { sessionPermission: request.sessionPermission as PermissionV1.Ruleset }
               : {}),
             ...(request.instructions ? { instructions: request.instructions } : {}),
+            ...(request.custom ? { custom: request.custom as ReadonlyArray<Custom> } : {}),
           })
         }).pipe(Effect.provideService(InstanceRef, request.instance as InstanceContext)),
       )
@@ -268,6 +462,7 @@ export const node = LayerNode.make({
     RuntimeFlags.node,
     Skill.node,
     McpService.node,
+    OperatorHelperTexts.node,
     locationServiceMapNode,
   ],
 })

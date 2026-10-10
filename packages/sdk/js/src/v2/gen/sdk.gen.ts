@@ -337,6 +337,7 @@ import type {
   OperatorQueueSendResponses,
   OperatorQueueStatus,
   OperatorQueueTarget,
+  OperatorResolver,
   OperatorSessionListErrors,
   OperatorSessionListResponses,
   OperatorSessionPermissionsGetErrors,
@@ -2027,6 +2028,7 @@ export class Layer extends HeyApiClient {
       section?: OperatorPromptSection
       text?: string
       prompt?: string
+      resolver?: OperatorResolver
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2041,6 +2043,7 @@ export class Layer extends HeyApiClient {
             { in: "body", key: "section" },
             { in: "body", key: "text" },
             { in: "body", key: "prompt" },
+            { in: "body", key: "resolver" },
           ],
         },
       ],
@@ -2109,6 +2112,7 @@ export class Layer extends HeyApiClient {
       section?: OperatorPromptSection
       text?: string
       prompt?: string
+      resolver?: OperatorResolver
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2124,6 +2128,7 @@ export class Layer extends HeyApiClient {
             { in: "body", key: "section" },
             { in: "body", key: "text" },
             { in: "body", key: "prompt" },
+            { in: "body", key: "resolver" },
           ],
         },
       ],
@@ -4039,7 +4044,7 @@ export class Prompt extends HeyApiClient {
   /**
    * Sample a layer
    *
-   * What one layer fills in for an agent of this project and a model: a Dynamic layer's text (the agent's prompt, the base prompt for the model, the environment, skills, MCP instructions, instruction files; your Dynamic layers are written by the dynamic generator), or a fixed layer's text.
+   * What one layer fills in for an agent of this project and a model: a Dynamic layer's text (the agent's prompt, the base prompt for the model, the environment, skills, MCP instructions, instruction files; your Dynamic layers are written by the dynamic generator), or a fixed layer's text. With `resolver` (and `session`), Test resolve: the layer's text and trace by draft rules, without sending anything.
    */
   public sample<ThrowOnError extends boolean = false>(
     parameters: {
@@ -4049,6 +4054,8 @@ export class Prompt extends HeyApiClient {
       layer: string
       provider?: string
       model?: string
+      session?: string
+      resolver?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4063,6 +4070,8 @@ export class Prompt extends HeyApiClient {
             { in: "query", key: "layer" },
             { in: "query", key: "provider" },
             { in: "query", key: "model" },
+            { in: "query", key: "session" },
+            { in: "query", key: "resolver" },
           ],
         },
       ],

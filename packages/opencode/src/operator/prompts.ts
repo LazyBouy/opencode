@@ -24,6 +24,8 @@ import { OperatorProfile } from "./profile"
 import { OperatorProfileStore } from "./profile-store"
 import { OperatorProjects } from "./projects"
 import { OperatorPromptText } from "./prompt-text"
+import { OperatorResolver } from "./resolver"
+import { OperatorResolverBuiltins } from "./resolver-builtins"
 
 export const ToolEntry = Schema.Struct({
   id: Schema.String,
@@ -102,6 +104,10 @@ export interface Interface {
     layer: string
     providerID?: string
     modelID?: string
+    /** Test resolve: a session's reads (its helper texts, its permissions). */
+    sessionID?: string
+    /** Test resolve: draft rules for the layer, in place of its saved ones. */
+    resolver?: OperatorResolver.Resolver
   }) => Effect.Effect<Sample, NotFoundError | OperatorGenerate.GenerateError>
   /** External plugins that config loads; they can change prompts after the profile. */
   readonly plugins: () => Effect.Effect<typeof Plugins.Type>
@@ -138,7 +144,17 @@ const layer = Layer.effect(
 
     // What a request of an agent of this project starts from: the model, the parts OpenCode writes for
     // it, and the project's prompt settings.
-    const request = Effect.fnUntraced(function* (input: { agent: string; providerID?: string; modelID?: string }) {
+    const request = Effect.fnUntraced(function* (input: {
+      agent: string
+      providerID?: string
+      modelID?: string
+      sessionID?: string
+      // The layers with rules of their own to resolve too, from the project's prompt settings.
+      custom?: (
+        loaded: Awaited<ReturnType<typeof OperatorProfileStore.forProject>>,
+      ) => ReadonlyArray<OperatorDynamicLayers.Custom>
+      helper?: "write" | "placeholder"
+    }) {
       const ctx = yield* InstanceState.context
       const agent = yield* agents.get(input.agent)
       if (!agent) return yield* new NotFoundError({ message: `No agent named "${input.agent}"` })
@@ -175,8 +191,19 @@ const layer = Layer.effect(
         extra: [],
         base: SystemPrompt.provider(model),
       }
-      // OpenCode's per-request Dynamic layers through the pipeline, as a request resolves them.
-      const resolved = helper ? undefined : yield* dynamicLayers.resolve({ agent, model, instructions: files })
+      // OpenCode's per-request Dynamic layers through the pipeline, as a request resolves them, and the
+      // layers with rules of their own.
+      const custom = input.custom?.(loaded) ?? []
+      const resolved = helper
+        ? undefined
+        : yield* dynamicLayers.resolve({
+            agent,
+            model,
+            instructions: files,
+            ...(input.sessionID ? { sessionID: input.sessionID } : {}),
+            ...(custom.length ? { custom } : {}),
+            ...(input.helper ? { helper: input.helper } : {}),
+          })
       return { ctx, agent, model, modelSource, key, loaded, parts, resolved }
     })
 
@@ -222,10 +249,42 @@ const layer = Layer.effect(
       layer: string
       providerID?: string
       modelID?: string
+      sessionID?: string
+      resolver?: OperatorResolver.Resolver
     }) {
-      const { agent, model, modelSource, loaded, parts, resolved } = yield* request(input)
+      // A layer with rules of its own (or draft rules: Test resolve) is resolved by them, with the session's
+      // reads when one is given (its helper texts, its permissions).
+      const ruled = (loaded: Awaited<ReturnType<typeof OperatorProfileStore.forProject>>) => {
+        const found = OperatorProfile.findLayer(loaded.catalog, input.layer)
+        if (!found || found.origin !== "user") return []
+        const draft = input.resolver ? { ...found, resolver: input.resolver } : found
+        const resolver = OperatorProfile.hasOwnRules(draft) ? OperatorProfile.resolverOf(draft) : undefined
+        return resolver ? [{ layer: draft, resolver }] : []
+      }
+      const { agent, model, modelSource, loaded, parts, resolved } = yield* request({ ...input, custom: ruled })
       const ns = loaded.catalog.namespace.id
       const head = { agent: agent.name, model: `${model.providerID}/${model.id}`, layer: input.layer, modelSource }
+      const drafted = ruled(loaded)[0]
+      if (input.resolver) {
+        const found = OperatorProfile.findLayer(loaded.catalog, input.layer)
+        const reason = found ? OperatorProfile.checkResolver(found, input.resolver) : `No layer "${input.layer}"`
+        if (reason) return yield* new NotFoundError({ message: reason })
+      }
+      if (drafted && resolved?.has(drafted.layer.id)) {
+        const done = resolved.get(drafted.layer.id)!
+        const helperOnly = OperatorProfile.sameRules(drafted.resolver, OperatorResolverBuiltins.HELPER_RESOLVER)
+        const trace = yield* complete(
+          [
+            helperOnly
+              ? { kind: "dynamic-written", name: drafted.layer.name }
+              : { kind: "rules", name: drafted.layer.name },
+            { kind: "layer", name: drafted.layer.name, detail: drafted.layer.id },
+          ],
+          ns,
+          agent,
+        )
+        return { ...head, text: done.text, source: drafted.layer.name, trace, resolution: done.trace }
+      }
       // Your Dynamic layers are written by the dynamic generator, here without a session.
       const own = OperatorProfile.findLayer(loaded.catalog, input.layer)
       if (own && OperatorProfile.isWrittenDynamic(own)) {
@@ -270,7 +329,15 @@ const layer = Layer.effect(
       profile?: string
       override?: OperatorProfile.Override | null
     }) {
-      const { ctx, agent, model, modelSource, key, loaded, parts, resolved } = yield* request(input)
+      // The namespace's layers with rules of their own (the assembler takes the ones its slots hold); helper
+      // sources show where their text goes.
+      const custom = (loaded: Awaited<ReturnType<typeof OperatorProfileStore.forProject>>) =>
+        OperatorProfile.ruledLayers(loaded.catalog, { all: loaded.catalog.layers.map((item) => item.id) })
+      const { ctx, agent, model, modelSource, key, loaded, parts, resolved } = yield* request({
+        ...input,
+        custom,
+        helper: "placeholder",
+      })
       if (input.profile && !OperatorProfile.profiles(loaded.catalog).some((item) => item.id === input.profile))
         return yield* new NotFoundError({
           message: `No profile "${input.profile}" in ${loaded.catalog.namespace.name}`,

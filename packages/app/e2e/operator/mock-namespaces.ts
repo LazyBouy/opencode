@@ -185,6 +185,8 @@ export interface PromptMock {
   readonly projects: Record<string, ProjectSetting>
   readonly agents: Record<string, AgentSetting>
   readonly writes: Array<{ method: string; path: string; body: unknown }>
+  /** The samples asked for (Test resolve), by their query. */
+  readonly samples: Array<Record<string, string>>
   /** Blank (undefined): Global and OpenCode are one namespace. */
   workingDir: string | undefined
   /** Global's record, listed while the working directory is set. */
@@ -213,6 +215,52 @@ const generated = (directory: string): Record<string, { text: string; source: st
     source: "generated",
   },
 })
+
+// OpenCode's rules for its Dynamic layers (resolver-builtins.ts), as the catalog lists them.
+const instructionsRules = {
+  sources: [
+    { kind: "file", location: "~/.config/opencode/AGENTS.md", group: "global", name: "AGENTS.md" },
+    { kind: "file", location: "~/.claude/CLAUDE.md", group: "global", name: "CLAUDE.md" },
+    { kind: "file", location: "AGENTS.md", group: "project", name: "AGENTS.md" },
+    { kind: "file", location: "CLAUDE.md", group: "project", name: "CLAUDE.md" },
+    { kind: "file", location: "CONTEXT.md", group: "project", name: "CONTEXT.md" },
+    { kind: "config", location: "instructions", group: "config" },
+  ],
+  filter: [{ kind: "available", need: "exists" }],
+  score: [{ kind: "precedence", attribute: "name", order: ["AGENTS.md", "CLAUDE.md", "CONTEXT.md"], weight: 10 }],
+  select: { policy: "one", per: { config: "all" }, unique: "path", groups: ["global", "project", "config"] },
+  template: { item: "Instructions from: {path}\n{text}", separator: "\n" },
+}
+const helperRules = {
+  sources: [{ kind: "helper", location: "prompt", name: "Helper" }],
+  filter: [{ kind: "available", need: "text" }],
+  score: [],
+  select: { policy: "one" },
+  template: { item: "{text}", separator: "\n" },
+}
+const builtinRules = {
+  [`${PREFIX}generated.instructions`]: instructionsRules,
+  [`${PREFIX}generated.environment`]: {
+    sources: [{ kind: "live", location: "environment", name: "Environment" }],
+    filter: [],
+    score: [],
+    select: { policy: "one" },
+    template: { item: "<env>\n  Working directory: {directory}\n</env>", separator: "\n", keepEmpty: true },
+  },
+  [`${PREFIX}slot.agent-or-base`]: {
+    sources: [
+      { kind: "agent-field", location: "prompt", name: "Agent prompt" },
+      { kind: "text", location: "base prompt (by model)", name: "Base prompt" },
+    ],
+    filter: [{ kind: "available", need: "text" }],
+    score: [{ kind: "present", weight: 1 }],
+    select: { policy: "one" },
+    template: { item: "{text}", separator: "\n" },
+  },
+}
+const editableRules = ["environment", "references", "instructions", "mcp", "skills"].map(
+  (name) => `${PREFIX}generated.${name}`,
+)
 
 // A Dynamic layer's resolution trace (resolver.ts), for the mocked preview and calls.
 export const candidate = (
@@ -256,6 +304,7 @@ export function createPromptMock(
     projects: Object.fromEntries(projects.map((project) => [project.key, { namespace: "opencode" }])),
     agents: {},
     writes: [],
+    samples: [],
     workingDir: "/workspace",
     global: { id: "global", name: "Global", purpose: "", createdAt: 0, updatedAt: 0 },
     moves: [],
@@ -356,6 +405,9 @@ export function createPromptMock(
       groups: [...(opencode ? builtinGroups : copies.groups), ...items.groups],
       profiles: [...(opencode ? builtinProfiles : copies.profiles), ...items.profiles],
       projects: keys.map((key) => ({ key, name: nameOf(key), ...state.projects[key] })),
+      resolvers: builtinRules,
+      editableRules,
+      helperRules,
       agents: Object.entries(state.agents)
         .map(([id, setting]) => {
           const [project, name] = id.split("\n")
@@ -540,10 +592,40 @@ export function createPromptMock(
     if (url.pathname === "/operator/prompt/sample") {
       const layer = url.searchParams.get("layer") ?? ""
       const agent = url.searchParams.get("agent") ?? "build"
+      state.samples.push(Object.fromEntries(url.searchParams))
       // Your Dynamic layers are written by the dynamic generator.
       const own = Object.values(state.items)
         .flatMap((items) => items.layers)
         .find((item) => item.id === layer && item.type === "dynamic")
+      // Rules without a helper source (draft ones too: Test resolve): each source a candidate, the first chosen.
+      const draft = url.searchParams.get("resolver")
+      const rules = (draft ? JSON.parse(draft) : (own as { resolver?: typeof helperRules } | undefined)?.resolver) as
+        | { sources: Array<{ kind: string; location: string; group?: string }>; select: { policy: string; n?: number } }
+        | undefined
+      const provider = url.searchParams.get("provider")
+      const model = provider ? `${provider}/${url.searchParams.get("model")}` : "opencode/claude-opus-4-6"
+      if (rules && !rules.sources.some((source) => source.kind === "helper"))
+        return json(route, {
+          agent,
+          model,
+          layer,
+          text: `Resolved from ${rules.sources.map((source) => source.location).join(", ")} (${rules.select.policy}${rules.select.n ? ` ${rules.select.n}` : ""})`,
+          source: own?.name ?? layer,
+          modelSource: provider
+            ? { model, source: "chosen" }
+            : { model: "opencode/claude-opus-4-6", source: "ranking" },
+          trace: [{ kind: "rules", name: own?.name ?? layer }],
+          resolution: resolution(
+            rules.sources.map((source, index) => ({
+              ...candidate(source.location, source.group, {
+                selected: index === 0,
+                why: index === 0 ? "selected" : `not in the top ${rules.select.n ?? 1}`,
+              }),
+              source: index,
+              kind: source.kind,
+            })),
+          ),
+        })
       if (own)
         return json(route, {
           agent,

@@ -1351,3 +1351,68 @@ details[data-slot="operator-as-sent"] [data-component="operator-code"][data-mode
   border-radius: 6px;
   background: var(--v2-background-bg-layer-02);
 }
+
+/* A Dynamic layer's rules edited in place (pages/layer-rules.tsx): one line per source, filter and rule;
+   Selection and Template as named settings. */
+[data-component="operator-rules-form"] {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+[data-component="operator-rules-form"] tr[data-editable] :is(td, th) {
+  padding-block: 4px;
+  vertical-align: middle;
+}
+
+[data-component="operator-rules-form"] th[scope="row"] {
+  width: 1%;
+  white-space: nowrap;
+  font-weight: normal;
+  color: var(--v2-text-text-muted);
+  text-align: start;
+}
+
+[data-component="operator-rules-form"] :is([data-slot="operator-rules-actions"], [data-slot="operator-rules-narrow"]) {
+  width: 1%;
+  white-space: nowrap;
+}
+
+[data-component="operator-rules-form"] [data-slot="operator-rules-narrow"] {
+  min-width: 72px;
+}
+
+[data-component="operator-rules-form"] [data-slot="operator-rules-kind"] {
+  width: 120px;
+  min-width: 120px;
+}
+
+[data-slot="operator-rules-settings"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+[data-slot="operator-rules-settings"] > * {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+
+[data-component="operator-rules-form"] :is(td, th) {
+  padding: 4px 6px;
+}
+
+[data-component="operator-rules-form"] td [data-component="text-input-v2"] {
+  min-width: 0;
+  width: 100%;
+}
+
+[data-component="operator-rules-form"] [data-slot="operator-rules-group"] {
+  width: 14%;
+}
+
+[data-component="operator-rules-form"] td :is([data-component="select-v2-root"], [data-component="select-v2"]) {
+  min-width: 0;
+  width: 100%;
+}

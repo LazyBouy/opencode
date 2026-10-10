@@ -1881,6 +1881,9 @@
                   },
                   "prompt": {
                     "type": "string"
+                  },
+                  "resolver": {
+                    "$ref": "#/components/schemas/OperatorResolver"
                   }
                 },
                 "required": ["name", "type", "text"],
@@ -1981,6 +1984,9 @@
                   },
                   "prompt": {
                     "type": "string"
+                  },
+                  "resolver": {
+                    "$ref": "#/components/schemas/OperatorResolver"
                   }
                 },
                 "required": ["name", "type", "text"],
@@ -14967,6 +14973,22 @@
               "type": "string"
             },
             "required": false
+          },
+          {
+            "name": "session",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "resolver",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -15011,7 +15033,7 @@
             }
           }
         },
-        "description": "What one layer fills in for an agent of this project and a model: a Dynamic layer's text (the agent's prompt, the base prompt for the model, the environment, skills, MCP instructions, instruction files; your Dynamic layers are written by the dynamic generator), or a fixed layer's text.",
+        "description": "What one layer fills in for an agent of this project and a model: a Dynamic layer's text (the agent's prompt, the base prompt for the model, the environment, skills, MCP instructions, instruction files; your Dynamic layers are written by the dynamic generator), or a fixed layer's text. With `resolver` (and `session`), Test resolve: the layer's text and trace by draft rules, without sending anything.",
         "summary": "Sample a layer",
         "x-codeSamples": [
           {
@@ -31490,6 +31512,345 @@
         "type": "string",
         "enum": ["builtin", "slot", "generated", "automatic", "user"]
       },
+      "OperatorResolverSourceKind": {
+        "type": "string",
+        "enum": ["text", "agent-field", "file", "config", "url", "live", "registry", "memory", "helper"]
+      },
+      "OperatorResolverSource": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/OperatorResolverSourceKind"
+          },
+          "location": {
+            "type": "string",
+            "description": "What to read: a file path or glob, a config key, a URL, a live value's name, a registry's name, a layer id, a helper's prompt"
+          },
+          "group": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "number"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": ["kind", "location"],
+        "additionalProperties": false
+      },
+      "OperatorResolverFilter": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["available"]
+              },
+              "need": {
+                "type": "string",
+                "enum": ["exists", "text"],
+                "description": "exists: the source was found (an empty one stays, and renders nothing); text: it has text"
+              }
+            },
+            "required": ["kind", "need"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["permission"]
+              },
+              "permission": {
+                "type": "string",
+                "description": "Decided for each candidate's name (skill: the skill's)"
+              }
+            },
+            "required": ["kind", "permission"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["size"]
+              },
+              "max": {
+                "type": "number",
+                "description": "Characters; a longer candidate is left out"
+              }
+            },
+            "required": ["kind", "max"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["attribute"]
+              },
+              "attribute": {
+                "type": "string"
+              },
+              "present": {
+                "type": "boolean",
+                "description": "Keep candidates that have it (true) or don't (false)"
+              }
+            },
+            "required": ["kind", "attribute", "present"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["flag"]
+              },
+              "attribute": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string",
+                "description": "Why a candidate whose flag is not yes is left out"
+              }
+            },
+            "required": ["kind", "attribute", "reason"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "OperatorResolverRule": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["precedence"]
+              },
+              "attribute": {
+                "type": "string"
+              },
+              "order": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "weight": {
+                "type": "number"
+              }
+            },
+            "required": ["kind", "attribute", "weight"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["match"]
+              },
+              "attribute": {
+                "type": "string"
+              },
+              "equals": {
+                "type": "string"
+              },
+              "pattern": {
+                "type": "string"
+              },
+              "weight": {
+                "type": "number"
+              }
+            },
+            "required": ["kind", "attribute", "weight"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["prefer"]
+              },
+              "order": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "weight": {
+                "type": "number"
+              }
+            },
+            "required": ["kind", "order", "weight"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["present"]
+              },
+              "weight": {
+                "type": "number"
+              }
+            },
+            "required": ["kind", "weight"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["recency"]
+              },
+              "weight": {
+                "type": "number"
+              }
+            },
+            "required": ["kind", "weight"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["size"]
+              },
+              "weight": {
+                "type": "number"
+              }
+            },
+            "required": ["kind", "weight"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["priority"]
+              },
+              "weight": {
+                "type": "number"
+              }
+            },
+            "required": ["kind", "weight"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "OperatorResolverSelect": {
+        "type": "object",
+        "properties": {
+          "policy": {
+            "type": "string",
+            "enum": ["one", "top", "all"]
+          },
+          "n": {
+            "type": "number"
+          },
+          "budget": {
+            "type": "number"
+          },
+          "perSource": {
+            "type": "number"
+          },
+          "overflow": {
+            "type": "string"
+          },
+          "unique": {
+            "type": "string"
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "per": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "enum": ["one", "top", "all"]
+            }
+          }
+        },
+        "required": ["policy"],
+        "additionalProperties": false
+      },
+      "OperatorResolverTemplate": {
+        "type": "object",
+        "properties": {
+          "header": {
+            "type": "string"
+          },
+          "item": {
+            "type": "string",
+            "description": "Per candidate: {text}, {path}, {name}, {description}, …; {text|indent:4} indents each line"
+          },
+          "separator": {
+            "type": "string",
+            "description": "Between items"
+          },
+          "footer": {
+            "type": "string"
+          },
+          "keepEmpty": {
+            "type": "boolean"
+          },
+          "empty": {
+            "type": "string"
+          }
+        },
+        "required": ["item", "separator"],
+        "additionalProperties": false
+      },
+      "OperatorResolver": {
+        "type": "object",
+        "properties": {
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorResolverSource"
+            }
+          },
+          "filter": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorResolverFilter"
+            }
+          },
+          "score": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorResolverRule"
+            }
+          },
+          "select": {
+            "$ref": "#/components/schemas/OperatorResolverSelect"
+          },
+          "template": {
+            "$ref": "#/components/schemas/OperatorResolverTemplate"
+          }
+        },
+        "required": ["sources", "filter", "score", "select", "template"],
+        "additionalProperties": false
+      },
       "OperatorPromptLayer": {
         "type": "object",
         "properties": {
@@ -31530,6 +31891,9 @@
           },
           "file": {
             "type": "string"
+          },
+          "resolver": {
+            "$ref": "#/components/schemas/OperatorResolver"
           }
         },
         "required": ["id", "name", "type", "section", "text", "origin"],
@@ -31692,9 +32056,37 @@
               "$ref": "#/components/schemas/OperatorPromptAgentSetting"
             },
             "description": "Prompt settings of the agents of those projects"
+          },
+          "resolvers": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/OperatorResolver"
+            },
+            "description": "OpenCode's rules for its Dynamic layers, by layer id (read-only; a copy of a per-request layer follows them until it has its own)"
+          },
+          "editableRules": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "OpenCode's layers whose copies can have rules of their own"
+          },
+          "helperRules": {
+            "$ref": "#/components/schemas/OperatorResolver"
           }
         },
-        "required": ["namespace", "types", "layers", "groups", "profiles", "projects", "agents"],
+        "required": [
+          "namespace",
+          "types",
+          "layers",
+          "groups",
+          "profiles",
+          "projects",
+          "agents",
+          "resolvers",
+          "editableRules",
+          "helperRules"
+        ],
         "additionalProperties": false
       },
       "OperatorPromptItemKind": {
@@ -35141,6 +35533,7 @@
               "file",
               "org-purpose",
               "dynamic-written",
+              "rules",
               "written",
               "references",
               "config",
@@ -35149,7 +35542,7 @@
               "mcp",
               "skill"
             ],
-            "description": "agent-own / agent-none: the agent has its own prompt, or none; agent-file / agent-config / agent-builtin: where it is defined (its agent file, a config file, OpenCode's own definition); model-rule: the base prompt's model and the rule that chose it; builtin-layer / copy-layer / own-layer / layer: the layer the text is in; file: the file it is in; org-purpose: the namespace's purpose; dynamic-written: written for each session by the dynamic generator; written: written by OpenCode for each request; references / config: the references in config files; instruction-file / instruction-url, mcp, skill: what a per-request text was made from"
+            "description": "agent-own / agent-none: the agent has its own prompt, or none; agent-file / agent-config / agent-builtin: where it is defined (its agent file, a config file, OpenCode's own definition); model-rule: the base prompt's model and the rule that chose it; builtin-layer / copy-layer / own-layer / layer: the layer the text is in; file: the file it is in; org-purpose: the namespace's purpose; dynamic-written: written for each session by the dynamic generator; rules: resolved by the layer's own rules; written: written by OpenCode for each request; references / config: the references in config files; instruction-file / instruction-url, mcp, skill: what a per-request text was made from"
           },
           "name": {
             "type": "string"
@@ -35163,10 +35556,6 @@
         },
         "required": ["kind"],
         "additionalProperties": false
-      },
-      "OperatorResolverSourceKind": {
-        "type": "string",
-        "enum": ["text", "agent-field", "file", "config", "url", "live", "registry", "memory", "helper"]
       },
       "OperatorResolverScorePart": {
         "type": "object",

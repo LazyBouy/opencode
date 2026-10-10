@@ -1,5 +1,6 @@
 import { OperatorProfile } from "@/operator/profile"
 import { OperatorPrompts } from "@/operator/prompts"
+import { OperatorResolver } from "@/operator/resolver"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
 import { Effect, Schema } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -12,6 +13,15 @@ const overrideOf = Effect.fnUntraced(function* (text: string | undefined) {
   if (text === undefined) return undefined
   const value = yield* Effect.try({ try: () => JSON.parse(text) as unknown, catch: invalidOverride })
   return yield* decodeOverride(value).pipe(Effect.mapError(invalidOverride))
+})
+
+// Test resolve's `resolver` query: JSON of draft rules.
+const decodeResolver = Schema.decodeUnknownEffect(OperatorResolver.Resolver)
+const invalidResolver = () => new OperatorPrompts.NotFoundError({ message: "The draft rules are not valid rules" })
+const resolverOf = Effect.fnUntraced(function* (text: string | undefined) {
+  if (text === undefined) return undefined
+  const value = yield* Effect.try({ try: () => JSON.parse(text) as unknown, catch: invalidResolver })
+  return yield* decodeResolver(value).pipe(Effect.mapError(invalidResolver))
 })
 
 export const operatorPromptHandlers = HttpApiBuilder.group(InstanceHttpApi, "operatorPrompt", (handlers) =>
@@ -27,14 +37,17 @@ export const operatorPromptHandlers = HttpApiBuilder.group(InstanceHttpApi, "ope
       .handle("catalog", () => prompts.catalog())
       .handle("plugins", () => prompts.plugins())
       .handle("sample", (ctx) =>
-        prompts
-          .sample({
+        Effect.gen(function* () {
+          const resolver = yield* resolverOf(ctx.query.resolver)
+          return yield* prompts.sample({
             agent: ctx.query.agent,
             layer: ctx.query.layer,
             providerID: ctx.query.provider,
             modelID: ctx.query.model,
+            ...(ctx.query.session ? { sessionID: ctx.query.session } : {}),
+            ...(resolver ? { resolver } : {}),
           })
-          .pipe(Effect.mapError(notFound)),
+        }).pipe(Effect.mapError(notFound)),
       )
       .handle("purpose", (ctx) =>
         prompts.purpose(ctx.payload).pipe(

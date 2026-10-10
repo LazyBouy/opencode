@@ -2415,6 +2415,140 @@ export type OperatorPromptSection =
 
 export type OperatorPromptOrigin = "builtin" | "slot" | "generated" | "automatic" | "user"
 
+export type OperatorResolverSourceKind =
+  | "text"
+  | "agent-field"
+  | "file"
+  | "config"
+  | "url"
+  | "live"
+  | "registry"
+  | "memory"
+  | "helper"
+
+export type OperatorResolverSource = {
+  kind: OperatorResolverSourceKind
+  /**
+   * What to read: a file path or glob, a config key, a URL, a live value's name, a registry's name, a layer id, a helper's prompt
+   */
+  location: string
+  group?: string
+  name?: string
+  priority?: number
+  text?: string
+}
+
+export type OperatorResolverFilter =
+  | {
+      kind: "available"
+      /**
+       * exists: the source was found (an empty one stays, and renders nothing); text: it has text
+       */
+      need: "exists" | "text"
+    }
+  | {
+      kind: "permission"
+      /**
+       * Decided for each candidate's name (skill: the skill's)
+       */
+      permission: string
+    }
+  | {
+      kind: "size"
+      /**
+       * Characters; a longer candidate is left out
+       */
+      max: number
+    }
+  | {
+      kind: "attribute"
+      attribute: string
+      /**
+       * Keep candidates that have it (true) or don't (false)
+       */
+      present: boolean
+    }
+  | {
+      kind: "flag"
+      attribute: string
+      /**
+       * Why a candidate whose flag is not yes is left out
+       */
+      reason: string
+    }
+
+export type OperatorResolverRule =
+  | {
+      kind: "precedence"
+      attribute: string
+      order?: Array<string>
+      weight: number
+    }
+  | {
+      kind: "match"
+      attribute: string
+      equals?: string
+      pattern?: string
+      weight: number
+    }
+  | {
+      kind: "prefer"
+      order: Array<string>
+      weight: number
+    }
+  | {
+      kind: "present"
+      weight: number
+    }
+  | {
+      kind: "recency"
+      weight: number
+    }
+  | {
+      kind: "size"
+      weight: number
+    }
+  | {
+      kind: "priority"
+      weight: number
+    }
+
+export type OperatorResolverSelect = {
+  policy: "one" | "top" | "all"
+  n?: number
+  budget?: number
+  perSource?: number
+  overflow?: string
+  unique?: string
+  groups?: Array<string>
+  per?: {
+    [key: string]: "one" | "top" | "all"
+  }
+}
+
+export type OperatorResolverTemplate = {
+  header?: string
+  /**
+   * Per candidate: {text}, {path}, {name}, {description}, …; {text|indent:4} indents each line
+   */
+  item: string
+  /**
+   * Between items
+   */
+  separator: string
+  footer?: string
+  keepEmpty?: boolean
+  empty?: string
+}
+
+export type OperatorResolver = {
+  sources: Array<OperatorResolverSource>
+  filter: Array<OperatorResolverFilter>
+  score: Array<OperatorResolverRule>
+  select: OperatorResolverSelect
+  template: OperatorResolverTemplate
+}
+
 export type OperatorPromptLayer = {
   id: string
   name: string
@@ -2431,6 +2565,7 @@ export type OperatorPromptLayer = {
   outdated?: boolean
   prompt?: string
   file?: string
+  resolver?: OperatorResolver
 }
 
 export type OperatorPromptGroup = {
@@ -2491,6 +2626,17 @@ export type OperatorPromptCatalog = {
    * Prompt settings of the agents of those projects
    */
   agents: Array<OperatorPromptAgentSetting>
+  /**
+   * OpenCode's rules for its Dynamic layers, by layer id (read-only; a copy of a per-request layer follows them until it has its own)
+   */
+  resolvers: {
+    [key: string]: OperatorResolver
+  }
+  /**
+   * OpenCode's layers whose copies can have rules of their own
+   */
+  editableRules: Array<string>
+  helperRules: OperatorResolver
 }
 
 export type OperatorPromptItemKind = "type" | "layer" | "group" | "profile"
@@ -3814,7 +3960,7 @@ export type OperatorPromptCatalog1 = {
 
 export type OperatorPromptTraceStep = {
   /**
-   * agent-own / agent-none: the agent has its own prompt, or none; agent-file / agent-config / agent-builtin: where it is defined (its agent file, a config file, OpenCode's own definition); model-rule: the base prompt's model and the rule that chose it; builtin-layer / copy-layer / own-layer / layer: the layer the text is in; file: the file it is in; org-purpose: the namespace's purpose; dynamic-written: written for each session by the dynamic generator; written: written by OpenCode for each request; references / config: the references in config files; instruction-file / instruction-url, mcp, skill: what a per-request text was made from
+   * agent-own / agent-none: the agent has its own prompt, or none; agent-file / agent-config / agent-builtin: where it is defined (its agent file, a config file, OpenCode's own definition); model-rule: the base prompt's model and the rule that chose it; builtin-layer / copy-layer / own-layer / layer: the layer the text is in; file: the file it is in; org-purpose: the namespace's purpose; dynamic-written: written for each session by the dynamic generator; rules: resolved by the layer's own rules; written: written by OpenCode for each request; references / config: the references in config files; instruction-file / instruction-url, mcp, skill: what a per-request text was made from
    */
   kind:
     | "agent-own"
@@ -3830,6 +3976,7 @@ export type OperatorPromptTraceStep = {
     | "file"
     | "org-purpose"
     | "dynamic-written"
+    | "rules"
     | "written"
     | "references"
     | "config"
@@ -3841,17 +3988,6 @@ export type OperatorPromptTraceStep = {
   path?: string
   detail?: string
 }
-
-export type OperatorResolverSourceKind =
-  | "text"
-  | "agent-field"
-  | "file"
-  | "config"
-  | "url"
-  | "live"
-  | "registry"
-  | "memory"
-  | "helper"
 
 export type OperatorResolverScorePart = {
   rule: string
@@ -10731,6 +10867,7 @@ export type OperatorNamespaceLayerCreateData = {
     section?: OperatorPromptSection
     text: string
     prompt?: string
+    resolver?: OperatorResolver
   }
   path: {
     ns: string
@@ -10807,6 +10944,7 @@ export type OperatorNamespaceLayerUpdateData = {
     section?: OperatorPromptSection
     text: string
     prompt?: string
+    resolver?: OperatorResolver
   }
   path: {
     ns: string
@@ -16366,6 +16504,8 @@ export type OperatorPromptSampleData = {
     layer: string
     provider?: string
     model?: string
+    session?: string
+    resolver?: string
   }
   url: "/operator/prompt/sample"
 }

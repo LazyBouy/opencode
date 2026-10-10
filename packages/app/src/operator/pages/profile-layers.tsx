@@ -4,7 +4,7 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
-import type { OperatorNamespaceSummary, OperatorPromptSample } from "@opencode-ai/sdk/v2/client"
+import type { OperatorNamespaceSummary, OperatorPromptSample, OperatorResolver } from "@opencode-ai/sdk/v2/client"
 import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
@@ -40,7 +40,12 @@ import {
   WRITTEN,
 } from "./profile-model"
 import { PurposeDraft } from "./purpose-draft"
+import { hasHelper, RulesForm, RulesView } from "./layer-rules"
 import { useOverlayParams } from "../ui/overlay-nav"
+
+// Test resolve's model and session choices: the agent's own model; no session.
+const AGENT_MODEL = "agent"
+const NO_SESSION = "none"
 
 // Each Layer Definition section's icon in the overlay's menu.
 const ICONS: Record<Section, OverlayBlock["icon"]> = {
@@ -332,7 +337,22 @@ function LayerRecord(props: {
   const words = useLayerWords(() => props.layers.map((item) => ({ ns: props.ns, item })))
   const creating = () => SECTIONS.find((item) => `new:${item.id}` === props.selected)?.id
   const layer = createMemo(() => props.layers.find((item) => item.id === props.selected))
-  const [store, setStore] = createStore({ name: "", type: "", text: "", prompt: "", busy: false, editing: false })
+  const [store, setStore] = createStore({
+    name: "",
+    type: "",
+    text: "",
+    prompt: "",
+    busy: false,
+    editing: false,
+    rules: undefined as OperatorResolver | undefined,
+  })
+  // A Dynamic layer's rules: its own, else OpenCode's (its built-in's, for a copy), else the helper's.
+  const rulesOf = (found: Layer | undefined): OperatorResolver | undefined => {
+    if (!found)
+      return SECTIONS.find((item) => item.id === creating())?.type === DYNAMIC ? props.catalog.helperRules : undefined
+    if (found.origin !== "user") return props.catalog.resolvers[found.id]
+    return found.resolver ?? (found.replaces ? props.catalog.resolvers[found.replaces] : undefined)
+  }
   const reset = () => {
     const found = layer()
     setStore({
@@ -341,6 +361,7 @@ function LayerRecord(props: {
       text: found?.text ?? "",
       prompt: found?.prompt ?? "",
       editing: !!creating() || (props.edit && found?.origin === "user"),
+      rules: rulesOf(found),
     })
   }
   // Only a change of record resets the form (not a refresh of the data around it).
@@ -354,6 +375,28 @@ function LayerRecord(props: {
   const prompted = () => store.type === DYNAMIC && !layer()?.replaces
   // A namespace's copy of a per-request layer has no text: only its name changes.
   const nameOnly = () => isPerRequest(layer())
+  // The rules can be edited for your Dynamic layers, and a namespace's copy of one of OpenCode's per-request
+  // layers whose sources any layer can read (dynamic_layer_resolution_spec.md §6).
+  const rulesEditable = () =>
+    prompted() || (!!layer()?.replaces && props.catalog.editableRules.includes(layer()!.replaces!))
+  // Your Dynamic layer needs its prompt while a helper source writes from it.
+  const needsPrompt = () => prompted() && hasHelper(store.rules)
+  // What the rules shown are: OpenCode's, the helper's default, a copy's (inherited or its own), yours.
+  const rulesNote = (found: Layer) => {
+    if (found.origin !== "user")
+      return language.t(
+        props.catalog.editableRules.includes(found.id)
+          ? "operator.layerRules.note.opencodeCopy"
+          : "operator.layerRules.note.opencode",
+      )
+    if (found.replaces)
+      return language.t(found.resolver ? "operator.layerRules.note.instead" : "operator.layerRules.note.follows")
+    return language.t(
+      JSON.stringify(found.resolver) === JSON.stringify(props.catalog.helperRules)
+        ? "operator.layerRules.note.helper"
+        : "operator.layerRules.note.own",
+    )
+  }
   // A copy of one of OpenCode's texts takes OpenCode's current text (after a release changed it).
   const sync = async () => {
     const found = layer()
@@ -398,6 +441,7 @@ function LayerRecord(props: {
       type: store.type,
       text: prompted() ? "" : store.text,
       ...(prompted() ? { prompt: store.prompt.trim() } : {}),
+      ...(rulesEditable() && store.rules ? { resolver: store.rules } : {}),
     }
     await (
       creating()
@@ -424,6 +468,38 @@ function LayerRecord(props: {
       })
       .catch(data.fail)
       .finally(() => setStore("busy", false))
+  }
+  // Edit a copy of OpenCode's rules: one of your Dynamic layers with the same rules, opened to edit.
+  const copyRules = async (ns: string) => {
+    const found = layer()
+    const rules = rulesOf(found)
+    if (!found || !rules) return
+    setStore("busy", true)
+    await client()
+      .layer.create({
+        ns,
+        name: language.t("operator.layerRules.copyName", { name: found.name }),
+        type: DYNAMIC,
+        section: "dynamic",
+        text: "",
+        resolver: rules,
+      })
+      .then(async (result) => {
+        await data.refresh()
+        props.onSelect(result.data?.id, ns, true)
+      })
+      .catch(data.fail)
+      .finally(() => setStore("busy", false))
+  }
+  // A copy with rules of its own goes back to OpenCode's (rules equal to them are not kept).
+  const followOpenCode = async () => {
+    const found = layer()
+    const rules = found?.replaces ? props.catalog.resolvers[found.replaces] : undefined
+    if (!found || !rules || !props.ns) return
+    await client()
+      .layer.update({ ns: props.ns, id: found.id, name: found.name, type: found.type, text: "", resolver: rules })
+      .then(() => data.refresh())
+      .catch(data.fail)
   }
   const remove = async () => {
     const found = layer()
@@ -469,20 +545,27 @@ function LayerRecord(props: {
         when={!prompted() && !nameOnly()}
         fallback={
           nameOnly() ? (
-            <p data-slot="operator-note">{language.t("operator.profile.perRequestCopy")}</p>
+            <p data-slot="operator-note">
+              {language.t(rulesEditable() ? "operator.layerRules.copyNote" : "operator.profile.perRequestCopy")}
+            </p>
           ) : (
-            <Field
-              label={language.t("operator.profile.prompt")}
-              hint={language.t("operator.help.layerPrompt")}
-              note={language.t("operator.profile.chars", { count: store.prompt.length })}
+            <Show
+              when={needsPrompt()}
+              fallback={<p data-slot="operator-note">{language.t("operator.layerRules.noPrompt")}</p>}
             >
-              <TextareaV2
-                class="operator-editor"
-                rows={8}
-                value={store.prompt}
-                onInput={(event) => setStore("prompt", event.currentTarget.value)}
-              />
-            </Field>
+              <Field
+                label={language.t("operator.profile.prompt")}
+                hint={language.t("operator.help.layerPrompt")}
+                note={language.t("operator.profile.chars", { count: store.prompt.length })}
+              >
+                <TextareaV2
+                  class="operator-editor"
+                  rows={8}
+                  value={store.prompt}
+                  onInput={(event) => setStore("prompt", event.currentTarget.value)}
+                />
+              </Field>
+            </Show>
           )
         }
       >
@@ -501,6 +584,23 @@ function LayerRecord(props: {
             onInput={(event) => setStore("text", event.currentTarget.value)}
           />
         </Field>
+      </Show>
+      <Show when={rulesEditable() && store.rules}>
+        {(rules) => (
+          <>
+            <RulesForm value={rules()} helper={prompted()} onChange={(next) => setStore("rules", next)} />
+            <Show when={layer()}>
+              {(found) => (
+                <LayerSample
+                  layer={found()}
+                  catalog={props.catalog}
+                  draft={() => store.rules}
+                  onSelect={(id) => props.onSelect(id)}
+                />
+              )}
+            </Show>
+          </>
+        )}
       </Show>
     </div>
   )
@@ -522,7 +622,7 @@ function LayerRecord(props: {
               </ButtonV2>
               <ButtonV2
                 variant="contrast"
-                disabled={store.busy || !store.name.trim() || (prompted() && !store.prompt.trim())}
+                disabled={store.busy || !store.name.trim() || (needsPrompt() && !store.prompt.trim())}
                 onClick={() => void save()}
               >
                 {language.t("operator.config.save")}
@@ -692,7 +792,7 @@ function LayerRecord(props: {
                 </RecordField>
               </Show>
             </dl>
-            <Show when={isWrittenDynamic(found())}>
+            <Show when={isWrittenDynamic(found()) && hasHelper(found().resolver ?? props.catalog.helperRules)}>
               <dl data-component="record-fields">
                 <RecordField
                   label={language.t("operator.profile.prompt")}
@@ -701,6 +801,33 @@ function LayerRecord(props: {
                   <pre data-component="operator-code">{found().prompt}</pre>
                 </RecordField>
               </dl>
+            </Show>
+            <Show when={dynamic() && rulesOf(found())}>
+              {(rules) => (
+                <RulesView
+                  rules={rules()}
+                  note={rulesNote(found())}
+                  actions={
+                    <>
+                      <Show when={found().origin !== "user" && props.catalog.editableRules.includes(found().id)}>
+                        <NamespaceAction
+                          variant="outline"
+                          label={language.t("operator.layerRules.editCopy")}
+                          ns={props.ns}
+                          namespaces={props.namespaces}
+                          disabled={store.busy}
+                          run={(ns) => void copyRules(ns)}
+                        />
+                      </Show>
+                      <Show when={found().origin === "user" && found().replaces && found().resolver}>
+                        <ButtonV2 variant="outline" onClick={() => void followOpenCode()}>
+                          {language.t("operator.layerRules.useOpenCode")}
+                        </ButtonV2>
+                      </Show>
+                    </>
+                  }
+                />
+              )}
             </Show>
             <Show when={dynamic()}>
               <LayerSample layer={found()} catalog={props.catalog} onSelect={(id) => props.onSelect(id)} />
@@ -717,7 +844,14 @@ function LayerRecord(props: {
 
 // What one of OpenCode's Dynamic layers fills in for an agent of a project, made on request, and where
 // to change it: the agent, the base prompt layer for the model, Memory, Capabilities or Config.
-function LayerSample(props: { layer: Layer; catalog: Catalog; onSelect: (id: string) => void }) {
+// Test resolve (dynamic_layer_resolution_spec.md §6): with draft rules, a model and a session, what the
+// layer's rules give and the full trace, without sending anything.
+function LayerSample(props: {
+  layer: Layer
+  catalog: Catalog
+  onSelect: (id: string) => void
+  draft?: () => OperatorResolver | undefined
+}) {
   const language = useLanguage()
   const navigate = useNavigate()
   const api = useOperatorClient()
@@ -726,6 +860,8 @@ function LayerSample(props: { layer: Layer; catalog: Catalog; onSelect: (id: str
   const [store, setStore] = createStore({
     project: undefined as string | undefined,
     agent: "build",
+    model: AGENT_MODEL,
+    session: NO_SESSION,
     busy: false,
     error: "",
     sample: undefined as OperatorPromptSample | undefined,
@@ -767,15 +903,52 @@ function LayerSample(props: { layer: Layer; catalog: Catalog; onSelect: (id: str
         .operator.agent.list({ directory: project() })
         .then((result) => result.data ?? []),
   }))
+  // The models of the project's providers, and the agent's sessions there (their reads: helper texts,
+  // permissions).
+  const providers = useQuery(() => ({
+    queryKey: api.key("providers", project()),
+    enabled: !!project(),
+    queryFn: () =>
+      api
+        .client()
+        .config.providers({ directory: project() })
+        .then((result) => result.data!),
+  }))
+  const models = createMemo(() => [
+    AGENT_MODEL,
+    ...(providers.data?.providers ?? []).flatMap((provider) =>
+      Object.values(provider.models).map((model) => `${provider.id}/${model.id}`),
+    ),
+  ])
+  const sessions = useQuery(() => ({
+    queryKey: api.key("sessions", "agent", project(), store.agent),
+    enabled: !!project(),
+    queryFn: () =>
+      api
+        .client()
+        .operator.session.list({ within: project(), agent: store.agent, limit: "50" })
+        .then((result) => result.data ?? []),
+  }))
   // The built-in the layer is, or is a copy of.
   const suffix = () => (props.layer.replaces ?? props.layer.id).slice(PREFIX.length)
   const generate = async () => {
     const directory = project()
     if (!directory) return
     setStore({ busy: true, error: "" })
+    const draft = props.draft?.()
+    const at = store.model.indexOf("/")
     await api
       .client()
-      .operator.prompt.sample({ directory, agent: store.agent, layer: props.layer.id })
+      .operator.prompt.sample({
+        directory,
+        agent: store.agent,
+        layer: props.layer.id,
+        ...(store.model === AGENT_MODEL
+          ? {}
+          : { provider: store.model.slice(0, at), model: store.model.slice(at + 1) }),
+        ...(store.session === NO_SESSION ? {} : { session: store.session }),
+        ...(draft ? { resolver: JSON.stringify(draft) } : {}),
+      })
       .then((result) => {
         if (!result.data) return
         setStore({ sample: result.data, sampleProject: directory })
@@ -816,11 +989,35 @@ function LayerSample(props: { layer: Layer; catalog: Catalog; onSelect: (id: str
             options={(agents.data ?? []).map((agent) => agent.name)}
             current={store.agent}
             label={agentLabel}
-            onSelect={(name) => name && setStore({ agent: name, sample: undefined })}
+            onSelect={(name) => name && setStore({ agent: name, session: NO_SESSION, sample: undefined })}
+          />
+        </Field>
+        <Field group label={language.t("operator.column.model")} hint={language.t("operator.help.sampleModel")}>
+          <SelectV2<string>
+            appearance="base"
+            aria-label={language.t("operator.column.model")}
+            options={models()}
+            current={store.model}
+            label={(value) => (value === AGENT_MODEL ? language.t("operator.layerRules.agentModel") : value)}
+            onSelect={(value) => value && setStore({ model: value, sample: undefined })}
+          />
+        </Field>
+        <Field group label={language.t("operator.layerRules.session")} hint={language.t("operator.help.sampleSession")}>
+          <SelectV2<string>
+            appearance="base"
+            aria-label={language.t("operator.layerRules.session")}
+            options={[NO_SESSION, ...(sessions.data ?? []).map((item) => item.id)]}
+            current={store.session}
+            label={(id) =>
+              id === NO_SESSION
+                ? language.t("operator.layerRules.noSession")
+                : ((sessions.data ?? []).find((item) => item.id === id)?.title ?? id)
+            }
+            onSelect={(id) => id && setStore({ session: id, sample: undefined })}
           />
         </Field>
         <ButtonV2 variant="contrast" disabled={store.busy || !project()} onClick={() => void generate()}>
-          {language.t("operator.profile.sample")}
+          {language.t(props.draft ? "operator.layerRules.testResolve" : "operator.profile.sample")}
         </ButtonV2>
       </div>
       <Show when={store.error}>

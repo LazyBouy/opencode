@@ -91,8 +91,12 @@ const PromptPlugin: Plugin = async (input) => {
       if (!hook.agent) return
       const loaded = await context()
       const setting = loaded.agents[hook.agent]
-      // OpenCode's per-request Dynamic layers through the pipeline (dynamic-layers.ts); without it, as
-      // upstream wrote them.
+      // OpenCode's per-request Dynamic layers, and the agent's layers with rules of their own, through the
+      // pipeline (dynamic-layers.ts); without it, OpenCode's as upstream wrote them and yours as written.
+      const custom = OperatorProfile.ruledLayers(
+        loaded.catalog,
+        OperatorProfile.slotsFor(loaded.catalog, { agent: hook.agent, setting, project: loaded.project }),
+      )
       const resolved = instance
         ? await OperatorRegistry.dynamicLayers
             .resolve?.({
@@ -101,6 +105,7 @@ const PromptPlugin: Plugin = async (input) => {
               model: hook.model,
               ...(hook.sessionID ? { sessionID: hook.sessionID } : {}),
               instructions: hook.parts.instructions,
+              ...(custom.length ? { custom } : {}),
             })
             .catch(() => undefined)
         : undefined
@@ -111,7 +116,7 @@ const PromptPlugin: Plugin = async (input) => {
         setting,
         model: hook.model,
         parts: hook.parts,
-        dynamic: await written(instance, hook.sessionID, loaded, hook.agent),
+        ...(resolved ? {} : { dynamic: await written(instance, hook.sessionID, loaded, hook.agent) }),
         ...(resolved ? { resolved: resolved as OperatorProfile.AssembleInput["resolved"] } : {}),
       })
       if (fiber)

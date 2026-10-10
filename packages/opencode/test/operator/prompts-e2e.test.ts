@@ -12,6 +12,8 @@ import { OperatorProfile } from "@/operator/profile"
 import { OperatorProfileStore } from "@/operator/profile-store"
 import { OperatorPrompts } from "@/operator/prompts"
 import { OperatorPromptText } from "@/operator/prompt-text"
+import type { OperatorResolver } from "@/operator/resolver"
+import { OperatorResolverBuiltins as B } from "@/operator/resolver-builtins"
 import { SessionCompaction } from "@/session/compaction"
 import { Session } from "@/session/session"
 import { ToolRegistry } from "@/tool/registry"
@@ -332,6 +334,179 @@ unix("a Dynamic layer's resolution: Instructions keeps AGENTS.md, the rest lost 
         `base.${preview.base.slice(5)}`,
       )
       expect(base.trace[1]).toMatchObject({ kind: "model-rule", detail: "no other rule matches" })
+    }),
+  ),
+)
+
+// A profile like OpenCode's whose dynamic slot also holds (or holds in place of) these layers, as the project's default.
+const useDynamic = (key: string, layers: ReadonlyArray<string>, without: ReadonlyArray<string> = []) =>
+  Effect.gen(function* () {
+    const store = yield* OperatorProfileStore.Service
+    const opencode = OperatorProfile.BUILTIN_PROFILES.find((item) => item.id === OperatorProfile.OPENCODE_PROFILE)!
+    const dynamic = opencode.slots.dynamic!.filter((id) => !without.includes(id))
+    const profile = yield* store.saveProfile("opencode", undefined, {
+      name: "Ruled",
+      group: opencode.group,
+      slots: { ...opencode.slots, dynamic: [...dynamic, ...layers] },
+    })
+    yield* store.setProject(key, { defaultProfile: profile.id })
+  })
+
+unix("a Dynamic layer with rules of its own: a glob by recency, top 3, as Test resolve shows and a request sends", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      const { directory, llm } = yield* configure()
+      const store = yield* OperatorProfileStore.Service
+      const prompts = yield* OperatorPrompts.Service
+      const key = (yield* prompts.preview({ agent: "build" })).project.key
+      for (const [index, name] of ["a", "b", "c", "d", "e"].entries()) {
+        const file = path.join(directory, "notes", `${name}.md`)
+        yield* write(file, `note ${name}`)
+        const at = new Date(Date.UTC(2026, 0, 1 + index))
+        yield* Effect.promise(() => fs.utimes(file, at, at))
+      }
+      const resolver: OperatorResolver.Resolver = {
+        sources: [{ kind: "file", location: "notes/*.md", name: "Notes" }],
+        filter: [{ kind: "available", need: "text" }],
+        score: [{ kind: "recency", weight: 1 }],
+        select: { policy: "top", n: 3 },
+        template: { header: "<notes>\n", item: "- {name}: {text}", separator: "\n", footer: "\n</notes>" },
+      }
+      // Without a helper source the layer needs no prompt; its rules are kept in its file.
+      const notes = yield* store.saveLayer("opencode", undefined, {
+        name: "Recent notes",
+        type: "dynamic",
+        text: "",
+        resolver,
+      })
+      expect(notes.resolver).toEqual(resolver)
+      const file = OperatorProfileStore.itemFile("opencode", "layer", notes.id)
+      expect(yield* Effect.promise(() => Bun.file(file).text())).toContain("resolver:")
+      expect((yield* store.catalog("opencode")).layers.find((item) => item.id === notes.id)?.resolver).toEqual(resolver)
+      yield* useDynamic(key, [notes.id])
+
+      const expected = "<notes>\n- e.md: note e\n- d.md: note d\n- c.md: note c\n</notes>"
+      const tested = yield* prompts.sample({ agent: "build", layer: notes.id })
+      expect(tested.text).toBe(expected)
+      expect(tested.trace[0]).toEqual({ kind: "rules", name: "Recent notes" })
+      expect(
+        tested.resolution!.candidates.filter((item) => !item.selected).map((item) => [item.name, item.why]),
+      ).toEqual([
+        ["a.md", "not in the top 3"],
+        ["b.md", "not in the top 3"],
+      ])
+      // Draft rules are tried without saving them.
+      const draft = yield* prompts.sample({
+        agent: "build",
+        layer: notes.id,
+        resolver: { ...resolver, select: { policy: "top", n: 1 } },
+      })
+      expect(draft.text).toBe("<notes>\n- e.md: note e\n</notes>")
+      // The preview and a request send what Test resolve showed.
+      const preview = yield* prompts.preview({ agent: "build" })
+      expect(preview.sections.find((item) => item.layer === notes.id)?.text).toBe(expected)
+      const seen: Array<{ agent: string; sent: string[] }> = []
+      promptAudit.listen = (entry) => seen.push(entry)
+      yield* llm.text("ok")
+      yield* send((yield* (yield* Session.Service).create({ title: "Notes" })).id, "hello", "build")
+      expect(seen.find((item) => item.agent === "build")!.sent[0]).toContain(expected)
+    }),
+  ),
+)
+
+unix(
+  "OpenCode's per-request rules give OpenCode's texts in a layer of yours; an edited copy changes only its own",
+  () =>
+    withGlobal(() =>
+      Effect.gen(function* () {
+        const { directory, llm } = yield* configure()
+        yield* write(path.join(directory, "AGENTS.md"), "Project rules\n")
+        yield* write(path.join(directory, "CONTEXT.md"), "Glossary\n")
+        const store = yield* OperatorProfileStore.Service
+        const prompts = yield* OperatorPrompts.Service
+        const key = (yield* prompts.preview({ agent: "build" })).project.key
+        // Edit a copy: one of your Dynamic layers with OpenCode's rules reads its sources the same way.
+        for (const id of B.EDITABLE) {
+          const copy = yield* store.saveLayer("opencode", undefined, {
+            name: `${id} – copy`,
+            type: "dynamic",
+            text: "",
+            resolver: B.RESOLVERS[id]!,
+          })
+          const mine = yield* prompts.sample({ agent: "build", layer: copy.id })
+          const opencode = yield* prompts.sample({ agent: "build", layer: id })
+          expect({ id, text: mine.text }).toEqual({ id, text: opencode.text })
+        }
+        // Its rules edited: Instructions with every project file, in place of OpenCode's.
+        const rules = B.RESOLVERS[B.INSTRUCTIONS]!
+        const edited = yield* store.saveLayer("opencode", undefined, {
+          name: "Every instruction file",
+          type: "dynamic",
+          text: "",
+          resolver: { ...rules, select: { ...rules.select, per: { config: "all", project: "all" } } },
+        })
+        yield* useDynamic(key, [edited.id], [B.INSTRUCTIONS])
+        const seen: Array<{
+          agent: string
+          sent: string[]
+          sections?: ReadonlyArray<OperatorProfile.AssembledSection>
+        }> = []
+        promptAudit.listen = (entry) => seen.push(entry)
+        yield* llm.text("ok")
+        yield* send((yield* (yield* Session.Service).create({ title: "Rules" })).id, "hello", "build")
+        const build = seen.find((item) => item.agent === "build")!
+        expect(build.sent[0]).toContain(`Instructions from: ${path.join(directory, "AGENTS.md")}\nProject rules\n`)
+        expect(build.sent[0]).toContain(`Instructions from: ${path.join(directory, "CONTEXT.md")}\nGlossary\n`)
+        const section = build.sections!.find((item) => item.layer === edited.id)!
+        expect(section.parity).toBeUndefined()
+        expect(section.resolution!.candidates.filter((item) => item.selected).length).toBe(2)
+      }),
+    ),
+)
+
+unix("rules of their own only for Dynamic layers; OpenCode's are kept by not keeping them", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      yield* configure()
+      const store = yield* OperatorProfileStore.Service
+      const rules = B.RESOLVERS[B.SKILLS]!
+      const refused = (input: Parameters<typeof store.saveLayer>[2], id?: string) =>
+        store.saveLayer("opencode", id, input).pipe(
+          Effect.flip,
+          Effect.map((error) => error.message),
+        )
+      expect(yield* refused({ name: "Role", type: "identity", text: "x", resolver: rules })).toBe(
+        "Only Dynamic layers have rules of their own",
+      )
+      expect(
+        yield* refused({ name: "Top", type: "dynamic", text: "", resolver: { ...rules, select: { policy: "top" } } }),
+      ).toBe("Top N needs N")
+      // A helper source writes from the prompt: without one, refused.
+      expect(yield* refused({ name: "Helper", type: "dynamic", text: "", resolver: B.HELPER_RESOLVER })).toBe(
+        "A Dynamic layer needs a prompt",
+      )
+      // Your layers written by a helper have its rules, not written in their file.
+      const written = yield* store.saveLayer("opencode", undefined, {
+        name: "Written",
+        type: "dynamic",
+        text: "",
+        prompt: "Say hello.",
+      })
+      expect(written.resolver).toEqual(B.HELPER_RESOLVER)
+      const file = OperatorProfileStore.itemFile("opencode", "layer", written.id)
+      expect(yield* Effect.promise(() => Bun.file(file).text())).not.toContain("resolver:")
+      // A namespace's version of a per-request layer follows OpenCode's rules until it has its own.
+      const acme = yield* store.createNamespace({ name: "Acme", folder: yield* folderFor("Acme") })
+      const version = (yield* store.catalog(acme.id)).layers.find((item) => item.replaces === B.SKILLS)!
+      expect(version.resolver).toBeUndefined()
+      yield* store.saveLayer(acme.id, version.id, { name: version.name, type: version.type, text: "", resolver: rules })
+      expect((yield* store.catalog(acme.id)).layers.find((item) => item.id === version.id)?.resolver).toBeUndefined()
+      const own = { ...rules, select: { policy: "top" as const, n: 2 } }
+      yield* store.saveLayer(acme.id, version.id, { name: version.name, type: version.type, text: "", resolver: own })
+      expect((yield* store.catalog(acme.id)).layers.find((item) => item.id === version.id)?.resolver).toEqual(own)
+      yield* store.saveLayer(acme.id, version.id, { name: version.name, type: version.type, text: "", resolver: null })
+      expect((yield* store.catalog(acme.id)).layers.find((item) => item.id === version.id)?.resolver).toBeUndefined()
+      expect((yield* store.catalog(acme.id)).resolvers[B.SKILLS]).toEqual(rules)
     }),
   ),
 )

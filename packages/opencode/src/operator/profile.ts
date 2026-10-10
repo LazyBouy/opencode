@@ -94,6 +94,10 @@ export const Layer = Schema.Struct({
   file: Schema.optional(Schema.String).annotate({
     description: "OpenCode's built-ins: the file in OpenCode's code the text comes from (repo path)",
   }),
+  resolver: Schema.optional(OperatorResolver.Resolver).annotate({
+    description:
+      "Your Dynamic layers, and copies of OpenCode's per-request layers with rules of their own: how the text is resolved (dynamic_layer_resolution_spec.md §6)",
+  }),
 }).annotate({ identifier: "OperatorPromptLayer" })
 
 // One step of how a section of a prompt was resolved, for the agent page to trace it to its source:
@@ -115,6 +119,7 @@ export const TraceStep = Schema.Struct({
     "file",
     "org-purpose",
     "dynamic-written",
+    "rules",
     "written",
     "references",
     "config",
@@ -124,7 +129,7 @@ export const TraceStep = Schema.Struct({
     "skill",
   ]).annotate({
     description:
-      "agent-own / agent-none: the agent has its own prompt, or none; agent-file / agent-config / agent-builtin: where it is defined (its agent file, a config file, OpenCode's own definition); model-rule: the base prompt's model and the rule that chose it; builtin-layer / copy-layer / own-layer / layer: the layer the text is in; file: the file it is in; org-purpose: the namespace's purpose; dynamic-written: written for each session by the dynamic generator; written: written by OpenCode for each request; references / config: the references in config files; instruction-file / instruction-url, mcp, skill: what a per-request text was made from",
+      "agent-own / agent-none: the agent has its own prompt, or none; agent-file / agent-config / agent-builtin: where it is defined (its agent file, a config file, OpenCode's own definition); model-rule: the base prompt's model and the rule that chose it; builtin-layer / copy-layer / own-layer / layer: the layer the text is in; file: the file it is in; org-purpose: the namespace's purpose; dynamic-written: written for each session by the dynamic generator; rules: resolved by the layer's own rules; written: written by OpenCode for each request; references / config: the references in config files; instruction-file / instruction-url, mcp, skill: what a per-request text was made from",
   }),
   name: Schema.optional(Schema.String).annotate({ description: "An agent, layer, model, namespace or server" }),
   path: Schema.optional(Schema.String).annotate({ description: "A file or URL" }),
@@ -390,6 +395,29 @@ export function isWrittenDynamic(layer: Layer | undefined): boolean {
   return layer?.type === DYNAMIC && layer.origin === "user" && !layer.replaces
 }
 
+// The rules a Dynamic layer is resolved by: its own (yours; a copy's edited rules), else OpenCode's for
+// its built-in. Your layers written by a helper have one helper source.
+export function resolverOf(layer: Layer | undefined): OperatorResolver.Resolver | undefined {
+  if (!layer) return undefined
+  if (layer.origin === "user" && layer.resolver) return layer.resolver
+  if (isWrittenDynamic(layer)) return B.HELPER_RESOLVER
+  return B.RESOLVERS[layer.origin === "user" ? (layer.replaces ?? layer.id) : layer.id]
+}
+// A layer resolved by rules of its own (dynamic-layers.ts reads its sources), not OpenCode's.
+export function hasOwnRules(layer: Layer | undefined): boolean {
+  return !!layer && layer.origin === "user" && (!!layer.resolver || isWrittenDynamic(layer))
+}
+
+// The layers of these slots resolved by rules of their own, with their rules (dynamic-layers.ts).
+export function ruledLayers(catalog: Catalog, slots: Slots) {
+  const ids = [...new Set(Object.values(slots).flat())]
+  return ids.flatMap((id) => {
+    const layer = findLayer(catalog, id)
+    const resolver = hasOwnRules(layer) ? resolverOf(layer) : undefined
+    return layer && resolver ? [{ layer, resolver }] : []
+  })
+}
+
 // A helper profile: its group holds the Helper type.
 export function isHelper(catalog: Catalog, profile: { group: string }) {
   return groups(catalog).some((item) => item.id === profile.group && item.types.includes(HELPER))
@@ -549,6 +577,14 @@ export function sample(input: AssembleInput, id: string) {
     }
   if ((found.replaces && !isPerRequest(found)) || found.type === HELPER)
     return { text: found.text, source: found.name, trace: layerTrace(input.catalog, found) }
+  const ruled = ownRules(input, found)
+  if (ruled)
+    return {
+      text: ruled.text,
+      source: found.name,
+      trace: ruled.trace,
+      resolution: ruled.resolution,
+    }
   if (isWrittenDynamic(found))
     return {
       text: input.dynamic?.get(found.id) ?? "",
@@ -690,6 +726,20 @@ function purpose(input: AssembleInput): Found[] {
   ]
 }
 
+// A layer with rules of its own, as the pipeline resolved it for this request (`input.resolved`, by the
+// layer's id); undefined when it has none or was not resolved.
+function ownRules(input: AssembleInput, layer: Layer) {
+  if (!hasOwnRules(layer)) return undefined
+  const done = input.resolved?.get(layer.id)
+  if (!done) return undefined
+  const helperOnly = !layer.resolver || sameRules(layer.resolver, B.HELPER_RESOLVER)
+  const trace: TraceStep[] = [
+    helperOnly ? { kind: "dynamic-written", name: layer.name } : { kind: "rules", name: layer.name },
+    ...layerTrace(input.catalog, layer),
+  ]
+  return { text: done.text, trace, resolution: done.trace }
+}
+
 // The text a slot entry stands for in this request, with how it was resolved.
 function resolve(input: AssembleInput, copies: Map<string, Layer>, entry: string): Found[] {
   const listed = findLayer(input.catalog, entry)
@@ -786,6 +836,13 @@ function resolve(input: AssembleInput, copies: Map<string, Layer>, entry: string
       ...(found.resolution ? { resolution: found.resolution } : {}),
       ...(found.parity ? { parity: found.parity } : {}),
     })
+  // Your Dynamic layers, and copies of OpenCode's with rules of their own: the pipeline's text for this
+  // request (dynamic-layers.ts). Without it (no resolution was made), as before.
+  const ruled = ownRules(input, listed)
+  if (ruled)
+    return ruled.text
+      ? [{ layer: listed, text: ruled.text, source: listed.name, trace: ruled.trace, resolution: ruled.resolution }]
+      : []
   // Copies stand in for their built-in where it is used; on their own they add nothing.
   // A helper agent's prompt is its helper layer, a copy or OpenCode's.
   if (found.type === HELPER)
@@ -912,6 +969,26 @@ export function checkSlots(catalog: Catalog, shape: { group: string; slots: Slot
   if (twice) return `A profile can hold one copy of ${twice.slice(PREFIX.length)}`
   return undefined
 }
+
+// A layer's own rules (dynamic_layer_resolution_spec.md §6): the reason they are refused, or undefined.
+export function checkResolver(layer: { type: string; replaces?: string }, resolver: OperatorResolver.Resolver) {
+  const written = layer.type === DYNAMIC && !layer.replaces
+  if (!written && !(layer.replaces && B.EDITABLE.includes(layer.replaces)))
+    return "Only Dynamic layers have rules of their own"
+  if (!resolver.sources.length) return "The rules need at least one source"
+  if (resolver.sources.some((source) => source.kind === "memory")) return "Memory sources come with the memory layers"
+  if (!written && resolver.sources.some((source) => source.kind === "helper"))
+    return "Only your Dynamic layers have a helper prompt to write from"
+  if (resolver.select.policy === "top" && !(resolver.select.n && resolver.select.n >= 1)) return "Top N needs N"
+  if (!resolver.template.item.trim()) return "The template needs an item"
+  return undefined
+}
+// The rules a layer has without rules of its own: the helper's (yours), OpenCode's (a copy).
+export function defaultResolver(layer: { type: string; replaces?: string }) {
+  return layer.type === DYNAMIC && !layer.replaces ? B.HELPER_RESOLVER : B.RESOLVERS[layer.replaces ?? ""]
+}
+export const sameRules = (a: OperatorResolver.Resolver | undefined, b: OperatorResolver.Resolver | undefined) =>
+  JSON.stringify(a) === JSON.stringify(b)
 
 export function checkLayer(catalog: Catalog, input: { name: string; type: string; replaces?: string }) {
   if (!input.name.trim()) return "A layer needs a name"

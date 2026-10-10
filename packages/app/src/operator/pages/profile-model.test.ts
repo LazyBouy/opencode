@@ -43,6 +43,15 @@ const catalog: Catalog = {
   ],
   projects: [{ key: "/repo", name: "repo", namespace: "acme", defaultProfile: "p2" }],
   agents: [{ project: "/repo", name: "build", profile: "p1" }],
+  resolvers: {},
+  editableRules: [],
+  helperRules: {
+    sources: [{ kind: "helper", location: "prompt" }],
+    filter: [],
+    score: [],
+    select: { policy: "one" },
+    template: { item: "{text}", separator: "\n" },
+  },
 }
 
 describe("profile model", () => {

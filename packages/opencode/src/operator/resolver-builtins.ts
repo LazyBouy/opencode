@@ -138,6 +138,20 @@ export const RESOLVERS: Readonly<Record<string, OperatorResolver.Resolver>> = {
 
 export const isBuiltinResolver = (id: string) => id in RESOLVERS
 
+// Your Dynamic layers written by a helper (before they had rules of their own): one helper source, the
+// layer's prompt, written once per session. The same text as before.
+export const HELPER_RESOLVER: OperatorResolver.Resolver = {
+  sources: [{ kind: "helper", location: "prompt", name: "Helper" }],
+  filter: [{ kind: "available", need: "text" }],
+  score: [],
+  select: { policy: "one" },
+  template: { item: "{text}", separator: "\n" },
+}
+
+// The layers whose rules can be edited in a copy: the sources of OpenCode's per-request layers can be
+// read for any layer (dynamic-layers.ts). The base and agent prompts are chosen in the profile itself.
+export const EDITABLE = [ENVIRONMENT, REFERENCES, INSTRUCTIONS, MCP, SKILLS]
+
 // Candidates, from what was read.
 
 export function environment(input: {

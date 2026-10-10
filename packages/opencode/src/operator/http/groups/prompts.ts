@@ -80,6 +80,13 @@ export const OperatorPromptApi = HttpApi.make("operator-prompt")
             layer: Schema.String,
             provider: Schema.optional(Schema.String),
             model: Schema.optional(Schema.String),
+            session: Schema.optional(Schema.String).annotate({
+              description: "Test resolve: a session whose reads to use (its helper texts, its permissions)",
+            }),
+            resolver: Schema.optional(Schema.String).annotate({
+              description:
+                "Test resolve: draft rules for the layer (an OperatorResolver as JSON), in place of its saved ones",
+            }),
           }),
           success: described(OperatorPrompts.Sample, "What the layer fills in"),
           error: [ApiPromptNotFoundError, ApiPromptGenerateError],
@@ -88,7 +95,7 @@ export const OperatorPromptApi = HttpApi.make("operator-prompt")
             identifier: "operator.prompt.sample",
             summary: "Sample a layer",
             description:
-              "What one layer fills in for an agent of this project and a model: a Dynamic layer's text (the agent's prompt, the base prompt for the model, the environment, skills, MCP instructions, instruction files; your Dynamic layers are written by the dynamic generator), or a fixed layer's text.",
+              "What one layer fills in for an agent of this project and a model: a Dynamic layer's text (the agent's prompt, the base prompt for the model, the environment, skills, MCP instructions, instruction files; your Dynamic layers are written by the dynamic generator), or a fixed layer's text. With `resolver` (and `session`), Test resolve: the layer's text and trace by draft rules, without sending anything.",
           }),
         ),
         HttpApiEndpoint.get("plugins", OperatorPromptPaths.plugins, {

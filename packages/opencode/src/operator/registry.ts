@@ -44,5 +44,7 @@ export const dynamicLayers: {
     sessionPermission?: unknown
     /** Upstream's instruction texts for this request (URLs are not fetched again). */
     instructions?: ReadonlyArray<string>
+    /** The agent's layers with rules of their own (OperatorDynamicLayers.Custom), resolved by their id. */
+    custom?: ReadonlyArray<{ layer: unknown; resolver: unknown }>
   }) => Promise<ReadonlyMap<string, { text: string; trace: unknown }>>
 } = {}
