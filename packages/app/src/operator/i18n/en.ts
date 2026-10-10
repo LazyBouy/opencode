@@ -180,6 +180,7 @@ export const dict = {
     "Saved; applies to new sessions after the project reloads (when no session is running). The agent's sessions use it now.",
   "operator.reply.covered": "Also answered {{count}} more waiting requests the rule covers",
   "operator.reply.detail.command": "Command",
+  "operator.reply.detail.title": "Title",
   "operator.reply.detail.file": "File",
   "operator.reply.detail.url": "URL",
   "operator.reply.detail.subagent": "Subagent",

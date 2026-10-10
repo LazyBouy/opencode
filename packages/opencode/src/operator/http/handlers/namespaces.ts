@@ -4,6 +4,7 @@ import { OperatorFolders } from "@/operator/folders"
 import { OperatorNamespaceScope } from "@/operator/namespace-scope"
 import { OperatorProfile } from "@/operator/profile"
 import { OperatorLayout } from "@/operator/layout"
+import { OperatorMemoryDefaults } from "@/operator/memory-defaults"
 import { OperatorProfileStore } from "@/operator/profile-store"
 import { OperatorProjectCopy } from "@/operator/project-copy"
 import { OperatorProjectSessions } from "@/operator/project-sessions"
@@ -41,7 +42,18 @@ export const operatorNamespaceHandlers = HttpApiBuilder.group(OperatorRootApi, "
 
     return handlers
       .handle("list", () => store.namespaces())
-      .handle("create", (ctx) => store.createNamespace(ctx.payload).pipe(Effect.mapError(apiError)))
+      .handle("create", (ctx) =>
+        store.createNamespace(ctx.payload).pipe(
+          // Its memory lines (memory_spec.md §6.1), shown and editable in its Permissions. An adopted
+          // folder keeps its .opencode as it is.
+          Effect.tap((created) =>
+            ctx.payload.adopt
+              ? Effect.void
+              : Effect.promise(() => OperatorMemoryDefaults.forNamespace(created.id).catch(() => false)),
+          ),
+          Effect.mapError(apiError),
+        ),
+      )
       .handle("folderPreview", (ctx) =>
         Effect.promise(() => OperatorProfileStore.namespacePreview(ctx.query.name)).pipe(
           Effect.flatMap((found) => ("error" in found ? Effect.fail(invalid(found.error!)) : Effect.succeed(found))),

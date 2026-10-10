@@ -18,6 +18,11 @@ export const SKILLS = `${P}generated.skills`
 export const BASE = `${P}slot.base`
 export const AGENT = `${P}slot.agent`
 export const AGENT_OR_BASE = `${P}slot.agent-or-base`
+// The memory layers (memory_spec.md §4.1): one per level.
+export const MEMORY_NAMESPACE = `${P}generated.memory-namespace`
+export const MEMORY_PROJECT = `${P}generated.memory-project`
+export const MEMORY_AGENT = `${P}generated.memory-agent`
+export const MEMORY_LAYERS = [MEMORY_NAMESPACE, MEMORY_PROJECT, MEMORY_AGENT]
 
 export const INSTRUCTION_NAMES = ["AGENTS.md", "CLAUDE.md", "CONTEXT.md"] as const
 

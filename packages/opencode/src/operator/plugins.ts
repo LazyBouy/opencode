@@ -1,6 +1,7 @@
 import type { Plugin } from "@opencode-ai/plugin"
 import { Context, Fiber } from "effect"
 import { InstanceRef } from "@/effect/instance-ref"
+import { OperatorMemoryTool } from "./memory-tool"
 import { OperatorPermissionEffective } from "./permission-effective"
 import { OperatorProfile } from "./profile"
 import { OperatorProfileStore } from "./profile-store"
@@ -43,6 +44,8 @@ const PromptPlugin: Plugin = async (input) => {
   }
 
   return {
+    // The fork's own tools: short-term memory (memory-tool.ts).
+    tool: { memory: OperatorMemoryTool.memoryTool },
     // Registers the model call for recording (provider-tap.ts): its id goes in a header the provider tap
     // removes before the request leaves. Recording never gets in the way of the request.
     "chat.headers": async (hook, output) => {

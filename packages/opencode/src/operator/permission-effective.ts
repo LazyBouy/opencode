@@ -21,6 +21,8 @@ export type Effective = {
   readonly rules: ReadonlyArray<Rule>
   /** The lines in levels; absent without the fork's handler (then `rules` is upstream's list). */
   readonly lines?: ReadonlyArray<Model.Line<unknown>>
+  /** The fork's opt-in tools (`declareOptIn`) offered here; the others are not (and none without the hook). */
+  readonly offered?: ReadonlyArray<string>
 }
 
 export type Draft = { agentRules?: ReadonlyArray<Rule>; sessionRules?: ReadonlyArray<Rule> }
@@ -33,6 +35,15 @@ export const handlers: {
     draft?: Draft
     permission?: string
   }) => Effect.Effect<Effective>
+  /**
+   * The fork's opt-in tools offered to this agent here (memory-service.ts): the handler above adds them
+   * to the effective set, so every list built from it leaves the others out.
+   */
+  offered?: (input: {
+    sessionID?: string
+    agent: string
+    lines: ReadonlyArray<Model.Line<unknown>>
+  }) => Effect.Effect<ReadonlyArray<string>>
 } = {}
 
 // The session a loop step runs for, by fiber: the fork's messages hook records it at the start of the
@@ -160,7 +171,19 @@ function reachable(permission: string, effective: Effective, tool?: string) {
 
 // The tools no call could ever be allowed or asked for (§4): dropped from the list.
 export function unreachable(tools: ReadonlyArray<string>, effective: Effective) {
-  return new Set(tools.filter((tool) => !reachable(permissionOf(tool), effective, tool)))
+  return new Set(
+    tools.filter(
+      (tool) =>
+        (optIn.has(tool) && !effective.offered?.includes(tool)) || !reachable(permissionOf(tool), effective, tool),
+    ),
+  )
+}
+
+// The fork's tools offered only where a hook says so (`handlers.offered`): the memory tool, so OpenCode's
+// tool list stays upstream's unless memory is opted into.
+const optIn = new Set<string>()
+export function declareOptIn(tool: string) {
+  optIn.add(tool)
 }
 
 // The "allowed only for" note of a tool's permission (permission-model.ts `note`), if it gets one.

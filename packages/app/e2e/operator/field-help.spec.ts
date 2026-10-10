@@ -21,7 +21,9 @@ test("every field has an (i) with its help, and Settings → Appearance → Fiel
   // The (i) beside a field shows its help on hover; it does not change the field's name.
   const about = page.getByRole("button", { name: "About Home folder" })
   await about.hover()
-  await expect(page.getByRole("tooltip")).toContainText("Sessions started as this agent open in this folder.")
+  await expect(page.getByRole("tooltip")).toContainText(
+    "Sessions started as this agent open in this folder, relative to the project",
+  )
   await expect(page.getByLabel("Home folder", { exact: true })).toBeVisible()
   await expect(page.getByRole("button", { name: "About Temperature" })).toBeVisible()
   await expect(page.getByRole("group", { name: "Mode" })).toBeVisible()

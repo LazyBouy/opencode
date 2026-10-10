@@ -32,6 +32,8 @@ export type Settings = {
   mcpLoginsCopied?: boolean
   /** The upgrade's moves were confirmed once (§12.3); what wasn't moved stays flagged "Not in place". */
   upgradeDone?: boolean
+  /** The `memory` permission's default lines were written once (memory-defaults.ts). */
+  memoryDefaults?: boolean
 }
 
 // Read on every permission ask: through the file cache (a file is read again only when it changed).
@@ -46,6 +48,7 @@ export async function readSettings(): Promise<Settings> {
     ...(typeof data.workingDir === "string" && data.workingDir ? { workingDir: data.workingDir } : {}),
     ...(data.mcpLoginsCopied === true ? { mcpLoginsCopied: true } : {}),
     ...(data.upgradeDone === true ? { upgradeDone: true } : {}),
+    ...(data.memoryDefaults === true ? { memoryDefaults: true } : {}),
   }
 }
 

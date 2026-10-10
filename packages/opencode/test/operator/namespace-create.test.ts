@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
+import { parse } from "jsonc-parser"
+import { OperatorMemoryDefaults } from "@/operator/memory-defaults"
 import { OperatorProfileStore } from "@/operator/profile-store"
 import { Server } from "../../src/server/server"
 import { resetDatabase } from "../fixture/db"
@@ -73,6 +75,14 @@ describe("a new namespace", () => {
       folder: path.join(work, "acme-tools"),
       inPlace: true,
     })
+  })
+
+  test("gets its memory lines at its level (memory_spec.md §6.1)", async () => {
+    const made = await request<{ id: string }>("POST", "/operator/namespaces", { name: "Acme" })
+    expect(made.status).toBe(200)
+    created.push(made.body.id)
+    const text = await fs.readFile(path.join(work, "acme", ".opencode", "opencode.jsonc"), "utf8")
+    expect(parse(text).permission.memory).toEqual(OperatorMemoryDefaults.NAMESPACE)
   })
 
   test("an existing folder that isn't empty is used only when asked", async () => {

@@ -43,6 +43,35 @@ test("the reply card shows who asks and why, and Allow for session sends the edi
   await expect(fields).toContainText("Fix the parser")
 })
 
+test("a memory request's card shows the memory's title, file, description and a diff of the text", async ({ page }) => {
+  const state = await mockOperator(page)
+  state.pending.splice(0, state.pending.length, {
+    ...pendingRequest,
+    request: {
+      ...pendingRequest.request,
+      id: "per_op_memory",
+      permission: "memory",
+      patterns: ["WRITE(project/release-checklist.md)"],
+      always: ["WRITE(project/*)"],
+      metadata: {
+        title: "Release checklist",
+        description: "Steps before tagging a release",
+        path: "/repo/.memory/release-checklist.md",
+        diff: "--- release-checklist.md\n+++ release-checklist.md\n+1. Run the tests",
+      },
+    },
+  } as never)
+  await page.goto("/operator/inbox")
+  await page.locator('[data-component="operator-ask"][data-request="per_op_memory"]').click()
+  const card = page.getByRole("dialog").getByTestId("reply-card")
+  const details = card.locator('[data-slot="operator-reply-details"]')
+  await expect(details).toContainText("Release checklist")
+  await expect(details).toContainText("/repo/.memory/release-checklist.md")
+  await expect(details).toContainText("Steps before tagging a release")
+  await card.locator('[data-slot="operator-reply-diff"] summary').click()
+  await expect(card.locator('[data-slot="operator-reply-diff"] pre')).toContainText("+1. Run the tests")
+})
+
 test("Deny sends the note back to the agent", async ({ page }) => {
   const state = await mockOperator(page)
   await page.goto("/operator/inbox?ask=per_op_1")

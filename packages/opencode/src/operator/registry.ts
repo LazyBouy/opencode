@@ -31,6 +31,21 @@ export const helperTexts: {
   }) => Promise<Record<string, string>>
 } = {}
 
+export const memory: {
+  /**
+   * What the memory tool needs for a call of a session (memory-service.ts): the folders of its three
+   * levels, whether it runs incognito (a subagent: namespace and project memory only, never writing),
+   * and each level's READ decision (a denied level is left out of `list`).
+   */
+  context?: (input: { instance: unknown; sessionID: string; agent: string }) => Promise<{
+    project: string
+    namespace: string
+    folders: { namespace: string; project: string; agent?: string }
+    incognito: boolean
+    read: Record<"namespace" | "project" | "agent", "allow" | "ask" | "deny">
+  }>
+} = {}
+
 export const dynamicLayers: {
   /**
    * OpenCode's per-request Dynamic layers (Environment, References, Instructions, MCP, Skills) resolved

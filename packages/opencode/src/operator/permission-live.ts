@@ -427,7 +427,16 @@ const layer = Layer.effect(
         ...(input.draft?.sessionRules ? { sessionLines: input.draft.sessionRules } : {}),
         ...(input.permission ? { permission: input.permission } : {}),
       })
-      return { lines: built.lines, rules: Model.compile(built.lines) }
+      // The fork's opt-in tools this agent is offered here (memory-service.ts).
+      const hook = OperatorPermissionEffective.handlers.offered
+      const offered = hook
+        ? yield* hook({
+            ...(input.sessionID ? { sessionID: input.sessionID } : {}),
+            agent: input.agent,
+            lines: built.lines,
+          }).pipe(Effect.orElseSucceed(() => [] as ReadonlyArray<string>))
+        : []
+      return { lines: built.lines, rules: Model.compile(built.lines), ...(offered.length ? { offered } : {}) }
     })
 
     yield* Effect.acquireRelease(

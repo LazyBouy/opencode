@@ -85,6 +85,8 @@ function Details(props: { metadata: { [key: string]: unknown } }) {
     (
       [
         ["command", text("command")],
+        // A memory's title (the memory tool).
+        ["title", text("title")],
         ["file", text("filePath") ?? text("filepath") ?? text("path")],
         ["url", text("url")],
         ["subagent", text("subagent_type") ?? text("agent")],
