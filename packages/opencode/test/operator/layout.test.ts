@@ -124,6 +124,21 @@ describe("a working directory", () => {
     expect(of(path.join(dir, "team", "site"), "gone")).toEqual({ namespace: "team" })
   })
 
+  test("setting it writes OpenCode's inheritance of Global into its record (§12.4); a choice stays", async () => {
+    const file = path.join(store(), "opencode", "namespace.json")
+    const read = async () => JSON.parse(await fs.readFile(file, "utf8")) as Record<string, unknown>
+    await record("opencode")
+    // Blank: OpenCode is Global, which always has its own capabilities; nothing is written.
+    await OperatorProfileStore.settleLayout()
+    expect(await read()).not.toHaveProperty("inheritGlobal")
+    await set(path.join(work.path, "ws"))
+    await OperatorProfileStore.settleLayout()
+    expect(await read()).toMatchObject({ id: "opencode", inheritGlobal: true })
+    await record("opencode", { inheritGlobal: false })
+    await OperatorProfileStore.settleLayout()
+    expect((await read()).inheritGlobal).toBe(false)
+  })
+
   test("setting it creates Global's record, once", async () => {
     await set(path.join(work.path, "ws"))
     await OperatorProfileStore.settleLayout()

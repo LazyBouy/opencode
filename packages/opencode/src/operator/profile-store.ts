@@ -472,15 +472,25 @@ export async function ensure(env: NodeJS.ProcessEnv = process.env) {
   }
   await settleLayout()
   const project = env.OPENCODE_OPERATOR_DEFAULT_PROJECT?.trim()
-  if (current && project && path.isAbsolute(project) && !current.defaultProject)
-    await writeNamespace({ ...current, defaultProject: path.resolve(project) }).catch(() => undefined)
+  // The record as settling left it (it may have written OpenCode's inheritance).
+  const latest = await readNamespaceRecord(OperatorProfile.OPENCODE)
+  if (latest && project && path.isAbsolute(project) && !latest.defaultProject)
+    await writeNamespace({ ...latest, defaultProject: path.resolve(project) }).catch(() => undefined)
 }
 
-// With a working directory, Global is a namespace of its own: its record, and OpenCode's MCP logins
-// copied to their own keys once. Run at the start and when the working directory is set.
+// With a working directory, Global is a namespace of its own: its record, OpenCode's MCP logins copied to
+// their own keys once, and OpenCode's inheritance of Global's capabilities written into its record
+// explicitly (§12.4: on, as it was; a namespace without the field inherits too). Run at the start and when
+// the working directory is set.
 export async function settleLayout() {
   const settings = await OperatorLayout.readSettings()
   if (settings.workingDir) {
+    const opencode = path.join(root(), OperatorProfile.OPENCODE, "namespace.json")
+    const record = (await Bun.file(opencode)
+      .json()
+      .catch(() => undefined)) as Record<string, unknown> | undefined
+    if (record && typeof record.inheritGlobal !== "boolean")
+      await writeJson(opencode, { ...record, inheritGlobal: true }).catch(() => undefined)
     if (!(await readNamespaceRecord(OperatorLayout.GLOBAL))) {
       const now = Date.now()
       await writeJson(path.join(root(), OperatorLayout.GLOBAL, "namespace.json"), {
@@ -817,8 +827,8 @@ const layer = Layer.effect(
         ...(input.defaultProfile !== undefined ? { defaultProfile: input.defaultProfile || undefined } : {}),
         ...(folder?.folder ? { folder: folder.folder } : {}),
         ...(input.defaultProject !== undefined ? { defaultProject: input.defaultProject || undefined } : {}),
-        // Absent means on: only "off" is written.
-        ...(input.inheritGlobal !== undefined ? { inheritGlobal: input.inheritGlobal ? undefined : false } : {}),
+        // Absent means on; the switch writes what it is set to.
+        ...(input.inheritGlobal !== undefined ? { inheritGlobal: input.inheritGlobal } : {}),
         updatedAt: Date.now(),
       }
       // A cleared choice leaves no key behind (the response would carry it as null).
@@ -1475,7 +1485,7 @@ async function readNamespaceRecord(id: string): Promise<OperatorProfile.Namespac
     ...(typeof data.defaultProfile === "string" ? { defaultProfile: data.defaultProfile } : {}),
     ...(typeof data.folder === "string" && data.folder ? { folder: data.folder } : {}),
     ...(typeof data.defaultProject === "string" && data.defaultProject ? { defaultProject: data.defaultProject } : {}),
-    ...(data.inheritGlobal === false ? { inheritGlobal: false } : {}),
+    ...(typeof data.inheritGlobal === "boolean" ? { inheritGlobal: data.inheritGlobal } : {}),
     createdAt: typeof data.createdAt === "number" ? data.createdAt : 0,
     updatedAt: typeof data.updatedAt === "number" ? data.updatedAt : 0,
   }
