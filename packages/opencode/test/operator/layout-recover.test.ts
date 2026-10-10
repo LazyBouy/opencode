@@ -6,6 +6,7 @@ import { Global } from "@opencode-ai/core/global"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { OperatorLayoutMove } from "@/operator/layout-move"
 import { OperatorPathRewrite } from "@/operator/path-rewrite"
+import { ClaudeSessions } from "@/merge/adapter/claude/sessions"
 import { InstanceBootstrap } from "@/project/bootstrap-service"
 import { InstanceStore } from "@/project/instance-store"
 import { TestInstance } from "../fixture/fixture"
@@ -95,5 +96,40 @@ it.instance("a journal stopped while finishing is finished, not rolled back", ()
     const after = yield* readJournal("mv_finish")
     expect(after.entries[0].step).toBe("done")
     expect(after.report.status).toBe("done")
+  }),
+)
+
+it.instance("a journal stopped after Claude Code's sessions followed the folder puts them back too", () =>
+  Effect.gen(function* () {
+    const { directory } = yield* TestInstance
+    const from = path.join(directory, "old", "site")
+    const to = path.join(directory, "acme", "site")
+    const claude = path.join(directory, "claude-config")
+    const at = (cwd: string) => path.join(claude, "projects", ClaudeSessions.folderName(cwd))
+    const id = "1b2c3d4e-0000-4000-8000-000000000001"
+    // As the move left it: the folder renamed, Claude's folder renamed and its transcript's cwd rewritten.
+    yield* Effect.promise(async () => {
+      await fs.mkdir(path.dirname(from), { recursive: true })
+      await fs.mkdir(to, { recursive: true })
+      await fs.mkdir(at(to), { recursive: true })
+      await fs.writeFile(path.join(at(to), `${id}.jsonl`), JSON.stringify({ type: "user", cwd: to }) + "\n")
+    })
+    yield* journal("mv_claude", {
+      from,
+      to,
+      step: "rewriting",
+      relocated: [
+        {
+          adapter: "claude",
+          renames: [{ from: at(from), to: at(to) }],
+          rewritten: [path.join(at(to), `${id}.jsonl`)],
+        },
+      ],
+    })
+    yield* (yield* OperatorLayoutMove.Service).recover()
+    expect(yield* exists(at(to))).toBe(false)
+    const text = yield* Effect.promise(() => fs.readFile(path.join(at(from), `${id}.jsonl`), "utf8"))
+    expect(JSON.parse(text).cwd).toBe(from)
+    expect(yield* exists(path.join(from))).toBe(true)
   }),
 )

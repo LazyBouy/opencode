@@ -1,0 +1,24 @@
+# Isolated mode: the server keeps its data in named volumes instead of your home folder, for a stack that
+# must not touch your home (a demo, CI, a second install). Add this file after compose.yaml:
+#
+#   docker compose -f docker/dev/compose.yaml -f docker/dev/compose.isolated.yaml up -d --build server web
+#
+# Global's folder (the opencode-config volume) is then another file system than the workspace: moving a
+# project between Global and another namespace is refused as crossing file systems (the move plan says
+# so). Claude Code's login and transcripts are in the claude-config volume.
+services:
+  server:
+    environment:
+      HOME: /root
+      CLAUDE_CONFIG_DIR: /claude-config
+    volumes: !override # Projects are mounted at the same path as on the host, so paths shown in the UI match the host.
+      - ${WORKSPACE:-/root/projects}:${WORKSPACE:-/root/projects}
+      - opencode-data:/root/.local/share/opencode
+      - opencode-config:/root/.config/opencode
+      - opencode-state:/root/.local/state/opencode
+      - claude-config:/claude-config
+
+volumes:
+  opencode-data:
+  opencode-config:
+  opencode-state:

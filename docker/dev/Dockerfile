@@ -21,14 +21,20 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 ENV BUN_INSTALL=/opt/bun
-ENV PATH=/opt/bun/bin:/root/.local/bin:$PATH
+# Claude Code's binary is in /opt/claude/bin, ahead of the home folder's ~/.local/bin: the server can
+# have your home folder mounted over /root (compose.yaml), which must neither hide it nor swap in another.
+ENV PATH=/opt/bun/bin:/opt/claude/bin:/root/.local/bin:$PATH
 RUN curl -fsSL https://bun.sh/install | bash -s -- "bun-v${BUN_VERSION}" && bun --version
 
-# Claude Code keeps its login and transcripts under CLAUDE_CONFIG_DIR (a named volume), and stays on
-# the pinned version instead of auto-updating inside the container.
+# Claude Code keeps its login and transcripts under CLAUDE_CONFIG_DIR (compose.yaml sets it to the home
+# folder's ~/.claude; one-off containers keep the claude-config volume), and stays on the pinned version
+# instead of auto-updating inside the container.
 ENV CLAUDE_CONFIG_DIR=/claude-config
 ENV DISABLE_AUTOUPDATER=1
-RUN curl -fsSL https://claude.ai/install.sh | bash -s "${CLAUDE_CODE_VERSION}" && claude --version
+RUN curl -fsSL https://claude.ai/install.sh | bash -s "${CLAUDE_CODE_VERSION}" \
+  && install -D "$(readlink -f /root/.local/bin/claude)" /opt/claude/bin/claude \
+  && rm -rf /root/.local/bin/claude /root/.local/share/claude \
+  && claude --version
 
 # Only the files `bun install` reads, so the dependency layer is rebuilt only when they change.
 FROM base AS manifests

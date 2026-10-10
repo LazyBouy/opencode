@@ -111,6 +111,20 @@ test("a project outside OpenCode's folder moves into it, after a plan", async ({
   expect(state.prompt.moves[1]!.body).toMatchObject({ plan: "mp_1", items: ["mi_1"] })
 })
 
+test("merged agents' sessions of the folder follow it: the plan and the report say so", async ({ page }) => {
+  const state = await mockOperator(page)
+  state.prompt.moveAgents = [{ adapter: "claude", name: "Claude Code", folders: 2 }]
+  state.prompt.projects[directory]!.flag = "outside-opencode"
+  await page.goto(`/operator/projects?project=${encodeURIComponent(directory)}`)
+  await page.getByRole("dialog").getByRole("button", { name: "Move into OpenCode's folder" }).click()
+  const move = page.getByRole("dialog").last()
+  await expect(move.getByTestId("move-agent-folders")).toHaveText(
+    "Claude Code: its sessions here (2 folders) follow, so they resume in the new place",
+  )
+  await move.getByRole("button", { name: "Move 1 folders" }).click()
+  await expect(move.getByTestId("move-report")).toContainText("Claude Code: 2 session folders moved")
+})
+
 test("a blocked folder can't be chosen, and says why", async ({ page }) => {
   const state = await mockOperator(page)
   state.prompt.moveBlockers = [{ kind: "target-exists", message: "/workspace/opencode/x already exists" }]

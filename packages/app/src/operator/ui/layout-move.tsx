@@ -228,7 +228,19 @@ function MoveDialog(props: { target: MoveTarget | (MoveTarget & { namespace?: st
                           <td title={item.to}>
                             <code>{item.to}</code>
                           </td>
-                          <td>{item.sessions}</td>
+                          <td>
+                            {item.sessions}
+                            <For each={item.agents ?? []}>
+                              {(agent) => (
+                                <p data-slot="operator-note" data-testid="move-agent-folders">
+                                  {language.t("operator.move.agentFolders", {
+                                    name: agent.name,
+                                    count: agent.folders,
+                                  })}
+                                </p>
+                              )}
+                            </For>
+                          </td>
                           <td>{item.size === undefined ? "—" : formatBytes(item.size, language.intl())}</td>
                           <td>
                             <For each={item.blockers} fallback={<Tag>{language.t("operator.move.ready")}</Tag>}>
@@ -305,6 +317,14 @@ function MoveReport(props: { report: OperatorLayoutMoveReport }) {
               <li>
                 <code>{item.from}</code> → <code>{item.to}</code> ·{" "}
                 {language.t("operator.move.sessionsLinked", { count: item.sessions })}
+                <For each={item.agents ?? []}>
+                  {(agent) => (
+                    <>
+                      {" · "}
+                      {language.t("operator.move.agentMoved", { name: agent.name, count: agent.folders })}
+                    </>
+                  )}
+                </For>
               </li>
             )}
           </For>

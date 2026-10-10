@@ -192,6 +192,8 @@ export interface PromptMock {
   /** Moves asked for (plans and moves), and what blocks the next plan's items. */
   readonly moves: Array<{ path: string; body: unknown }>
   moveBlockers?: Array<{ kind: string; message: string }>
+  /** Merged agents' records of the moved folder's sessions that follow it. */
+  moveAgents?: Array<{ adapter: string; name: string; folders: number }>
   /** The upgrade's confirmation waits (§12.3). */
   upgrade: { waiting: boolean; needsWorkingDir: boolean; suggested?: string }
 }
@@ -688,7 +690,13 @@ export function createPromptMock(
       return json(route, {
         id: "mp_1",
         kind: input.kind,
-        items: planned.map((item) => ({ ...item, sessions: 2, size: 4096, blockers: state.moveBlockers ?? [] })),
+        items: planned.map((item) => ({
+          ...item,
+          sessions: 2,
+          size: 4096,
+          ...(state.moveAgents ? { agents: state.moveAgents } : {}),
+          blockers: state.moveBlockers ?? [],
+        })),
       })
     }
     if (url.pathname === "/operator/layout/move") {
@@ -708,7 +716,14 @@ export function createPromptMock(
         id: "mv_1",
         plan: input.plan,
         status: chosen.length ? "done" : "failed",
-        moved: chosen.map((item) => ({ item: item.id, name: item.name, from: item.from, to: item.to, sessions: 2 })),
+        moved: chosen.map((item) => ({
+          item: item.id,
+          name: item.name,
+          from: item.from,
+          to: item.to,
+          sessions: 2,
+          ...(state.moveAgents ? { agents: state.moveAgents } : {}),
+        })),
         skipped: [],
         byHand: [],
         startedAt: 1,

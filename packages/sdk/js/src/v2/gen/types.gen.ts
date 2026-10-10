@@ -2699,6 +2699,15 @@ export type OperatorLayoutPlanInput =
       workingDir: string
     }
 
+export type OperatorLayoutAgentFolders = {
+  adapter: string
+  name: string
+  /**
+   * Its folders of sessions that ran in the folder or below it
+   */
+  folders: number
+}
+
 export type OperatorLayoutBlockerKind =
   | "target-exists"
   | "cross-device"
@@ -2707,6 +2716,7 @@ export type OperatorLayoutBlockerKind =
   | "terminal"
   | "protected"
   | "name"
+  | "agent-data"
 
 export type OperatorLayoutBlocker = {
   kind: OperatorLayoutBlockerKind
@@ -2728,6 +2738,7 @@ export type OperatorLayoutMoveItem = {
    * Sessions in the folder
    */
   sessions: number
+  agents?: Array<OperatorLayoutAgentFolders>
   blockers: Array<OperatorLayoutBlocker>
 }
 
@@ -2757,6 +2768,7 @@ export type OperatorLayoutMoveReport = {
     from: string
     to: string
     sessions: number
+    agents?: Array<OperatorLayoutAgentFolders>
   }>
   skipped: Array<{
     item: string

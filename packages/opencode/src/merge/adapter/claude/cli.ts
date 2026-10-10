@@ -177,6 +177,7 @@ export const make = Effect.gen(function* () {
     listSessions: (cwd, env) => ClaudeSessions.list(fs, cwd, env),
     describeTool: ClaudeTools.describe,
     permissionFor: ClaudeTools.permission,
+    relocator: ClaudeSessions.relocator(fs),
   } satisfies MergeAdapter.Adapter
 })
 

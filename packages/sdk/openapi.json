@@ -32196,9 +32196,26 @@
           }
         ]
       },
+      "OperatorLayoutAgentFolders": {
+        "type": "object",
+        "properties": {
+          "adapter": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "folders": {
+            "type": "number",
+            "description": "Its folders of sessions that ran in the folder or below it"
+          }
+        },
+        "required": ["adapter", "name", "folders"],
+        "additionalProperties": false
+      },
       "OperatorLayoutBlockerKind": {
         "type": "string",
-        "enum": ["target-exists", "cross-device", "worktrees", "busy", "terminal", "protected", "name"]
+        "enum": ["target-exists", "cross-device", "worktrees", "busy", "terminal", "protected", "name", "agent-data"]
       },
       "OperatorLayoutBlocker": {
         "type": "object",
@@ -32242,6 +32259,12 @@
           "sessions": {
             "type": "number",
             "description": "Sessions in the folder"
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorLayoutAgentFolders"
+            }
           },
           "blockers": {
             "type": "array",
@@ -32328,6 +32351,12 @@
                 },
                 "sessions": {
                   "type": "number"
+                },
+                "agents": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorLayoutAgentFolders"
+                  }
                 }
               },
               "required": ["item", "name", "from", "to", "sessions"],

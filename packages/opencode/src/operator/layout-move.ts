@@ -12,6 +12,8 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { MergeAdapter } from "@/merge/adapter/adapter"
+import { MergeAdapterRegistry } from "@/merge/adapter/registry"
 import { InstanceStore } from "@/project/instance-store"
 import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
@@ -30,8 +32,10 @@ import { OperatorReloadWhenIdle } from "./reload-when-idle"
 //    crosses file systems, linked git worktrees, running sessions, open terminals, protected folders).
 // 2. The move, item by item, with a journal (`<data>/operator/moves/<id>.json`) updated after each step:
 //    stop the folder's instances, rename it, rewrite every stored path (the database here; the files,
-//    queue and snapshots in path-rewrite.ts), verify, finish. A failure rolls the item back; a journal a
-//    stopped server left is rolled back (or finished, if only finishing was left) at the next start.
+//    queue and snapshots in path-rewrite.ts; merged agents' own records of sessions in it, through their
+//    adapters' relocators, such as Claude Code's transcripts), verify, finish. A failure rolls the item
+//    back; a journal a stopped server left is rolled back (or finished, if only finishing was left) at the
+//    next start.
 // 3. A report: what moved, what was skipped and why, and the files that still name the old folder (config
 //    files aren't rewritten; they are updated by hand).
 // Never moved: Global's folder, the working directory, OpenCode's own folders, anything outside the
@@ -45,6 +49,7 @@ export const BlockerKind = Schema.Literals([
   "terminal",
   "protected",
   "name",
+  "agent-data",
 ]).annotate({ identifier: "OperatorLayoutBlockerKind" })
 
 export const Blocker = Schema.Struct({
@@ -52,6 +57,12 @@ export const Blocker = Schema.Struct({
   message: Schema.String,
 }).annotate({ identifier: "OperatorLayoutBlocker" })
 export type Blocker = typeof Blocker.Type
+
+const AgentFolders = Schema.Struct({
+  adapter: Schema.String,
+  name: Schema.String,
+  folders: Schema.Finite.annotate({ description: "Its folders of sessions that ran in the folder or below it" }),
+}).annotate({ identifier: "OperatorLayoutAgentFolders" })
 
 export const Item = Schema.Struct({
   id: Schema.String,
@@ -62,6 +73,9 @@ export const Item = Schema.Struct({
   namespace: Schema.String.annotate({ description: "project: the namespace it goes to; namespace: the one moving" }),
   size: Schema.optional(Schema.Finite).annotate({ description: "Bytes, when they could be counted" }),
   sessions: Schema.Finite.annotate({ description: "Sessions in the folder" }),
+  agents: Schema.optional(Schema.Array(AgentFolders)).annotate({
+    description: "Merged agents' records of sessions in the folder that follow it (Claude Code's transcripts)",
+  }),
   blockers: Schema.Array(Blocker),
 }).annotate({ identifier: "OperatorLayoutMoveItem" })
 export type Item = typeof Item.Type
@@ -103,6 +117,7 @@ const Moved = Schema.Struct({
   from: Schema.String,
   to: Schema.String,
   sessions: Schema.Finite,
+  agents: Schema.optional(Schema.Array(AgentFolders)),
 })
 const Skipped = Schema.Struct({
   item: Schema.String,
@@ -150,6 +165,8 @@ type Entry = Item & {
   repointed?: string[]
   database?: boolean
   undo?: OperatorPathRewrite.Undo
+  /** What merged agents' relocators changed (put back on a rollback). */
+  relocated?: MergeAdapter.Relocation[]
   error?: string
 }
 type Journal = { id: string; plan: Plan; startedAt: number; entries: Entry[]; report: Report }
@@ -225,8 +242,17 @@ const layer = Layer.effect(
     const instances = yield* InstanceStore.Service
     const reloads = yield* OperatorReloadWhenIdle.Service
     const store = yield* OperatorProfileStore.Service
+    const adapters = yield* MergeAdapterRegistry.Service
     const scope = yield* Scope.Scope
     const plans = new Map<string, Plan>()
+    // Merged agents keep their own records per working folder; they read the server's environment
+    // (CLAUDE_CONFIG_DIR, HOME), as the agents the server starts do.
+    const relocators = () =>
+      adapters.list().flatMap((adapter) => (adapter.relocator ? [{ adapter, relocator: adapter.relocator }] : []))
+    const agentsOf = (from: string) =>
+      Effect.forEach(relocators(), ({ adapter, relocator }) =>
+        relocator.check(from, process.env).pipe(Effect.map((check) => ({ adapter, check }))),
+      )
 
     // Terminals open now, by folder: a move skips a folder with one open.
     const terminals = new Map<string, string>()
@@ -288,6 +314,8 @@ const layer = Layer.effect(
         blockers.push({ kind: "busy", message: `${running.length} session(s) running or waiting for approval in it` })
       const open = [...terminals.values()].filter((cwd) => inside(from, cwd))
       if (open.length) blockers.push({ kind: "terminal", message: `${open.length} terminal(s) open in it` })
+      for (const { check } of yield* agentsOf(from))
+        if (check.problem) blockers.push({ kind: "agent-data", message: check.problem })
       return blockers
     })
 
@@ -301,6 +329,9 @@ const layer = Layer.effect(
     }) {
       const from = path.resolve(input.from)
       const to = path.resolve(input.to)
+      const agents = (yield* agentsOf(from))
+        .filter(({ check }) => check.folders > 0)
+        .map(({ adapter, check }) => ({ adapter: adapter.id, name: adapter.name, folders: check.folders }))
       return {
         id: newID("mi"),
         kind: input.kind,
@@ -310,6 +341,7 @@ const layer = Layer.effect(
         namespace: input.namespace,
         ...(yield* Effect.promise(() => sizeOf(from)).pipe(Effect.map((size) => (size === undefined ? {} : { size })))),
         sessions: (yield* sessionsUnder(from)).length,
+        ...(agents.length ? { agents } : {}),
         blockers: [...(input.extra ?? []), ...(yield* blockersOf(from, to, input.kind))],
       } satisfies Item
     })
@@ -460,6 +492,10 @@ const layer = Layer.effect(
 
     // Puts an item back as it was before its move, from what its journal entry says was done.
     const rollback = Effect.fnUntraced(function* (entry: Entry) {
+      for (const done of (entry.relocated ?? []).toReversed()) {
+        const relocator = adapters.get(done.adapter)?.relocator
+        if (relocator) yield* relocator.restore(done, entry.from, entry.to)
+      }
       if (entry.undo) yield* Effect.promise(() => OperatorPathRewrite.rollback(entry.undo!, entry.from, entry.to))
       if (entry.prior !== undefined)
         yield* Effect.promise(() =>
@@ -543,6 +579,17 @@ const layer = Layer.effect(
           try: () => OperatorPathRewrite.rewrite(`${journal.id}-${entry.id}`, entry.from, entry.to, projects),
           catch: (error) => new MoveError({ message: error instanceof Error ? error.message : String(error) }),
         })
+        yield* save(journal)
+        // Merged agents' records of the folder's sessions follow it, so those sessions resume there.
+        entry.relocated = []
+        for (const { relocator } of relocators()) {
+          const done = yield* relocator
+            .move(entry.from, entry.to, process.env)
+            .pipe(Effect.mapError((error) => new MoveError({ message: error.message })))
+          if (!done.renames.length && !done.rewritten.length) continue
+          entry.relocated.push(done)
+          yield* save(journal)
+        }
         yield* step("finishing")
         const after = (yield* sessionsUnder(entry.to)).length
         if (!(yield* Effect.promise(() => exists(entry.to))) || (yield* Effect.promise(() => exists(entry.from))))
@@ -555,7 +602,22 @@ const layer = Layer.effect(
           ...journal.report,
           moved: [
             ...journal.report.moved,
-            { item: entry.id, name: entry.name, from: entry.from, to: entry.to, sessions: after },
+            {
+              item: entry.id,
+              name: entry.name,
+              from: entry.from,
+              to: entry.to,
+              sessions: after,
+              ...(entry.relocated.length
+                ? {
+                    agents: entry.relocated.map((done) => ({
+                      adapter: done.adapter,
+                      name: adapters.get(done.adapter)?.name ?? done.adapter,
+                      folders: done.renames.length,
+                    })),
+                  }
+                : {}),
+            },
           ],
           byHand: [
             ...journal.report.byHand,
@@ -733,5 +795,6 @@ export const node = LayerNode.make({
     InstanceStore.node,
     OperatorReloadWhenIdle.node,
     OperatorProfileStore.node,
+    MergeAdapterRegistry.node,
   ],
 })

@@ -14,6 +14,11 @@ export class StartFailed extends Schema.TaggedErrorClass<StartFailed>()("MergeSt
   message: Schema.String,
 }) {}
 
+export class RelocateFailed extends Schema.TaggedErrorClass<RelocateFailed>()("MergeRelocateFailed", {
+  adapter: Schema.String,
+  message: Schema.String,
+}) {}
+
 export type Env = Record<string, string | undefined>
 
 export interface Content {
@@ -101,6 +106,35 @@ export interface PermissionView {
   readonly readOnly: boolean
 }
 
+// What an adapter changed when a folder moved: the move's journal keeps it, to undo it
+// (operator/layout-move.ts).
+export interface Relocation {
+  readonly adapter: string
+  /** Folders and files renamed, in order. */
+  readonly renames: ReadonlyArray<{ readonly from: string; readonly to: string }>
+  /** Files whose recorded working folder was rewritten, at their new paths. */
+  readonly rewritten: ReadonlyArray<string>
+}
+
+// For a move's plan: how many of the adapter's per-folder records would follow the folder, and why they
+// can't, if they can't.
+export interface RelocationCheck {
+  /** Where the adapter keeps them. */
+  readonly root: string
+  readonly folders: number
+  readonly problem?: string
+}
+
+// An agent that keeps its own records per working folder (Claude Code's transcripts under
+// `projects/<folder name>`): when a folder moves, its records of sessions that ran in the folder or below
+// it follow, so those sessions resume in the new place.
+export interface Relocator {
+  readonly check: (from: string, env: Env) => Effect.Effect<RelocationCheck>
+  readonly move: (from: string, to: string, env: Env) => Effect.Effect<Relocation, RelocateFailed>
+  /** Puts back what `move` did. */
+  readonly restore: (done: Relocation, from: string, to: string) => Effect.Effect<void>
+}
+
 export interface Adapter {
   readonly id: string
   readonly name: string
@@ -113,6 +147,7 @@ export interface Adapter {
   readonly listSessions: (cwd: string, env: Env) => Effect.Effect<ReadonlyArray<ExternalSession>>
   readonly describeTool: (name: string, input: Record<string, unknown>, cwd: string) => ToolView
   readonly permissionFor: (name: string, input: Record<string, unknown>, cwd: string) => PermissionView
+  readonly relocator?: Relocator
 }
 
 export * as MergeAdapter from "./adapter"

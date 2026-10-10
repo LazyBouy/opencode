@@ -969,6 +969,9 @@ export const dict = {
   "operator.move.byHand": "Update these by hand: they still name the old folder",
   "operator.move.done": "Done",
   "operator.move.sessionsLinked": "{{count}} sessions re-linked",
+  "operator.move.agentFolders":
+    "{{name}}: its sessions here ({{count}} folders) follow, so they resume in the new place",
+  "operator.move.agentMoved": "{{name}}: {{count}} session folders moved",
   "operator.move.upgradeTitle": "Folders to move after the upgrade",
   "operator.move.upgradeHint":
     "Namespaces and projects are now where their folders are, and these folders aren't in their places yet. Nothing moves until you choose Move; what you leave out keeps working where it is, flagged Not in place.",

@@ -16,17 +16,42 @@ installed on the host. All commands run from the repository root.
 docker compose -f docker/dev/compose.yaml up -d --build server web
 ```
 
-Open http://127.0.0.1:4444. The server sees your projects at the same paths as the host (default
-`/root/projects`, change with `WORKSPACE`). Every namespace but Global lives in the working directory
-(`OPENCODE_WORKING_DIR`, below), at `<working dir>/<namespace>`; **Operator → Projects → Add project**
-makes a project at `<namespace folder>/<name>` (a git repository by default, so it is its own project),
-or adds a folder that exists. They are written to the mounted host folder, so they persist. Global's
-folder (`~/.config/opencode`) is in the `opencode-config` volume, a different file system from the
-mounted folder: moving a project between Global and another namespace is refused as crossing file
-systems (the move plan says so).
+Open http://127.0.0.1:4444.
 
-Connect a model provider for OpenCode's own agents under **Settings → Providers**. Credentials are kept
-in the `opencode-data` volume.
+**Your home folder is mounted into the server, at the same path** (`$HOME`, `/root` by default). This is
+the production model: the agent reaches your files as Claude Code on the host does. Everything the server
+keeps is in your home folder, as on the host:
+
+- Global's folder and config: `~/.config/opencode`;
+- OpenCode's data (sessions, provider credentials) and state: `~/.local/share/opencode`, `~/.local/state/opencode`;
+- Claude Code's login and transcripts for `/merge claude`: `~/.claude` (`CLAUDE_CONFIG_DIR`);
+- your projects, under `WORKSPACE` (default `/root/projects`), which must be inside your home folder.
+
+They are one file system, so a project can move between Global and another namespace, and a move takes
+merged agents' records of its sessions along (Claude Code's `~/.claude/projects/<folder>`), so those
+sessions resume in the new place. The container runs as root: with a home folder that isn't root's, the
+files it writes there are root's.
+
+Every namespace but Global lives in the working directory (`OPENCODE_WORKING_DIR`, below), at
+`<working dir>/<namespace>`; **Operator → Projects → Add project** makes a project at
+`<namespace folder>/<name>` (a git repository by default, so it is its own project), or adds a folder
+that exists.
+
+Connect a model provider for OpenCode's own agents under **Settings → Providers**.
+
+### Isolated mode
+
+For a stack that must not touch your home folder (a demo, CI, a second install), add
+`compose.isolated.yaml`. The server then keeps its data in the named volumes `opencode-config`,
+`opencode-data`, `opencode-state` and `claude-config`, and sees only `WORKSPACE`:
+
+```sh
+docker compose -f docker/dev/compose.yaml -f docker/dev/compose.isolated.yaml up -d --build server web
+```
+
+Global's folder is then another file system than the workspace: moving a project between Global and
+another namespace is refused as crossing file systems (the move plan says so). Use the same two files for
+every later command (`exec`, `down`).
 
 The server runs from source through `serve.sh`, which gives it the version in
 `packages/opencode/package.json`. Without it the version is `local`, and OpenCode Zen's free models
@@ -44,16 +69,17 @@ server. A `bun.lock` change rebuilds the image.
 
 ## Claude Code for `/merge claude`
 
-The image includes Claude Code 2.1.123 (the version the merge adapter was verified against). Log it in
-once. The login is stored in the `claude-config` volume, not in your host `~/.claude`:
+The image includes Claude Code 2.1.123 (the version the merge adapter was verified against), in
+`/opt/claude/bin`. It uses your `~/.claude`: if you are logged in on the host, it is logged in. Otherwise
+log it in once (in isolated mode the login goes to the `claude-config` volume):
 
 ```sh
 docker compose -f docker/dev/compose.yaml exec server claude
 # run /login, follow the link, then /exit
 ```
 
-Then in any session: `/merge claude`, `/merge status`, `/merge detach`. Claude transcripts created
-from the container live in the same volume.
+Then in any session: `/merge claude`, `/merge status`, `/merge detach`. Its transcripts are in
+`~/.claude/projects`, next to the host's.
 
 ## One-off commands
 
@@ -82,20 +108,21 @@ containers. See `FORK.md`.
 
 Override in the shell or in `docker/dev/.env`:
 
-| Variable                                                                                                             | Default                                            | Purpose                                                      |
-| -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------ |
-| `WORKSPACE`                                                                                                          | `/root/projects`                                   | host folder mounted into the server, same path               |
-| `OPENCODE_SERVER_PORT`                                                                                               | `4096`                                             | API port on the host (127.0.0.1 only)                        |
-| `OPENCODE_WEB_PORT`                                                                                                  | `4444`                                             | web UI port on the host (127.0.0.1 only)                     |
-| `OPENCODE_SERVER_PASSWORD`                                                                                           | unset                                              | require basic auth on the API                                |
+| Variable                                                                                                             | Default                                            | Purpose                                                                                                         |
+| -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `HOME`                                                                                                               | your shell's, else `/root`                         | home folder mounted into the server, same path                                                                  |
+| `WORKSPACE`                                                                                                          | `/root/projects`                                   | where projects live (inside `HOME`); isolated mode mounts it alone                                              |
+| `OPENCODE_SERVER_PORT`                                                                                               | `4096`                                             | API port on the host (127.0.0.1 only)                                                                           |
+| `OPENCODE_WEB_PORT`                                                                                                  | `4444`                                             | web UI port on the host (127.0.0.1 only)                                                                        |
+| `OPENCODE_SERVER_PASSWORD`                                                                                           | unset                                              | require basic auth on the API                                                                                   |
 | `OPENCODE_WORKING_DIR`                                                                                               | `/root/projects/agent-harnesses`                   | the working directory: every namespace but Global lives in it (OpenCode at `<it>/opencode`), set on first start |
-| `OPENCODE_DEFAULT_PROJECT`                                                                                           | `/root/projects/agent-harnesses/opencode/opencode` | the OpenCode namespace's default project, set on first start |
-| `SERVER_CPUS` / `SERVER_MEMORY`, `WEB_CPUS` / `WEB_MEMORY`, `TOOLS_CPUS` / `TOOLS_MEMORY`, `E2E_CPUS` / `E2E_MEMORY` | see table                                          | resource limits                                              |
-| `E2E_WORKERS`                                                                                                        | `2`                                                | Playwright workers                                           |
+| `OPENCODE_DEFAULT_PROJECT`                                                                                           | `/root/projects/agent-harnesses/opencode/opencode` | the OpenCode namespace's default project, set on first start                                                    |
+| `SERVER_CPUS` / `SERVER_MEMORY`, `WEB_CPUS` / `WEB_MEMORY`, `TOOLS_CPUS` / `TOOLS_MEMORY`, `E2E_CPUS` / `E2E_MEMORY` | see table                                          | resource limits                                                                                                 |
+| `E2E_WORKERS`                                                                                                        | `2`                                                | Playwright workers                                                                                              |
 
 ## Stop
 
 ```sh
-docker compose -f docker/dev/compose.yaml down        # keep sessions, settings and the Claude login
-docker compose -f docker/dev/compose.yaml down -v     # also delete those volumes
+docker compose -f docker/dev/compose.yaml down        # your home folder keeps everything
+docker compose -f docker/dev/compose.yaml -f docker/dev/compose.isolated.yaml down -v   # isolated: also delete its volumes
 ```

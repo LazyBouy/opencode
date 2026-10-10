@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
+import { ClaudeSessions } from "../../src/merge/adapter/claude/sessions"
 import { Server } from "../../src/server/server"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
@@ -41,24 +42,35 @@ const repo = async (folder: string) => {
   )
 }
 
-type Item = { id: string; from: string; to: string; blockers: Array<{ kind: string; message: string }> }
+type Agents = Array<{ adapter: string; name: string; folders: number }>
+type Item = {
+  id: string
+  from: string
+  to: string
+  agents?: Agents
+  blockers: Array<{ kind: string; message: string }>
+}
 type Plan = { id: string; items: Item[] }
 type Report = {
   status: string
-  moved: Array<{ from: string; to: string; sessions: number }>
+  moved: Array<{ from: string; to: string; sessions: number; agents?: Agents }>
   skipped: Array<{ reason: string }>
 }
 
-const keep = { projects: "", roots: process.env.OPENCODE_WORKSPACE_ROOTS }
+const keep = { projects: "", roots: process.env.OPENCODE_WORKSPACE_ROOTS, claude: process.env.CLAUDE_CONFIG_DIR }
 let root: Awaited<ReturnType<typeof tmpdir>>
 
 beforeEach(async () => {
   root = await tmpdir()
   keep.projects = await fs.readFile(path.join(store(), "projects.json"), "utf8").catch(() => "")
   process.env.OPENCODE_WORKSPACE_ROOTS = root.path
+  // Moves relocate Claude Code's sessions: never the real ones.
+  process.env.CLAUDE_CONFIG_DIR = path.join(root.path, "claude-config")
 })
 
 afterEach(async () => {
+  if (keep.claude === undefined) delete process.env.CLAUDE_CONFIG_DIR
+  else process.env.CLAUDE_CONFIG_DIR = keep.claude
   await fs.writeFile(path.join(store(), "projects.json"), keep.projects || "{}\n").catch(() => undefined)
   await fs.rm(path.join(store(), "acme"), { recursive: true, force: true })
   await fs.rm(path.join(store(), "settings.json"), { force: true })
@@ -107,6 +119,26 @@ describe("moving a project", () => {
     expect(projects[item.to]).toMatchObject({ namespace: "acme" })
     // A plan is used once.
     expect((await post("/operator/layout/move", { plan: plan.body.id, items: [item.id] })).status).toBe(400)
+  })
+
+  test("Claude Code's sessions of the folder follow it, so a merged session resumes in the new place", async () => {
+    const acmeFolder = path.join(root.path, "acme")
+    await fs.mkdir(acmeFolder, { recursive: true })
+    await acme(acmeFolder)
+    const project = path.join(root.path, "loose", "site")
+    await repo(project)
+    const claude = process.env.CLAUDE_CONFIG_DIR!
+    const id = "1b2c3d4e-0000-4000-8000-000000000001"
+    const transcript = (cwd: string) => path.join(claude, "projects", ClaudeSessions.folderName(cwd), `${id}.jsonl`)
+    await write(transcript(project), JSON.stringify({ type: "user", cwd: project, message: { content: "hi" } }) + "\n")
+    const plan = await post<Plan>("/operator/layout/plan", { kind: "project", project, namespace: "acme" })
+    const item = plan.body.items[0]!
+    expect(item.agents).toEqual([{ adapter: "claude", name: "Claude Code", folders: 1 }])
+    expect(item.blockers).toEqual([])
+    const moved = await post<Report>("/operator/layout/move", { plan: plan.body.id, items: [item.id] })
+    expect(moved.body.moved[0]?.agents).toEqual([{ adapter: "claude", name: "Claude Code", folders: 1 }])
+    expect(JSON.parse(await fs.readFile(transcript(item.to), "utf8")).cwd).toBe(item.to)
+    expect(await Bun.file(transcript(project)).exists()).toBe(false)
   })
 
   test("blocked items are skipped with the reason: the target exists, linked git worktrees", async () => {

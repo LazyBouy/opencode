@@ -22,7 +22,10 @@ import { OperatorQueueStore } from "./queue-store"
 // - snapshot repositories, `<data>/snapshot/<project id>/<hash of the worktree>`: renamed to the new
 //   worktree's hash, with their `objects/info/alternates` pointed at the moved repository.
 // The core database (project, project_directory, workspace, session_merge_binding, and sessions through
-// their events) is rewritten by layout-move.ts, which holds the database services.
+// their events) is rewritten by layout-move.ts, which holds the database services; so are merged agents'
+// own records of sessions in the folder, through their adapters' relocators (Claude Code: its
+// `projects/<folder name>` folders under CLAUDE_CONFIG_DIR or ~/.claude are renamed, and the `cwd` of their
+// transcripts' lines rewritten; merge/adapter/claude/sessions.ts).
 // Not rewritten (content, not records): message and part bodies, prompts, call blobs, config files (listed
 // in the move's report instead, §11.3 step 5).
 
@@ -44,6 +47,7 @@ export const STORES = [
   "database: project.worktree, project.sandboxes, project_directory.directory",
   "database: workspace.directory, session_merge_binding.cwd",
   "database: session.directory (through session events)",
+  "merged agents: Claude Code's projects/<folder name> (folder names, transcript cwd)",
 ] as const
 
 /** `value` with the folder `from` replaced by `to`, when it is `from` or inside it; else undefined. */
