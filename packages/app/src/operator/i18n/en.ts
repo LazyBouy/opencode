@@ -890,11 +890,14 @@ export const dict = {
   "operator.config.sources": "Where settings come from",
   "operator.config.sourcesHint":
     "The config files OpenCode reads for this project, in the order it reads them; a later file's value replaces an earlier one's. Command and agent files in the Global and namespace folders load after these.",
+  "operator.config.sourcesHintNamespace":
+    "The config files OpenCode reads at {{name}}'s level, in the order it reads them; a later file's value replaces an earlier one's.",
   "operator.config.kind.global": "Global base",
   "operator.config.kind.globalHome": "Global base (~/.opencode)",
   "operator.config.kind.project": "This project",
   "operator.config.kind.namespaceOf": "{{name}}'s config",
   "operator.config.kind.envOf": "Environment ({{variable}})",
+  "operator.config.kind.above": "A folder above",
   "operator.config.origins": "Where each setting comes from",
   "operator.config.edit": "Edit settings",
   "operator.config.editHint": "Saving writes {{path}}. The text is checked before it is saved.",
@@ -904,6 +907,10 @@ export const dict = {
   "operator.config.savedWhenIdle": "Saved to {{path}}; applies after the project reloads (when no session is running)",
   "operator.config.effective": "Effective settings",
   "operator.config.effectiveHint": "The merged result for this project. Keys, tokens and passwords are hidden.",
+  "operator.config.effectiveHintNamespace":
+    "The merged result at {{name}}'s level: Global's base (its capabilities only while {{name}} inherits them), then {{name}}'s config, then the environment. A project that uses {{name}}'s config gets this plus its own folders' files. Keys, tokens and passwords are hidden.",
+  "operator.config.effectiveHintGlobal":
+    "The merged result at Global's level: Global's config, then the environment. Every namespace builds on it. Keys, tokens and passwords are hidden.",
   "operator.projectConfig.usingNamespace": "Using {{name}}'s config",
   "operator.projectConfig.noOwn": "This project has no config of its own.",
   "operator.projectConfig.usingOwn": "Using this project's own config",

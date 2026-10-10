@@ -8,12 +8,14 @@ import { useLanguage } from "@/context/language"
 import { showToast } from "@/utils/toast"
 import { ready, useOperatorClient } from "../data"
 import { shortPath } from "../format"
+import { ConfigEffective, useSourceLabel } from "../pages/config-effective"
 import { requestError } from "../pages/config-helpers"
 
 // A namespace's config, and Global's (global_and_opencode_namespaces_spec.md §8): the Config section of
 // each namespace in Settings → Namespaces, the only place they are edited. The notice says who a change
 // reaches: the namespace's projects that use its config (not those with their own copy), and for Global
-// every namespace that inherits it.
+// every namespace that inherits it. Below the editor, as on a project's Config page: the effective
+// settings at the namespace's level and where each comes from.
 
 // A namespace record to open with its Config section, when Settings opens from a project's Config page.
 let requested: string | undefined
@@ -55,7 +57,16 @@ export function NamespaceConfigEditor(props: {
         .operator.namespaceConfig.get({ id: props.namespace }, { throwOnError: true })
         .then((result) => result.data!),
   }))
+  const effective = useQuery(() => ({
+    queryKey: api.key("namespace-config-effective", props.namespace),
+    queryFn: () =>
+      api
+        .client()
+        .operator.namespaceConfig.effective({ id: props.namespace }, { throwOnError: true })
+        .then((result) => result.data!),
+  }))
   const found = () => ready(config)
+  const label = useSourceLabel(() => found()?.name ?? "", "namespace")
   const saved = createMemo(() => found()?.text ?? "")
   createEffect(on([() => found()?.file, saved], () => setStore({ text: saved(), error: "", written: undefined })))
   createEffect(() => props.onDirty?.(!!found() && store.text !== saved() && store.text !== store.written))
@@ -82,6 +93,7 @@ export function NamespaceConfigEditor(props: {
               : result.data?.file,
         })
         await queryClient.invalidateQueries({ queryKey: api.key("namespace-config", props.namespace) })
+        await queryClient.invalidateQueries({ queryKey: api.key("namespace-config-effective") })
         await Promise.all(
           ["config-resolved", "config-layers", "config"].map((part) =>
             queryClient.invalidateQueries({ queryKey: api.key(part) }),
@@ -165,6 +177,24 @@ export function NamespaceConfigEditor(props: {
           {language.t("operator.config.save")}
         </ButtonV2>
       </div>
+      <Show when={ready(effective)}>
+        {(item) => (
+          <ConfigEffective
+            nested
+            config={item().config}
+            origins={item().origins}
+            variables={item().variables}
+            sources={item().sources}
+            label={label}
+            effectiveHint={
+              found()?.global
+                ? language.t("operator.config.effectiveHintGlobal")
+                : language.t("operator.config.effectiveHintNamespace", { name: found()?.name ?? "" })
+            }
+            sourcesHint={language.t("operator.config.sourcesHintNamespace", { name: found()?.name ?? "" })}
+          />
+        )}
+      </Show>
     </div>
   )
 }

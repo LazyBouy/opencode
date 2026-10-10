@@ -38,7 +38,14 @@ const owned = new Set<string>()
 // a namespace, or a project moving between namespaces, reloads exactly those instances.
 const loaded = new Map<string, { project: string; namespace: string }>()
 
-export type Layer = { namespace: string; project: string; dir?: string; inherit: boolean }
+export type Layer = {
+  namespace: string
+  project: string
+  dir?: string
+  inherit: boolean
+  /** The folder is the namespace's own (Global's, for Global): the namespace level, not a project. */
+  atFolder?: boolean
+}
 
 // The config keys that are capabilities: left out of the global config for a namespace that doesn't
 // inherit it.
@@ -78,7 +85,21 @@ function projectOf(directory: string, worktree: string, registered: ReadonlyArra
 
 // The namespace a folder's project is in (by location, layout.ts), and that namespace's `.opencode`
 // folder when it exists. Global's projects have no namespace layer: Global is already the base.
+// A namespace's own folder (Global's included) is the namespace level itself: its config is the
+// namespace's, never a project's own (its Config section loads an instance there, §8).
 export async function layerOf(directory: string, worktree?: string): Promise<Layer> {
+  const layout = await OperatorLayout.snapshot()
+  const home = layout.places.find((place) => place.folder === path.resolve(directory))
+  if (home) {
+    const namespace = home.id
+    const project = home.folder
+    loaded.set(directory, { project, namespace })
+    const dir = home.global ? undefined : home.configDir
+    const inherit = home.inheritGlobal
+    if (!dir || !(await exists(dir))) return { namespace, project, inherit, atFolder: true }
+    owned.add(dir)
+    return { namespace, project, dir, inherit, atFolder: true }
+  }
   const settings = await readJson(path.join(store(), "projects.json"))
   const project = projectOf(directory, worktree ?? "/", Object.keys(settings))
   const entry = settings[project]
@@ -86,7 +107,6 @@ export async function layerOf(directory: string, worktree?: string): Promise<Lay
     entry && typeof entry === "object" && typeof (entry as { namespace?: unknown }).namespace === "string"
       ? (entry as { namespace: string }).namespace
       : undefined
-  const layout = await OperatorLayout.snapshot()
   const namespace = OperatorLayout.membership(project, layout, assigned).namespace
   const place = OperatorLayout.placeOf(namespace, layout)
   const inherit = place?.inheritGlobal ?? true
@@ -159,10 +179,11 @@ export const inheritsGlobal = Effect.fnUntraced(function* (directory: string, wo
 // The namespace layer's opencode.json(c), merged right after the global config files: only for a project
 // without a config of its own (global_and_opencode_namespaces_spec.md §6, layer 2). A project's own config
 // is a full copy of its namespace's, made when a project page first saved a change (project-config.ts).
+// At the namespace's own folder the files are the namespace's, not a project's own.
 export const configFiles = Effect.fnUntraced(function* (ctx: { directory: string; worktree: string }) {
   const layer = yield* Effect.promise(() => layerOf(ctx.directory, ctx.worktree))
   if (!layer.dir) return []
-  if ((yield* Effect.promise(() => ownConfigFiles(layer.project))).length) return []
+  if (!layer.atFolder && (yield* Effect.promise(() => ownConfigFiles(layer.project))).length) return []
   return [path.join(layer.dir, "opencode.json"), path.join(layer.dir, "opencode.jsonc")]
 })
 

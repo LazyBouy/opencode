@@ -1,5 +1,7 @@
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { OperatorConfig } from "@/operator/config"
 import { described } from "@/server/routes/instance/httpapi/groups/metadata"
 
 // A namespace's config, and Global's (global_and_opencode_namespaces_spec.md §8): edited only here
@@ -7,6 +9,7 @@ import { described } from "@/server/routes/instance/httpapi/groups/metadata"
 // OperatorRootApi.
 export const OperatorNamespaceConfigPaths = {
   config: "/operator/namespace/:id/config",
+  effective: "/operator/namespace/:id/config/effective",
 } as const
 
 export class ApiNamespaceConfigError extends Schema.ErrorClass<{
@@ -39,6 +42,19 @@ export const NamespaceConfig = Schema.Struct({
   reload: Schema.optional(Schema.Literals(["now", "when-idle"])),
 }).annotate({ identifier: "OperatorNamespaceConfig" })
 
+// What the namespace level gets (§8): Global's base (its capability keys only when the namespace
+// inherits them), the namespace's own config, then the environment, account and managed config.
+export const NamespaceEffectiveConfig = Schema.Struct({
+  id: Schema.String,
+  folder: Schema.String.annotate({ description: "The namespace's folder, where the config was loaded" }),
+  config: ConfigV1.Info.annotate({ description: "The merged config, secrets masked" }),
+  sources: Schema.Array(OperatorConfig.Source).annotate({
+    description: "Config sources that exist, in load order. Later sources override earlier ones.",
+  }),
+  origins: OperatorConfig.Layers.fields.origins,
+  variables: OperatorConfig.Layers.fields.variables,
+}).annotate({ identifier: "OperatorNamespaceEffectiveConfig" })
+
 const doc = (identifier: string, summary: string, description: string) =>
   OpenApi.annotations({ identifier, summary, description })
 
@@ -53,6 +69,17 @@ export const OperatorNamespaceConfigGroup = HttpApiGroup.make("operatorNamespace
         "operator.namespaceConfig.get",
         "A namespace's config",
         "A namespace's config file (`global` for Global's own) and text, the namespace's projects that use it and those with their own config, and, for Global, the namespaces that inherit it.",
+      ),
+    ),
+    HttpApiEndpoint.get("effective", OperatorNamespaceConfigPaths.effective, {
+      params: { id: Schema.String },
+      success: described(NamespaceEffectiveConfig, "The namespace's effective config and where it comes from"),
+      error: ApiNamespaceConfigError,
+    }).annotateMerge(
+      doc(
+        "operator.namespaceConfig.effective",
+        "A namespace's effective config",
+        "The config as loaded at the namespace's folder (Global's, for `global`), secrets masked: Global's base, the namespace's own config and the environment. With the sources in load order and, for each top-level key, the kind of source that sets it.",
       ),
     ),
     HttpApiEndpoint.put("save", OperatorNamespaceConfigPaths.config, {

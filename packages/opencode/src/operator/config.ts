@@ -64,6 +64,14 @@ export const Layers = Schema.Struct({
   origins: Schema.Record(Schema.String, Source.fields.kind).annotate({
     description: "For each top-level key, the kind of source that sets it last (the one in effect)",
   }),
+  variables: Schema.optional(
+    Schema.Record(
+      Schema.String,
+      Schema.Literals(["OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG_CONTENT"]),
+    ),
+  ).annotate({
+    description: "For each top-level key the environment sets last, the environment variable it comes from",
+  }),
 }).annotate({ identifier: "OperatorConfigLayers" })
 export type Layers = typeof Layers.Type
 
@@ -142,10 +150,12 @@ const layer = Layer.effect(
       return { id, dir: layer.target, file: path.join(layer.target, name) }
     })
 
-    // Whether the project has a config of its own (then its namespace's isn't merged, §6).
+    // Whether the project has a config of its own (then its namespace's isn't merged, §6). A namespace's
+    // own folder is the namespace level: its config is the namespace's.
     const ownConfig = Effect.fnUntraced(function* () {
       const ctx = yield* InstanceState.context
       const layer = yield* Effect.promise(() => OperatorNamespaceScope.layerOf(ctx.directory, ctx.worktree))
+      if (layer.atFolder) return false
       return (yield* Effect.promise(() => OperatorNamespaceScope.ownConfigFiles(layer.project))).length > 0
     })
 
@@ -236,6 +246,20 @@ const layer = Layer.effect(
       const own = yield* namespaceFile(namespace)
       // Global's capability keys don't reach a namespace that leaves out Global's capabilities.
       const inherit = (yield* Effect.promise(() => OperatorNamespaceScope.namespaceLayer(own.id))).inherit
+      // Each top-level key's last source: the one in effect.
+      const setters = new Map<string, Source>(
+        list.flatMap((source: Source) => {
+          const value = parse(source.text) as unknown
+          return isRecord(value)
+            ? Object.keys(value)
+                .filter((key) => key !== "$schema")
+                .filter(
+                  (key) => inherit || source.kind !== "global" || !OperatorNamespaceScope.CAPABILITY_KEYS.includes(key),
+                )
+                .map((key) => [key, source] as const)
+            : []
+        }),
+      )
       return {
         sources: list,
         targets: yield* targets(list, namespace),
@@ -246,19 +270,9 @@ const layer = Layer.effect(
         },
         namespace: own.id,
         project: (yield* ownConfig()) ? ("own" as const) : ("namespace" as const),
-        origins: Object.fromEntries(
-          list.flatMap((source) => {
-            const value = parse(source.text) as unknown
-            return isRecord(value)
-              ? Object.keys(value)
-                  .filter((key) => key !== "$schema")
-                  .filter(
-                    (key) =>
-                      inherit || source.kind !== "global" || !OperatorNamespaceScope.CAPABILITY_KEYS.includes(key),
-                  )
-                  .map((key) => [key, source.kind] as const)
-              : []
-          }),
+        origins: Object.fromEntries([...setters].map(([key, source]) => [key, source.kind])),
+        variables: Object.fromEntries(
+          [...setters].flatMap(([key, source]) => (source.variable ? [[key, source.variable] as const] : [])),
         ),
       }
     })
@@ -324,6 +338,19 @@ export function validate(file: string, text: string) {
     try: () => ConfigParse.schema(ConfigV1.Info, ConfigV2Compat.lower(ConfigParse.jsonc(text, file), file).value, file),
     catch: (cause) => new InvalidError({ path: file, message: describe(cause) }),
   }).pipe(Effect.asVoid)
+}
+
+// Keys whose values are credentials: shown masked in the effective config (as the app's config-helpers.ts).
+const SECRET = /(api[_-]?key|token|secret|password|authorization)/i
+export function maskSecrets<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(maskSecrets) as T
+  if (!isRecord(value)) return value
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [
+      key,
+      SECRET.test(key) && typeof item === "string" && item ? "••••••" : maskSecrets(item),
+    ]),
+  ) as T
 }
 
 /** A JSON merge patch applied to JSONC text, comments kept. */

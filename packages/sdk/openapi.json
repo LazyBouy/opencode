@@ -3940,6 +3940,59 @@
         ]
       }
     },
+    "/operator/namespace/{id}/config/effective": {
+      "get": {
+        "tags": ["operator namespace config"],
+        "operationId": "operator.namespaceConfig.effective",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The namespace's effective config and where it comes from",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorNamespaceEffectiveConfig"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorNamespaceConfigError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorNamespaceConfigError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "The config as loaded at the namespace's folder (Global's, for `global`), secrets masked: Global's base, the namespace's own config and the environment. With the sources in load order and, for each top-level key, the kind of source that sets it.",
+        "summary": "A namespace's effective config",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.namespaceConfig.effective({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/operator/project-records": {
       "get": {
         "tags": ["operator project records"],
@@ -32419,6 +32472,68 @@
         "required": ["name", "data"],
         "additionalProperties": false
       },
+      "OperatorConfigSource": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["global", "namespace", "project", "directory", "env"],
+            "description": "global: Global's config (and `~/.opencode`, part of the Global base); namespace: the namespace's; project and directory: the project's files and `.opencode` folders; env: OPENCODE_CONFIG, OPENCODE_CONFIG_DIR or OPENCODE_CONFIG_CONTENT, never written by the console"
+          },
+          "path": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "variable": {
+            "type": "string",
+            "enum": ["OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG_CONTENT"]
+          }
+        },
+        "required": ["kind", "path", "text"],
+        "additionalProperties": false
+      },
+      "OperatorNamespaceEffectiveConfig": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "folder": {
+            "type": "string",
+            "description": "The namespace's folder, where the config was loaded"
+          },
+          "config": {
+            "$ref": "#/components/schemas/Config"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorConfigSource"
+            },
+            "description": "Config sources that exist, in load order. Later sources override earlier ones."
+          },
+          "origins": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "enum": ["global", "namespace", "project", "directory", "env"],
+              "description": "global: Global's config (and `~/.opencode`, part of the Global base); namespace: the namespace's; project and directory: the project's files and `.opencode` folders; env: OPENCODE_CONFIG, OPENCODE_CONFIG_DIR or OPENCODE_CONFIG_CONTENT, never written by the console"
+            },
+            "description": "For each top-level key, the kind of source that sets it last (the one in effect)"
+          },
+          "variables": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "enum": ["OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG_CONTENT"]
+            }
+          }
+        },
+        "required": ["id", "folder", "config", "sources", "origins"],
+        "additionalProperties": false
+      },
       "OperatorProjectStatus": {
         "type": "string",
         "enum": ["draft", "active", "paused", "completed", "archived"]
@@ -34412,28 +34527,6 @@
         "required": ["name", "data"],
         "additionalProperties": false
       },
-      "OperatorConfigSource": {
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": ["global", "namespace", "project", "directory", "env"],
-            "description": "global: Global's config (and `~/.opencode`, part of the Global base); namespace: the namespace's; project and directory: the project's files and `.opencode` folders; env: OPENCODE_CONFIG, OPENCODE_CONFIG_DIR or OPENCODE_CONFIG_CONTENT, never written by the console"
-          },
-          "path": {
-            "type": "string"
-          },
-          "text": {
-            "type": "string"
-          },
-          "variable": {
-            "type": "string",
-            "enum": ["OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG_CONTENT"]
-          }
-        },
-        "required": ["kind", "path", "text"],
-        "additionalProperties": false
-      },
       "OperatorConfigLayers": {
         "type": "object",
         "properties": {
@@ -34495,6 +34588,13 @@
               "description": "global: Global's config (and `~/.opencode`, part of the Global base); namespace: the namespace's; project and directory: the project's files and `.opencode` folders; env: OPENCODE_CONFIG, OPENCODE_CONFIG_DIR or OPENCODE_CONFIG_CONTENT, never written by the console"
             },
             "description": "For each top-level key, the kind of source that sets it last (the one in effect)"
+          },
+          "variables": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "enum": ["OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG_CONTENT"]
+            }
           }
         },
         "required": ["sources", "targets", "folders", "namespace", "project", "origins"],

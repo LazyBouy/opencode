@@ -233,6 +233,8 @@ import type {
   OperatorModelDefaultsResponses,
   OperatorNamespaceCatalogErrors,
   OperatorNamespaceCatalogResponses,
+  OperatorNamespaceConfigEffectiveErrors,
+  OperatorNamespaceConfigEffectiveResponses,
   OperatorNamespaceConfigGetErrors,
   OperatorNamespaceConfigGetResponses,
   OperatorNamespaceConfigSaveErrors,
@@ -3286,6 +3288,29 @@ export class NamespaceConfig extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * A namespace's effective config
+   *
+   * The config as loaded at the namespace's folder (Global's, for `global`), secrets masked: Global's base, the namespace's own config and the environment. With the sources in load order and, for each top-level key, the kind of source that sets it.
+   */
+  public effective<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
+    return (options?.client ?? this.client).get<
+      OperatorNamespaceConfigEffectiveResponses,
+      OperatorNamespaceConfigEffectiveErrors,
+      ThrowOnError
+    >({
+      url: "/operator/namespace/{id}/config/effective",
+      ...options,
+      ...params,
     })
   }
 }

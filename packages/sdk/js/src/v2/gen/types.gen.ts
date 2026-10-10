@@ -2815,6 +2815,38 @@ export type OperatorNamespaceConfigError = {
   }
 }
 
+export type OperatorConfigSource = {
+  /**
+   * global: Global's config (and `~/.opencode`, part of the Global base); namespace: the namespace's; project and directory: the project's files and `.opencode` folders; env: OPENCODE_CONFIG, OPENCODE_CONFIG_DIR or OPENCODE_CONFIG_CONTENT, never written by the console
+   */
+  kind: "global" | "namespace" | "project" | "directory" | "env"
+  path: string
+  text: string
+  variable?: "OPENCODE_CONFIG" | "OPENCODE_CONFIG_DIR" | "OPENCODE_CONFIG_CONTENT"
+}
+
+export type OperatorNamespaceEffectiveConfig = {
+  id: string
+  /**
+   * The namespace's folder, where the config was loaded
+   */
+  folder: string
+  config: Config
+  /**
+   * Config sources that exist, in load order. Later sources override earlier ones.
+   */
+  sources: Array<OperatorConfigSource>
+  /**
+   * For each top-level key, the kind of source that sets it last (the one in effect)
+   */
+  origins: {
+    [key: string]: "global" | "namespace" | "project" | "directory" | "env"
+  }
+  variables?: {
+    [key: string]: "OPENCODE_CONFIG" | "OPENCODE_CONFIG_DIR" | "OPENCODE_CONFIG_CONTENT"
+  }
+}
+
 export type OperatorProjectStatus = "draft" | "active" | "paused" | "completed" | "archived"
 
 export type OperatorProjectGroup = {
@@ -3514,16 +3546,6 @@ export type WorkspaceWarpError = {
   }
 }
 
-export type OperatorConfigSource = {
-  /**
-   * global: Global's config (and `~/.opencode`, part of the Global base); namespace: the namespace's; project and directory: the project's files and `.opencode` folders; env: OPENCODE_CONFIG, OPENCODE_CONFIG_DIR or OPENCODE_CONFIG_CONTENT, never written by the console
-   */
-  kind: "global" | "namespace" | "project" | "directory" | "env"
-  path: string
-  text: string
-  variable?: "OPENCODE_CONFIG" | "OPENCODE_CONFIG_DIR" | "OPENCODE_CONFIG_CONTENT"
-}
-
 export type OperatorConfigLayers = {
   /**
    * Config sources that exist, in load order. Later sources override earlier ones.
@@ -3558,6 +3580,9 @@ export type OperatorConfigLayers = {
    */
   origins: {
     [key: string]: "global" | "namespace" | "project" | "directory" | "env"
+  }
+  variables?: {
+    [key: string]: "OPENCODE_CONFIG" | "OPENCODE_CONFIG_DIR" | "OPENCODE_CONFIG_CONTENT"
   }
 }
 
@@ -11646,6 +11671,35 @@ export type OperatorNamespaceConfigSaveResponses = {
 
 export type OperatorNamespaceConfigSaveResponse =
   OperatorNamespaceConfigSaveResponses[keyof OperatorNamespaceConfigSaveResponses]
+
+export type OperatorNamespaceConfigEffectiveData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/operator/namespace/{id}/config/effective"
+}
+
+export type OperatorNamespaceConfigEffectiveErrors = {
+  /**
+   * OperatorNamespaceConfigError | InvalidRequestError
+   */
+  400: OperatorNamespaceConfigError | InvalidRequestError
+}
+
+export type OperatorNamespaceConfigEffectiveError =
+  OperatorNamespaceConfigEffectiveErrors[keyof OperatorNamespaceConfigEffectiveErrors]
+
+export type OperatorNamespaceConfigEffectiveResponses = {
+  /**
+   * The namespace's effective config and where it comes from
+   */
+  200: OperatorNamespaceEffectiveConfig
+}
+
+export type OperatorNamespaceConfigEffectiveResponse =
+  OperatorNamespaceConfigEffectiveResponses[keyof OperatorNamespaceConfigEffectiveResponses]
 
 export type OperatorProjectRecordListData = {
   body?: never

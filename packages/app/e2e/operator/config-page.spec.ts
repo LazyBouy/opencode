@@ -93,13 +93,22 @@ test("Open the namespace's config goes to its Config section in Settings, where 
   await expect(page.getByTestId("namespace-config-reach")).toContainText("1 projects use their own copies")
   const editor = section.getByRole("textbox", { name: "Config" })
   await expect(editor).toHaveValue('{ "model": "opencode/big" }')
+  // The effective settings at the namespace's level, and where each comes from.
+  await expect(section.getByTestId("config-effective")).toContainText('"model": "opencode/big"')
+  const origins = section.getByTestId("config-origins")
+  await expect(origins).toContainText("OpenCode's config")
+  await expect(origins).toContainText("Environment (OPENCODE_CONFIG_CONTENT)")
+  await expect(section.getByTestId("config-sources")).toContainText("/opencode/.opencode/opencode.jsonc")
   await editor.fill('{ "model": "opencode/medium" }')
   await section.getByRole("button", { name: "Save", exact: true }).click()
   await expect.poll(() => state.namespaceConfigs.opencode).toBe('{ "model": "opencode/medium" }')
+  // Read again after the save.
+  await expect(section.getByTestId("config-effective")).toContainText('"model": "opencode/medium"')
 })
 
 test("Global's Config section says it is the base for every namespace", async ({ page }) => {
-  await mockOperator(page)
+  const state = await mockOperator(page)
+  state.namespaceConfigs.global = '{ "share": "manual", "provider": { "acme": { "options": { "apiKey": "sk-1" } } } }'
   await page.goto("/operator")
   await page.getByRole("navigation", { name: "Operator" }).getByRole("button", { name: "Settings" }).click()
   const settings = page.locator(".settings-v2-dialog")
@@ -107,4 +116,9 @@ test("Global's Config section says it is the base for every namespace", async ({
   await settings.locator('[data-slot="settings-namespace"]').first().click()
   await expect(page.getByTestId("namespace-config-reach")).toContainText("the base for every namespace")
   await expect(page.getByTestId("namespace-config")).toContainText("opencode/opencode.jsonc")
+  // Global's effective settings: its base and the environment, secrets hidden.
+  const effective = page.getByTestId("namespace-config").getByTestId("config-effective")
+  await expect(effective).toContainText('"share": "manual"')
+  await expect(effective).not.toContainText("sk-1")
+  await expect(page.getByTestId("namespace-config").getByTestId("config-origins")).toContainText("Global base")
 })

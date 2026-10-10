@@ -634,6 +634,19 @@ export const operatorScenarios: Scenario[] = [
       array(body.using)
       array(body.own)
     }),
+  http.protected
+    .get("/operator/namespace/{id}/config/effective", "operator.namespaceConfig.effective")
+    .at((ctx) => ({
+      path: route("/operator/namespace/{id}/config/effective", { id: "global" }),
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => {
+      object(body)
+      object(body.config)
+      object(body.origins)
+      array(body.sources)
+      check(typeof body.folder === "string", "the folder the config was loaded at")
+    }),
   // A valid save would change Global's config for every later scenario: only the refusal is exercised.
   http.protected
     .put("/operator/namespace/{id}/config", "operator.namespaceConfig.save")

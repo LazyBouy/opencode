@@ -28,6 +28,8 @@ export interface Interface {
   readonly wantFile: (file: string, directory: string) => Effect.Effect<Reload>
   /** The sessions running now in a folder or below it (a move waits for them, or skips the folder). */
   readonly runningUnder: (folder: string) => Effect.Effect<ReadonlyArray<string>>
+  /** The sessions running now in exactly this folder. */
+  readonly runningIn: (directory: string) => Effect.Effect<ReadonlyArray<string>>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorReloadWhenIdle") {}
@@ -125,7 +127,13 @@ const layer = Layer.effect(
           .map(([sessionID]) => sessionID)
       })
 
-    return Service.of({ want, wantFile, runningUnder })
+    const runningIn = (directory: string) =>
+      Effect.sync(() => {
+        const root = path.resolve(directory)
+        return [...running.entries()].filter(([, item]) => item === root).map(([sessionID]) => sessionID)
+      })
+
+    return Service.of({ want, wantFile, runningUnder, runningIn })
   }),
 )
 

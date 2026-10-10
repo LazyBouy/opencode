@@ -989,6 +989,59 @@ export async function mockOperator(page: Page) {
           text: state.namespaceConfigs.opencode ?? "",
         },
       })
+    // A namespace's effective config (§8): Global's base, the namespace's own, then the environment.
+    const namespaceEffective = url.pathname.match(/^\/operator\/namespace\/([^/]+)\/config\/effective$/)
+    if (namespaceEffective) {
+      const id = decodeURIComponent(namespaceEffective[1]!)
+      const global = id === "global"
+      const parse = (text?: string): Record<string, unknown> => {
+        try {
+          return text ? (JSON.parse(text) as Record<string, unknown>) : {}
+        } catch {
+          return {}
+        }
+      }
+      const base = parse(state.namespaceConfigs.global)
+      const own = global ? {} : parse(state.namespaceConfigs[id])
+      const env = { username: "ci" }
+      return json(route, {
+        id,
+        folder: global ? "/home/me/.config/opencode" : `${workspace}/${id}`,
+        config: { ...base, ...own, ...env },
+        sources: [
+          ...(state.namespaceConfigs.global === undefined
+            ? []
+            : [
+                {
+                  kind: "global",
+                  path: "/home/me/.config/opencode/opencode.jsonc",
+                  text: state.namespaceConfigs.global,
+                },
+              ]),
+          ...(global || state.namespaceConfigs[id] === undefined
+            ? []
+            : [
+                {
+                  kind: "namespace",
+                  path: `${workspace}/${id}/.opencode/opencode.jsonc`,
+                  text: state.namespaceConfigs[id],
+                },
+              ]),
+          {
+            kind: "env",
+            path: "OPENCODE_CONFIG_CONTENT",
+            text: JSON.stringify(env),
+            variable: "OPENCODE_CONFIG_CONTENT",
+          },
+        ],
+        origins: Object.fromEntries([
+          ...Object.keys(base).map((key) => [key, "global"]),
+          ...Object.keys(own).map((key) => [key, "namespace"]),
+          ...Object.keys(env).map((key) => [key, "env"]),
+        ]),
+        variables: Object.fromEntries(Object.keys(env).map((key) => [key, "OPENCODE_CONFIG_CONTENT"])),
+      })
+    }
     const namespaceConfig = url.pathname.match(/^\/operator\/namespace\/([^/]+)\/config$/)
     if (namespaceConfig) {
       const id = decodeURIComponent(namespaceConfig[1]!)

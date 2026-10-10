@@ -1,5 +1,4 @@
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
@@ -14,24 +13,8 @@ import { useConfirm } from "../ui/confirm"
 import { FieldHelp } from "../ui/field-help"
 import { useProjectConfigWrite } from "../ui/project-config-copy"
 import { useOpenNamespaceConfig } from "../settings/namespace-config"
-import { maskSecrets, requestError } from "./config-helpers"
-
-type Source = { kind: string; path: string; text: string; variable?: string }
-
-// The words a config source goes by (global_and_opencode_namespaces_spec.md §3, §7.2).
-export function useSourceLabel(namespace: () => string) {
-  const language = useLanguage()
-  return (source: Pick<Source, "kind" | "path" | "variable">) => {
-    if (source.kind === "env")
-      return language.t("operator.config.kind.envOf", { variable: source.variable ?? "OPENCODE_CONFIG" })
-    if (source.kind === "global")
-      return source.path.includes("/.opencode/")
-        ? language.t("operator.config.kind.globalHome")
-        : language.t("operator.config.kind.global")
-    if (source.kind === "namespace") return language.t("operator.config.kind.namespaceOf", { name: namespace() })
-    return language.t("operator.config.kind.project")
-  }
-}
+import { ConfigEffective, useSourceLabel } from "./config-effective"
+import { requestError } from "./config-helpers"
 
 // One project's config (the Config page, and the project record's Config section), §7: the config it
 // uses (its own, else its namespace's), raw JSONC to edit, and the effective settings with secrets masked
@@ -321,59 +304,15 @@ export function ConfigEditor(props: { directory: string; onDirty?: (dirty: boole
         </div>
       </section>
 
-      <section data-component="operator-panel">
-        <h2 data-slot="operator-panel-title">{language.t("operator.config.effective")}</h2>
-        <p data-slot="operator-note">{language.t("operator.config.effectiveHint")}</p>
-        <pre data-component="operator-code">{JSON.stringify(maskSecrets(ready(effective) ?? {}), null, 2)}</pre>
-        <h3 data-slot="operator-panel-title" class="flex items-center">
-          {language.t("operator.config.origins")}
-          <FieldHelp field={language.t("operator.config.kind.global")} text={language.t("operator.help.globalBase")} />
-        </h3>
-        <dl data-component="record-fields" data-testid="config-origins">
-          <For each={Object.entries(ready(layers)?.origins ?? {}).toSorted((a, b) => a[0].localeCompare(b[0]))}>
-            {([key, kind]) => (
-              <>
-                <dt>
-                  <code>{key}</code>
-                </dt>
-                <dd>
-                  <Tag variant={kind === "project" || kind === "directory" ? "accent" : "neutral"}>
-                    {label({ kind, path: "" })}
-                  </Tag>
-                </dd>
-              </>
-            )}
-          </For>
-        </dl>
-      </section>
-
-      <section data-component="operator-panel">
-        <h2 data-slot="operator-panel-title">{language.t("operator.config.sources")}</h2>
-        <p data-slot="operator-note">{language.t("operator.config.sourcesHint")}</p>
-        <ol data-component="operator-sources">
-          <For each={ready(layers)?.sources ?? []}>
-            {(source) => (
-              <li>
-                <details>
-                  <summary>
-                    <Tag
-                      variant={
-                        source.kind === "project" || source.kind === "directory" || source.kind === "namespace"
-                          ? "accent"
-                          : "neutral"
-                      }
-                    >
-                      {label(source)}
-                    </Tag>
-                    <code>{source.path}</code>
-                  </summary>
-                  <pre data-component="operator-code">{source.text}</pre>
-                </details>
-              </li>
-            )}
-          </For>
-        </ol>
-      </section>
+      <ConfigEffective
+        config={ready(effective)}
+        origins={ready(layers)?.origins ?? {}}
+        variables={ready(layers)?.variables}
+        sources={ready(layers)?.sources ?? []}
+        label={label}
+        effectiveHint={language.t("operator.config.effectiveHint")}
+        sourcesHint={language.t("operator.config.sourcesHint")}
+      />
     </div>
   )
 }
