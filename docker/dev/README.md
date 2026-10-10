@@ -3,12 +3,12 @@
 Runs OpenCode, including the `/merge` feature and the iphi web UI, entirely in containers. Nothing is
 installed on the host. All commands run from the repository root.
 
-| Service  | What it runs                               | Host address            | Limits (default) |
-| -------- | ------------------------------------------ | ----------------------- | ---------------- |
-| `server` | `opencode serve` (API, sessions, `/merge`) | `http://127.0.0.1:4096` | 4 CPUs, 6 GB     |
-| `web`    | web UI dev server (Vite)                   | `http://127.0.0.1:4444` | 2 CPUs, 3 GB     |
-| `tools`  | one-off commands (typecheck, tests)        | on demand (`run --rm`)  | 4 CPUs, 6 GB     |
-| `e2e`    | Playwright browser tests                   | on demand (`run --rm`)  | 4 CPUs, 6 GB     |
+| Service  | What it runs                               | Host address                | Limits (default) |
+| -------- | ------------------------------------------ | --------------------------- | ---------------- |
+| `server` | `opencode serve` (API, sessions, `/merge`) | none: reached through `web` | 4 CPUs, 6 GB     |
+| `web`    | the web UI (Vite) and the API, forwarded   | `http://127.0.0.1:4444`     | 2 CPUs, 3 GB     |
+| `tools`  | one-off commands (typecheck, tests)        | on demand (`run --rm`)      | 4 CPUs, 6 GB     |
+| `e2e`    | Playwright browser tests                   | on demand (`run --rm`)      | 4 CPUs, 6 GB     |
 
 ## Start
 
@@ -17,6 +17,13 @@ docker compose -f docker/dev/compose.yaml up -d --build server web
 ```
 
 Open http://127.0.0.1:4444.
+
+**One server.** The browser talks only to 4444: the `web` service serves the app and forwards every API
+request (the event stream and the terminal's WebSocket included) to `server` inside Docker's network
+(`packages/app/vite.dev-stack.config.ts`, run on Node from `/opt/node`, whose HTTP server lets the proxy
+forward WebSockets). Settings → Servers lists that one server, `127.0.0.1:4444`. The API server's port
+(4096) isn't published on the host; for a one-off call use `curl http://127.0.0.1:4444/global/health`.
+A browser that saved `localhost:4096` as a server earlier keeps it in the list; remove it there.
 
 **Your home folder is mounted into the server, at the same path** (`$HOME`, `/root` by default). This is
 the production model: the agent reaches your files as Claude Code on the host does. Everything the server
@@ -112,8 +119,8 @@ Override in the shell or in `docker/dev/.env`:
 | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | `HOME`                                                                                                               | your shell's, else `/root`                         | home folder mounted into the server, same path                                                                  |
 | `WORKSPACE`                                                                                                          | `/root/projects`                                   | where projects live (inside `HOME`); isolated mode mounts it alone                                              |
-| `OPENCODE_SERVER_PORT`                                                                                               | `4096`                                             | API port on the host (127.0.0.1 only)                                                                           |
 | `OPENCODE_WEB_PORT`                                                                                                  | `4444`                                             | web UI port on the host (127.0.0.1 only)                                                                        |
+| `OPENCODE_WEB_HOST`                                                                                                  | `127.0.0.1`                                        | the address you open the web UI at: the app's one server is `http://<it>:<OPENCODE_WEB_PORT>`                   |
 | `OPENCODE_SERVER_PASSWORD`                                                                                           | unset                                              | require basic auth on the API                                                                                   |
 | `OPENCODE_WORKING_DIR`                                                                                               | `/root/projects/agent-harnesses`                   | the working directory: every namespace but Global lives in it (OpenCode at `<it>/opencode`), set on first start |
 | `OPENCODE_DEFAULT_PROJECT`                                                                                           | `/root/projects/agent-harnesses/opencode/opencode` | the OpenCode namespace's default project, set on first start                                                    |

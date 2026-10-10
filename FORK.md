@@ -5,7 +5,7 @@ This repository is a fork of [anomalyco/opencode](https://github.com/anomalyco/o
 - **`/merge`**: drive Claude Code (and future adapters) from an OpenCode session.
 - **The iphi theme**: the default look.
 - **An operator console**: `/operator/*` pages and the left sidebar, plus Settings → Adapters and Settings → Organization → Namespaces (prompt profiles per organization).
-- **A Docker-only dev stack**: in `docker/dev`. It mounts your home folder into the server at the same path, the production model (`compose.isolated.yaml` keeps the server's data in volumes instead).
+- **A Docker-only dev stack**: in `docker/dev`. It mounts your home folder into the server at the same path, the production model (`compose.isolated.yaml` keeps the server's data in volumes instead), and serves the app and the API on one origin, 4444 (`packages/app/vite.dev-stack.config.ts` forwards the API to the server).
 
 The fork is built so that new upstream releases merge with as few conflicts as possible.
 
@@ -21,7 +21,7 @@ Fork code lives in **fork-only paths**. Upstream never touches them, so they nev
 | Web app          | `packages/app/src/operator/**` (pages, sidebar, UI kit, settings, `i18n/en.ts`), `packages/app/src/components/session/merge-indicator.*`                                                                                                                                              |
 | Shared UI        | `packages/session-ui/src/components/merge-summary.tsx`, `packages/ui/src/styles/skins/iphi.css`, `packages/ui/src/theme/themes/iphi.json`, `packages/tui/src/theme/assets/iphi.json`                                                                                                  |
 | Tests            | `packages/opencode/test/{merge,operator}/**`, `packages/opencode/test/fixtures/merge/**`, `packages/opencode/test/lib/fake-claude.ts`, `packages/opencode/test/server/httpapi-exercise/operator.ts`, `packages/app/e2e/operator/**`, `packages/app/e2e/regression/theme-iphi.spec.ts` |
-| Tooling          | `docker/**`, `script/fork/**`, `CLAUDE.md`, `FORK.md`                                                                                                                                                                                                                                 |
+| Tooling          | `docker/**`, `packages/app/vite.dev-stack.config.ts`, `script/fork/**`, `CLAUDE.md`, `FORK.md`                                                                                                                                                                                                                                 |
 
 ## Rules for new fork work
 

@@ -7,6 +7,9 @@ ARG DEBIAN_FRONTEND=noninteractive
 ARG BUN_VERSION=1.3.14
 # The merge adapter's stdio permission protocol was verified against this Claude Code release.
 ARG CLAUDE_CODE_VERSION=2.1.123
+# Node runs only the web UI's dev server (compose.yaml): its proxy forwards the terminal's WebSocket to the
+# API server, which needs Node's HTTP upgrade handling (Bun's Node layer doesn't hand the socket over).
+ARG NODE_VERSION=22.14.0
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
@@ -18,6 +21,7 @@ RUN apt-get update \
     python3 \
     ripgrep \
     unzip \
+    xz-utils \
   && rm -rf /var/lib/apt/lists/*
 
 ENV BUN_INSTALL=/opt/bun
@@ -25,6 +29,11 @@ ENV BUN_INSTALL=/opt/bun
 # have your home folder mounted over /root (compose.yaml), which must neither hide it nor swap in another.
 ENV PATH=/opt/bun/bin:/opt/claude/bin:/root/.local/bin:$PATH
 RUN curl -fsSL https://bun.sh/install | bash -s -- "bun-v${BUN_VERSION}" && bun --version
+# In /opt/node, not on PATH: everything else keeps running on Bun.
+RUN arch=$(dpkg --print-architecture | sed 's/amd64/x64/') \
+  && curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${arch}.tar.xz" | tar -xJ -C /opt \
+  && mv "/opt/node-v${NODE_VERSION}-linux-${arch}" /opt/node \
+  && /opt/node/bin/node --version
 
 # Claude Code keeps its login and transcripts under CLAUDE_CONFIG_DIR (compose.yaml sets it to the home
 # folder's ~/.claude; one-off containers keep the claude-config volume), and stays on the pinned version

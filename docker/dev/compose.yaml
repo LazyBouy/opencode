@@ -17,8 +17,8 @@ services:
     # bunfig.toml in packages/opencode must apply, so the server runs from that directory; serve.sh
     # also gives it the package's version (OpenCode Zen's free tier refuses "opencode/local").
     command: ["sh", "/opencode/docker/dev/serve.sh", "serve", "--hostname", "0.0.0.0", "--port", "4096"]
-    ports:
-      - "127.0.0.1:${OPENCODE_SERVER_PORT:-4096}:4096"
+    # No port on the host: the browser reaches the API through the web server (one server, 4444), which
+    # forwards it here inside Docker's network.
     environment:
       HOME: ${HOME:-/root}
       # Claude Code (`/merge claude`) uses your login and keeps its transcripts in your ~/.claude, as on the
@@ -59,14 +59,29 @@ services:
 
   web:
     <<: *image
+    # vite.dev-stack.config.ts: the app's config, forwarding the API to the server, so the app and the API
+    # share one origin and Settings → Servers lists that one server.
+    # Run on Node (/opt/node, Dockerfile), whose HTTP server lets the proxy forward WebSocket upgrades.
+    working_dir: /opencode/packages/app
     command:
-      ["bun", "run", "--cwd", "/opencode/packages/app", "dev", "--host", "0.0.0.0", "--port", "4444", "--strictPort"]
+      [
+        "/opt/node/bin/node",
+        "node_modules/vite/bin/vite.js",
+        "--config",
+        "vite.dev-stack.config.ts",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "4444",
+        "--strictPort",
+      ]
     ports:
       - "127.0.0.1:${OPENCODE_WEB_PORT:-4444}:4444"
     environment:
-      # The browser on the host reaches the server through its published port.
-      VITE_OPENCODE_SERVER_HOST: localhost
-      VITE_OPENCODE_SERVER_PORT: ${OPENCODE_SERVER_PORT:-4096}
+      # The server the app talks to: the web server itself, at the address you open.
+      VITE_OPENCODE_SERVER_HOST: ${OPENCODE_WEB_HOST:-127.0.0.1}
+      VITE_OPENCODE_SERVER_PORT: ${OPENCODE_WEB_PORT:-4444}
+      OPENCODE_DEV_API: http://server:4096
     depends_on:
       server:
         condition: service_healthy

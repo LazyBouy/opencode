@@ -14,7 +14,7 @@ Read these alongside this file:
 
 ## Commands
 
-**In this checkout, nothing is installed on the host.** Bun, dependencies, builds, tests, dev servers and browser tests all run in Docker with resource limits through the stack in [docker/dev/](docker/dev/README.md): `server` (API on 4096), `web` (web UI on 4444), and `tools` for one-off commands. Run the `bun …` commands below inside that stack, for example `docker compose -f docker/dev/compose.yaml run --rm tools bun run --cwd packages/opencode test test/merge`. Rebuild the image first so `tools` sees source edits.
+**In this checkout, nothing is installed on the host.** Bun, dependencies, builds, tests, dev servers and browser tests all run in Docker with resource limits through the stack in [docker/dev/](docker/dev/README.md): `server` (the API, inside Docker's network), `web` (the web UI and the API, forwarded, on 4444: the one server the browser uses), and `tools` for one-off commands. Run the `bun …` commands below inside that stack, for example `docker compose -f docker/dev/compose.yaml run --rm tools bun run --cwd packages/opencode test test/merge`. Rebuild the image first so `tools` sees source edits.
 
 Bun version is pinned in the root `packageManager`. The pre-push hook checks it and runs `bun typecheck`. `bunfig.toml` uses exact installs and refuses package versions published less than 3 days ago, so a just-released dependency may fail to resolve.
 
