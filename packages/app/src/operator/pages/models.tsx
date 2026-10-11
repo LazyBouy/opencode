@@ -4,7 +4,7 @@ import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import type { Model } from "@opencode-ai/sdk/v2/client"
-import { useQuery, useQueryClient } from "@tanstack/solid-query"
+import { useQuery } from "@tanstack/solid-query"
 import { createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSettingsDialog } from "@/components/settings-dialog"
@@ -15,17 +15,16 @@ import { type Column, DataTable } from "../ui/data-table"
 import { PageHeader } from "../ui/page-header"
 import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOverlay } from "../ui/record-overlay"
 import { NamespacePicker, useNamespaceScope } from "../ui/namespace-picker"
-import { showToast } from "@/utils/toast"
-import { requestError } from "./config-helpers"
 import { OPENCODE } from "./profile-model"
 import { useOverlayParams } from "../ui/overlay-nav"
-import { ModelsPerProject } from "../ui/model-defaults"
+import { DefaultsBlock, ModelsPerProject, useEffectiveDefaults, useModelWords } from "../ui/model-defaults"
 
 type Row = Model & { providerName: string; isDefault: boolean; isSmall: boolean }
 
 // The providers and models the page lists are those of the namespace's default project (with every
 // namespace in scope, OpenCode's), or the server's own when the namespace has no project. Default and
-// Small mark the models the global config sets, which "Use as" changes.
+// Small mark the models in effect for the namespace in scope (with every namespace in scope, Settings'):
+// default_models_spec.md §5.4.
 function useModels() {
   const api = useOperatorClient()
   const scope = useNamespaceScope()
@@ -34,14 +33,7 @@ function useModels() {
       ? (scope.namespaces().find((item) => item.namespace.id === OPENCODE) ?? scope.namespaces()[0])
       : scope.scoped()[0]
   const directory = () => namespace()?.defaultProject
-  const defaults = useQuery(() => ({
-    queryKey: api.key("model-defaults", directory()),
-    queryFn: () =>
-      api
-        .client()
-        .operator.model.defaults({ directory: directory() })
-        .then((result) => result.data!),
-  }))
+  const effective = useEffectiveDefaults(() => (scope.all() ? undefined : scope.scoped()[0]?.namespace.id))
   const providers = useQuery(() => ({
     queryKey: api.key("providers", directory()),
     queryFn: () =>
@@ -55,33 +47,59 @@ function useModels() {
       Object.values(provider.models).map((model) => ({
         ...model,
         providerName: provider.name,
-        isDefault: defaults.data?.global?.model === `${provider.id}/${model.id}`,
-        isSmall: defaults.data?.global?.small === `${provider.id}/${model.id}`,
+        isDefault: effective()?.model.model === `${provider.id}/${model.id}`,
+        isSmall: effective()?.small.model === `${provider.id}/${model.id}`,
       })),
     ),
   )
-  return { providers, rows, defaults, directory, scope, namespace }
+  const connected = createMemo(() =>
+    (providers.data?.providers ?? []).flatMap((provider) =>
+      Object.values(provider.models).map((model) => ({
+        key: `${provider.id}/${model.id}`,
+        name: model.name,
+        provider: provider.name,
+      })),
+    ),
+  )
+  return { providers, rows, effective, connected, directory, scope, namespace }
 }
 
-// Makes a model the default or the small model of every project: config `model` / `small_model` in
-// the global config. One project's models are set in Models per project.
-function useSetModel() {
+type Effective = ReturnType<ReturnType<typeof useEffectiveDefaults>>
+type Words = ReturnType<typeof useModelWords>
+
+// The Default and Small tags, with where the model in effect comes from in their tooltip.
+function DefaultTags(props: { row: Row; namespace: string; effective: Effective; words: Words }) {
   const language = useLanguage()
-  const api = useOperatorClient()
-  const queryClient = useQueryClient()
-  return async (key: "model" | "small_model", model: string) =>
-    api
-      .client()
-      .operator.config.update({ scope: "global", body: { [key]: model } }, { throwOnError: true })
-      .then(async () => {
-        showToast({
-          title: language.t(key === "model" ? "operator.models.defaultSet" : "operator.models.smallSet", { model }),
-        })
-        await queryClient.invalidateQueries({ queryKey: api.key() })
-      })
-      .catch((error: unknown) =>
-        showToast({ title: language.t("operator.models.setFailed"), description: requestError(error) }),
-      )
+  const effective = () => props.effective
+  const words = props.words
+  return (
+    <>
+      <Show when={props.row.isDefault && effective()}>
+        {(found) => (
+          <span
+            title={language.t("operator.modelChain.tagDefault", {
+              namespace: props.namespace,
+              from: words.from(found().model, props.namespace),
+            })}
+          >
+            <Tag variant="accent">{language.t("operator.models.default")}</Tag>
+          </span>
+        )}
+      </Show>
+      <Show when={props.row.isSmall && effective()}>
+        {(found) => (
+          <span
+            title={language.t("operator.modelChain.tagSmall", {
+              namespace: props.namespace,
+              from: words.from(found().small, props.namespace),
+            })}
+          >
+            <Tag>{language.t("operator.models.small")}</Tag>
+          </span>
+        )}
+      </Show>
+    </>
+  )
 }
 
 // A model opens in the overlay (`model`, as provider/model): the providers on the left.
@@ -90,7 +108,10 @@ export default function ModelsPage() {
   const connect = useSettingsDialog("providers")
   const choose = useSettingsDialog("models")
   const [filter, setFilter] = createStore({ text: "" })
-  const { providers, rows, directory, scope } = useModels()
+  const { providers, rows, directory, scope, effective, connected } = useModels()
+  const words = useModelWords(connected)
+  const inScope = () =>
+    scope.all() ? language.t("operator.modelChain.settingsName") : (scope.scoped()[0]?.namespace.name ?? "")
   const [params, setParams] = useSearchParams<{ model?: string }>()
   useRecordOverlay(
     () => !!params.model,
@@ -109,12 +130,7 @@ export default function ModelsPage() {
         <span class="flex items-center gap-2">
           <ProviderIcon id={model.providerID} width={14} height={14} class="shrink-0" />
           {model.name}
-          <Show when={model.isDefault}>
-            <Tag variant="accent">{language.t("operator.models.default")}</Tag>
-          </Show>
-          <Show when={model.isSmall}>
-            <Tag>{language.t("operator.models.small")}</Tag>
-          </Show>
+          <DefaultTags row={model} namespace={inScope()} effective={effective()} words={words} />
         </span>
       ),
     },
@@ -210,6 +226,7 @@ export default function ModelsPage() {
           </>
         }
       />
+      <DefaultsBlock namespace={scope.all() ? undefined : scope.scoped()[0]} all={scope.all()} />
       <ModelsPerProject namespaces={scope.scoped()} grouped={scope.all() && scope.namespaces().length > 1} />
       <div data-slot="operator-tiles">
         <For each={providers.data?.providers ?? []}>
@@ -264,14 +281,11 @@ export default function ModelsPage() {
 // The overlay a model opens in: the providers on the left, a model's limits, prices and capabilities.
 function ModelOverlay() {
   const language = useLanguage()
-  const { providers, rows } = useModels()
-  const setModel = useSetModel()
-  const [state, setState] = createStore({ busy: false })
-  const use = async (key: "model" | "small_model", model: string) => {
-    setState("busy", true)
-    await setModel(key, model).finally(() => setState("busy", false))
-  }
+  const { providers, rows, scope, effective, connected } = useModels()
+  const words = useModelWords(connected)
   const [params, setParams] = useOverlayParams<{ model?: string }>()
+  const inScope = () =>
+    scope.all() ? language.t("operator.modelChain.settingsName") : (scope.scoped()[0]?.namespace.name ?? "")
   const locale = () => language.intl()
   const perMillion = (value: number) => (value ? formatCost(value, locale()) : "—")
   const keyOf = (model: Row) => `${model.providerID}/${model.id}`
@@ -305,34 +319,17 @@ function ModelOverlay() {
             title={
               <>
                 {found().name}
-                <Show when={found().isDefault}>
-                  <Tag variant="accent">{language.t("operator.models.default")}</Tag>
-                </Show>
-                <Show when={found().isSmall}>
-                  <Tag>{language.t("operator.models.small")}</Tag>
-                </Show>
-              </>
-            }
-            actions={
-              <>
-                <ButtonV2
-                  variant="outline"
-                  disabled={state.busy || found().isDefault}
-                  onClick={() => void use("model", keyOf(found()))}
-                >
-                  {language.t("operator.models.useDefault")}
-                </ButtonV2>
-                <ButtonV2
-                  variant="outline"
-                  disabled={state.busy || found().isSmall}
-                  onClick={() => void use("small_model", keyOf(found()))}
-                >
-                  {language.t("operator.models.useSmall")}
-                </ButtonV2>
+                <DefaultTags row={found()} namespace={inScope()} effective={effective()} words={words} />
               </>
             }
           >
             <dl data-component="record-fields">
+              <RecordField
+                label={language.t("operator.modelChain.defaultFor")}
+                help={language.t("operator.help.modelDefaultFor")}
+              >
+                <DefaultFor model={keyOf(found())} />
+              </RecordField>
               <RecordField
                 label={language.t("operator.column.provider")}
                 help={language.t("operator.help.modelProvider")}
@@ -395,5 +392,83 @@ function ModelOverlay() {
         )}
       </Show>
     </RecordOverlay>
+  )
+}
+
+// Where a model is the default or the small model (§5.4): Settings, namespaces and projects whose config sets it,
+// each with a way to its row.
+function DefaultFor(props: { model: string }) {
+  const language = useLanguage()
+  const api = useOperatorClient()
+  const openSettings = useSettingsDialog("models")
+  const found = useQuery(() => ({
+    queryKey: api.key("model-default-for", props.model),
+    queryFn: () =>
+      api
+        .client()
+        .operator.model.defaultFor({ model: props.model })
+        .then((result) => result.data!),
+  }))
+  const role = (item: { model: boolean; small: boolean }) =>
+    [
+      item.model ? language.t("operator.modelChain.roleDefault") : undefined,
+      item.small ? language.t("operator.modelChain.roleSmall") : undefined,
+    ]
+      .filter(Boolean)
+      .join(", ")
+  const places = () => {
+    const data = found.data
+    if (!data) return 0
+    return (data.settings ? 1 : 0) + data.namespaces.length + data.projects.length
+  }
+  return (
+    <Show when={found.data} fallback={language.t("common.loading")}>
+      {(data) => (
+        <Show
+          when={places()}
+          fallback={<span data-slot="operator-note">{language.t("operator.modelChain.defaultForNone")}</span>}
+        >
+          <ul data-testid="model-default-for" class="flex flex-col gap-1">
+            <Show when={data().settings}>
+              {(settings) => (
+                <li>
+                  <button type="button" data-slot="operator-link" onClick={() => openSettings()}>
+                    {language.t("operator.modelChain.settingsName")}
+                  </button>{" "}
+                  · {role(settings())}
+                </li>
+              )}
+            </Show>
+            <For each={data().namespaces}>
+              {(item) => (
+                <li>
+                  <a
+                    data-slot="operator-link"
+                    href={`/operator/models?ns=${encodeURIComponent(item.id)}&row=namespace`}
+                  >
+                    {item.name}
+                  </a>{" "}
+                  · {role(item)}
+                </li>
+              )}
+            </For>
+            <For each={data().projects}>
+              {(item) => (
+                <li>
+                  <a
+                    data-slot="operator-link"
+                    href={`/operator/models?ns=${encodeURIComponent(item.namespace)}&project=${encodeURIComponent(item.key)}`}
+                    title={item.key}
+                  >
+                    {item.name}
+                  </a>{" "}
+                  · {role(item)}
+                </li>
+              )}
+            </For>
+          </ul>
+        </Show>
+      )}
+    </Show>
   )
 }

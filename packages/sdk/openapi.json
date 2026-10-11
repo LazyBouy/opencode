@@ -34149,9 +34149,12 @@
           },
           "effective": {
             "$ref": "#/components/schemas/OperatorModelEffective"
+          },
+          "inherited": {
+            "$ref": "#/components/schemas/OperatorModelEffective"
           }
         },
-        "required": ["levels", "effective"],
+        "required": ["levels", "effective", "inherited"],
         "additionalProperties": false
       },
       "OperatorModelChains": {

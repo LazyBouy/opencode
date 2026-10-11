@@ -9,7 +9,8 @@ type Values = { model?: string; small_model?: string }
 export type ModelDefaultsMock = {
   settings: Values
   namespaces: Record<string, Values>
-  projects: Record<string, Values & { namespace: string }>
+  /** `own`: the project has a config of its own (else a write asks to copy its namespace's first). */
+  projects: Record<string, Values & { namespace: string; own?: boolean }>
   /** What OpenCode decides when nothing is set. */
   decides: { model: string; small: string }
   /** An environment variable that sets the default model, if any. */
@@ -112,44 +113,73 @@ export function modelDefaultsMock(): ModelDefaultsMock {
   }
 }
 
-export async function mockModelDefaults(page: Page, mock = modelDefaultsMock()) {
-  const json = (route: Route, body: unknown, status = 200) =>
-    route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) })
-  await page.route("**/operator/model/**", (route) => {
-    const url = new URL(route.request().url())
-    const method = route.request().method()
-    if (url.pathname === "/operator/model/namespace" && method === "GET") {
-      const namespace = url.searchParams.get("namespace") ?? undefined
-      const settings = !namespace || namespace === "global"
-      return json(route, {
+/** The model routes' answers, for the mocks' route handlers (undefined: not a model route). */
+export function modelRoute(mock: ModelDefaultsMock, url: URL, method: string, body: () => unknown) {
+  if (url.pathname === "/operator/model" && method === "GET") {
+    const project = url.searchParams.get("directory") ?? undefined
+    const namespace = project ? (mock.projects[project]?.namespace ?? "opencode") : "opencode"
+    const chain = modelChains(mock, namespace, project)
+    // The older fields, as the server still sends them.
+    return {
+      body: {
+        model: { model: chain.model.effective.model, source: "ranking", how: "default" },
+        small: { model: chain.small.effective.model, source: "small-family", how: "default" },
+        global: { path: SETTINGS_FILE },
+        chain,
+      },
+    }
+  }
+  if (url.pathname === "/operator/model/namespace" && method === "GET") {
+    const namespace = url.searchParams.get("namespace") ?? undefined
+    const settings = !namespace || namespace === "global"
+    return {
+      body: {
         ...(namespace ? { namespace, name: namespace === "opencode" ? "OpenCode" : namespace } : {}),
         settings,
         path: settings ? SETTINGS_FILE : `/root/opencode-home/${namespace}/.opencode/opencode.jsonc`,
         chain: modelChains(mock, namespace),
-      })
+      },
     }
-    if (url.pathname === "/operator/model/default" && method === "PUT") {
-      const body = route.request().postDataJSON() as {
-        level: string
-        namespace?: string
-        directory?: string
-        key: Key
-        model: string | null
+  }
+  if (url.pathname === "/operator/model/default" && method === "PUT") {
+    const input = body() as {
+      level: string
+      namespace?: string
+      directory?: string
+      key: Key
+      model: string | null
+      confirmCopy?: boolean
+    }
+    // A project without its own config asks first (copy-on-write).
+    if (input.level === "project" && !mock.projects[input.directory!]?.own && !input.confirmCopy)
+      return {
+        status: 409,
+        body: {
+          name: "OperatorProjectConfigCopyNeededError",
+          data: {
+            message: "This project uses its namespace's config.",
+            project: input.directory,
+            namespace: mock.projects[input.directory!]?.namespace ?? "opencode",
+            file: `${input.directory}/.opencode/opencode.jsonc`,
+          },
+        },
       }
-      mock.writes.push(body)
-      const target =
-        body.level === "settings"
-          ? mock.settings
-          : body.level === "namespace"
-            ? (mock.namespaces[body.namespace!] ??= {})
-            : (mock.projects[body.directory!] ??= { namespace: "opencode" })
-      if (body.model === null) delete target[body.key]
-      else target[body.key] = body.model
-      return json(route, { path: SETTINGS_FILE, changed: true, reload: "now" })
-    }
-    if (url.pathname === "/operator/model/default-for" && method === "GET") {
-      const model = url.searchParams.get("model")
-      return json(route, {
+    mock.writes.push(input)
+    const target =
+      input.level === "settings"
+        ? mock.settings
+        : input.level === "namespace"
+          ? (mock.namespaces[input.namespace!] ??= {})
+          : (mock.projects[input.directory!] ??= { namespace: "opencode" })
+    if (input.level === "project") (target as { own?: boolean }).own = true
+    if (input.model === null) delete target[input.key]
+    else target[input.key] = input.model
+    return { body: { path: SETTINGS_FILE, changed: true, reload: "now" } }
+  }
+  if (url.pathname === "/operator/model/default-for" && method === "GET") {
+    const model = url.searchParams.get("model")
+    return {
+      body: {
         model,
         ...(mock.settings.model === model || mock.settings.small_model === model
           ? {
@@ -179,9 +209,23 @@ export async function mockModelDefaults(page: Page, mock = modelDefaultsMock()) 
             small: value.small_model === model,
             path: `${key}/.opencode/opencode.jsonc`,
           })),
-      })
+      },
     }
-    return route.fallback()
-  })
+  }
+  return undefined
+}
+
+/** The model routes with their own state, registered after mockOperator (so it wins for these paths). */
+export async function mockModelDefaults(page: Page, mock = modelDefaultsMock()) {
+  const json = (route: Route, body: unknown, status = 200) =>
+    route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) })
+  await page.route(
+    (url) => url.pathname.startsWith("/operator/model"),
+    (route) => {
+      const url = new URL(route.request().url())
+      const found = modelRoute(mock, url, route.request().method(), () => route.request().postDataJSON())
+      return found ? json(route, found.body, found.status) : route.fallback()
+    },
+  )
   return mock
 }

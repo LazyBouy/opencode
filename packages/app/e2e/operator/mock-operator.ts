@@ -2,6 +2,7 @@ import type { Page, Route } from "@playwright/test"
 import { createPromptMock, type PromptMock } from "./mock-namespaces"
 import { callFor, callsFor, rawFor } from "./mock-calls"
 import { draftFor, lastFor, permissionsFor, sessionPermissionsFor, toolPromptFor } from "./mock-tool-prompt"
+import { type ModelDefaultsMock, modelRoute } from "./mock-models"
 
 // Responses for the fork's operator endpoints, layered over mockOpenCodeServer (later routes win).
 
@@ -520,6 +521,8 @@ export interface OperatorMock {
   readonly memory: MemoryMock
   /** Onboarding: whether it waits, and the checks and finish sent (memory_spec.md §10). */
   readonly onboarding: OnboardingMock
+  /** The default and small model by level (default_models_spec.md §11). */
+  readonly models: ModelDefaultsMock
   readonly projectsOpened: string[]
   readonly folders: Set<string>
   readonly prompt: PromptMock
@@ -675,6 +678,14 @@ export async function mockOperator(page: Page) {
     memoryWrites: [],
     memory: memoryMock(),
     onboarding: onboardingMock(),
+    // The fixture's one model: OpenCode decides it, nothing sets one.
+    models: {
+      settings: {},
+      namespaces: {},
+      projects: { [directory]: { namespace: "opencode" } },
+      decides: { model: "opencode/claude-opus-4-6", small: "opencode/claude-opus-4-6" },
+      writes: [],
+    },
     projectsOpened: [],
     folders: new Set([`${workspace}/apps`, `${workspace}/site`]),
     prompt: prompt.state,
@@ -1429,12 +1440,8 @@ export async function mockOperator(page: Page) {
     if (url.pathname === "/operator/prompt") return json(route, promptCatalog)
     if (url.pathname === "/operator/prompt/plugins")
       return json(route, { plugins: [{ spec: "opencode-wakatime", source: `${directory}/opencode.json` }] })
-    if (url.pathname === "/operator/model")
-      return json(route, {
-        model: { model: "opencode/claude-opus-4-6", source: "ranking", how: "default" },
-        small: { model: "opencode/claude-haiku-4-5", source: "small-family", how: "default" },
-        global: { path: "/home/me/.config/opencode/opencode.jsonc" },
-      })
+    const models = modelRoute(state.models, url, method, () => route.request().postDataJSON())
+    if (models) return json(route, models.body, models.status)
     if (url.pathname === "/operator/folder/roots") return json(route, [workspace])
     if (url.pathname === "/operator/folder" && method === "GET") {
       const path = url.searchParams.get("path") ?? workspace

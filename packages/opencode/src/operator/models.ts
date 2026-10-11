@@ -105,6 +105,10 @@ export const Chain = Schema.Struct({
       "settings, namespace (not for Global's projects: its config is Settings), project, and each environment variable that sets it, in the order they apply",
   }),
   effective: Effective,
+  inherited: Effective.annotate({
+    description:
+      "What it would be without the deepest level's own setting (the project's; for a namespace's chain the namespace's; for Settings' own, Settings'): the picker's Inherit option",
+  }),
 }).annotate({ identifier: "OperatorModelChain" })
 export type Chain = typeof Chain.Type
 
@@ -427,30 +431,39 @@ const layer = Layer.effect(
       sources: ReadonlyArray<Layered>,
       targets: { settings: string; namespace?: string; project?: string },
     ) {
-      const model = linksOf(sources, "model", targets)
-      const small = linksOf(sources, "small_model", targets)
       const picked = yield* decides()
-      const modelEffective: Effective = (yield* effective(model.last)) ?? {
-        model: picked.model,
-        from: "opencode",
-        rule: picked.rule,
-      }
-      // The small model OpenCode picks: a small one of the default model's provider, else the default model.
-      const smallFound = small.last
-        ? undefined
-        : modelEffective.model
-          ? yield* provider
-              .getSmallModel(ProviderV2.ID.make(modelEffective.model.split("/")[0]!))
-              .pipe(Effect.catch(() => Effect.succeed(undefined)))
-          : undefined
-      const smallPicked: Effective = !modelEffective.model
-        ? { model: "", from: "opencode", rule: "none" }
-        : smallFound
-          ? { model: `${smallFound.providerID}/${smallFound.id}`, from: "opencode", rule: "small-family" }
-          : { model: modelEffective.model, from: "opencode", rule: "default-model" }
+      // What OpenCode decides for the small model: a small one of the default model's provider, else the
+      // default model itself.
+      const smallFor = Effect.fnUntraced(function* (model: string) {
+        if (!model) return { model: "", from: "opencode", rule: "none" } satisfies Effective
+        const found = yield* provider
+          .getSmallModel(ProviderV2.ID.make(model.split("/")[0]!))
+          .pipe(Effect.catch(() => Effect.succeed(undefined)))
+        return (
+          found
+            ? { model: `${found.providerID}/${found.id}`, from: "opencode", rule: "small-family" }
+            : { model, from: "opencode", rule: "default-model" }
+        ) satisfies Effective
+      })
+      const resolve = Effect.fnUntraced(function* (list: ReadonlyArray<Layered>) {
+        const model = linksOf(list, "model", targets)
+        const small = linksOf(list, "small_model", targets)
+        const modelEffective: Effective = (yield* effective(model.last)) ?? {
+          model: picked.model,
+          from: "opencode",
+          rule: picked.rule,
+        }
+        const smallEffective: Effective = (yield* effective(small.last)) ?? (yield* smallFor(modelEffective.model))
+        return { model, small, modelEffective, smallEffective }
+      })
+      const now = yield* resolve(sources)
+      // The Inherit option: the same chain without the deepest level's own setting.
+      const deepest: Level =
+        targets.project !== undefined ? "project" : targets.namespace !== undefined ? "namespace" : "settings"
+      const without = yield* resolve(sources.filter((source) => source.level !== deepest))
       return {
-        model: { levels: model.levels, effective: modelEffective },
-        small: { levels: small.levels, effective: (yield* effective(small.last)) ?? smallPicked },
+        model: { levels: now.model.levels, effective: now.modelEffective, inherited: without.modelEffective },
+        small: { levels: now.small.levels, effective: now.smallEffective, inherited: without.smallEffective },
       }
     })
 

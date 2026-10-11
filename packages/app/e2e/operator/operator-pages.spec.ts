@@ -259,27 +259,29 @@ test("capabilities list tools by origin and connect an MCP server", async ({ pag
 test("the models page lists the catalog with limits and prices", async ({ page }) => {
   await mockOperator(page)
   await page.goto(`/operator/models${dir}`)
-  const row = page.getByRole("row", { name: /Claude Opus 4.6/ })
+  const row = page.getByRole("table", { name: "Providers & Models" }).getByRole("row", { name: /Claude Opus 4.6/ })
   await expect(row).toContainText("200K")
   await expect(row).toContainText("$15.00")
 })
 
-test("Providers & Models: a namespace picker, the models of its default project, and Use as writes the global config", async ({
+test("Providers & Models: a namespace picker, the models of its default project, each in the overlay", async ({
   page,
 }) => {
-  const state = await mockOperator(page)
+  await mockOperator(page)
   await page.goto(`/operator/models${dir}`)
   // The namespace picker replaces the project picker; the single default/small panel is gone.
   await expect(page.locator('[data-component="select-v2-root"][aria-label="Project"]')).toHaveCount(0)
   await expect(page.getByTestId("model-defaults")).toHaveCount(0)
   await expect(page.getByTestId("models-listed-from")).toContainText("the namespace's default project")
-  await page.getByRole("row", { name: /Claude Opus 4.6/ }).click()
+  await page
+    .getByRole("table", { name: "Providers & Models" })
+    .getByRole("row", { name: /Claude Opus 4.6/ })
+    .click()
   const overlay = page.getByRole("dialog")
   await expect(overlay.locator('[data-component="operator-scope-switch"]')).toHaveCount(0)
-  await overlay.getByRole("button", { name: "Use as small model (global)" }).click()
-  await expect.poll(() => state.writes.length).toBe(1)
-  expect(new URL(state.writes[0]!.url).searchParams.get("scope")).toBe("global")
-  expect(state.writes[0]!.body).toEqual({ small_model: "opencode/claude-opus-4-6" })
+  // Defaults are set in Settings → Models and Models per project, not from a model (default_models_spec.md §5.4).
+  await expect(overlay.getByRole("button", { name: /Use as/ })).toHaveCount(0)
+  await expect(overlay).toContainText("Not set as a default anywhere.")
 })
 
 test("capabilities and inbox requests open in the overlay, with ‹ › through the list", async ({ page }) => {

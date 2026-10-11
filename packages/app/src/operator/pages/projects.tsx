@@ -30,7 +30,7 @@ import { useProjectSettings } from "./project-prompt"
 import { ConfigEditor } from "./config-editor"
 import { PermissionRequests } from "../ui/permission-requests"
 import { LevelPermissions } from "../ui/level-permissions"
-import { ProjectModelPickers } from "../ui/model-defaults"
+import { ProjectModels } from "../ui/model-defaults"
 import {
   PROJECT_SECTIONS,
   ProjectAgents,
@@ -526,7 +526,11 @@ function ProjectOverlay() {
                   />
                 </Match>
                 <Match when={section() === "models"}>
-                  <ProjectModelPickers directory={found().key} />
+                  <ProjectModels
+                    directory={found().key}
+                    namespace={found().ns}
+                    namespaceName={data.nsName(found().ns)}
+                  />
                 </Match>
                 <Match when={section() === "permissions"}>
                   <LevelPermissions level="project" directory={found().key} onDirty={setDirty} />

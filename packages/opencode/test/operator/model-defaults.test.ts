@@ -31,7 +31,8 @@ const writeJson = async (file: string, value: unknown) => {
 }
 
 type Link = { level: string; set: boolean; model?: string; path: string }
-type Chain = { levels: Link[]; effective: { model: string; from: string; unavailable?: boolean } }
+type Effective = { model: string; from: string; unavailable?: boolean }
+type Chain = { levels: Link[]; effective: Effective; inherited: Effective }
 type Namespace = { namespace?: string; settings: boolean; path: string; chain: { model: Chain; small: Chain } }
 
 const keep = { projects: "", roots: process.env.OPENCODE_WORKSPACE_ROOTS, global: "" }
@@ -103,6 +104,8 @@ describe("model defaults by level", () => {
     expect((await readJsonc(globalFile())).model).toBe("test/a")
     acme = await request<Namespace>("GET", "/operator/model/namespace?namespace=acme")
     expect(acme.body.chain.model.effective).toMatchObject({ model: "test/b", from: "namespace" })
+    // The namespace row's Inherit: Settings'.
+    expect(acme.body.chain.model.inherited).toMatchObject({ model: "test/a", from: "settings" })
 
     // Global's config is Settings: its namespace level is refused.
     const global = await request<Namespace>("GET", "/operator/model/namespace?namespace=global")

@@ -143,6 +143,7 @@ unix("the chain: Settings, the namespace, the project, each set or not; OpenCode
       expect(found.model.levels.map((link) => link.level)).toEqual(["settings", "project"])
       expect(found.model.effective).toMatchObject({ from: "opencode", rule: "ranking" })
       expect(found.model.effective.model).toStartWith("test/")
+      expect(found.model.inherited).toEqual(found.model.effective)
       expect(found.small.effective.from).toBe("opencode")
 
       // Settings sets it.
@@ -167,6 +168,8 @@ unix("the chain: Settings, the namespace, the project, each set or not; OpenCode
         ["project", "test/test-model", "", ""],
       ])
       expect(found.model.effective).toEqual({ model: "test/test-model", from: "project" })
+      // Inherit (the picker's first option) would give the namespace's.
+      expect(found.model.inherited).toEqual({ model: "test/other-model", from: "namespace" })
       // A model no connected provider offers is flagged.
       yield* projectConfig(directory, llm.url, { model: "test/missing" })
       expect((yield* chain).model.effective).toEqual({ model: "test/missing", from: "project", unavailable: true })

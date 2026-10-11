@@ -3044,6 +3044,7 @@ export type OperatorModelChain = {
    */
   levels: Array<OperatorModelLink>
   effective: OperatorModelEffective
+  inherited: OperatorModelEffective
 }
 
 export type OperatorModelChains = {
