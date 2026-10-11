@@ -30,7 +30,6 @@
   min-width: 0;
 }
 
-.operator-settings-default-value[data-unset],
 .operator-settings-default-provider,
 .operator-settings-defaults-note {
   color: var(--v2-text-text-muted);

@@ -1,6 +1,7 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { Icon } from "@opencode-ai/ui/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
@@ -109,8 +110,8 @@ export const SettingsModelsOperator: Component = () => {
   const fieldName = (key: Key) =>
     key === "model" ? language.t("operator.settingsModels.default") : language.t("operator.settingsModels.small")
 
-  // Recomputes both fields: what Settings sets, and what OpenCode decides now (after connecting a provider, or
-  // using another model in the TUI).
+  // Runs OpenCode's own logic again on the server for both fields (it reads the connected providers and the TUI's
+  // recent models each time), and reads what Settings sets.
   const refresh = () =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: api.key("model-defaults") }),
@@ -161,18 +162,18 @@ export const SettingsModelsOperator: Component = () => {
               />
             )}
           </For>
-          <p class="operator-settings-defaults-note">
-            {language.t("operator.settingsModels.note")}{" "}
+          <p class="operator-settings-defaults-note">{language.t("operator.settingsModels.note")}</p>
+          <span>
             <ButtonV2
               size="small"
-              variant="ghost"
+              variant="outline"
               data-testid="settings-models-refresh"
               disabled={settings.isFetching}
               onClick={() => void refresh()}
             >
               {language.t("operator.settingsModels.refresh")}
             </ButtonV2>
-          </p>
+          </span>
           <Show when={last()}>
             {(change) => (
               <p class="operator-settings-defaults-change" data-testid="settings-model-change" role="status">
@@ -365,7 +366,7 @@ export const SettingsModelsOperator: Component = () => {
   )
 }
 
-/** One server-wide default: the model Settings sets, or "Not set"; Let OpenCode decide; (i) with what's used now. */
+/** One server-wide default: the model in effect (Settings', else OpenCode's pick, tagged Auto); Let OpenCode decide; (i). */
 function DefaultField(props: {
   key: Key
   label: string
@@ -397,17 +398,12 @@ function DefaultField(props: {
   return (
     <div class="operator-settings-default" data-testid={`settings-default-${props.key}`}>
       <span class="operator-settings-default-label">{props.label}</span>
-      <span
-        class="operator-settings-default-value"
-        data-testid="settings-default-value"
-        data-unset={props.setting ? undefined : ""}
-      >
+      <span class="operator-settings-default-value" data-testid="settings-default-value">
         <Show
           when={environment()}
           fallback={
-            // The model Settings sets, else "Not set" (muted): what OpenCode picks now is in the (i). Showing that
-            // model here read as if it were set (for the small model it's often the default model itself).
-            <Show when={props.setting} fallback={language.t("operator.settingsModels.notSet")}>
+            // The model in effect: the one Settings sets, else the one OpenCode's own logic picks now, tagged Auto.
+            <Show when={props.setting ?? effective()?.model}>
               {(value) => (
                 <>
                   <Show when={props.name(value())}>
@@ -417,7 +413,12 @@ function DefaultField(props: {
                   <Show when={props.name(value())}>
                     {(found) => <span class="operator-settings-default-provider">· {found().provider}</span>}
                   </Show>
-                  <Show when={effective()?.unavailable && effective()?.from === "settings"}>
+                  <Show when={!props.setting}>
+                    <span title={language.t("operator.settingsModels.autoTip")} data-testid="settings-default-auto">
+                      <Tag>{language.t("operator.settingsModels.auto")}</Tag>
+                    </span>
+                  </Show>
+                  <Show when={props.setting && effective()?.unavailable && effective()?.from === "settings"}>
                     <span class="operator-settings-default-warning" data-testid="settings-default-unavailable">
                       <Icon name="warning" size="small" />
                       {language.t("operator.settingsModels.unavailable")}

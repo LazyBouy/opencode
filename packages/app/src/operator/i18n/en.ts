@@ -1842,11 +1842,11 @@ export const dict = {
   "operator.settingsModels.helpSet":
     "Set in Settings, in Global's config ({{path}}). Namespaces and projects can override it on Providers & Models. Agents created from now on start with this model.",
   "operator.settingsModels.helpDecides":
-    "Not set: OpenCode uses the TUI's most recent model, else the first connected provider's best model by its built-in ranking. Right now that's {{model}}.",
+    "Auto: Settings doesn't set one, so OpenCode's own logic picks it: 1) the model last used in the terminal app (TUI), if a connected provider still offers it; 2) else the first connected provider (only those in the config's provider list, if it has one) and its top model by OpenCode's ranking: ids with gemini-3-pro first, then big-pickle, claude-sonnet-4 and gpt-5, then ids with \"latest\", then by id. Right now that's {{model}}. Refresh runs it again.",
   "operator.settingsModels.helpDecidesSmall":
-    "Not set: OpenCode picks a small model of the default model's provider. Right now that's {{model}}.",
+    "Auto: Settings doesn't set one, so OpenCode's own logic picks it within the provider of the chat's model (here the default model's): the newest model of the first small family the provider offers: Gemini Flash, then GPT nano, then Claude Haiku (OpenCode's own providers: GPT nano only; GitHub Copilot: GPT mini first; Azure: none). It names chats. Right now that's {{model}}. Refresh runs it again.",
   "operator.settingsModels.helpDecidesSmallDefault":
-    "Not set: OpenCode picks a small model of the default model's provider. It finds none, so it uses the default model, {{model}}.",
+    "Auto: Settings doesn't set one, and OpenCode's own logic finds no small model in the default model's provider (it looks for the newest model of the first small family the provider offers: Gemini Flash, then GPT nano, then Claude Haiku (OpenCode's own providers: GPT nano only; GitHub Copilot: GPT mini first; Azure: none)), so chats are named with the chat's own model: here the default model, {{model}}. Refresh runs it again.",
   "operator.settingsModels.helpEnvironment":
     "The environment sets {{key}} ({{variable}}), so this setting has no effect while it does.",
   "operator.settingsModels.show": "Show",
@@ -1862,7 +1862,9 @@ export const dict = {
   "operator.settingsModels.showFirst": "Turn Show on to make it a default.",
   "operator.settingsModels.keepShown": "It's a default model: choose another before hiding it.",
   "operator.settingsModels.refresh": "Refresh",
-  "operator.settingsModels.notSet": "Not set",
+  "operator.settingsModels.auto": "Auto",
+  "operator.settingsModels.autoTip":
+    "Not set in Settings: OpenCode's own logic picked it. Choose one in the list below to set it.",
   "operator.modelChain.fromNamespace": "{{namespace}}'s config",
   "operator.modelChain.fromSettings": "Settings (Global's config)",
   "operator.modelChain.fromProject": "this project's config",
@@ -1873,11 +1875,11 @@ export const dict = {
   "operator.modelChain.traceEnvironment":
     "The environment ({{variable}}) sets it to {{model}}, so what's set before it doesn't apply.",
   "operator.modelChain.traceDecides":
-    "Nothing sets one, so OpenCode decides: the TUI's most recent model, else the first connected provider's best model by its built-in ranking. Right now that's {{model}}.",
+    "Nothing sets one, so OpenCode's own logic picks it: 1) the model last used in the terminal app (TUI), if a connected provider still offers it; 2) else the first connected provider (only those in the config's provider list, if it has one) and its top model by OpenCode's ranking: ids with gemini-3-pro first, then big-pickle, claude-sonnet-4 and gpt-5, then ids with \"latest\", then by id. Right now that's {{model}}.",
   "operator.modelChain.traceDecidesSmall":
-    "Nothing sets one, so OpenCode decides: a small model of the default model's provider. Right now that's {{model}}.",
+    "Nothing sets one, so OpenCode's own logic picks it within the provider of the chat's model (here the default model's): the newest model of the first small family the provider offers: Gemini Flash, then GPT nano, then Claude Haiku (OpenCode's own providers: GPT nano only; GitHub Copilot: GPT mini first; Azure: none). Right now that's {{model}}.",
   "operator.modelChain.traceDecidesSmallDefault":
-    "Nothing sets one, so OpenCode decides: a small model of the default model's provider. It finds none, so it uses the default model, {{model}}.",
+    "Nothing sets one, and OpenCode's own logic finds no small model in the default model's provider (it looks for the newest model of the first small family the provider offers: Gemini Flash, then GPT nano, then Claude Haiku (OpenCode's own providers: GPT nano only; GitHub Copilot: GPT mini first; Azure: none)), so chats are named with the chat's own model: here the default model, {{model}}.",
   "operator.modelChain.traceSet": "Set in {{level}}: {{model}}.",
   "operator.modelChain.traceInherited":
     "{{here}} doesn't set a {{what}}, so it comes from {{from}}, which sets {{model}}.",
