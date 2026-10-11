@@ -223,16 +223,26 @@ import type {
   OperatorLayoutPlanResponses,
   OperatorLayoutWorkingDirErrors,
   OperatorLayoutWorkingDirResponses,
+  OperatorMemoryEntryErrors,
+  OperatorMemoryEntryResponses,
+  OperatorMemoryForgetEntryErrors,
+  OperatorMemoryForgetEntryResponses,
+  OperatorMemoryLevelName,
+  OperatorMemoryLevelsErrors,
+  OperatorMemoryLevelsResponses,
   OperatorMemoryOverviewErrors,
   OperatorMemoryOverviewResponses,
   OperatorMemoryReadErrors,
   OperatorMemoryReadResponses,
+  OperatorMemorySaveEntryErrors,
+  OperatorMemorySaveEntryResponses,
   OperatorMemorySaveSettingsErrors,
   OperatorMemorySaveSettingsResponses,
   OperatorMemorySettingsErrors,
-  OperatorMemorySettingsInput,
   OperatorMemorySettingsResponses,
   OperatorMemoryWriteErrors,
+  OperatorMemoryWriteIndexErrors,
+  OperatorMemoryWriteIndexResponses,
   OperatorMemoryWriteResponses,
   OperatorModelDefaultsErrors,
   OperatorModelDefaultsResponses,
@@ -4321,7 +4331,13 @@ export class Memory extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
-      operatorMemorySettingsInput?: OperatorMemorySettingsInput
+      commit?: boolean
+      indexLines?: number
+      indexChars?: number
+      project?: {
+        key: string
+        commit: boolean
+      }
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4332,7 +4348,10 @@ export class Memory extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
-            { key: "operatorMemorySettingsInput", map: "body" },
+            { in: "body", key: "commit" },
+            { in: "body", key: "indexLines" },
+            { in: "body", key: "indexChars" },
+            { in: "body", key: "project" },
           ],
         },
       ],
@@ -4343,6 +4362,214 @@ export class Memory extends HeyApiClient {
       ThrowOnError
     >({
       url: "/operator/memory/settings",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * List memory levels
+   *
+   * The project's short-term memory: its namespace's, its own and an agent's (build unless named), each with its folder, entries, lines that are not entries, files no line names, and its size against the prompts' limits.
+   */
+  public levels<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      agent?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "agent" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorMemoryLevelsResponses,
+      OperatorMemoryLevelsErrors,
+      ThrowOnError
+    >({
+      url: "/operator/memory/levels",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Delete a memory
+   *
+   * Moves a memory's file to Trash and takes its line out of MEMORY.md.
+   */
+  public forgetEntry<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      level: OperatorMemoryLevelName
+      file: string
+      agent?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "level" },
+            { in: "query", key: "file" },
+            { in: "query", key: "agent" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      OperatorMemoryForgetEntryResponses,
+      OperatorMemoryForgetEntryErrors,
+      ThrowOnError
+    >({
+      url: "/operator/memory/entry",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Read a memory
+   *
+   * One memory's file: its title, description, when and by whom it was written, and its text.
+   */
+  public entry<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      level: OperatorMemoryLevelName
+      file: string
+      agent?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "level" },
+            { in: "query", key: "file" },
+            { in: "query", key: "agent" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<OperatorMemoryEntryResponses, OperatorMemoryEntryErrors, ThrowOnError>({
+      url: "/operator/memory/entry",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Save a memory
+   *
+   * A new memory (no file) or a change to one: its file and its MEMORY.md line, written as the memory tool writes them, by the user.
+   */
+  public saveEntry<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      level?: OperatorMemoryLevelName
+      agent?: string
+      file?: string
+      title?: string
+      description?: string
+      content?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "level" },
+            { in: "body", key: "agent" },
+            { in: "body", key: "file" },
+            { in: "body", key: "title" },
+            { in: "body", key: "description" },
+            { in: "body", key: "content" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorMemorySaveEntryResponses,
+      OperatorMemorySaveEntryErrors,
+      ThrowOnError
+    >({
+      url: "/operator/memory/entry",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Write MEMORY.md
+   *
+   * A level's MEMORY.md as text, for a hand fix: lines that are not entries are kept and flagged.
+   */
+  public writeIndex<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      level?: OperatorMemoryLevelName
+      agent?: string
+      text?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "level" },
+            { in: "body", key: "agent" },
+            { in: "body", key: "text" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorMemoryWriteIndexResponses,
+      OperatorMemoryWriteIndexErrors,
+      ThrowOnError
+    >({
+      url: "/operator/memory/index",
       ...options,
       ...params,
       headers: {

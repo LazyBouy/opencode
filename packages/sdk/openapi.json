@@ -15515,7 +15515,32 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/OperatorMemorySettingsInput"
+                "type": "object",
+                "properties": {
+                  "commit": {
+                    "type": "boolean"
+                  },
+                  "indexLines": {
+                    "type": "number"
+                  },
+                  "indexChars": {
+                    "type": "number"
+                  },
+                  "project": {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      },
+                      "commit": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": ["key", "commit"],
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
               }
             }
           }
@@ -15524,6 +15549,410 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.memory.saveSettings({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/memory/levels": {
+      "get": {
+        "tags": ["operator memory"],
+        "operationId": "operator.memory.levels",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The project's memory levels",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorMemoryLevels"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The project's short-term memory: its namespace's, its own and an agent's (build unless named), each with its folder, entries, lines that are not entries, files no line names, and its size against the prompts' limits.",
+        "summary": "List memory levels",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.memory.levels({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/memory/entry": {
+      "get": {
+        "tags": ["operator memory"],
+        "operationId": "operator.memory.entry",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/OperatorMemoryLevelName"
+            },
+            "required": true
+          },
+          {
+            "name": "file",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The memory",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorMemoryDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorMemoryInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorMemoryInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "One memory's file: its title, description, when and by whom it was written, and its text.",
+        "summary": "Read a memory",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.memory.entry({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "tags": ["operator memory"],
+        "operationId": "operator.memory.saveEntry",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The memory as saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorMemoryDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorMemoryInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorMemoryInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "A new memory (no file) or a change to one: its file and its MEMORY.md line, written as the memory tool writes them, by the user.",
+        "summary": "Save a memory",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "level": {
+                    "$ref": "#/components/schemas/OperatorMemoryLevelName"
+                  },
+                  "agent": {
+                    "type": "string"
+                  },
+                  "file": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "content": {
+                    "type": "string"
+                  }
+                },
+                "required": ["level", "title", "description", "content"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.memory.saveEntry({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "tags": ["operator memory"],
+        "operationId": "operator.memory.forgetEntry",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/OperatorMemoryLevelName"
+            },
+            "required": true
+          },
+          {
+            "name": "file",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Moved to Trash",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Moved to Trash"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorMemoryInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorMemoryInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Moves a memory's file to Trash and takes its line out of MEMORY.md.",
+        "summary": "Delete a memory",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.memory.forgetEntry({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/memory/index": {
+      "put": {
+        "tags": ["operator memory"],
+        "operationId": "operator.memory.writeIndex",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The level",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorMemoryLevel"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorMemoryInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorMemoryInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "A level's MEMORY.md as text, for a hand fix: lines that are not entries are kept and flagged.",
+        "summary": "Write MEMORY.md",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "level": {
+                    "$ref": "#/components/schemas/OperatorMemoryLevelName"
+                  },
+                  "agent": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": ["level", "text"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.memory.writeIndex({\n  ...\n})"
           }
         ]
       }
@@ -36299,32 +36728,196 @@
         "required": ["commit", "indexLines", "indexChars", "projects"],
         "additionalProperties": false
       },
-      "OperatorMemorySettingsInput": {
+      "OperatorMemoryLevelName": {
+        "type": "string",
+        "enum": ["namespace", "project", "agent"]
+      },
+      "OperatorMemoryEntry": {
         "type": "object",
         "properties": {
-          "commit": {
-            "type": "boolean"
+          "title": {
+            "type": "string"
           },
-          "indexLines": {
-            "type": "number"
+          "file": {
+            "type": "string"
           },
-          "indexChars": {
-            "type": "number"
+          "description": {
+            "type": "string"
           },
+          "line": {
+            "type": "number",
+            "description": "Its line in MEMORY.md"
+          },
+          "created": {
+            "type": "string"
+          },
+          "updated": {
+            "type": "string"
+          },
+          "by": {
+            "type": "string"
+          }
+        },
+        "required": ["title", "file", "description", "line"],
+        "additionalProperties": false
+      },
+      "OperatorMemoryLevel": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "$ref": "#/components/schemas/OperatorMemoryLevelName"
+          },
+          "folder": {
+            "type": "string"
+          },
+          "exists": {
+            "type": "boolean",
+            "description": "Whether its MEMORY.md exists"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorMemoryEntry"
+            }
+          },
+          "invalid": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "line": {
+                  "type": "number"
+                },
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": ["line", "text"],
+              "additionalProperties": false
+            },
+            "description": "Lines of MEMORY.md that are not memory entries (kept, flagged)"
+          },
+          "unindexed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Memory files no line of MEMORY.md names"
+          },
+          "lines": {
+            "type": "number",
+            "description": "The index's entry lines"
+          },
+          "chars": {
+            "type": "number",
+            "description": "The index's characters, as prompts count them"
+          }
+        },
+        "required": ["level", "folder", "exists", "entries", "invalid", "unindexed", "lines", "chars"],
+        "additionalProperties": false
+      },
+      "OperatorMemoryLevels": {
+        "type": "object",
+        "properties": {
           "project": {
+            "type": "string"
+          },
+          "namespace": {
             "type": "object",
             "properties": {
-              "key": {
+              "id": {
                 "type": "string"
               },
-              "commit": {
-                "type": "boolean"
+              "name": {
+                "type": "string"
               }
             },
-            "required": ["key", "commit"],
+            "required": ["id", "name"],
+            "additionalProperties": false
+          },
+          "instructions": {
+            "type": "boolean",
+            "description": "Whether instruction files (AGENTS.md, …) apply to the project: the OpenCode and Global namespaces"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "limits": {
+            "type": "object",
+            "properties": {
+              "lines": {
+                "type": "number"
+              },
+              "chars": {
+                "type": "number"
+              }
+            },
+            "required": ["lines", "chars"],
+            "additionalProperties": false
+          },
+          "levels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorMemoryLevel"
+            }
+          }
+        },
+        "required": ["project", "namespace", "instructions", "limits", "levels"],
+        "additionalProperties": false
+      },
+      "OperatorMemoryDetail": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "$ref": "#/components/schemas/OperatorMemoryLevelName"
+          },
+          "file": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "created": {
+            "type": "string"
+          },
+          "updated": {
+            "type": "string"
+          },
+          "by": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": ["level", "file", "path", "title", "description", "content"],
+        "additionalProperties": false
+      },
+      "OperatorMemoryInvalidError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorMemoryInvalidError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
             "additionalProperties": false
           }
         },
+        "required": ["name", "data"],
         "additionalProperties": false
       },
       "OperatorAgentPrompt": {

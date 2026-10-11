@@ -449,7 +449,7 @@ export const dict = {
     "Channel setup, chat-to-session links and allowlists, starting with a two-way Telegram bridge with approval buttons.",
   "operator.page.memory.title": "Memory",
   "operator.page.memory.description":
-    "What OpenCode keeps for this project: the files it adds to prompts and the database of sessions and summaries.",
+    "What agents remember for this project: its namespace's, its own and each agent's short-term memory; and, for OpenCode's projects, the files OpenCode adds to prompts and its database.",
   "operator.page.memory.planned":
     "Browse, search, pin and forget what agents remember, for every project, per project or per agent.",
 
@@ -1677,6 +1677,51 @@ export const dict = {
 
   "operator.memory.tab.files": "Files ({{count}})",
   "operator.memory.tab.database": "Database",
+  "operator.memory.tab.memory": "Memory",
+  "operator.memory.tab.settings": "Settings",
+  "operator.memoryLevels.level.namespace": "Namespace memory · {{name}}",
+  "operator.memoryLevels.level.project": "Project memory",
+  "operator.memoryLevels.level.agent": "Agent memory · {{name}}",
+  "operator.memoryLevels.agent": "Agent",
+  "operator.memoryLevels.editIndex": "Edit MEMORY.md as text",
+  "operator.memoryLevels.new": "New memory",
+  "operator.memoryLevels.size": "{{lines}} of {{maxLines}} lines · {{chars}} of {{maxChars}} characters in prompts",
+  "operator.memoryLevels.empty": "No memories here yet.",
+  "operator.memoryLevels.title": "Title",
+  "operator.memoryLevels.description": "Description",
+  "operator.memoryLevels.file": "File",
+  "operator.memoryLevels.by": "By",
+  "operator.memoryLevels.written": "Written",
+  "operator.memoryLevels.text": "Text",
+  "operator.memoryLevels.notEntry": "Not a memory entry",
+  "operator.memoryLevels.line": "line {{line}}",
+  "operator.memoryLevels.notIndexed": "Not in MEMORY.md",
+  "operator.memoryLevels.deleteTitle": "Move {{name}} to Trash?",
+  "operator.memoryLevels.deleteBody":
+    "Its line goes from MEMORY.md and its file to Trash, where it can be restored (its line is not).",
+  "operator.memoryLevels.indexTitle": "MEMORY.md of {{level}}",
+  "operator.memoryLevels.newTitle": "New memory in {{level}}",
+  "operator.memoryLevels.indexText": "MEMORY.md",
+  "operator.memoryLevels.instructionsElsewhere":
+    "Instruction files (AGENTS.md, CLAUDE.md, CONTEXT.md) apply only to the OpenCode namespace's projects. This project uses its profile and its .memory folders.",
+  "operator.memorySettings.commit": "Commit .memory folders to git",
+  "operator.memorySettings.commitHint":
+    "Off: each repository's .git/info/exclude keeps .memory out (its .gitignore is never changed).",
+  "operator.memorySettings.lines": "Index lines in prompts",
+  "operator.memorySettings.chars": "Index characters in prompts",
+  "operator.memorySettings.projects": "Projects",
+  "operator.memorySettings.projectsHint":
+    "Each project with a .memory folder or a choice of its own, and whether its repository keeps .memory out.",
+  "operator.memorySettings.noProjects": "No project has a .memory folder yet.",
+  "operator.memorySettings.choice": "Commit .memory",
+  "operator.memorySettings.choiceOf": "Commit .memory in {{name}}",
+  "operator.memorySettings.choice.default": "Use the default",
+  "operator.memorySettings.choice.on": "On",
+  "operator.memorySettings.choice.off": "Off",
+  "operator.memorySettings.repo": "Repository",
+  "operator.memorySettings.excluded": "{{repo}}: kept out",
+  "operator.memorySettings.included": "{{repo}}: committed",
+  "operator.memorySettings.noRepo": "Not in a repository",
   "operator.memory.filesHint":
     "Files OpenCode adds to prompts. Choose a file to read or change it; changes apply from the next message.",
   "operator.memory.filesLabel": "Memory files",
@@ -1791,6 +1836,23 @@ export const dict = {
     "The model the request would use: the agent's own, or one to try. The base prompt and the environment depend on it.",
   "operator.help.sampleSession":
     "A session of the agent: its permissions decide what the layer may list, and helper sources use the text written for it. Without one, a helper writes a sample now.",
+  "operator.help.memoryAgent":
+    "The agent whose own memory the Agent level shows: in its home's .memory folder, or the project's .memory/agents/<name>/ when it has none.",
+  "operator.help.memoryTitle":
+    "A short title, at most 80 characters, on one line. It names the memory in MEMORY.md, and its file name is made from it.",
+  "operator.help.memoryDescription":
+    "One line, at most 200 characters, saying what the memory holds. Agents decide from it whether to read the memory.",
+  "operator.help.memoryFile":
+    "The memory's own file in the level's .memory folder: its title, description, level, when and by whom it was written, then its text.",
+  "operator.help.memoryWritten":
+    "When the memory was last written, and by which agent and session, or by you on this page.",
+  "operator.help.memoryText": "The memory itself, read with the memory tool's read. At most 100,000 characters.",
+  "operator.help.memoryIndex":
+    "One line per memory: - [title](file.md) — description, with an em dash. Lines that don't match are kept and flagged.",
+  "operator.help.memoryCommit":
+    "Whether .memory folders are committed to git. Off by default: OpenCode adds a .memory/ line to each repository's .git/info/exclude, and takes it out again when this is on. A project can choose for itself below.",
+  "operator.help.memoryLimits":
+    "Each level's index in system prompts is cut at this many lines or characters, whichever comes first, with a line saying how many more memories there are.",
   "operator.help.rulesSources":
     "Where the candidates come from, in order. A file can be a glob; relative paths are looked for from the project's folder up. A group makes One and Top N apply per group.",
   "operator.help.rulesFilters": "Candidates a filter leaves out are listed in the trace with the filter that did it.",

@@ -224,6 +224,186 @@ export type CapabilityItem = {
   disabledAt?: { origin: string; location: string }
 }
 
+// Short-term memory for the Memory page's Memory and Settings tabs.
+type MemoryEntry = { title: string; file: string; description: string; line: number; updated?: string; by?: string }
+type MemoryLevel = {
+  level: "namespace" | "project" | "agent"
+  folder: string
+  exists: boolean
+  entries: MemoryEntry[]
+  invalid: Array<{ line: number; text: string }>
+  unindexed: string[]
+  lines: number
+  chars: number
+}
+export type MemoryMock = {
+  instructions: boolean
+  levels: MemoryLevel[]
+  content: Record<string, string>
+  settings: {
+    commit: boolean
+    indexLines: number
+    indexChars: number
+    projects: Array<{
+      key: string
+      name: string
+      override?: boolean
+      commits: boolean
+      repo?: string
+      excluded?: boolean
+    }>
+  }
+  writes: Array<{ method: string; path: string; body: unknown }>
+}
+function memoryMock(): MemoryMock {
+  const level = (name: MemoryLevel["level"], folder: string, entries: MemoryEntry[]): MemoryLevel => ({
+    level: name,
+    folder,
+    exists: entries.length > 0,
+    entries,
+    invalid: [],
+    unindexed: [],
+    lines: entries.length,
+    chars: entries.reduce(
+      (total, item) => total + item.title.length + item.file.length + item.description.length + 9,
+      0,
+    ),
+  })
+  return {
+    instructions: true,
+    levels: [
+      level("namespace", "/home/me/.config/opencode/.memory", [
+        {
+          title: "Org conventions",
+          file: "org-conventions.md",
+          description: "How we name things",
+          line: 1,
+          by: "user",
+        },
+      ]),
+      {
+        ...level("project", `${directory}/.memory`, [
+          {
+            title: "Release checklist",
+            file: "release-checklist.md",
+            description: "Steps before tagging a release",
+            line: 1,
+            updated: new Date(now - 3_600_000).toISOString(),
+            by: "agent build · session ses_op_1",
+          },
+        ]),
+        invalid: [{ line: 2, text: "A note by hand" }],
+        unindexed: ["orphan.md"],
+      },
+      level("agent", `${directory}/.memory/agents/build`, []),
+    ],
+    content: { "project/release-checklist.md": "1. Run the tests\n2. Tag" },
+    settings: {
+      commit: false,
+      indexLines: 200,
+      indexChars: 25000,
+      projects: [{ key: directory, name: "smoke-project", commits: false, repo: directory, excluded: true }],
+    },
+    writes: [],
+  }
+}
+function memoryRoute(memory: MemoryMock, url: URL, method: string, body: () => unknown) {
+  const query = (key: string) => url.searchParams.get(key) ?? ""
+  const find = (name: string) => memory.levels.find((item) => item.level === name)
+  if (url.pathname === "/operator/memory/levels")
+    return {
+      body: {
+        project: directory,
+        namespace: { id: "opencode", name: "OpenCode" },
+        instructions: memory.instructions,
+        agent: query("agent") || "build",
+        limits: { lines: memory.settings.indexLines, chars: memory.settings.indexChars },
+        levels: memory.levels,
+      },
+    }
+  if (url.pathname === "/operator/memory/settings") {
+    if (method === "GET") return { body: memory.settings }
+    const input = body() as {
+      commit?: boolean
+      indexLines?: number
+      indexChars?: number
+      project?: { key: string; commit: boolean | null }
+    }
+    memory.writes.push({ method, path: url.pathname, body: input })
+    Object.assign(memory.settings, {
+      ...(input.commit !== undefined ? { commit: input.commit } : {}),
+      ...(input.indexLines !== undefined ? { indexLines: input.indexLines } : {}),
+      ...(input.indexChars !== undefined ? { indexChars: input.indexChars } : {}),
+    })
+    if (input.project)
+      memory.settings.projects = memory.settings.projects.map((item) =>
+        item.key === input.project!.key
+          ? {
+              ...item,
+              override: input.project!.commit ?? undefined,
+              commits: input.project!.commit ?? memory.settings.commit,
+            }
+          : item,
+      )
+    return { body: memory.settings }
+  }
+  if (url.pathname === "/operator/memory/index" && method === "PUT") {
+    const input = body() as { level: string; text: string }
+    memory.writes.push({ method, path: url.pathname, body: input })
+    return { body: find(input.level) }
+  }
+  if (url.pathname !== "/operator/memory/entry") return undefined
+  if (method === "GET") {
+    const level = find(query("level"))
+    const entry = level?.entries.find((item) => item.file === query("file"))
+    if (!level || !entry)
+      return { body: { name: "OperatorMemoryInvalidError", data: { message: "No such memory" } }, status: 400 }
+    return {
+      body: {
+        level: level.level,
+        file: entry.file,
+        path: `${level.folder}/${entry.file}`,
+        title: entry.title,
+        description: entry.description,
+        ...(entry.updated ? { updated: entry.updated } : {}),
+        ...(entry.by ? { by: entry.by } : {}),
+        content: memory.content[`${level.level}/${entry.file}`] ?? "",
+      },
+    }
+  }
+  if (method === "DELETE") {
+    memory.writes.push({ method, path: url.pathname, body: { level: query("level"), file: query("file") } })
+    const level = find(query("level"))
+    if (level) level.entries = level.entries.filter((item) => item.file !== query("file"))
+    return { body: true }
+  }
+  const input = body() as { level: string; file?: string; title: string; description: string; content: string }
+  memory.writes.push({ method, path: url.pathname, body: input })
+  const level = find(input.level)!
+  const file =
+    input.file ??
+    `${input.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")}.md`
+  const entry = { title: input.title, file, description: input.description, line: level.entries.length + 1, by: "user" }
+  level.entries = input.file
+    ? level.entries.map((item) => (item.file === file ? { ...item, ...entry, line: item.line } : item))
+    : [...level.entries, entry]
+  memory.content[`${input.level}/${file}`] = input.content
+  return {
+    body: {
+      level: input.level,
+      file,
+      path: `${level.folder}/${file}`,
+      title: input.title,
+      description: input.description,
+      by: "user",
+      content: input.content,
+    },
+  }
+}
+
 export interface OperatorMock {
   readonly replies: Array<{ url: string; body: unknown }>
   readonly writes: Array<{ url: string; body: unknown }>
@@ -233,6 +413,8 @@ export interface OperatorMock {
   readonly sessionCreates: Array<{ url: string; body: unknown }>
   readonly folderWrites: Array<{ url: string; body: unknown }>
   readonly memoryWrites: Array<{ url: string; body: unknown }>
+  /** Short-term memory: the three levels, the writes to them, and the settings (memory_spec.md §8). */
+  readonly memory: MemoryMock
   readonly projectsOpened: string[]
   readonly folders: Set<string>
   readonly prompt: PromptMock
@@ -384,6 +566,7 @@ export async function mockOperator(page: Page) {
     sessionCreates: [],
     folderWrites: [],
     memoryWrites: [],
+    memory: memoryMock(),
     projectsOpened: [],
     folders: new Set([`${workspace}/apps`, `${workspace}/site`]),
     prompt: prompt.state,
@@ -1107,6 +1290,8 @@ export async function mockOperator(page: Page) {
       return json(route, { path: body.path })
     }
     if (url.pathname === "/operator/memory/overview") return json(route, memoryOverview)
+    const memory = memoryRoute(state.memory, url, method, () => route.request().postDataJSON())
+    if (memory) return json(route, memory.body, memory.status)
     if (url.pathname === "/operator/memory/file" && method === "GET")
       return json(route, { path: url.searchParams.get("path"), text: "# Project rules\nUse Bun.\n" })
     if (url.pathname === "/operator/memory/file") {

@@ -64,6 +64,8 @@ test("Add an existing folder… browses the workspace; a folder can be made a gi
 test("memory lists files and the database, and edits AGENTS.md", async ({ page }) => {
   const state = await mockOperator(page)
   await page.goto(`/operator/memory${dir}`)
+  // Memory (the levels) is the first tab; instruction files are under Files.
+  await page.getByRole("tab", { name: /Files/ }).click()
 
   const table = page.locator('[data-component="operator-table"]')
   await expect(table).toContainText("Folder instructions")

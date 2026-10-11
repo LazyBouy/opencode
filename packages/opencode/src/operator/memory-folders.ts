@@ -122,7 +122,7 @@ export const SettingsInput = Schema.Struct({
       commit: Schema.NullOr(Schema.Boolean).annotate({ description: "null: use the default" }),
     }),
   ).annotate({ description: "One project's own choice for committing" }),
-}).annotate({ identifier: "OperatorMemorySettingsInput" })
+})
 export type SettingsInput = typeof SettingsInput.Type
 
 // The projects OpenCode knows (OperatorProfileStore's `projects()`: git projects, registered folders).

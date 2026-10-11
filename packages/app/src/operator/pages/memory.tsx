@@ -21,6 +21,7 @@ import { ScopePicker } from "../ui/scope-picker"
 import { StatTile } from "../ui/stat-tile"
 import { requestError } from "./config-helpers"
 import { useOverlayParams } from "../ui/overlay-nav"
+import { MemoryEntryOverlay, MemoryLevelsTab, MemorySettingsTab, useMemoryLevels } from "./memory-levels"
 
 // What OpenCode keeps for a project: its files and database, read for the page and its overlay.
 function useMemory(directory: () => string | undefined) {
@@ -42,7 +43,13 @@ export default function MemoryPage() {
   const language = useLanguage()
   const api = useOperatorClient()
   const directory = useScopedProject()
-  const [params, setParams] = useSearchParams<{ tab?: string; file?: string; summary?: string }>()
+  const [params, setParams] = useSearchParams<{
+    tab?: string
+    file?: string
+    summary?: string
+    memory?: string
+    magent?: string
+  }>()
   const locale = () => language.intl()
   const memory = useMemory(directory)
   // A file (or a compaction summary) opens in the overlay.
@@ -51,6 +58,20 @@ export default function MemoryPage() {
     () => <MemoryOverlay />,
     ["file", "summary"],
   )
+  // A memory of a level (or a new one, or a level's MEMORY.md as text) opens in its own overlay.
+  useRecordOverlay(
+    () => !!params.memory && !!directory(),
+    () => <MemoryEntryOverlay directory={directory()!} />,
+    ["memory"],
+  )
+  // Instruction files (Files, Database) apply only to the OpenCode namespace's projects (and Global's).
+  const levels = useMemoryLevels(directory, () => params.magent)
+  const instructions = () => levels.data?.instructions !== false
+  const tab = () => {
+    const wanted = params.tab ?? "memory"
+    if ((wanted === "files" || wanted === "database") && !instructions()) return "memory"
+    return ["memory", "files", "database", "settings"].includes(wanted) ? wanted : "memory"
+  }
 
   const loaded = (file: OperatorMemoryFile) => language.t(`operator.memory.loaded.${file.loaded}`)
   const totalRows = createMemo(() =>
@@ -74,13 +95,30 @@ export default function MemoryPage() {
           />
         }
       >
-        <TabsV2 value={params.tab === "database" ? "database" : "files"} onChange={(tab: string) => setParams({ tab })}>
+        <TabsV2 value={tab()} onChange={(next: string) => setParams({ tab: next })}>
           <TabsV2.List>
-            <TabsV2.Trigger value="files">
-              {language.t("operator.memory.tab.files", { count: memory.data?.files.length ?? 0 })}
-            </TabsV2.Trigger>
-            <TabsV2.Trigger value="database">{language.t("operator.memory.tab.database")}</TabsV2.Trigger>
+            <TabsV2.Trigger value="memory">{language.t("operator.memory.tab.memory")}</TabsV2.Trigger>
+            <Show when={instructions()}>
+              <TabsV2.Trigger value="files">
+                {language.t("operator.memory.tab.files", { count: memory.data?.files.length ?? 0 })}
+              </TabsV2.Trigger>
+              <TabsV2.Trigger value="database">{language.t("operator.memory.tab.database")}</TabsV2.Trigger>
+            </Show>
+            <TabsV2.Trigger value="settings">{language.t("operator.memory.tab.settings")}</TabsV2.Trigger>
           </TabsV2.List>
+
+          <TabsV2.Content value="memory">
+            <MemoryLevelsTab
+              directory={directory()!}
+              agent={params.magent}
+              onAgent={(agent) => setParams({ magent: agent })}
+              onOpen={(record) => setParams({ memory: record })}
+            />
+          </TabsV2.Content>
+
+          <TabsV2.Content value="settings">
+            <MemorySettingsTab />
+          </TabsV2.Content>
 
           <TabsV2.Content value="files">
             <p data-slot="operator-note">{language.t("operator.memory.filesHint")}</p>

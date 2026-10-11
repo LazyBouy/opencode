@@ -24,6 +24,7 @@ import { useProfileNames } from "./profile-data"
 import { namespaceDefault, OPENCODE } from "./profile-model"
 import { RegisterProject } from "../project-gate"
 import { useMoveToTrash } from "../ui/confirm"
+import { ProjectMemoryCommit } from "./memory-levels"
 import { ProjectRecordFields, ProjectRecordForm } from "./project-record"
 import { useProjectSettings } from "./project-prompt"
 import { ConfigEditor } from "./config-editor"
@@ -709,6 +710,12 @@ function ProjectRecord(props: {
               help={language.t("operator.help.projectNamespace")}
             >
               {props.nsName}
+            </RecordField>
+            <RecordField
+              label={language.t("operator.memorySettings.choice")}
+              help={language.t("operator.help.memoryCommit")}
+            >
+              <ProjectMemoryCommit project={props.row.worktree} name={nameOf(props.row)} />
             </RecordField>
             <Show when={props.row.registered}>
               <ProjectRecordFields setting={props.setting} />

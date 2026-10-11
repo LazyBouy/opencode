@@ -32,6 +32,7 @@ import { OperatorReloadWhenIdle } from "./reload-when-idle"
 import { OperatorPermissionLocks } from "./permission-locks"
 import { OperatorResolutions } from "./resolutions"
 import { OperatorDynamicLayers } from "./dynamic-layers"
+import { OperatorMemoryPage } from "./memory-page"
 import { OperatorMemoryService } from "./memory-service"
 
 // Services the fork's routes need, added to the server's service graph in one place.
@@ -60,6 +61,7 @@ export const operatorNodes = [
   OperatorResolutions.node,
   OperatorDynamicLayers.node,
   OperatorMemoryService.node,
+  OperatorMemoryPage.node,
   OperatorPrompts.node,
   OperatorFolders.node,
   OperatorMemory.node,

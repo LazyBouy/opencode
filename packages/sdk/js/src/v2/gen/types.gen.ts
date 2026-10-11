@@ -4253,13 +4253,84 @@ export type OperatorMemorySettings = {
   }>
 }
 
-export type OperatorMemorySettingsInput = {
-  commit?: boolean
-  indexLines?: number
-  indexChars?: number
-  project?: {
-    key: string
-    commit: boolean
+export type OperatorMemoryLevelName = "namespace" | "project" | "agent"
+
+export type OperatorMemoryEntry = {
+  title: string
+  file: string
+  description: string
+  /**
+   * Its line in MEMORY.md
+   */
+  line: number
+  created?: string
+  updated?: string
+  by?: string
+}
+
+export type OperatorMemoryLevel = {
+  level: OperatorMemoryLevelName
+  folder: string
+  /**
+   * Whether its MEMORY.md exists
+   */
+  exists: boolean
+  entries: Array<OperatorMemoryEntry>
+  /**
+   * Lines of MEMORY.md that are not memory entries (kept, flagged)
+   */
+  invalid: Array<{
+    line: number
+    text: string
+  }>
+  /**
+   * Memory files no line of MEMORY.md names
+   */
+  unindexed: Array<string>
+  /**
+   * The index's entry lines
+   */
+  lines: number
+  /**
+   * The index's characters, as prompts count them
+   */
+  chars: number
+}
+
+export type OperatorMemoryLevels = {
+  project: string
+  namespace: {
+    id: string
+    name: string
+  }
+  /**
+   * Whether instruction files (AGENTS.md, …) apply to the project: the OpenCode and Global namespaces
+   */
+  instructions: boolean
+  agent?: string
+  limits: {
+    lines: number
+    chars: number
+  }
+  levels: Array<OperatorMemoryLevel>
+}
+
+export type OperatorMemoryDetail = {
+  level: OperatorMemoryLevelName
+  file: string
+  path: string
+  title: string
+  description: string
+  created?: string
+  updated?: string
+  by?: string
+  content: string
+}
+
+export type OperatorMemoryInvalidError = {
+  name: "OperatorMemoryInvalidError"
+  data: {
+    message: string
   }
 }
 
@@ -16769,7 +16840,15 @@ export type OperatorMemorySettingsResponses = {
 export type OperatorMemorySettingsResponse = OperatorMemorySettingsResponses[keyof OperatorMemorySettingsResponses]
 
 export type OperatorMemorySaveSettingsData = {
-  body?: OperatorMemorySettingsInput
+  body?: {
+    commit?: boolean
+    indexLines?: number
+    indexChars?: number
+    project?: {
+      key: string
+      commit: boolean
+    }
+  }
   path?: never
   query?: {
     directory?: string
@@ -16800,6 +16879,166 @@ export type OperatorMemorySaveSettingsResponses = {
 
 export type OperatorMemorySaveSettingsResponse =
   OperatorMemorySaveSettingsResponses[keyof OperatorMemorySaveSettingsResponses]
+
+export type OperatorMemoryLevelsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    agent?: string
+  }
+  url: "/operator/memory/levels"
+}
+
+export type OperatorMemoryLevelsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorMemoryLevelsError = OperatorMemoryLevelsErrors[keyof OperatorMemoryLevelsErrors]
+
+export type OperatorMemoryLevelsResponses = {
+  /**
+   * The project's memory levels
+   */
+  200: OperatorMemoryLevels
+}
+
+export type OperatorMemoryLevelsResponse = OperatorMemoryLevelsResponses[keyof OperatorMemoryLevelsResponses]
+
+export type OperatorMemoryForgetEntryData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    level: OperatorMemoryLevelName
+    file: string
+    agent?: string
+  }
+  url: "/operator/memory/entry"
+}
+
+export type OperatorMemoryForgetEntryErrors = {
+  /**
+   * OperatorMemoryInvalidError | InvalidRequestError
+   */
+  400: OperatorMemoryInvalidError | InvalidRequestError
+}
+
+export type OperatorMemoryForgetEntryError = OperatorMemoryForgetEntryErrors[keyof OperatorMemoryForgetEntryErrors]
+
+export type OperatorMemoryForgetEntryResponses = {
+  /**
+   * Moved to Trash
+   */
+  200: boolean
+}
+
+export type OperatorMemoryForgetEntryResponse =
+  OperatorMemoryForgetEntryResponses[keyof OperatorMemoryForgetEntryResponses]
+
+export type OperatorMemoryEntryData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    level: OperatorMemoryLevelName
+    file: string
+    agent?: string
+  }
+  url: "/operator/memory/entry"
+}
+
+export type OperatorMemoryEntryErrors = {
+  /**
+   * OperatorMemoryInvalidError | InvalidRequestError
+   */
+  400: OperatorMemoryInvalidError | InvalidRequestError
+}
+
+export type OperatorMemoryEntryError = OperatorMemoryEntryErrors[keyof OperatorMemoryEntryErrors]
+
+export type OperatorMemoryEntryResponses = {
+  /**
+   * The memory
+   */
+  200: OperatorMemoryDetail
+}
+
+export type OperatorMemoryEntryResponse = OperatorMemoryEntryResponses[keyof OperatorMemoryEntryResponses]
+
+export type OperatorMemorySaveEntryData = {
+  body?: {
+    level: OperatorMemoryLevelName
+    agent?: string
+    file?: string
+    title: string
+    description: string
+    content: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/memory/entry"
+}
+
+export type OperatorMemorySaveEntryErrors = {
+  /**
+   * OperatorMemoryInvalidError | InvalidRequestError
+   */
+  400: OperatorMemoryInvalidError | InvalidRequestError
+}
+
+export type OperatorMemorySaveEntryError = OperatorMemorySaveEntryErrors[keyof OperatorMemorySaveEntryErrors]
+
+export type OperatorMemorySaveEntryResponses = {
+  /**
+   * The memory as saved
+   */
+  200: OperatorMemoryDetail
+}
+
+export type OperatorMemorySaveEntryResponse = OperatorMemorySaveEntryResponses[keyof OperatorMemorySaveEntryResponses]
+
+export type OperatorMemoryWriteIndexData = {
+  body?: {
+    level: OperatorMemoryLevelName
+    agent?: string
+    text: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/memory/index"
+}
+
+export type OperatorMemoryWriteIndexErrors = {
+  /**
+   * OperatorMemoryInvalidError | InvalidRequestError
+   */
+  400: OperatorMemoryInvalidError | InvalidRequestError
+}
+
+export type OperatorMemoryWriteIndexError = OperatorMemoryWriteIndexErrors[keyof OperatorMemoryWriteIndexErrors]
+
+export type OperatorMemoryWriteIndexResponses = {
+  /**
+   * The level
+   */
+  200: OperatorMemoryLevel
+}
+
+export type OperatorMemoryWriteIndexResponse =
+  OperatorMemoryWriteIndexResponses[keyof OperatorMemoryWriteIndexResponses]
 
 export type OperatorAgentPromptGetData = {
   body?: never

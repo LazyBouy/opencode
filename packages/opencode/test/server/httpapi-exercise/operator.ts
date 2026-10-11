@@ -713,6 +713,45 @@ export const operatorScenarios: Scenario[] = [
     .put("/operator/memory/settings", "operator.memory.saveSettings")
     .at((ctx) => ({ path: "/operator/memory/settings", headers: ctx.headers(), body: { indexLines: 0 } }))
     .status(403),
+  http.protected.get("/operator/memory/levels", "operator.memory.levels").json(200, (body) => {
+    object(body)
+    array(body.levels)
+    check(body.levels.length === 3, "the namespace, project and agent levels should be listed")
+    check(body.agent === "build", "the agent level should be build's unless an agent is named")
+  }),
+  http.protected
+    .get("/operator/memory/entry", "operator.memory.entry")
+    .at((ctx) => ({ path: "/operator/memory/entry?level=project&file=..%2Fescape.md", headers: ctx.headers() }))
+    .status(400),
+  http.protected
+    .put("/operator/memory/entry", "operator.memory.saveEntry")
+    .mutating()
+    .at((ctx) => ({
+      path: "/operator/memory/entry",
+      headers: ctx.headers(),
+      body: { level: "project", title: "Exerciser note", description: "Saved by the exerciser", content: "A memory." },
+    }))
+    .json(200, (body) => {
+      object(body)
+      check(body.file === "exerciser-note.md", "the memory's file should be a slug of its title")
+    }),
+  http.protected
+    .delete("/operator/memory/entry", "operator.memory.forgetEntry")
+    .at((ctx) => ({ path: "/operator/memory/entry?level=project&file=no-such-memory.md", headers: ctx.headers() }))
+    .status(400),
+  http.protected
+    .put("/operator/memory/index", "operator.memory.writeIndex")
+    .mutating()
+    .at((ctx) => ({
+      path: "/operator/memory/index",
+      headers: ctx.headers(),
+      body: { level: "agent", text: "- [A](a.md) — One\nA note by hand\n" },
+    }))
+    .json(200, (body) => {
+      object(body)
+      array(body.invalid)
+      check(body.invalid.length === 1, "the hand-written line should be kept and flagged")
+    }),
   http.protected.get("/operator/layout", "operator.layout.get").json(200, (body) => {
     object(body)
     array(body.namespaces)
