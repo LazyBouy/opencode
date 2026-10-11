@@ -7,6 +7,7 @@ import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { useProviders } from "@/hooks/use-providers"
 import { resolveDefaultModel } from "@/hooks/provider-catalog"
+import { useFolderDefaultModel } from "@/operator/folder-model"
 
 export function createPromptModelSelection(input: { agent: () => { model?: ModelKey; variant?: string } | undefined }) {
   const sdk = useSDK()
@@ -14,6 +15,8 @@ export function createPromptModelSelection(input: { agent: () => { model?: Model
   const models = useModels()
   const prompt = usePrompt()
   const providers = useProviders(() => sdk().directory)
+  // fork: the folder's default model as the server resolves it (operator/folder-model.ts)
+  const folderDefault = useFolderDefaultModel(() => sdk().directory)
   const connected = createMemo(() => new Set(providers.connected().map((item) => item.id)))
 
   const valid = (model: ModelKey) => {
@@ -37,9 +40,15 @@ export function createPromptModelSelection(input: { agent: () => { model?: Model
   }
 
   const current = () => {
-    const key = [prompt.model.current(), input.agent()?.model, configured(), recent(), fallback()].find(
-      (item): item is ModelKey => !!item && valid(item),
-    )
+    // fork: a new chat starts on the folder's default model, ahead of the app's own recent models
+    const key = [
+      prompt.model.current(),
+      input.agent()?.model,
+      folderDefault(),
+      configured(),
+      recent(),
+      fallback(),
+    ].find((item): item is ModelKey => !!item && valid(item))
     if (!key) return
     return models.find(key)
   }

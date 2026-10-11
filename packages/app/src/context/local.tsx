@@ -15,6 +15,7 @@ import { useSync } from "./sync"
 import { useServerSDK } from "./server-sdk"
 import { useServerSync } from "./server-sync"
 import { ScopedKey, type ServerScope } from "@/utils/server-scope"
+import { useFolderDefaultModel } from "@/operator/folder-model"
 
 export type ModelKey = { providerID: string; modelID: string; variant?: string }
 
@@ -66,6 +67,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const sync = useSync()
     const serverSDK = useServerSDK()
     const providers = useProviders(() => sdk().directory)
+    // fork: the folder's default model as the server resolves it (operator/folder-model.ts)
+    const folderDefault = useFolderDefaultModel(() => sdk().directory)
     const models = useModels()
     const settings = useSettings()
 
@@ -185,7 +188,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     }
 
-    const fallback = createMemo<ModelKey | undefined>(() => configuredModel() ?? recentModel() ?? defaultModel())
+    // fork: a new chat starts on the folder's default model, ahead of the app's own recent models
+    const folderModel = () => {
+      const model = folderDefault()
+      if (model && validModel(model)) return model
+    }
+    const fallback = createMemo<ModelKey | undefined>(
+      () => folderModel() ?? configuredModel() ?? recentModel() ?? defaultModel(),
+    )
 
     const agent = {
       list,
@@ -211,7 +221,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const prev = scope()
           const next = {
             agent: item.name,
-            model: item.model ?? prev?.model,
+            // fork: a draft doesn't take the previous chat's model; an existing chat keeps its own
+            model: item.model ?? (id() ? prev?.model : undefined),
             variant: item.variant ?? prev?.variant,
           } satisfies State
           const session = id()
