@@ -73,14 +73,6 @@ export function MemoryLevelsTab(props: {
     () => props.directory,
     () => props.agent,
   )
-  const agents = useQuery(() => ({
-    queryKey: api.key("agents", props.directory),
-    queryFn: () =>
-      api
-        .client()
-        .operator.agent.list({ directory: props.directory })
-        .then((result) => result.data ?? []),
-  }))
   const locale = () => language.intl()
 
   return (
@@ -88,17 +80,11 @@ export function MemoryLevelsTab(props: {
       <Show when={levels.data && !levels.data.instructions}>
         <p data-slot="operator-note">{language.t("operator.memoryLevels.instructionsElsewhere")}</p>
       </Show>
-      <div class="flex items-end gap-2 flex-wrap">
-        <Field group label={language.t("operator.memoryLevels.agent")} hint={language.t("operator.help.memoryAgent")}>
-          <SelectV2<string>
-            appearance="base"
-            aria-label={language.t("operator.memoryLevels.agent")}
-            options={(agents.data ?? []).map((item) => item.name)}
-            current={levels.data?.agent ?? props.agent ?? "build"}
-            onSelect={(name) => name && props.onAgent(name)}
-          />
-        </Field>
-      </div>
+      <MemoryAgentPicker
+        directory={props.directory}
+        agent={levels.data?.agent ?? props.agent}
+        onAgent={props.onAgent}
+      />
       <For each={levels.data?.levels ?? []}>
         {(level) => (
           <section data-component="operator-panel" data-testid={`memory-level-${level.level}`}>
@@ -662,5 +648,36 @@ export function ProjectMemoryCommit(props: { project: string; name: string }) {
       label={(choice) => language.t(`operator.memorySettings.choice.${choice}` as "operator.memorySettings.choice.on")}
       onSelect={(choice) => choice && void choose(choice)}
     />
+  )
+}
+
+// The agent whose memory and files the page shows (its home is its working folder).
+export function MemoryAgentPicker(props: {
+  directory: string
+  agent: string | undefined
+  onAgent: (agent: string) => void
+}) {
+  const language = useLanguage()
+  const api = useOperatorClient()
+  const agents = useQuery(() => ({
+    queryKey: api.key("agents", props.directory),
+    queryFn: () =>
+      api
+        .client()
+        .operator.agent.list({ directory: props.directory })
+        .then((result) => result.data ?? []),
+  }))
+  return (
+    <div class="flex items-end gap-2 flex-wrap">
+      <Field group label={language.t("operator.memoryLevels.agent")} hint={language.t("operator.help.memoryAgent")}>
+        <SelectV2<string>
+          appearance="base"
+          aria-label={language.t("operator.memoryLevels.agent")}
+          options={(agents.data ?? []).map((item) => item.name)}
+          current={props.agent ?? "build"}
+          onSelect={(name) => name && props.onAgent(name)}
+        />
+      </Field>
+    </div>
   )
 }

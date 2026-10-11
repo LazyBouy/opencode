@@ -21,18 +21,26 @@ import { ScopePicker } from "../ui/scope-picker"
 import { StatTile } from "../ui/stat-tile"
 import { requestError } from "./config-helpers"
 import { useOverlayParams } from "../ui/overlay-nav"
-import { MemoryEntryOverlay, MemoryLevelsTab, MemorySettingsTab, useMemoryLevels } from "./memory-levels"
+import {
+  MemoryAgentPicker,
+  MemoryEntryOverlay,
+  MemoryLevelsTab,
+  MemorySettingsTab,
+  useMemoryLevels,
+} from "./memory-levels"
 
-// What OpenCode keeps for a project: its files and database, read for the page and its overlay.
+// What OpenCode keeps for a project: its files and database, read for the page and its overlay; the
+// files as the chosen agent's sessions load them (from its home, when it has one).
 function useMemory(directory: () => string | undefined) {
   const api = useOperatorClient()
+  const [params] = useSearchParams<{ magent?: string }>()
   return useQuery(() => ({
-    queryKey: api.key("memory", directory()),
+    queryKey: api.key("memory", directory(), params.magent),
     enabled: !!directory(),
     queryFn: () =>
       api
         .client()
-        .operator.memory.overview({ directory: directory() })
+        .operator.memory.overview({ directory: directory(), ...(params.magent ? { agent: params.magent } : {}) })
         .then((result) => result.data!),
   }))
 }
@@ -121,6 +129,11 @@ export default function MemoryPage() {
           </TabsV2.Content>
 
           <TabsV2.Content value="files">
+            <MemoryAgentPicker
+              directory={directory()!}
+              agent={params.magent}
+              onAgent={(agent) => setParams({ magent: agent })}
+            />
             <p data-slot="operator-note">{language.t("operator.memory.filesHint")}</p>
             <Show when={memory.data?.creatable.length}>
               <div class="flex flex-wrap gap-2">

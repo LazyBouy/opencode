@@ -150,3 +150,16 @@ test("a project's record has its own choice for committing .memory", async ({ pa
   await expect.poll(() => state.memory.writes.length).toBe(1)
   expect(state.memory.writes[0]!.body).toEqual({ project: { key: directory, commit: true } })
 })
+
+test("Files shows instruction files as the chosen agent's sessions load them", async ({ page }) => {
+  await mockOperator(page)
+  const asked: string[] = []
+  page.on("request", (request) => {
+    const url = new URL(request.url())
+    if (url.pathname === "/operator/memory/overview") asked.push(url.searchParams.get("agent") ?? "")
+  })
+  await page.goto(`/operator/memory${dir}&tab=files`)
+  await pick(page, "Agent", "reviewer")
+  await expect(page).toHaveURL(/magent=reviewer/)
+  await expect.poll(() => asked.at(-1)).toBe("reviewer")
+})

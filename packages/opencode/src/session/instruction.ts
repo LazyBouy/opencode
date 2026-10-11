@@ -27,6 +27,9 @@ function extract(messages: SessionV1.WithParts[]) {
           if (typeof p === "string") paths.add(p)
         }
       }
+      // fork: an @-mentioned file's nested instructions (memory_spec.md §11.2)
+      if (part.type === "text" && part.synthetic && Array.isArray(part.metadata?.loaded))
+        for (const p of part.metadata.loaded) if (typeof p === "string") paths.add(p)
     }
   }
   return paths

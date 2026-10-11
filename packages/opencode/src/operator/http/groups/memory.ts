@@ -49,7 +49,12 @@ export const OperatorMemoryApi = HttpApi.make("operator-memory")
     HttpApiGroup.make("operatorMemory")
       .add(
         HttpApiEndpoint.get("overview", OperatorMemoryPaths.overview, {
-          query: WorkspaceRoutingQuery,
+          query: Schema.Struct({
+            ...WorkspaceRoutingQueryFields,
+            agent: Schema.optional(Schema.String).annotate({
+              description: "An agent: its files as its sessions load them (from its home, when it has one)",
+            }),
+          }),
           success: described(OperatorMemory.Overview, "Memory files and database"),
         }).annotateMerge(
           OpenApi.annotations({

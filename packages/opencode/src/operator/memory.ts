@@ -67,7 +67,8 @@ export class NotAllowedError extends Schema.TaggedErrorClass<NotAllowedError>()(
 }) {}
 
 export interface Interface {
-  readonly overview: () => Effect.Effect<Overview>
+  /** With an agent: its files as its sessions load them (from its home, when it has one). */
+  readonly overview: (agent?: string) => Effect.Effect<Overview>
   /** Reads a memory file listed by overview. */
   readonly read: (file: string) => Effect.Effect<string, NotAllowedError>
   /**
@@ -101,13 +102,33 @@ const layer = Layer.effect(
           .catch(() => ({})),
       )
 
-    const files = Effect.fnUntraced(function* () {
+    const files = Effect.fnUntraced(function* (agent?: string) {
       const ctx = yield* InstanceState.context
       const root = OperatorConfig.projectRoot(ctx)
       const layout = yield* Effect.promise(() => OperatorScopes.layout([root]))
       const scopeOf = (file: string) => OperatorScopes.classify(file, layout).kind
 
-      const always = [...(yield* instruction.systemPaths().pipe(Effect.orDie))]
+      // An agent with a home works there (memory_spec.md §11.4): its sessions find the instruction files
+      // from the home up to the project root, and nested ones only below the home.
+      const home = agent ? (yield* config.get()).agent?.[agent]?.home : undefined
+      const working = home ? path.resolve(root, home) : path.resolve(ctx.directory)
+      const systemPaths = [...(yield* instruction.systemPaths().pipe(Effect.orDie))]
+      const fromHome = home
+        ? yield* Effect.promise(async () => {
+            for (const name of names) {
+              const matches: string[] = []
+              for (let dir = working; ; dir = path.dirname(dir)) {
+                const file = path.join(dir, name)
+                if (await Bun.file(file).exists()) matches.push(file)
+                if (dir === root || dir === path.dirname(dir) || !dir.startsWith(root)) break
+              }
+              if (matches.length) return matches
+            }
+            return [] as string[]
+          })
+        : undefined
+      const projectNamed = (file: string) => names.includes(path.basename(file)) && file.startsWith(root + path.sep)
+      const always = fromHome ? [...systemPaths.filter((file) => !projectNamed(file)), ...fromHome] : systemPaths
       const urls = ((yield* config.get()).instructions ?? []).filter((item) => /^https?:\/\//.test(item))
       // Instruction files below the session folder are added when the agent reads a file under
       // theirs. In each folder only the first name in `names` counts; the session folder's own files
@@ -117,7 +138,7 @@ const layer = Layer.effect(
           ? []
           : yield* Effect.promise(() =>
               glob(`**/{${names.map((name) => name.slice(0, -3)).join(",")}}.md`, {
-                cwd: ctx.directory,
+                cwd: root,
                 absolute: true,
                 nodir: true,
                 maxDepth: 8,
@@ -132,7 +153,10 @@ const layer = Layer.effect(
         .toSorted()
         .map((file) => ({
           file,
-          used: path.dirname(file) !== path.resolve(ctx.directory) && first.get(path.dirname(file)) === file,
+          used:
+            path.dirname(file) !== working &&
+            path.dirname(file).startsWith(working + path.sep) &&
+            first.get(path.dirname(file)) === file,
         }))
       const skills = yield* skill.all()
       // Prompt profile data: namespaces, their types, layers, groups and profiles, project and agent settings.
@@ -175,7 +199,7 @@ const layer = Layer.effect(
         : { path: path.join(Global.Path.config, "AGENTS.md"), scope: "global" as const },
     ]
 
-    const overview = Effect.fn("OperatorMemory.overview")(function* () {
+    const overview = Effect.fn("OperatorMemory.overview")(function* (agent?: string) {
       const ctx = yield* InstanceState.context
       const dbPath = Database.path()
       // Every table, counted only: rows are never read, since some (accounts, credentials) hold secrets.
@@ -243,7 +267,7 @@ const layer = Layer.effect(
             return data.type === "text" && data.text ? [data.text] : []
           })
           .join("\n")
-      const listed = yield* files()
+      const listed = yield* files(agent)
       const creatable = yield* Effect.filter(candidates(ctx), (item) =>
         Effect.promise(() =>
           fs

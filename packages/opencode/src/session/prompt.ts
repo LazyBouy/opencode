@@ -874,12 +874,14 @@ const layer = Layer.effect(
                 )
                 if (Exit.isSuccess(exit)) {
                   const result = exit.value
+                  const loaded = result.metadata?.loaded // fork: they count as loaded (memory_spec.md §11.2)
                   pieces.push({
                     messageID: info.id,
                     sessionID: input.sessionID,
                     type: "text",
                     synthetic: true,
                     text: result.output,
+                    ...(Array.isArray(loaded) && loaded.length ? { metadata: { loaded } } : {}),
                   })
                   if (result.attachments?.length) {
                     pieces.push(

@@ -21,7 +21,7 @@ export const operatorMemoryHandlers = HttpApiBuilder.group(InstanceHttpApi, "ope
       new ApiMemoryNotAllowedError({ name: "OperatorMemoryNotAllowedError", data: { message: error.message } })
 
     return handlers
-      .handle("overview", () => memory.overview())
+      .handle("overview", (ctx) => memory.overview(ctx.query.agent))
       .handle("levels", (ctx) => page.levels(ctx.query.agent))
       .handle("entry", (ctx) =>
         page

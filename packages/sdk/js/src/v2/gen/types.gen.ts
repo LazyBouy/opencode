@@ -16765,6 +16765,7 @@ export type OperatorMemoryOverviewData = {
   query?: {
     directory?: string
     workspace?: string
+    agent?: string
   }
   url: "/operator/memory/overview"
 }
