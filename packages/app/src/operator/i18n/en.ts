@@ -361,7 +361,7 @@ export const dict = {
   "operator.help.projectGroups":
     "Named sets of members, so messages and permissions can address several agents at once.",
   "operator.help.agentModelFact":
-    "The model this agent's requests use, and where it is set: the agent's own model (its config entry or agent file), else the default model (config model, set on Providers & Models), else OpenCode's own choice. The title agent uses the small model. In chat, a session can pick another model in the composer; a new session starts with this one.",
+    "The model this agent's requests use: its own model (its agent file or config entry), else the project's default model, which comes from the project's config, its namespace's, or Settings → Models, else OpenCode decides. The title agent uses the small model. In chat, a session can pick another model.",
   "operator.help.agentSource": "Where the agent is defined: built in, in a config file, or in its own markdown file.",
   "operator.help.agentSessions": "Sessions started as this agent in this project.",
   "operator.help.agentLastUsed": "When a session of this agent last changed.",
@@ -1910,6 +1910,8 @@ export const dict = {
   "operator.modelDefaults.changeInSettings": "Change in Settings → Models",
   "operator.help.modelDefaultFor":
     "Where this model is the default or small model: Settings, and the namespaces and projects whose config sets it. Levels that only inherit it aren't listed. Defaults are set in Settings → Models and in Models per project.",
+  "operator.modelChain.agentDefault": "Default model · {{model}}",
+  "operator.modelChain.agentSmall": "Small model · {{model}}",
   "operator.memory.summariesHint": "In this project",
   "operator.memory.summariesBody": "The latest summaries that replaced older turns in this project's sessions.",
   "operator.memory.noSummaries": "No sessions here have been compacted yet.",

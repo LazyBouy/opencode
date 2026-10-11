@@ -21,6 +21,7 @@ import { createStore } from "solid-js/store"
 import { SettingsListV2 } from "@/components/settings-v2/parts/list"
 import { SettingsRowV2 } from "@/components/settings-v2/parts/row"
 import "@/components/settings-v2/settings-v2.css"
+import { useNavigate } from "@solidjs/router"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
 import { showToast } from "@/utils/toast"
@@ -37,6 +38,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
 import { useLayoutMove } from "../ui/layout-move"
 import { ready } from "../data"
+import { NamespaceModels } from "../ui/model-defaults"
 
 const OPENCODE = "opencode"
 // The Default project choice that means "the namespace's first project".
@@ -178,6 +180,17 @@ function NamespaceRecord(props: {
 }) {
   const language = useLanguage()
   const moveFolder = useLayoutMove()
+  const dialog = useDialog()
+  const navigate = useNavigate()
+  // Leaves Settings for a page: every open dialog closes (one at a time: each takes 100ms), then the page opens.
+  const leave = (href: string) => {
+    const step = () => {
+      if (!dialog.active) return navigate(href)
+      dialog.close()
+      setTimeout(step, 120)
+    }
+    step()
+  }
   const id = createUniqueId()
   const serverSdk = useServerSDK()
   const client = () => serverSdk().client.operator.namespace
@@ -384,6 +397,7 @@ function NamespaceRecord(props: {
                     {defaultProjectText(found(), language.t)}
                   </span>
                 </RecordField>
+                <NamespaceModels summary={found()} />
                 <RecordField
                   label={language.t("settings.namespaces.inheritGlobal")}
                   help={language.t("operator.help.namespaceInheritGlobal")}
@@ -398,6 +412,13 @@ function NamespaceRecord(props: {
                 </RecordField>
               </dl>
               <div class="flex items-center justify-end gap-2">
+                <ButtonV2
+                  variant="outline"
+                  data-testid="namespace-models-link"
+                  onClick={() => leave(`/operator/models?ns=${encodeURIComponent(found().namespace.id)}&row=namespace`)}
+                >
+                  {language.t("operator.modelChain.change")}
+                </ButtonV2>
                 <ButtonV2
                   ref={(element: HTMLButtonElement) => (edit = element)}
                   variant="contrast"

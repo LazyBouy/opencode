@@ -18,7 +18,7 @@ import { AgentQueue } from "./agent-queue"
 import { recordOf, useProjectRecords } from "./project-record"
 import { requestError } from "./config-helpers"
 import { FieldHelp } from "../ui/field-help"
-import { ModelWithSource } from "../ui/prompt-trace"
+import { AgentModel } from "../ui/model-defaults"
 import { PermissionRequests } from "../ui/permission-requests"
 import { homeFolder } from "./agent-home"
 
@@ -212,7 +212,7 @@ export function AgentDetail(props: { name: string; directory: string; tab: strin
             <Match when={props.tab === "overview"}>
               <dl data-component="operator-facts" data-layout="stacked">
                 <Fact label={language.t("operator.column.model")} help={language.t("operator.help.agentModelFact")}>
-                  <ModelWithSource source={current().modelSource} />
+                  <AgentModel source={current().modelSource} directory={directory()} />
                 </Fact>
                 <Fact label={language.t("operator.prompts.profile")} help={language.t("operator.help.agentProfile")}>
                   <Show when={prompt.data} fallback="—">
