@@ -24,6 +24,10 @@ import type { Provider } from "@/provider/provider"
 import { Skill } from "@/skill"
 import { OperatorFileCache } from "./file-cache"
 import { OperatorHelperTexts } from "./helper-texts"
+import { OperatorMemoryFolders } from "./memory-folders"
+import { OperatorMemoryFormat } from "./memory-format"
+import { OperatorMemoryService } from "./memory-service"
+import { OperatorMemoryStore } from "./memory-store"
 import { OperatorPermissionEffective } from "./permission-effective"
 import type { OperatorProfile } from "./profile"
 import { OperatorRegistry } from "./registry"
@@ -61,6 +65,8 @@ export type Input = {
   readonly layers?: ReadonlyArray<string>
   /** Helper sources: written (the default), or a placeholder (the agent page's preview calls no model). */
   readonly helper?: "write" | "placeholder"
+  /** The memory layers too (the agent's profile holds one): each level's index, by its READ decision. */
+  readonly memory?: boolean
 }
 
 export interface Interface {
@@ -92,6 +98,92 @@ const layer = Layer.effect(
     const locations = yield* LocationServiceMap.Service
     const agents = yield* Agent.Service
     const helpers = yield* OperatorHelperTexts.Service
+    const memory = yield* OperatorMemoryService.Service
+
+    // A memory level's index lines as candidates (newest first by their files' times), read again only
+    // when MEMORY.md changed: a save rewrites it, so the next call sees the memory and an unchanged index
+    // gives the same text (the prompt stays cached).
+    const indexes = new Map<string, { stamp: string; candidates: OperatorResolver.Candidate[] }>()
+    const memoryCandidates = (folder: string) =>
+      Effect.promise(async (): Promise<OperatorResolver.Candidate[]> => {
+        const index = path.join(folder, OperatorMemoryFormat.INDEX)
+        const stamp = await OperatorFileCache.stamp(index)
+        const known = indexes.get(folder)
+        if (known && known.stamp === stamp) return known.candidates
+        const listed = await OperatorMemoryStore.list(folder)
+        const candidates: OperatorResolver.Candidate[] = listed.exists
+          ? await Promise.all(
+              listed.entries.map(async (entry) => {
+                const file = path.join(folder, entry.file)
+                const info = await stat(file).catch(() => undefined)
+                return {
+                  source: 0,
+                  location: file,
+                  text: OperatorMemoryFormat.formatLine(entry),
+                  attributes: { name: entry.title, file: entry.file, updated: info?.mtimeMs ?? 0 },
+                }
+              }),
+            )
+          : [{ source: 0, location: index, reason: "missing" }]
+        if (indexes.size > 500) indexes.clear()
+        indexes.set(folder, { stamp, candidates })
+        return candidates
+      })
+
+    // The memory layers (memory_spec.md §4.1, §7): allow shows the index, ask one line saying it is
+    // there, deny nothing; an incognito session has no agent memory.
+    const memoryLayers = Effect.fnUntraced(function* (input: Input) {
+      const found = yield* memory.context({
+        ...(input.sessionID ? { sessionID: input.sessionID } : {}),
+        agent: input.agent.name,
+      })
+      const limits = yield* Effect.promise(() => OperatorMemoryFolders.settings())
+      const result = new Map<string, Resolution>()
+      for (const [id, level] of Object.entries(B.MEMORY_LEVEL)) {
+        const folder = found.folders[level]
+        const resolver = B.memoryResolver(level, {
+          folder: folder ?? "",
+          lines: limits.indexLines,
+          chars: limits.indexChars,
+        })
+        const decision = found.read[level]
+        if (!folder || decision === "deny") {
+          const off = !folder ? "this session runs incognito: no agent memory" : `READ(${level}/*) is denied`
+          result.set(id, OperatorResolver.run(resolver, [], { off }))
+          continue
+        }
+        const candidates = yield* memoryCandidates(folder)
+        if (decision === "ask") {
+          const any = candidates.some((item) => item.text)
+          const notice: OperatorResolver.Resolver = {
+            sources: [{ kind: "memory", location: level, name: `${level} memory` }],
+            filter: [{ kind: "available", need: "text" }],
+            score: [],
+            select: { policy: "one" },
+            template: { item: "{text}", separator: "\n" },
+          }
+          result.set(
+            id,
+            OperatorResolver.run(
+              notice,
+              any
+                ? [
+                    {
+                      source: 0,
+                      location: path.join(folder, OperatorMemoryFormat.INDEX),
+                      text: B.memoryAvailable(level),
+                      attributes: { name: `READ(${level}/*) asks: one line in place of the index` },
+                    },
+                  ]
+                : [],
+            ),
+          )
+          continue
+        }
+        result.set(id, OperatorResolver.run(resolver, candidates))
+      }
+      return result
+    })
 
     // `~/.config/opencode/` is the global config folder (wherever it is), `~/` the home folder.
     const expand = (location: string) =>
@@ -413,6 +505,7 @@ const layer = Layer.effect(
         }
       }
       for (const custom of input.custom ?? []) result.set(custom.layer.id, yield* resolveCustom(input, custom))
+      if (input.memory) for (const [id, done] of yield* memoryLayers(input)) result.set(id, done)
       return result
     })
 
@@ -431,6 +524,7 @@ const layer = Layer.effect(
               : {}),
             ...(request.instructions ? { instructions: request.instructions } : {}),
             ...(request.custom ? { custom: request.custom as ReadonlyArray<Custom> } : {}),
+            ...(request.memory ? { memory: true } : {}),
           })
         }).pipe(Effect.provideService(InstanceRef, request.instance as InstanceContext)),
       )
@@ -463,6 +557,7 @@ export const node = LayerNode.make({
     Skill.node,
     McpService.node,
     OperatorHelperTexts.node,
+    OperatorMemoryService.node,
     locationServiceMapNode,
   ],
 })

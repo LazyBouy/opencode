@@ -33,6 +33,9 @@ import { SystemPrompt } from "@/session/system"
 // Mirrors session/prompt.ts; kept in sync by the end-to-end prompt tests.
 export const STRUCTURED_OUTPUT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
+export const MEMORY_GUIDANCE =
+  "Memories from earlier sessions. Read a memory's details with the memory tool (read); save what you learn that will help later (save)."
+
 export type Kind = "base" | "reminder" | "notice" | "helper"
 
 interface Builtin {
@@ -73,6 +76,8 @@ export const BUILTINS: readonly Builtin[] = [
     text: MAX_STEPS_PROMPT,
     file: "packages/core/src/session/runner/max-steps.ts",
   },
+  // The fork's: before the memory layers' blocks, once (memory_spec.md §4.1).
+  { id: "notice.memory", kind: "notice", text: MEMORY_GUIDANCE },
   // The prompts of the agents OpenCode runs for itself (title, summary, compaction) and of the agent
   // generator's one call.
   { id: "helper.title", kind: "helper", text: PROMPT_TITLE, file: `${AGENT}/prompt/title.txt` },

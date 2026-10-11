@@ -96,10 +96,12 @@ const PromptPlugin: Plugin = async (input) => {
       const setting = loaded.agents[hook.agent]
       // OpenCode's per-request Dynamic layers, and the agent's layers with rules of their own, through the
       // pipeline (dynamic-layers.ts); without it, OpenCode's as upstream wrote them and yours as written.
-      const custom = OperatorProfile.ruledLayers(
-        loaded.catalog,
-        OperatorProfile.slotsFor(loaded.catalog, { agent: hook.agent, setting, project: loaded.project }),
-      )
+      const agentSlots = OperatorProfile.slotsFor(loaded.catalog, {
+        agent: hook.agent,
+        setting,
+        project: loaded.project,
+      })
+      const custom = OperatorProfile.ruledLayers(loaded.catalog, agentSlots)
       const resolved = instance
         ? await OperatorRegistry.dynamicLayers
             .resolve?.({
@@ -109,6 +111,7 @@ const PromptPlugin: Plugin = async (input) => {
               ...(hook.sessionID ? { sessionID: hook.sessionID } : {}),
               instructions: hook.parts.instructions,
               ...(custom.length ? { custom } : {}),
+              ...(OperatorProfile.holdsMemory(loaded.catalog, agentSlots) ? { memory: true } : {}),
             })
             .catch(() => undefined)
         : undefined

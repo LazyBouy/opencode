@@ -100,7 +100,7 @@ export const Select = Schema.Struct({
   budget: Schema.optional(Schema.Finite).annotate({ description: "Characters for the whole layer" }),
   perSource: Schema.optional(Schema.Finite).annotate({ description: "Characters per candidate; longer is cut" }),
   overflow: Schema.optional(Schema.String).annotate({
-    description: "A line added when candidates are over budget; {count} is how many",
+    description: "A line added when candidates are left out by the budget or a top N; {count} is how many",
   }),
   unique: Schema.optional(Schema.String).annotate({
     description: "An attribute (path): a candidate whose value was already selected is left out",
@@ -369,6 +369,8 @@ export function run(resolver: Resolver, candidates: ReadonlyArray<Candidate>, co
   ]
   const why = new Map<Scored, string>()
   const chosen: Scored[] = []
+  // Left out by a top N: counted in the overflow line with those over budget.
+  let beyondTop = 0
   for (const group of order) {
     const pool = kept.filter((item) => item.group === group).toSorted(byScore)
     if (!pool.length) continue
@@ -384,6 +386,7 @@ export function run(resolver: Resolver, candidates: ReadonlyArray<Candidate>, co
             )
     for (const item of pool) {
       if (take.includes(item)) continue
+      if (policy === "top") beyondTop++
       const rule = differing(pool[0]!, item)
       why.set(
         item,
@@ -432,7 +435,8 @@ export function run(resolver: Resolver, candidates: ReadonlyArray<Candidate>, co
         name: String(attribute(item, "name") ?? ""),
       }),
     )
-  const overflow = over && resolver.select.overflow ? [fill(resolver.select.overflow, { count: over })] : []
+  const more = over + beyondTop
+  const overflow = more && resolver.select.overflow ? [fill(resolver.select.overflow, { count: more })] : []
   const body = [...pieces, ...overflow]
   // An empty selection renders nothing (no header, footer or separator), or the template's empty text.
   const text = body.length ? (t.header ?? "") + body.join(t.separator) + (t.footer ?? "") : (t.empty ?? "")

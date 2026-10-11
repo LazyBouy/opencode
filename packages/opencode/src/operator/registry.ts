@@ -61,5 +61,7 @@ export const dynamicLayers: {
     instructions?: ReadonlyArray<string>
     /** The agent's layers with rules of their own (OperatorDynamicLayers.Custom), resolved by their id. */
     custom?: ReadonlyArray<{ layer: unknown; resolver: unknown }>
+    /** The memory layers too (the agent's profile holds one). */
+    memory?: boolean
   }) => Promise<ReadonlyMap<string, { text: string; trace: unknown }>>
 } = {}

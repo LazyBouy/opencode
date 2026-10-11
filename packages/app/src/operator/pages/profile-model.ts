@@ -68,7 +68,7 @@ export function isPerRequest(layer: { origin: string; replaces?: string } | unde
 
 // What a Dynamic layer's text varies with: OpenCode's per-request layers (by the built-in's id
 // without its prefix), and yours (written).
-export type Factor = "agent" | "model" | "project" | "config" | "date" | "session"
+export type Factor = "agent" | "model" | "project" | "config" | "date" | "session" | "namespace" | "permission"
 export const DEPENDS_ON: Record<string, ReadonlyArray<Factor>> = {
   "slot.base": ["model"],
   "slot.agent": ["agent", "project", "config"],
@@ -78,6 +78,9 @@ export const DEPENDS_ON: Record<string, ReadonlyArray<Factor>> = {
   "generated.instructions": ["project", "config"],
   "generated.mcp": ["agent", "project", "config"],
   "generated.skills": ["agent", "project", "config"],
+  "generated.memory-namespace": ["namespace", "permission"],
+  "generated.memory-project": ["project", "permission"],
+  "generated.memory-agent": ["agent", "project", "permission"],
   written: ["project", "session"],
 }
 

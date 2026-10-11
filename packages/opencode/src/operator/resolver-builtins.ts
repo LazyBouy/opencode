@@ -143,6 +143,48 @@ export const RESOLVERS: Readonly<Record<string, OperatorResolver.Resolver>> = {
 
 export const isBuiltinResolver = (id: string) => id in RESOLVERS
 
+// The memory layers (memory_spec.md §4.1): the level's index lines, newest first, cut at the limits (Memory →
+// Settings) with an overflow line; nothing when the index is empty. Built per request with the level's folder
+// and the limits; RESOLVERS shows them with the default limits.
+export const MEMORY_LEVEL: Readonly<Record<string, "namespace" | "project" | "agent">> = {
+  [MEMORY_NAMESPACE]: "namespace",
+  [MEMORY_PROJECT]: "project",
+  [MEMORY_AGENT]: "agent",
+}
+export function memoryResolver(
+  level: "namespace" | "project" | "agent",
+  input: { folder: string; lines: number; chars: number },
+): OperatorResolver.Resolver {
+  return {
+    sources: [{ kind: "memory", location: level, name: `${level} memory` }],
+    filter: [{ kind: "available", need: "text" }],
+    score: [{ kind: "recency", weight: 1 }],
+    select: {
+      policy: "top",
+      n: input.lines,
+      budget: input.chars,
+      overflow: "…{count} more memories: use the memory tool to list them",
+    },
+    template: {
+      header: `<${level}_memory path="${input.folder}">\n`,
+      item: "{text}",
+      separator: "\n",
+      footer: `\n</${level}_memory>`,
+    },
+  }
+}
+// What a level shows when reading it asks (§7): one line, and the memory tool asks when it reads.
+export const memoryAvailable = (level: string) =>
+  `${level.charAt(0).toUpperCase()}${level.slice(1)} memory is available. Read it with the memory tool; reading asks for permission.`
+
+// The memory layers' rules as the editor shows them (the default limits; the folder is the level's).
+for (const [id, level] of Object.entries(MEMORY_LEVEL))
+  (RESOLVERS as Record<string, OperatorResolver.Resolver>)[id] = memoryResolver(level, {
+    folder: "{folder}",
+    lines: 200,
+    chars: 25_000,
+  })
+
 // Your Dynamic layers written by a helper (before they had rules of their own): one helper source, the
 // layer's prompt, written once per session. The same text as before.
 export const HELPER_RESOLVER: OperatorResolver.Resolver = {

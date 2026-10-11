@@ -357,6 +357,9 @@ async function adopt(ns: string): Promise<void> {
           slots: ownSlots(item.slots),
           builtin: false,
         })
+    // The memory layers, when a namespace first takes them: its OpenCode and Spec profiles hold them, last in
+    // Dynamic (OpenCode's own OpenCode profile stays upstream's; the user's choice of 2026-10-10).
+    if (layers.some((item) => OperatorResolverBuiltins.MEMORY_LAYERS.includes(item.id))) await addMemoryLayers(ns)
     // What the namespace already had now points at its own copies.
     await pointAtOwn(ns)
     await writeJson(
@@ -366,6 +369,28 @@ async function adopt(ns: string): Promise<void> {
   })().finally(() => adopting.delete(ns))
   adopting.set(ns, work)
   return work
+}
+
+async function addMemoryLayers(ns: string) {
+  const own = OperatorProfile.own
+  const memory = OperatorResolverBuiltins.MEMORY_LAYERS.map(own)
+  for (const id of [own(OperatorProfile.OPENCODE_PROFILE), own(`${OperatorProfile.PREFIX}profile.spec`)]) {
+    const file = itemFile(ns, "profile", id)
+    const found = (await Bun.file(file)
+      .json()
+      .catch(() => undefined)) as OperatorProfile.Profile | undefined
+    if (!found?.slots) continue
+    const dynamic = found.slots[OperatorProfile.DYNAMIC] ?? []
+    if (memory.every((layer) => dynamic.includes(layer))) continue
+    await writeItem(ns, "profile", {
+      ...found,
+      slots: {
+        ...found.slots,
+        [OperatorProfile.DYNAMIC]: [...dynamic.filter((layer) => !memory.includes(layer)), ...memory],
+      },
+      builtin: false,
+    })
+  }
 }
 
 // Slots with OpenCode's built-ins replaced by a namespace's own copies. Built-in tool descriptions do

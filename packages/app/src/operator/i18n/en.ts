@@ -2291,6 +2291,7 @@ export const dict = {
   "operator.trace.config": "Config file: {{path}}",
   "operator.trace.instruction-file": "Instruction file: {{path}}",
   "operator.trace.instruction-url": "Instruction URL: {{path}}",
+  "operator.trace.memory-index": "Memory index: {{path}}",
   "operator.trace.mcp": "The instructions of the MCP server {{name}}",
   "operator.trace.skill": "Skill file: {{path}}",
   "operator.trace.skillBuiltin": "One of OpenCode's own skills (packages/opencode/src/skill/index.ts)",
@@ -2380,6 +2381,11 @@ export const dict = {
   "operator.profile.factor.date.hint": "Today's date.",
   "operator.profile.factor.session": "Session",
   "operator.profile.factor.session.hint": "Written once per session, from its first message.",
+  "operator.profile.factor.namespace": "Namespace",
+  "operator.profile.factor.namespace.hint": "The project's namespace: its folder holds the namespace's memory.",
+  "operator.profile.factor.permission": "Permission",
+  "operator.profile.factor.permission.hint":
+    "The session's memory READ decision: allow shows the index, ask one line saying it is there, deny nothing.",
   "operator.layer.source.slot.base":
     "OpenCode's base prompt for the request's model: one of the Base Model Group layers. base.anthropic for Claude models; base.beast for GPT-4, o1 and o3; base.gpt-astra for GPT-6; base.codex for GPT Codex models; base.gpt for other GPT models; base.gemini for Gemini; base.kimi for Kimi (and the kimi-for-coding and moonshotai providers); base.trinity for Trinity; base.meta for Muse; base.default for every other model. A copy of one of them in the profile is used instead of it.",
   "operator.layer.source.slot.agent":
@@ -2398,6 +2404,12 @@ export const dict = {
     "The skills the agent may load, each with its name, description and file. Found in: OpenCode's own; `skill/` or `skills/` in OpenCode's config folders (`~/.config/opencode`, every `.opencode` from the working folder up to the project root, `~/.opencode`, `OPENCODE_CONFIG_DIR`); `.claude/skills` and `.agents/skills` in the home folder and from the working folder up to the project root; and the paths and URLs of the `skills` config key. A skill needs a `name`; one without a `description` is not listed. Only skills the agent's `skill` permission does not deny are listed; none when its last `skill` rule is `*: deny`. See Capabilities → Skills → How skills reach an agent.",
   "operator.layer.source.written":
     "Written by the dynamic generator (a helper agent) from this layer's prompt, the project (its name, the org and project purposes, README, AGENTS.md and manifest) and the session's first message, once per session. The session's next turns and its subagents reuse it.",
+  "operator.layer.source.generated.memory-namespace":
+    "The namespace's index of memories, `<namespace folder>/.memory/MEMORY.md`: its lines, newest first, cut at the limits on Memory → Settings (200 lines or 25,000 characters by default) with a line saying how many more there are. Nothing when it is empty. With READ ask, one line saying it is there; with deny, nothing. The memory tool reads, saves and forgets memories.",
+  "operator.layer.source.generated.memory-project":
+    "The project's index of memories, `<project folder>/.memory/MEMORY.md`: its lines, newest first, cut at the limits on Memory → Settings with a line saying how many more there are. Nothing when it is empty. With READ ask, one line saying it is there; with deny, nothing.",
+  "operator.layer.source.generated.memory-agent":
+    "The running agent's index of memories: `<its home>/.memory/MEMORY.md`, or `<project folder>/.memory/agents/<name>/MEMORY.md` for an agent without a home. Its lines, newest first, cut at the limits on Memory → Settings. Nothing when it is empty, or for an incognito subagent. With READ ask, one line saying it is there; with deny, nothing.",
   "operator.profile.sampleAgentOption": "{{name}} ({{details}})",
   "operator.profile.cameFrom": "Came from",
   "operator.newSession.namespace": "Namespace",

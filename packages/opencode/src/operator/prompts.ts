@@ -203,6 +203,8 @@ const layer = Layer.effect(
             ...(input.sessionID ? { sessionID: input.sessionID } : {}),
             ...(custom.length ? { custom } : {}),
             ...(input.helper ? { helper: input.helper } : {}),
+            // The memory layers, for whichever profile is previewed.
+            memory: true,
           })
       return { ctx, agent, model, modelSource, key, loaded, parts, resolved }
     })

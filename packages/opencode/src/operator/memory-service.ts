@@ -18,7 +18,6 @@ import { OperatorProfile } from "./profile"
 import { OperatorProfileStore } from "./profile-store"
 import { OperatorProjects } from "./projects"
 import { OperatorRegistry } from "./registry"
-import { OperatorResolverBuiltins as B } from "./resolver-builtins"
 
 // Short-term memory for the memory tool (memory-tool.ts) and the requests that offer it
 // (specs/docs/feedbacks/memory/memory_spec.md §4.3, §5, §6):
@@ -30,8 +29,9 @@ import { OperatorResolverBuiltins as B } from "./resolver-builtins"
 // - the `memory` permission's defaults, written once at start (memory-defaults.ts).
 
 export interface Interface {
+  /** Without a session (the agent page's preview): not incognito, the agent's rules alone. */
   readonly context: (input: {
-    sessionID: string
+    sessionID?: string
     agent: string
   }) => Effect.Effect<Awaited<ReturnType<NonNullable<typeof OperatorRegistry.memory.context>>>>
 }
@@ -58,10 +58,15 @@ const layer = Layer.effect(
       )
     }
 
-    const context = Effect.fn("OperatorMemoryService.context")(function* (input: { sessionID: string; agent: string }) {
+    const context = Effect.fn("OperatorMemoryService.context")(function* (input: {
+      sessionID?: string
+      agent: string
+    }) {
       const ctx = yield* InstanceState.context
       const project = yield* Effect.promise(() => OperatorProjects.keyOf(ctx))
-      const session = yield* sessions.get(SessionID.make(input.sessionID)).pipe(Effect.option)
+      const session = input.sessionID
+        ? yield* sessions.get(SessionID.make(input.sessionID)).pipe(Effect.option)
+        : Option.none()
       const incognito = Option.isSome(session) && !!session.value.parentID
       const home = (yield* config.get()).agent?.[input.agent]?.home
       const folders = yield* Effect.promise(() =>
@@ -101,12 +106,7 @@ const layer = Layer.effect(
           setting: loaded.agents[agent],
           project: loaded.project,
         })
-        const opted = Object.values(slots)
-          .flat()
-          .some((id) => {
-            const layer = OperatorProfile.findLayer(loaded.catalog, id)
-            return !!layer && B.MEMORY_LAYERS.includes(layer.replaces ?? layer.id)
-          })
+        const opted = OperatorProfile.holdsMemory(loaded.catalog, slots)
         if (recent.size > 500) recent.clear()
         recent.set(key, { at: Date.now(), revision, opted })
         return { opted }

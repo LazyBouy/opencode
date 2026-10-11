@@ -3960,7 +3960,7 @@ export type OperatorPromptCatalog1 = {
 
 export type OperatorPromptTraceStep = {
   /**
-   * agent-own / agent-none: the agent has its own prompt, or none; agent-file / agent-config / agent-builtin: where it is defined (its agent file, a config file, OpenCode's own definition); model-rule: the base prompt's model and the rule that chose it; builtin-layer / copy-layer / own-layer / layer: the layer the text is in; file: the file it is in; org-purpose: the namespace's purpose; dynamic-written: written for each session by the dynamic generator; rules: resolved by the layer's own rules; written: written by OpenCode for each request; references / config: the references in config files; instruction-file / instruction-url, mcp, skill: what a per-request text was made from
+   * agent-own / agent-none: the agent has its own prompt, or none; agent-file / agent-config / agent-builtin: where it is defined (its agent file, a config file, OpenCode's own definition); model-rule: the base prompt's model and the rule that chose it; builtin-layer / copy-layer / own-layer / layer: the layer the text is in; file: the file it is in; org-purpose: the namespace's purpose; dynamic-written: written for each session by the dynamic generator; rules: resolved by the layer's own rules; written: written by OpenCode for each request; references / config: the references in config files; instruction-file / instruction-url, mcp, skill: what a per-request text was made from; memory-index: a memory level's index (MEMORY.md)
    */
   kind:
     | "agent-own"
@@ -3982,6 +3982,7 @@ export type OperatorPromptTraceStep = {
     | "config"
     | "instruction-file"
     | "instruction-url"
+    | "memory-index"
     | "mcp"
     | "skill"
   name?: string
@@ -4065,6 +4066,7 @@ export type OperatorPromptAssembledSection = {
   trace: Array<OperatorPromptTraceStep>
   resolution?: OperatorResolverTrace
   parity?: "same" | "differs"
+  memory?: boolean
   text: string
 }
 

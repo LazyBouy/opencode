@@ -125,11 +125,12 @@ export const TraceStep = Schema.Struct({
     "config",
     "instruction-file",
     "instruction-url",
+    "memory-index",
     "mcp",
     "skill",
   ]).annotate({
     description:
-      "agent-own / agent-none: the agent has its own prompt, or none; agent-file / agent-config / agent-builtin: where it is defined (its agent file, a config file, OpenCode's own definition); model-rule: the base prompt's model and the rule that chose it; builtin-layer / copy-layer / own-layer / layer: the layer the text is in; file: the file it is in; org-purpose: the namespace's purpose; dynamic-written: written for each session by the dynamic generator; rules: resolved by the layer's own rules; written: written by OpenCode for each request; references / config: the references in config files; instruction-file / instruction-url, mcp, skill: what a per-request text was made from",
+      "agent-own / agent-none: the agent has its own prompt, or none; agent-file / agent-config / agent-builtin: where it is defined (its agent file, a config file, OpenCode's own definition); model-rule: the base prompt's model and the rule that chose it; builtin-layer / copy-layer / own-layer / layer: the layer the text is in; file: the file it is in; org-purpose: the namespace's purpose; dynamic-written: written for each session by the dynamic generator; rules: resolved by the layer's own rules; written: written by OpenCode for each request; references / config: the references in config files; instruction-file / instruction-url, mcp, skill: what a per-request text was made from; memory-index: a memory level's index (MEMORY.md)",
   }),
   name: Schema.optional(Schema.String).annotate({ description: "An agent, layer, model, namespace or server" }),
   path: Schema.optional(Schema.String).annotate({ description: "A file or URL" }),
@@ -246,6 +247,11 @@ export const BUILTIN_LAYERS: readonly Layer[] = [
   layer(base("generated.environment"), "Environment", DYNAMIC, "dynamic", "generated"),
   layer(base("generated.references"), "References", DYNAMIC, "dynamic", "generated"),
   layer(base("generated.instructions"), "Instructions", DYNAMIC, "dynamic", "generated"),
+  // Short-term memory (memory_spec.md §4.1): each level's index, and the line before them.
+  layer(B.MEMORY_NAMESPACE, "Namespace memory", DYNAMIC, "dynamic", "generated"),
+  layer(B.MEMORY_PROJECT, "Project memory", DYNAMIC, "dynamic", "generated"),
+  layer(B.MEMORY_AGENT, "Agent memory", DYNAMIC, "dynamic", "generated"),
+  layer(base("notice.memory"), "notice.memory", DYNAMIC, "dynamic", "builtin", text("notice.memory")),
   ...HELPERS.map((item) =>
     layer(base(item.id), item.id.slice("helper.".length), HELPER, "helper", "builtin", item.text),
   ),
@@ -308,7 +314,7 @@ export const BUILTIN_PROFILES: readonly Profile[] = [
       platform: [],
       role: [],
       identity: [],
-      [DYNAMIC]: [base("slot.base"), base("slot.agent"), ...CAPABILITIES, ...ENVIRONMENT],
+      [DYNAMIC]: [base("slot.base"), base("slot.agent"), ...CAPABILITIES, ...ENVIRONMENT, ...B.MEMORY_LAYERS],
       output: [base("notice.structured-output")],
     },
     builtin: true,
@@ -408,6 +414,16 @@ export function hasOwnRules(layer: Layer | undefined): boolean {
   return !!layer && layer.origin === "user" && (!!layer.resolver || isWrittenDynamic(layer))
 }
 
+// Whether these slots hold a memory layer (OpenCode's, or a namespace's version of one).
+export function holdsMemory(catalog: Catalog, slots: Slots) {
+  return Object.values(slots)
+    .flat()
+    .some((id) => {
+      const layer = findLayer(catalog, id)
+      return !!layer && B.MEMORY_LAYERS.includes(layer.replaces ?? layer.id)
+    })
+}
+
 // The layers of these slots resolved by rules of their own, with their rules (dynamic-layers.ts).
 export function ruledLayers(catalog: Catalog, slots: Slots) {
   const ids = [...new Set(Object.values(slots).flat())]
@@ -496,6 +512,9 @@ export const AssembledSection = Schema.Struct({
     description:
       "One of OpenCode's Dynamic layers: whether the pipeline's text is the one OpenCode wrote for this request (when it differs, OpenCode's is sent)",
   }),
+  memory: Schema.optional(Schema.Boolean).annotate({
+    description: "A memory level's block; the memory guidance (notice.memory) is put before the first one",
+  }),
   text: Schema.String,
 }).annotate({ identifier: "OperatorPromptAssembledSection" })
 export type AssembledSection = typeof AssembledSection.Type
@@ -549,9 +568,16 @@ export function assemble(input: AssembleInput) {
         trace: item.trace,
         ...(item.resolution ? { resolution: item.resolution } : {}),
         ...(item.parity ? { parity: item.parity } : {}),
+        ...(item.memory ? { memory: true } : {}),
         text: item.text,
       }))
   })
+  // One line before the memory blocks, once, when any is present (memory_spec.md §4.1): the profile's
+  // copy of it, else the namespace's version, else OpenCode's.
+  const first = sections.findIndex((item) => item.memory)
+  const guidance =
+    versionOf({ catalog: input.catalog, slots: shape.slots, builtin: base("notice.memory") }) ?? text("notice.memory")
+  if (first >= 0 && guidance) sections[first] = { ...sections[first]!, text: `${guidance}\n${sections[first]!.text}` }
   const system = [...sections.map((item) => item.text), ...(input.parts.extra ?? []), input.parts.user ?? ""]
     .filter((text) => text)
     .join("\n")
@@ -677,6 +703,8 @@ type Found = {
   trace: TraceStep[]
   resolution?: OperatorResolver.Trace
   parity?: "same" | "differs"
+  /** A memory level's block (the memory guidance goes before the first). */
+  memory?: boolean
 }
 
 // The layer a text is in: OpenCode's (with its file), a namespace's own version of one, a copy made
@@ -880,6 +908,16 @@ function resolve(input: AssembleInput, copies: Map<string, Layer>, entry: string
     }))
   }
   const written: TraceStep[] = [{ kind: "written" }]
+  // A memory level's index, through the pipeline (dynamic-layers.ts); no text without its resolution.
+  if (B.MEMORY_LAYERS.includes(found.id)) {
+    const done = input.resolved?.get(found.id)
+    // The level's MEMORY.md (its candidates are its memories' files, or the index itself).
+    const first = done?.trace.candidates[0]?.location
+    const index = first ? `${first.slice(0, first.lastIndexOf("/"))}/MEMORY.md` : undefined
+    return one(done?.text, index ?? "generated", [{ kind: "memory-index", ...(index ? { path: index } : {}) }]).map(
+      (item) => ({ ...item, ...(done ? { resolution: done.trace } : {}), memory: true }),
+    )
+  }
   if (found.id === base("generated.environment")) {
     const done = piped(B.ENVIRONMENT, input.parts.environment[0])
     return one(done.text, "generated", written).map(withPipe(done))
