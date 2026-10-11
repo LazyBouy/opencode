@@ -13,6 +13,7 @@ import { useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createEffect, createMemo, For, type JSX, Show } from "solid-js"
 import { useSettingsDialog } from "@/components/settings-dialog"
 import { useLanguage } from "@/context/language"
+import { useModels } from "@/context/models"
 import { showToast } from "@/utils/toast"
 import { ready, useOperatorClient } from "../data"
 import { shortPath } from "../format"
@@ -279,7 +280,18 @@ function ModelCell(props: {
   const link = () => props.chain?.levels.find((item) => item.level === props.level)
   const own = () => (link()?.set ? link()!.model : undefined)
   const inherited = () => props.chain?.inherited
-  const options = () => [INHERIT, ...models().map((model) => model.key)]
+  // Only a model shown in the chat's picker can be a default (Settings → Models' Show); the level's own stays listed.
+  const visibility = useModels()
+  const shown = (key: string) => {
+    const at = key.indexOf("/")
+    return key === own() || visibility.visible({ providerID: key.slice(0, at), modelID: key.slice(at + 1) })
+  }
+  const options = () => [
+    INHERIT,
+    ...models()
+      .filter((model) => shown(model.key))
+      .map((model) => model.key),
+  ]
   const optionLabel = (key: string) => {
     if (key !== INHERIT) return words.name(key)
     const found = inherited()

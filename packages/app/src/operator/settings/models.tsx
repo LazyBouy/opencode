@@ -27,7 +27,8 @@ import "./models.css"
 // Settings → Models (default_models_spec.md §4): upstream's list of models, each shown or hidden in the chat's
 // model picker, plus the server-wide defaults. Two fields name the default and the small default model (or
 // what OpenCode decides now), each with Let OpenCode decide; every row gets a Default and a Small radio, one
-// selection per column across providers. Both write Global's config, which namespaces and projects can override
+// selection per column across providers, for shown models only (the user, 2026-10-11): a default can't be
+// hidden until another is chosen. Both write Global's config, which namespaces and projects can override
 // on Providers & Models. Upstream's tab (components/settings-v2/models.tsx) is left as it is; this list behaves
 // the same (settings/models-list.test.ts keeps the two in step).
 
@@ -108,6 +109,14 @@ export const SettingsModelsOperator: Component = () => {
   const fieldName = (key: Key) =>
     key === "model" ? language.t("operator.settingsModels.default") : language.t("operator.settingsModels.small")
 
+  // Recomputes both fields: what Settings sets, and what OpenCode decides now (after connecting a provider, or
+  // using another model in the TUI).
+  const refresh = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: api.key("model-defaults") }),
+      queryClient.invalidateQueries({ queryKey: api.key("providers") }),
+    ])
+
   const write = async (key: Key, model: string | null, undo = false) => {
     const before = setting(key) ?? null
     return (
@@ -121,16 +130,13 @@ export const SettingsModelsOperator: Component = () => {
             setLast(undefined)
             return
           }
-          const shown = model ? models.visible(splitModel(model)) : true
-          if (model && !shown) models.setVisibility(splitModel(model), true)
           const title = model
             ? language.t(key === "model" ? "operator.settingsModels.setDefault" : "operator.settingsModels.setSmall", {
                 model: label(model),
               })
             : language.t("operator.settingsModels.cleared", { field: fieldName(key) })
-          const description = model && !shown ? language.t("operator.settingsModels.shownToo") : undefined
-          setLast({ key, before, text: description ? `${title}. ${description}` : title })
-          showToast({ title, ...(description ? { description } : {}) })
+          setLast({ key, before, text: title })
+          showToast({ title })
         })
         .catch((error: unknown) =>
           showToast({ title: language.t("operator.settingsModels.failed"), description: requestError(error) }),
@@ -155,7 +161,18 @@ export const SettingsModelsOperator: Component = () => {
               />
             )}
           </For>
-          <p class="operator-settings-defaults-note">{language.t("operator.settingsModels.note")}</p>
+          <p class="operator-settings-defaults-note">
+            {language.t("operator.settingsModels.note")}{" "}
+            <ButtonV2
+              size="small"
+              variant="ghost"
+              data-testid="settings-models-refresh"
+              disabled={settings.isFetching}
+              onClick={() => void refresh()}
+            >
+              {language.t("operator.settingsModels.refresh")}
+            </ButtonV2>
+          </p>
           <Show when={last()}>
             {(change) => (
               <p class="operator-settings-defaults-change" data-testid="settings-model-change" role="status">
@@ -279,12 +296,19 @@ export const SettingsModelsOperator: Component = () => {
                           {(item) => {
                             const key = { providerID: item.provider.id, modelID: item.id }
                             const value = `${item.provider.id}/${item.id}`
+                            // Only a shown model can be a default; a default can't be hidden until another is chosen.
+                            const shown = () => models.visible(key)
+                            const chosen = () => setting("model") === value || setting("small_model") === value
                             return (
                               <SettingsRowV2 title={item.name} description="">
                                 <div class="operator-settings-model-controls" data-testid={`settings-model-${value}`}>
-                                  <span class="operator-settings-model-cell">
+                                  <span
+                                    class="operator-settings-model-cell"
+                                    title={chosen() ? language.t("operator.settingsModels.keepShown") : undefined}
+                                  >
                                     <Switch
                                       checked={models.visible(key)}
+                                      disabled={chosen()}
                                       onChange={(checked) => {
                                         models.setVisibility(key, checked)
                                       }}
@@ -293,11 +317,15 @@ export const SettingsModelsOperator: Component = () => {
                                       {item.name}
                                     </Switch>
                                   </span>
-                                  <span class="operator-settings-model-cell">
+                                  <span
+                                    class="operator-settings-model-cell"
+                                    title={shown() ? undefined : language.t("operator.settingsModels.showFirst")}
+                                  >
                                     <input
                                       type="radio"
                                       class="operator-settings-model-radio"
                                       name="operator-default-model"
+                                      disabled={!shown()}
                                       aria-label={language.t("operator.settingsModels.defaultFor", {
                                         model: item.name,
                                       })}
@@ -305,11 +333,15 @@ export const SettingsModelsOperator: Component = () => {
                                       onChange={() => void write("model", value)}
                                     />
                                   </span>
-                                  <span class="operator-settings-model-cell">
+                                  <span
+                                    class="operator-settings-model-cell"
+                                    title={shown() ? undefined : language.t("operator.settingsModels.showFirst")}
+                                  >
                                     <input
                                       type="radio"
                                       class="operator-settings-model-radio"
                                       name="operator-small-model"
+                                      disabled={!shown()}
                                       aria-label={language.t("operator.settingsModels.smallFor", { model: item.name })}
                                       checked={setting("small_model") === value}
                                       onChange={() => void write("small_model", value)}
@@ -333,7 +365,7 @@ export const SettingsModelsOperator: Component = () => {
   )
 }
 
-/** One server-wide default: the model Settings sets, or what OpenCode decides now; Let OpenCode decide; (i). */
+/** One server-wide default: the model Settings sets, or (muted) what OpenCode picks now; Let OpenCode decide; (i). */
 function DefaultField(props: {
   key: Key
   label: string
@@ -365,42 +397,43 @@ function DefaultField(props: {
   return (
     <div class="operator-settings-default" data-testid={`settings-default-${props.key}`}>
       <span class="operator-settings-default-label">{props.label}</span>
-      <span class="operator-settings-default-value" data-testid="settings-default-value">
+      <span
+        class="operator-settings-default-value"
+        data-testid="settings-default-value"
+        data-unset={props.setting ? undefined : ""}
+      >
         <Show
-          when={props.setting}
+          when={environment()}
           fallback={
-            <Show
-              when={environment()}
-              fallback={language.t("operator.settingsModels.decides", {
-                model: shown(effective()?.model ?? "") || "—",
-              })}
-            >
-              {(env) =>
-                language.t("operator.settingsModels.byEnvironment", {
-                  variable: env().variable ?? "",
-                  model: shown(env().model),
-                })
-              }
+            // The model Settings sets, or (muted) the one OpenCode picks now: the (i) and the disabled Let OpenCode
+            // decide say which.
+            <Show when={props.setting ?? effective()?.model}>
+              {(value) => (
+                <>
+                  <Show when={props.name(value())}>
+                    {(found) => <ProviderIcon id={found().providerID} width={16} height={16} class="shrink-0" />}
+                  </Show>
+                  <span>{shown(value())}</span>
+                  <Show when={props.name(value())}>
+                    {(found) => <span class="operator-settings-default-provider">· {found().provider}</span>}
+                  </Show>
+                  <Show when={props.setting && effective()?.unavailable && effective()?.from === "settings"}>
+                    <span class="operator-settings-default-warning" data-testid="settings-default-unavailable">
+                      <Icon name="warning" size="small" />
+                      {language.t("operator.settingsModels.unavailable")}
+                    </span>
+                  </Show>
+                </>
+              )}
             </Show>
           }
         >
-          {(value) => (
-            <>
-              <Show when={props.name(value())}>
-                {(found) => <ProviderIcon id={found().providerID} width={16} height={16} class="shrink-0" />}
-              </Show>
-              <span>{shown(value())}</span>
-              <Show when={props.name(value())}>
-                {(found) => <span class="operator-settings-default-provider">· {found().provider}</span>}
-              </Show>
-              <Show when={effective()?.unavailable && effective()?.from === "settings"}>
-                <span class="operator-settings-default-warning" data-testid="settings-default-unavailable">
-                  <Icon name="warning" size="small" />
-                  {language.t("operator.settingsModels.unavailable")}
-                </span>
-              </Show>
-            </>
-          )}
+          {(env) =>
+            language.t("operator.settingsModels.byEnvironment", {
+              variable: env().variable ?? "",
+              model: shown(env().model),
+            })
+          }
         </Show>
       </span>
       <span class="operator-settings-default-actions">

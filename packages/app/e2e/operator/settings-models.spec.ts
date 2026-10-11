@@ -37,7 +37,11 @@ test("the two fields say what is set, or what OpenCode decides now; each (i) say
   const small = dialog.getByTestId("settings-default-small_model")
   await expect(model.getByTestId("settings-default-value")).toContainText("Claude Sonnet 4.5")
   await expect(model.getByTestId("settings-default-value")).toContainText("Anthropic")
-  await expect(small.getByTestId("settings-default-value")).toHaveText("OpenCode decides · now Claude Haiku 4.5")
+  // Not set: the model OpenCode picks now, muted, without words (the (i) says how it's chosen).
+  const smallValue = small.getByTestId("settings-default-value")
+  await expect(smallValue).toContainText("Claude Haiku 4.5")
+  await expect(smallValue).not.toContainText("OpenCode decides")
+  await expect(smallValue).toHaveAttribute("data-unset", "")
   await expect(small.getByRole("button", { name: "Let OpenCode decide" })).toBeDisabled()
   await expect(dialog).toContainText("Namespaces and projects can override these on Providers & Models.")
 
@@ -87,22 +91,22 @@ test("Let OpenCode decide removes the setting and clears the column", async ({ p
   const model = dialog.getByTestId("settings-default-model")
   await model.getByRole("button", { name: "Let OpenCode decide" }).click()
   await expect.poll(() => mock.writes.at(-1)).toEqual({ level: "settings", key: "model", model: null })
-  await expect(model.getByTestId("settings-default-value")).toHaveText("OpenCode decides · now Claude Sonnet 4.5")
+  await expect(model.getByTestId("settings-default-value")).toContainText("Claude Sonnet 4.5")
+  await expect(model.getByTestId("settings-default-value")).toHaveAttribute("data-unset", "")
   await expect(dialog.getByRole("radio", { name: "Default model: Claude Sonnet 4.5" })).not.toBeChecked()
 })
 
-test("choosing a hidden model shows it in the chat's picker; search keeps the fields", async ({ page }) => {
+test("only a shown model can be a default, and a default stays shown; search keeps the fields", async ({ page }) => {
   const mock = await mockModelDefaults(page)
   const dialog = await openModels(page)
   const row = dialog.getByTestId("settings-model-openai/gpt-5")
   await row.locator('[data-slot="switch-control"]').click()
   await expect(row.getByRole("switch")).not.toBeChecked()
-  await dialog.getByRole("radio", { name: "Small model: GPT-5" }).check()
-  await expect.poll(() => mock.writes.length).toBe(1)
-  await expect(dialog.getByTestId("settings-model-change")).toContainText(
-    "It's now shown in the chat's model picker too",
-  )
-  await expect(row.getByRole("switch")).toBeChecked()
+  await expect(dialog.getByRole("radio", { name: "Default model: GPT-5" })).toBeDisabled()
+  await expect(dialog.getByRole("radio", { name: "Small model: GPT-5" })).toBeDisabled()
+  // Claude Sonnet 4.5 is the default model: it can't be hidden until another is chosen.
+  await expect(dialog.getByTestId("settings-model-anthropic/claude-sonnet-4-5").getByRole("switch")).toBeDisabled()
+  expect(mock.writes).toEqual([])
 
   await dialog.getByRole("searchbox", { name: "Search models" }).fill("haiku")
   await expect(dialog.getByTestId("settings-default-model")).toContainText("Claude Sonnet 4.5")
@@ -123,4 +127,14 @@ test("the environment overriding Settings is said in the field and its (i)", asy
   await expect(tooltip(page)).toContainText(
     "The environment sets model (OPENCODE_CONFIG), so this setting has no effect while it does.",
   )
+})
+
+test("Refresh recomputes both fields: what OpenCode picks now can change", async ({ page }) => {
+  const mock = await mockModelDefaults(page)
+  const dialog = await openModels(page)
+  const small = dialog.getByTestId("settings-default-small_model").getByTestId("settings-default-value")
+  await expect(small).toContainText("Claude Haiku 4.5")
+  mock.decides.small = "openai/gpt-5"
+  await dialog.getByTestId("settings-models-refresh").click()
+  await expect(small).toContainText("GPT-5")
 })
