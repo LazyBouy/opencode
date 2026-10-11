@@ -1863,6 +1863,7 @@ export const dict = {
   "operator.settingsModels.showFirst": "Turn Show on to make it a default.",
   "operator.settingsModels.keepShown": "It's a default model: choose another before hiding it.",
   "operator.settingsModels.refresh": "Refresh",
+  "operator.settingsModels.notSet": "Not set",
   "operator.modelChain.fromNamespace": "{{namespace}}'s config",
   "operator.modelChain.fromSettings": "Settings (Global's config)",
   "operator.modelChain.fromProject": "this project's config",

@@ -365,7 +365,7 @@ export const SettingsModelsOperator: Component = () => {
   )
 }
 
-/** One server-wide default: the model Settings sets, or (muted) what OpenCode picks now; Let OpenCode decide; (i). */
+/** One server-wide default: the model Settings sets, or "Not set"; Let OpenCode decide; (i) with what's used now. */
 function DefaultField(props: {
   key: Key
   label: string
@@ -405,9 +405,9 @@ function DefaultField(props: {
         <Show
           when={environment()}
           fallback={
-            // The model Settings sets, or (muted) the one OpenCode picks now: the (i) and the disabled Let OpenCode
-            // decide say which.
-            <Show when={props.setting ?? effective()?.model}>
+            // The model Settings sets, else "Not set" (muted): what OpenCode picks now is in the (i). Showing that
+            // model here read as if it were set (for the small model it's often the default model itself).
+            <Show when={props.setting} fallback={language.t("operator.settingsModels.notSet")}>
               {(value) => (
                 <>
                   <Show when={props.name(value())}>
@@ -417,7 +417,7 @@ function DefaultField(props: {
                   <Show when={props.name(value())}>
                     {(found) => <span class="operator-settings-default-provider">· {found().provider}</span>}
                   </Show>
-                  <Show when={props.setting && effective()?.unavailable && effective()?.from === "settings"}>
+                  <Show when={effective()?.unavailable && effective()?.from === "settings"}>
                     <span class="operator-settings-default-warning" data-testid="settings-default-unavailable">
                       <Icon name="warning" size="small" />
                       {language.t("operator.settingsModels.unavailable")}
