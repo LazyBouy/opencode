@@ -173,6 +173,7 @@ export function LevelPermissions(props: {
                 </div>
               </Show>
               <LevelEditor
+                {...(props.directory ? { directory: props.directory } : {})}
                 level={props.level as Level}
                 inherited={found().inherited}
                 value={store.value}

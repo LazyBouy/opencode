@@ -18851,6 +18851,159 @@
         ]
       }
     },
+    "/operator/capability/tool-patterns": {
+      "get": {
+        "tags": ["operator capabilities"],
+        "operationId": "operator.capability.toolPatterns",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Each tool's permission pattern",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorToolPattern"
+                  },
+                  "description": "Each tool's permission pattern"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "How each tool of the project asks for permission (memory_spec.md §9): the permission its rules use, its verbs, what the pattern is matched against, examples, and the rules that apply by default. OpenCode's tools from their code; MCP tools always `*`; a custom tool's as written for it.",
+        "summary": "List tools' permission patterns",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.capability.toolPatterns({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/capability/tool-pattern": {
+      "put": {
+        "tags": ["operator capabilities"],
+        "operationId": "operator.capability.saveToolPattern",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The tool's permission pattern",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorToolPattern"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorCapabilityError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorCapabilityError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Writes how a custom tool asks for permission (its permission, verbs, pattern and examples). OpenCode's and MCP tools' come from their code.",
+        "summary": "Save a custom tool's permission pattern",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tool": {
+                    "type": "string"
+                  },
+                  "permission": {
+                    "type": "string"
+                  },
+                  "verbs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "examples": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/OperatorToolPatternExample"
+                    }
+                  }
+                },
+                "required": ["tool", "permission", "verbs", "text", "examples"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.capability.saveToolPattern({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/operator/capability/source": {
       "get": {
         "tags": ["operator capabilities"],
@@ -39870,6 +40023,99 @@
           }
         },
         "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorToolPatternForm": {
+        "type": "string",
+        "enum": [
+          "path",
+          "absolute",
+          "command",
+          "search",
+          "url",
+          "query",
+          "agent",
+          "skill",
+          "tool",
+          "any",
+          "verbs",
+          "custom"
+        ]
+      },
+      "OperatorToolPatternExample": {
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": ["allow", "ask", "deny"]
+          }
+        },
+        "required": ["pattern", "action"],
+        "additionalProperties": false
+      },
+      "OperatorToolPattern": {
+        "type": "object",
+        "properties": {
+          "tool": {
+            "type": "string"
+          },
+          "permission": {
+            "type": "string",
+            "description": "The name rules use"
+          },
+          "verbs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The tool's verbs (memory: READ, WRITE, FORGET)"
+          },
+          "form": {
+            "$ref": "#/components/schemas/OperatorToolPatternForm"
+          },
+          "text": {
+            "type": "string"
+          },
+          "examples": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorToolPatternExample"
+            }
+          },
+          "source": {
+            "type": "string",
+            "enum": ["code", "mcp", "user", "default"],
+            "description": "code: OpenCode's (or the fork's) tool, from its ctx.ask calls; mcp: an MCP tool, always `*`; user: written for a custom tool; default: a custom tool's until one is written (its id, `*`)"
+          },
+          "editable": {
+            "type": "boolean"
+          },
+          "defaults": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string"
+                },
+                "action": {
+                  "type": "string",
+                  "enum": ["allow", "ask", "deny"]
+                },
+                "level": {
+                  "type": "string"
+                }
+              },
+              "required": ["pattern", "action", "level"],
+              "additionalProperties": false
+            },
+            "description": "The rules for its permission that apply by default (OpenCode's and Global's), in order"
+          }
+        },
+        "required": ["tool", "permission", "verbs", "form", "examples", "source", "editable", "defaults"],
         "additionalProperties": false
       },
       "OperatorCapabilitySeed": {

@@ -22,6 +22,7 @@ import { ALL, useNamespaceScope } from "../ui/namespace-picker"
 import { useScopedProject } from "../project"
 import { requestError } from "./config-helpers"
 import { useProjectConfigWrite } from "../ui/project-config-copy"
+import { draftOf, inputOf, ToolPatternForm } from "../ui/tool-pattern"
 
 // The Capabilities page's scope (capability_scopes_spec.md §9): a project's effective set, or a
 // namespace's own layer. Every row shows where its definition comes from and its state, and the actions
@@ -472,6 +473,9 @@ function CreateDialog(props: {
     url: "",
     busy: false,
     error: "",
+    // A custom tool's permission pattern (memory_spec.md §9): its id and `*` until changed.
+    pattern: draftOf(undefined, ""),
+    patternChanged: false,
   })
   const agents = useQuery(() => ({
     queryKey: api.key("agents", props.directory()),
@@ -515,6 +519,15 @@ function CreateDialog(props: {
     )
       .then(async (result) => {
         if (!result) return
+        // A custom tool's permission pattern, as entered.
+        if (props.kind === "tool")
+          await api.client().operator.capability.saveToolPattern(
+            {
+              ...(props.directory() ? { directory: props.directory() } : {}),
+              ...inputOf(store.name.trim(), store.pattern),
+            },
+            { throwOnError: true },
+          )
         showToast({ title: language.t("operator.capabilities.created", { name: store.name.trim() }) })
         await queryClient.invalidateQueries({ queryKey: api.key() })
         dialog.close()
@@ -551,7 +564,11 @@ function CreateDialog(props: {
               id={`${id}-name`}
               appearance="base"
               value={store.name}
-              onInput={(event) => setStore("name", event.currentTarget.value)}
+              onInput={(event) => {
+                const name = event.currentTarget.value
+                setStore("name", name)
+                if (props.kind === "tool" && !store.patternChanged) setStore("pattern", "permission", name.trim())
+              }}
             />
           ))}
           <Show when={props.kind === "command" || props.kind === "skill"}>
@@ -593,6 +610,13 @@ function CreateDialog(props: {
               label={language.t("operator.capabilities.subtask")}
               checked={store.subtask}
               onChange={(checked: boolean) => setStore("subtask", checked)}
+            />
+          </Show>
+          <Show when={props.kind === "tool"}>
+            <h4 data-slot="operator-panel-title">{language.t("operator.toolPattern.title")}</h4>
+            <ToolPatternForm
+              value={store.pattern}
+              onChange={(pattern) => setStore({ pattern, patternChanged: true })}
             />
           </Show>
           <Show when={props.kind === "mcp"}>

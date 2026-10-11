@@ -1,4 +1,5 @@
 import { OperatorCapabilities } from "@/operator/capabilities"
+import { OperatorToolPatterns } from "@/operator/tool-patterns"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "@/server/routes/instance/httpapi/middleware/authorization"
@@ -22,6 +23,8 @@ export const OperatorCapabilityPaths = {
   source: "/operator/capability/source",
   take: "/operator/capability/take-opencode",
   seed: "/operator/capability/seed",
+  toolPatterns: "/operator/capability/tool-patterns",
+  toolPattern: "/operator/capability/tool-pattern",
 } as const
 
 export class ApiCapabilityError extends Schema.ErrorClass<{
@@ -128,6 +131,28 @@ export const OperatorCapabilityApi = HttpApi.make("operator-capabilities")
             "operator.capability.copy",
             "Copy a namespace's capability to another namespace",
             "Copy a capability of a namespace (its file, or its config entry) into another namespace's layer, as that namespace's own. The copies are independent.",
+          ),
+        ),
+        HttpApiEndpoint.get("toolPatterns", OperatorCapabilityPaths.toolPatterns, {
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Array(OperatorToolPatterns.Pattern), "Each tool's permission pattern"),
+        }).annotateMerge(
+          doc(
+            "operator.capability.toolPatterns",
+            "List tools' permission patterns",
+            "How each tool of the project asks for permission (memory_spec.md §9): the permission its rules use, its verbs, what the pattern is matched against, examples, and the rules that apply by default. OpenCode's tools from their code; MCP tools always `*`; a custom tool's as written for it.",
+          ),
+        ),
+        HttpApiEndpoint.put("saveToolPattern", OperatorCapabilityPaths.toolPattern, {
+          query: WorkspaceRoutingQuery,
+          payload: OperatorToolPatterns.Input,
+          success: described(OperatorToolPatterns.Pattern, "The tool's permission pattern"),
+          error: ApiCapabilityError,
+        }).annotateMerge(
+          doc(
+            "operator.capability.saveToolPattern",
+            "Save a custom tool's permission pattern",
+            "Writes how a custom tool asks for permission (its permission, verbs, pattern and examples). OpenCode's and MCP tools' come from their code.",
           ),
         ),
         HttpApiEndpoint.get("source", OperatorCapabilityPaths.source, {

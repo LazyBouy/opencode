@@ -457,6 +457,8 @@ export interface OperatorMock {
   // The capabilities by scope (/operator/capability) and the actions taken on them.
   capabilities: CapabilityItem[]
   capabilityWrites: Array<{ action: string; body: Record<string, unknown>; directory?: string }>
+  // Each tool's permission pattern (memory_spec.md §9).
+  toolPatterns: Array<Record<string, unknown> & { tool: string }>
   toolPromptQueries: URLSearchParams[]
   permissionWrites: Array<{ agent: string; body: { scope: string; rules: Array<Record<string, string>> } }>
   ownRules: Record<string, Array<{ permission: string; pattern: string; action: "allow" | "ask" | "deny" }>>
@@ -625,6 +627,52 @@ export async function mockOperator(page: Page) {
       },
     ],
     capabilityWrites: [],
+    toolPatterns: [
+      {
+        tool: "read",
+        permission: "read",
+        verbs: [],
+        form: "path",
+        examples: [
+          { pattern: "*.env", action: "ask" },
+          { pattern: "*", action: "allow" },
+        ],
+        source: "code",
+        editable: false,
+        defaults: [{ pattern: "* (*)", action: "allow", level: "opencode" }],
+      },
+      {
+        tool: "bash",
+        permission: "bash",
+        verbs: [],
+        form: "command",
+        examples: [{ pattern: "git push*", action: "ask" }],
+        source: "code",
+        editable: false,
+        defaults: [],
+      },
+      {
+        tool: "hello",
+        permission: "hello",
+        verbs: [],
+        form: "custom",
+        text: "*",
+        examples: [],
+        source: "default",
+        editable: true,
+        defaults: [],
+      },
+      {
+        tool: "memory",
+        permission: "memory",
+        verbs: ["READ", "WRITE", "FORGET"],
+        form: "verbs",
+        examples: [{ pattern: "READ(*)", action: "allow" }],
+        source: "code",
+        editable: false,
+        defaults: [],
+      },
+    ],
     toolPromptQueries: [],
     permissionWrites: [],
     ownRules: {},
@@ -1029,6 +1077,20 @@ export async function mockOperator(page: Page) {
       state.capabilityWrites.push({ action: "edit", body: route.request().postDataJSON() as Record<string, unknown> })
       const edited = state.capabilities.find((item) => item.kind === "command")
       return json(route, edited)
+    }
+    if (url.pathname === "/operator/capability/tool-patterns") return json(route, state.toolPatterns)
+    if (url.pathname === "/operator/capability/tool-pattern") {
+      const body = route.request().postDataJSON() as { tool: string; permission: string; verbs: string[]; text: string }
+      state.capabilityWrites.push({ action: "tool-pattern", body })
+      const next = {
+        ...body,
+        form: body.verbs.length ? "verbs" : "custom",
+        source: "user",
+        editable: true,
+        defaults: [],
+      }
+      state.toolPatterns = [...state.toolPatterns.filter((item) => item.tool !== body.tool), next]
+      return json(route, next)
     }
     if (url.pathname.startsWith("/operator/capability/")) {
       const action = url.pathname.slice("/operator/capability/".length)

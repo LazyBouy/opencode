@@ -5552,6 +5552,53 @@ export type OperatorCapabilityError = {
   }
 }
 
+export type OperatorToolPatternForm =
+  | "path"
+  | "absolute"
+  | "command"
+  | "search"
+  | "url"
+  | "query"
+  | "agent"
+  | "skill"
+  | "tool"
+  | "any"
+  | "verbs"
+  | "custom"
+
+export type OperatorToolPatternExample = {
+  pattern: string
+  action: "allow" | "ask" | "deny"
+}
+
+export type OperatorToolPattern = {
+  tool: string
+  /**
+   * The name rules use
+   */
+  permission: string
+  /**
+   * The tool's verbs (memory: READ, WRITE, FORGET)
+   */
+  verbs: Array<string>
+  form: OperatorToolPatternForm
+  text?: string
+  examples: Array<OperatorToolPatternExample>
+  /**
+   * code: OpenCode's (or the fork's) tool, from its ctx.ask calls; mcp: an MCP tool, always `*`; user: written for a custom tool; default: a custom tool's until one is written (its id, `*`)
+   */
+  source: "code" | "mcp" | "user" | "default"
+  editable: boolean
+  /**
+   * The rules for its permission that apply by default (OpenCode's and Global's), in order
+   */
+  defaults: Array<{
+    pattern: string
+    action: "allow" | "ask" | "deny"
+    level: string
+  }>
+}
+
 export type OperatorCapabilitySeed = {
   /**
    * The source namespace (OpenCode: its layer and its built-ins)
@@ -18247,6 +18294,72 @@ export type OperatorCapabilityCopyResponses = {
 }
 
 export type OperatorCapabilityCopyResponse = OperatorCapabilityCopyResponses[keyof OperatorCapabilityCopyResponses]
+
+export type OperatorCapabilityToolPatternsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/capability/tool-patterns"
+}
+
+export type OperatorCapabilityToolPatternsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorCapabilityToolPatternsError =
+  OperatorCapabilityToolPatternsErrors[keyof OperatorCapabilityToolPatternsErrors]
+
+export type OperatorCapabilityToolPatternsResponses = {
+  /**
+   * Each tool's permission pattern
+   */
+  200: Array<OperatorToolPattern>
+}
+
+export type OperatorCapabilityToolPatternsResponse =
+  OperatorCapabilityToolPatternsResponses[keyof OperatorCapabilityToolPatternsResponses]
+
+export type OperatorCapabilitySaveToolPatternData = {
+  body?: {
+    tool: string
+    permission: string
+    verbs: Array<string>
+    text: string
+    examples: Array<OperatorToolPatternExample>
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/capability/tool-pattern"
+}
+
+export type OperatorCapabilitySaveToolPatternErrors = {
+  /**
+   * OperatorCapabilityError | InvalidRequestError
+   */
+  400: OperatorCapabilityError | InvalidRequestError
+}
+
+export type OperatorCapabilitySaveToolPatternError =
+  OperatorCapabilitySaveToolPatternErrors[keyof OperatorCapabilitySaveToolPatternErrors]
+
+export type OperatorCapabilitySaveToolPatternResponses = {
+  /**
+   * The tool's permission pattern
+   */
+  200: OperatorToolPattern
+}
+
+export type OperatorCapabilitySaveToolPatternResponse =
+  OperatorCapabilitySaveToolPatternResponses[keyof OperatorCapabilitySaveToolPatternResponses]
 
 export type OperatorCapabilitySourceData = {
   body?: never

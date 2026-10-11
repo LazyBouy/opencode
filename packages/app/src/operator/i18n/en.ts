@@ -1722,6 +1722,36 @@ export const dict = {
   "operator.memorySettings.excluded": "{{repo}}: kept out",
   "operator.memorySettings.included": "{{repo}}: committed",
   "operator.memorySettings.noRepo": "Not in a repository",
+  "operator.toolPattern.title": "Permission pattern",
+  "operator.toolPattern.permission": "Permission",
+  "operator.toolPattern.verbs": "Verbs",
+  "operator.toolPattern.pattern": "Pattern",
+  "operator.toolPattern.examples": "Examples",
+  "operator.toolPattern.defaults": "Defaults",
+  "operator.toolPattern.customIs": "As this tool asks: {{text}}",
+  "operator.toolPattern.form.path": "The file path, relative to the project root",
+  "operator.toolPattern.form.absolute": "The absolute path of a folder outside the project",
+  "operator.toolPattern.form.command": "The command, with suggested prefixes by its arity (git push *)",
+  "operator.toolPattern.form.search": "The search pattern",
+  "operator.toolPattern.form.url": "The URL",
+  "operator.toolPattern.form.query": "The search query",
+  "operator.toolPattern.form.agent": "The subagent's name",
+  "operator.toolPattern.form.skill": "The skill's name",
+  "operator.toolPattern.form.tool": "The tool's name",
+  "operator.toolPattern.form.any": "Always * (one decision for every call)",
+  "operator.toolPattern.form.verbs":
+    "VERB(<target>): the verb (READ, WRITE, …), then what it acts on (<level>/<file> for memory)",
+  "operator.toolPattern.form.custom": "As this tool's code asks",
+  "operator.toolPattern.source.code": "From its code",
+  "operator.toolPattern.source.mcp": "MCP tool",
+  "operator.toolPattern.source.user": "Written for it",
+  "operator.toolPattern.source.default": "Not written yet",
+  "operator.toolPattern.examplePattern": "Example pattern",
+  "operator.toolPattern.exampleAction": "Example action",
+  "operator.toolPattern.removeExample": "Remove example",
+  "operator.toolPattern.addExample": "Add example",
+  "operator.toolPattern.editorHelp": "Its pattern: {{text}}.",
+  "operator.toolPattern.editorExamples": "For example: {{examples}}",
   "operator.memory.filesHint":
     "Files OpenCode adds to prompts. Choose a file to read or change it; changes apply from the next message.",
   "operator.memory.filesLabel": "Memory files",
@@ -1853,6 +1883,17 @@ export const dict = {
     "Whether .memory folders are committed to git. Off by default: OpenCode adds a .memory/ line to each repository's .git/info/exclude, and takes it out again when this is on. A project can choose for itself below.",
   "operator.help.memoryLimits":
     "Each level's index in system prompts is cut at this many lines or characters, whichever comes first, with a line saying how many more memories there are.",
+  "operator.help.patternPermission":
+    "The name rules use for this tool: edit, write and apply_patch share edit; an MCP tool's is its key.",
+  "operator.help.patternVerbs":
+    "A tool with verbs asks with VERB(target) patterns, so each verb can be allowed, asked or denied on its own (memory: READ, WRITE, FORGET).",
+  "operator.help.patternPattern":
+    "What a rule's pattern is matched against when the tool asks: * matches anything, including /.",
+  "operator.help.patternPatternCustom":
+    "What this tool's code asks with: * when it asks once for every call, or what its pattern stands for (a path, a name).",
+  "operator.help.patternExamples": "Example rules, as written in config: the pattern, then allow, ask or deny.",
+  "operator.help.patternDefaults":
+    "The rules for this permission that apply by default, in order: OpenCode's built-in ones (for build) and the global config's.",
   "operator.help.rulesSources":
     "Where the candidates come from, in order. A file can be a glob; relative paths are looked for from the project's folder up. A group makes One and Top N apply per group.",
   "operator.help.rulesFilters": "Candidates a filter leaves out are listed in the trace with the filter that did it.",

@@ -18,6 +18,7 @@ import { PageHeader } from "../ui/page-header"
 import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOverlay } from "../ui/record-overlay"
 import { ScopePicker } from "../ui/scope-picker"
 import { useOverlayParams } from "../ui/overlay-nav"
+import { ToolPatternSection } from "../ui/tool-pattern"
 import { SkillsNote } from "./skills-note"
 import {
   CapabilityActions,
@@ -633,6 +634,9 @@ function CapabilityOverlay() {
                 )}
               </Show>
             </dl>
+            <Show when={kind() === "tools"}>
+              <ToolPatternSection tool={found().name} directory={data.directory} />
+            </Show>
           </RecordView>
         )}
       </Show>

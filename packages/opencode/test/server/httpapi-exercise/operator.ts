@@ -752,6 +752,23 @@ export const operatorScenarios: Scenario[] = [
       array(body.invalid)
       check(body.invalid.length === 1, "the hand-written line should be kept and flagged")
     }),
+  http.protected.get("/operator/capability/tool-patterns", "operator.capability.toolPatterns").json(200, (body) => {
+    array(body)
+    const bash = body.find((item) => isRecord(item) && item.tool === "bash")
+    check(isRecord(bash) && bash.permission === "bash" && bash.form === "command", "bash should ask with its command")
+    check(
+      body.some((item) => isRecord(item) && item.tool === "external_directory"),
+      "paths outside the project should be listed",
+    )
+  }),
+  http.protected
+    .put("/operator/capability/tool-pattern", "operator.capability.saveToolPattern")
+    .at((ctx) => ({
+      path: "/operator/capability/tool-pattern",
+      headers: ctx.headers(),
+      body: { tool: "bash", permission: "bash", verbs: [], text: "*", examples: [] },
+    }))
+    .status(400),
   http.protected.get("/operator/layout", "operator.layout.get").json(200, (body) => {
     object(body)
     array(body.namespaces)

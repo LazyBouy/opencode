@@ -174,6 +174,8 @@ import type {
   OperatorCapabilityRemoveResponses,
   OperatorCapabilityRevertErrors,
   OperatorCapabilityRevertResponses,
+  OperatorCapabilitySaveToolPatternErrors,
+  OperatorCapabilitySaveToolPatternResponses,
   OperatorCapabilitySeed,
   OperatorCapabilitySeedErrors,
   OperatorCapabilitySeedResponses,
@@ -181,6 +183,8 @@ import type {
   OperatorCapabilitySourceResponses,
   OperatorCapabilityTakeOpenCodeErrors,
   OperatorCapabilityTakeOpenCodeResponses,
+  OperatorCapabilityToolPatternsErrors,
+  OperatorCapabilityToolPatternsResponses,
   OperatorConfigCompareErrors,
   OperatorConfigCompareResponses,
   OperatorConfigLayersErrors,
@@ -365,6 +369,7 @@ import type {
   OperatorStatusResponses,
   OperatorToolListErrors,
   OperatorToolListResponses,
+  OperatorToolPatternExample,
   OperatorToolPromptDraftErrors,
   OperatorToolPromptDraftResponses,
   OperatorToolPromptGetErrors,
@@ -5931,6 +5936,89 @@ export class Capability extends HeyApiClient {
       ThrowOnError
     >({
       url: "/operator/capability/copy",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * List tools' permission patterns
+   *
+   * How each tool of the project asks for permission (memory_spec.md §9): the permission its rules use, its verbs, what the pattern is matched against, examples, and the rules that apply by default. OpenCode's tools from their code; MCP tools always `*`; a custom tool's as written for it.
+   */
+  public toolPatterns<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorCapabilityToolPatternsResponses,
+      OperatorCapabilityToolPatternsErrors,
+      ThrowOnError
+    >({
+      url: "/operator/capability/tool-patterns",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Save a custom tool's permission pattern
+   *
+   * Writes how a custom tool asks for permission (its permission, verbs, pattern and examples). OpenCode's and MCP tools' come from their code.
+   */
+  public saveToolPattern<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      tool?: string
+      permission?: string
+      verbs?: Array<string>
+      text?: string
+      examples?: Array<OperatorToolPatternExample>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "tool" },
+            { in: "body", key: "permission" },
+            { in: "body", key: "verbs" },
+            { in: "body", key: "text" },
+            { in: "body", key: "examples" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorCapabilitySaveToolPatternResponses,
+      OperatorCapabilitySaveToolPatternErrors,
+      ThrowOnError
+    >({
+      url: "/operator/capability/tool-pattern",
       ...options,
       ...params,
       headers: {

@@ -102,6 +102,7 @@ export function SessionPermissions(props: {
                   fallback={<p data-slot="operator-note">{language.t("operator.locks.allLocked")}</p>}
                 >
                   <LevelEditor
+                    directory={props.directory}
                     level="session"
                     inherited={data().rows.slice(0, data().editable.start)}
                     ownRows={data().rows.slice(data().editable.start, data().editable.end)}

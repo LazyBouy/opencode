@@ -379,6 +379,7 @@ export default function AgentFormPage() {
           >
             <div data-slot="operator-permission-layout">
               <LevelEditor
+                {...(directory() ? { directory: directory() } : {})}
                 level="agent"
                 inherited={editing() ? (permissions.data?.inherited ?? []) : []}
                 value={{ lines: store.rules, deleted: [], locks: [] }}

@@ -1,4 +1,5 @@
 import { OperatorCapabilities } from "@/operator/capabilities"
+import { OperatorToolPatterns } from "@/operator/tool-patterns"
 import { OperatorProjectConfig } from "@/operator/project-config"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
 import { Effect } from "effect"
@@ -12,6 +13,7 @@ const apiError = (error: { message: string }) =>
 export const operatorCapabilityHandlers = HttpApiBuilder.group(InstanceHttpApi, "operatorCapabilities", (handlers) =>
   Effect.gen(function* () {
     const capabilities = yield* OperatorCapabilities.Service
+    const patterns = yield* OperatorToolPatterns.Service
     return handlers
       .handle("list", (ctx) => capabilities.inventory({ namespace: ctx.query.namespace }))
       .handle("override", (ctx) =>
@@ -40,6 +42,8 @@ export const operatorCapabilityHandlers = HttpApiBuilder.group(InstanceHttpApi, 
           .pipe(Effect.mapError(copyOr(apiError)), OperatorProjectConfig.consent(ctx.query.confirmCopy)),
       )
       .handle("copy", (ctx) => capabilities.copyTo(ctx.payload).pipe(Effect.mapError(apiError)))
+      .handle("toolPatterns", () => patterns.list())
+      .handle("saveToolPattern", (ctx) => patterns.save(ctx.payload).pipe(Effect.mapError(apiError)))
       .handle("source", (ctx) =>
         capabilities
           .read({ kind: ctx.query.kind, name: ctx.query.name, namespace: ctx.query.namespace })

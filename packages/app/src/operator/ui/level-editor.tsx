@@ -12,6 +12,7 @@ import { useLanguage } from "@/context/language"
 import { FieldHelp } from "./field-help"
 import { useOriginText } from "./permission-origin"
 import { type Action, hintOf, type PatternForm, type Rule } from "./rules"
+import { PatternHelp, useToolPatterns } from "./tool-pattern"
 
 const ACTIONS: Action[] = ["allow", "ask", "deny"]
 
@@ -155,6 +156,8 @@ export function LevelEditor(props: {
   canLock: boolean
   forms: Readonly<Record<string, PatternForm>>
   known: ReadonlyArray<string>
+  // The project whose tools' permission patterns help with a new rule (the page's chosen one when none).
+  directory?: string
   filter?: string
   onClearFilter?: () => void
 }) {
@@ -163,6 +166,7 @@ export function LevelEditor(props: {
   const levelText = useLevelText()
   const list = createUniqueId()
   const [draft, setDraft] = createStore({ permission: "", pattern: "*", action: "ask" as Action })
+  const patterns = useToolPatterns(() => props.directory)
   let permissionField: HTMLInputElement | undefined
   let patternField: HTMLInputElement | undefined
 
@@ -500,6 +504,7 @@ export function LevelEditor(props: {
           {language.t("operator.rules.add")}
         </ButtonV2>
       </div>
+      <PatternHelp patterns={patterns.data} permission={draft.permission} />
     </div>
   )
 }
