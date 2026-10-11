@@ -7,7 +7,8 @@ import { usePlatform } from "@/context/platform"
 import { SettingsGeneralV2 } from "./general"
 import { SettingsKeybinds } from "../settings-keybinds"
 import { SettingsProvidersV2 } from "./providers"
-import { SettingsModelsV2 } from "./models"
+// fork: the Models tab with the server-wide default and small model (operator/settings/models.tsx)
+import { SettingsModelsOperator } from "@/operator/settings/models"
 import { SettingsAdaptersV2 } from "@/operator/settings/adapters"
 import { SettingsNamespacesV2 } from "@/operator/settings/namespaces"
 import { SettingsMaximize } from "@/operator/settings/settings-maximize"
@@ -124,7 +125,7 @@ export const DialogSettings: Component<{
           <SettingsProvidersV2 directory={directory} onBack={showProviders} />
         </TabsV2.Content>
         <TabsV2.Content value="models" class="settings-v2-panel">
-          <SettingsModelsV2 />
+          <SettingsModelsOperator />
         </TabsV2.Content>
         <TabsV2.Content value="adapters" class="settings-v2-panel">
           <SettingsAdaptersV2 />

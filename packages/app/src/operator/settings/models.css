@@ -1,0 +1,88 @@
+/* Settings → Models (operator/settings/models.tsx): the server-wide defaults above upstream's list, and the
+   Show / Default / Small columns of each row. */
+.operator-settings-defaults {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--v2-border-border-base);
+  border-radius: 8px;
+  background: var(--v2-background-bg-base);
+}
+
+.operator-settings-default {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  color: var(--v2-text-text-base);
+}
+
+.operator-settings-default-label {
+  font-weight: 500;
+}
+
+.operator-settings-default-value {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.operator-settings-default-provider,
+.operator-settings-defaults-note {
+  color: var(--v2-text-text-muted);
+}
+
+.operator-settings-defaults-change {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.operator-settings-default-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--v2-state-fg-warning);
+}
+
+.operator-settings-default-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.operator-settings-model-columns,
+.operator-settings-model-controls {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.operator-settings-model-columns {
+  padding: 0 12px 4px;
+  color: var(--v2-text-text-muted);
+}
+
+.operator-settings-model-cell {
+  display: inline-flex;
+  justify-content: center;
+  width: 64px;
+}
+
+.operator-settings-model-radio {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--v2-text-text-accent);
+  cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .operator-settings-default {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1843,6 +1843,35 @@ export const dict = {
   "operator.welcome.doneAlready": "Onboarding ran on {{date}}, with the working folder {{folder}}.",
   "operator.welcome.notNeeded":
     "This installation was set up before onboarding came: there is nothing to do here. Settings → Namespaces holds the working folder.",
+  "operator.settingsModels.default": "Default model",
+  "operator.settingsModels.small": "Small default model",
+  "operator.settingsModels.note": "Namespaces and projects can override these on Providers & Models.",
+  "operator.settingsModels.decides": "OpenCode decides · now {{model}}",
+  "operator.settingsModels.byEnvironment": "Set by the environment ({{variable}}) · {{model}}",
+  "operator.settingsModels.letDecide": "Let OpenCode decide",
+  "operator.settingsModels.unavailable": "not offered by the connected providers",
+  "operator.settingsModels.helpSet":
+    "Set in Settings, in Global's config ({{path}}). Namespaces and projects can override it on Providers & Models. Agents created from now on start with this model.",
+  "operator.settingsModels.helpDecides":
+    "Not set: OpenCode uses the TUI's most recent model, else the first connected provider's best model by its built-in ranking. Right now that's {{model}}.",
+  "operator.settingsModels.helpDecidesSmall":
+    "Not set: OpenCode picks a small model of the default model's provider. Right now that's {{model}}.",
+  "operator.settingsModels.helpDecidesSmallDefault":
+    "Not set: OpenCode picks a small model of the default model's provider. It finds none, so it uses the default model, {{model}}.",
+  "operator.settingsModels.helpEnvironment":
+    "The environment sets {{key}} ({{variable}}), so this setting has no effect while it does.",
+  "operator.settingsModels.show": "Show",
+  "operator.settingsModels.defaultColumn": "Default",
+  "operator.settingsModels.smallColumn": "Small",
+  "operator.settingsModels.defaultFor": "Default model: {{model}}",
+  "operator.settingsModels.smallFor": "Small model: {{model}}",
+  "operator.settingsModels.setDefault": "Default model set to {{model}}",
+  "operator.settingsModels.setSmall": "Small default model set to {{model}}",
+  "operator.settingsModels.cleared": "{{field}}: OpenCode decides",
+  "operator.settingsModels.shownToo":
+    "It's now shown in the chat's model picker too: the default model must be pickable in chats.",
+  "operator.settingsModels.undo": "Undo",
+  "operator.settingsModels.failed": "The model couldn't be saved",
   "operator.memory.summariesHint": "In this project",
   "operator.memory.summariesBody": "The latest summaries that replaced older turns in this project's sessions.",
   "operator.memory.noSummaries": "No sessions here have been compacted yet.",

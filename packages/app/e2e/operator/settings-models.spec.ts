@@ -1,0 +1,126 @@
+import { expect, type Page, test } from "@playwright/test"
+import { fixture, pageMessages } from "../smoke/session-timeline.fixture"
+import { mockOpenCodeServer } from "../utils/mock-server"
+import { mockModelDefaults, modelDefaultsMock, modelProviders } from "./mock-models"
+import { mockOperator } from "./mock-operator"
+
+// Settings → Models (default_models_spec.md §4): the server-wide default and small model above upstream's list,
+// with a Default and a Small radio on every row. A change can be undone in the tab.
+
+test.beforeEach(async ({ page }) => {
+  await mockOpenCodeServer(page, {
+    protocol: "v1",
+    sessions: fixture.sessions.map((session) => ({ ...session })),
+    provider: modelProviders,
+    directory: fixture.directory,
+    project: fixture.project,
+    pageMessages,
+  })
+  await mockOperator(page)
+})
+
+// The settings dialog is modal: the tooltip and the toast are outside it, hidden from role queries.
+const tooltip = (page: Page) => page.locator('[role="tooltip"]')
+
+const openModels = async (page: Page) => {
+  await page.goto("/operator")
+  await page.getByRole("navigation", { name: "Operator" }).getByRole("button", { name: "Settings" }).click()
+  const dialog = page.locator(".settings-v2-dialog")
+  await dialog.getByRole("tab", { name: "Models" }).click()
+  return dialog
+}
+
+test("the two fields say what is set, or what OpenCode decides now; each (i) says how", async ({ page }) => {
+  await mockModelDefaults(page)
+  const dialog = await openModels(page)
+  const model = dialog.getByTestId("settings-default-model")
+  const small = dialog.getByTestId("settings-default-small_model")
+  await expect(model.getByTestId("settings-default-value")).toContainText("Claude Sonnet 4.5")
+  await expect(model.getByTestId("settings-default-value")).toContainText("Anthropic")
+  await expect(small.getByTestId("settings-default-value")).toHaveText("OpenCode decides · now Claude Haiku 4.5")
+  await expect(small.getByRole("button", { name: "Let OpenCode decide" })).toBeDisabled()
+  await expect(dialog).toContainText("Namespaces and projects can override these on Providers & Models.")
+
+  await model.getByRole("button", { name: "About Default model" }).hover()
+  await expect(tooltip(page)).toContainText("Set in Settings, in Global's config")
+  await small.getByRole("button", { name: "About Small default model" }).hover()
+  await expect(tooltip(page)).toContainText(
+    "OpenCode picks a small model of the default model's provider. Right now that's Claude Haiku 4.5.",
+  )
+})
+
+test("a radio sets the default at once, one per column across providers; Undo puts it back", async ({ page }) => {
+  const mock = await mockModelDefaults(page)
+  const dialog = await openModels(page)
+  const sonnet = dialog.getByRole("radio", { name: "Default model: Claude Sonnet 4.5" })
+  const gpt = dialog.getByRole("radio", { name: "Default model: GPT-5" })
+  await expect(sonnet).toBeChecked()
+  await gpt.check()
+  await expect.poll(() => mock.writes.at(-1)).toEqual({ level: "settings", key: "model", model: "openai/gpt-5" })
+  await expect(gpt).toBeChecked()
+  await expect(sonnet).not.toBeChecked()
+  await expect(dialog.getByTestId("settings-default-model")).toContainText("GPT-5")
+  // Undo is in the tab: the toast is outside the dialog, and clicking it would close the dialog.
+  const change = dialog.getByTestId("settings-model-change")
+  await expect(change).toContainText("Default model set to GPT-5")
+  await change.getByRole("button", { name: "Undo" }).click()
+  await expect
+    .poll(() => mock.writes.at(-1))
+    .toEqual({ level: "settings", key: "model", model: "anthropic/claude-sonnet-4-5" })
+  await expect(sonnet).toBeChecked()
+
+  // The Small column is a group of its own.
+  await dialog.getByRole("radio", { name: "Small model: Claude Haiku 4.5" }).check()
+  await expect
+    .poll(() => mock.writes.at(-1))
+    .toEqual({
+      level: "settings",
+      key: "small_model",
+      model: "anthropic/claude-haiku-4-5",
+    })
+  await expect(sonnet).toBeChecked()
+})
+
+test("Let OpenCode decide removes the setting and clears the column", async ({ page }) => {
+  const mock = await mockModelDefaults(page)
+  const dialog = await openModels(page)
+  const model = dialog.getByTestId("settings-default-model")
+  await model.getByRole("button", { name: "Let OpenCode decide" }).click()
+  await expect.poll(() => mock.writes.at(-1)).toEqual({ level: "settings", key: "model", model: null })
+  await expect(model.getByTestId("settings-default-value")).toHaveText("OpenCode decides · now Claude Sonnet 4.5")
+  await expect(dialog.getByRole("radio", { name: "Default model: Claude Sonnet 4.5" })).not.toBeChecked()
+})
+
+test("choosing a hidden model shows it in the chat's picker; search keeps the fields", async ({ page }) => {
+  const mock = await mockModelDefaults(page)
+  const dialog = await openModels(page)
+  const row = dialog.getByTestId("settings-model-openai/gpt-5")
+  await row.locator('[data-slot="switch-control"]').click()
+  await expect(row.getByRole("switch")).not.toBeChecked()
+  await dialog.getByRole("radio", { name: "Small model: GPT-5" }).check()
+  await expect.poll(() => mock.writes.length).toBe(1)
+  await expect(dialog.getByTestId("settings-model-change")).toContainText(
+    "It's now shown in the chat's model picker too",
+  )
+  await expect(row.getByRole("switch")).toBeChecked()
+
+  await dialog.getByRole("searchbox", { name: "Search models" }).fill("haiku")
+  await expect(dialog.getByTestId("settings-default-model")).toContainText("Claude Sonnet 4.5")
+  await expect(dialog.getByTestId("settings-model-openai/gpt-5")).toHaveCount(0)
+})
+
+test("the environment overriding Settings is said in the field and its (i)", async ({ page }) => {
+  const mock = modelDefaultsMock()
+  mock.settings = {}
+  mock.environment = { variable: "OPENCODE_CONFIG", model: "openai/gpt-5" }
+  await mockModelDefaults(page, mock)
+  const dialog = await openModels(page)
+  const model = dialog.getByTestId("settings-default-model")
+  await expect(model.getByTestId("settings-default-value")).toHaveText(
+    "Set by the environment (OPENCODE_CONFIG) · GPT-5",
+  )
+  await model.getByRole("button", { name: "About Default model" }).hover()
+  await expect(tooltip(page)).toContainText(
+    "The environment sets model (OPENCODE_CONFIG), so this setting has no effect while it does.",
+  )
+})
