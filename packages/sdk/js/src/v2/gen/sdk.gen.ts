@@ -3949,6 +3949,7 @@ export class Agent extends HeyApiClient {
       description?: string
       mode?: "subagent" | "primary" | "all"
       model?: string
+      modelSource?: "small" | "fixed"
       variant?: string
       temperature?: number
       top_p?: number
@@ -3963,6 +3964,7 @@ export class Agent extends HeyApiClient {
         | "description"
         | "mode"
         | "model"
+        | "modelSource"
         | "variant"
         | "temperature"
         | "top_p"
@@ -3991,6 +3993,7 @@ export class Agent extends HeyApiClient {
             { in: "body", key: "description" },
             { in: "body", key: "mode" },
             { in: "body", key: "model" },
+            { in: "body", key: "modelSource" },
             { in: "body", key: "variant" },
             { in: "body", key: "temperature" },
             { in: "body", key: "top_p" },
@@ -4075,6 +4078,7 @@ export class Agent extends HeyApiClient {
       description?: string
       mode?: "subagent" | "primary" | "all"
       model?: string
+      modelSource?: "small" | "fixed"
       variant?: string
       temperature?: number
       top_p?: number
@@ -4089,6 +4093,7 @@ export class Agent extends HeyApiClient {
         | "description"
         | "mode"
         | "model"
+        | "modelSource"
         | "variant"
         | "temperature"
         | "top_p"
@@ -4116,6 +4121,7 @@ export class Agent extends HeyApiClient {
             { in: "body", key: "description" },
             { in: "body", key: "mode" },
             { in: "body", key: "model" },
+            { in: "body", key: "modelSource" },
             { in: "body", key: "variant" },
             { in: "body", key: "temperature" },
             { in: "body", key: "top_p" },

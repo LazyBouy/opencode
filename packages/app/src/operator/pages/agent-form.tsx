@@ -18,6 +18,7 @@ import { LevelEditor } from "../ui/level-editor"
 import { PermissionImpact } from "../ui/permission-impact"
 import { orderCheck, type Rule, rulesFromConfig, rulesToConfig } from "../ui/rules"
 import { useAgentPermissions, useRefreshAgent } from "./agent-permissions"
+import { AgentModelFields } from "./agent-model-fields"
 import { type Scope, ScopeSwitch } from "../ui/scope-switch"
 import { useAgents } from "./agents"
 import { agentPatch, type AgentForm, formFromSettings } from "./agent-form-state"
@@ -297,22 +298,19 @@ export default function AgentFormPage() {
               </SegmentedControlV2>
             </Field>
           </Show>
-          <Field label={language.t("operator.column.model")} hint={language.t("operator.agentForm.modelHint")}>
-            <TextInputV2
-              appearance="base"
-              value={store.form.model}
-              placeholder="anthropic/claude-sonnet-4-5"
-              onInput={(event) => set("model", event.currentTarget.value)}
-            />
-          </Field>
+          <AgentModelFields
+            form={store.form}
+            set={set}
+            directory={directory()}
+            scope={store.scope}
+            editing={editing()}
+            where={
+              store.scope === "global"
+                ? language.t("operator.modelChain.settingsName")
+                : (settings.data?.find((item) => item.key === directory())?.name ?? directory() ?? "")
+            }
+          />
           <div data-slot="operator-form-row">
-            <Field label={language.t("operator.agent.variant")} hint={language.t("operator.help.variant")}>
-              <TextInputV2
-                appearance="base"
-                value={store.form.variant}
-                onInput={(event) => set("variant", event.currentTarget.value)}
-              />
-            </Field>
             <Field label={language.t("operator.agent.temperature")} hint={language.t("operator.help.temperature")}>
               <TextInputV2
                 appearance="base"

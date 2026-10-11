@@ -1,7 +1,11 @@
 import { Config } from "@/config/config"
 import { EffectBridge } from "@/effect/bridge"
+import { InstanceState } from "@/effect/instance-state"
 import { OperatorAgents } from "@/operator/agents"
+import { OperatorConfig } from "@/operator/config"
 import { OperatorModels } from "@/operator/models"
+import { OperatorSmallAgentNotes } from "@/operator/small-agent-notes"
+import { OperatorSmallAgents } from "@/operator/small-agents"
 import { OperatorProjectConfig } from "@/operator/project-config"
 import { OperatorTools } from "@/operator/tools"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
@@ -29,8 +33,9 @@ export const operatorProjectHandlers = HttpApiBuilder.group(InstanceHttpApi, "op
       .handle("models", () => models.defaults())
       .handle("agentCreate", (ctx) => {
         const { name, format, ...patch } = ctx.payload
-        return agents
-          .create(ctx.query.scope, name, patch, format)
+        // An agent on the small model gets the model it resolves to (small-agents.ts).
+        return OperatorSmallAgents.fill(ctx.query.scope, patch)
+          .pipe(Effect.flatMap((filled) => agents.create(ctx.query.scope, name, filled, format)))
           .pipe(
             Effect.flatMap(written(ctx.query.scope)),
             Effect.mapError(copyOr(apiError)),
@@ -38,8 +43,22 @@ export const operatorProjectHandlers = HttpApiBuilder.group(InstanceHttpApi, "op
           )
       })
       .handle("agentUpdate", (ctx) =>
-        agents
-          .update(ctx.query.scope, ctx.params.name, ctx.payload)
+        OperatorSmallAgents.fill(ctx.query.scope, ctx.payload)
+          .pipe(
+            Effect.flatMap((filled) => agents.update(ctx.query.scope, ctx.params.name, filled)),
+            // A model or variant chosen again replaces the note about a cleared variant.
+            Effect.tap(() =>
+              ctx.payload.variant !== undefined || ctx.payload.modelSource !== undefined || ctx.payload.model
+                ? InstanceState.context.pipe(
+                    Effect.flatMap((instance) =>
+                      Effect.promise(() =>
+                        OperatorSmallAgentNotes.forget(OperatorConfig.projectRoot(instance), ctx.params.name),
+                      ),
+                    ),
+                  )
+                : Effect.void,
+            ),
+          )
           .pipe(
             Effect.flatMap(written(ctx.query.scope)),
             Effect.mapError(copyOr(apiError)),

@@ -40,4 +40,32 @@ describe("agent form", () => {
     expect(sent(agentPatch(form, before, { bash: "ask" }))).toEqual({ reset: ["description", "temperature"] })
     expect(agentPatch(form, before, {}).reset).toEqual(["description", "temperature", "permission"])
   })
+
+  test("the model source: default sends no model, small sends the source, a pick sends the model", () => {
+    expect(formFromSettings("a", {}).modelSource).toBe("default")
+    expect(formFromSettings("a", { model: "openai/gpt-5" }).modelSource).toBe("pick")
+    expect(formFromSettings("a", { model: "anthropic/haiku", modelSource: "small" }).modelSource).toBe("small")
+
+    const picked = {
+      ...formFromSettings("a", {}),
+      modelSource: "pick" as const,
+      model: "openai/gpt-5",
+      variant: "high",
+    }
+    expect(sent(agentPatch(picked, {}, {}))).toEqual({ model: "openai/gpt-5", variant: "high" })
+    // Small model: the server fills in `model`; the variant stays.
+    const small = { ...picked, modelSource: "small" as const }
+    expect(sent(agentPatch(small, { model: "openai/gpt-5" }, {}))).toEqual({ modelSource: "small", variant: "high" })
+    // Back to the default model: model, source and variant go.
+    const before = { model: "anthropic/haiku", modelSource: "small", variant: "high" }
+    const back = { ...formFromSettings("a", before), modelSource: "default" as const }
+    expect(agentPatch(back, before, {}).reset).toEqual(["model", "modelSource", "variant"])
+    // Picking a model for a small agent drops the source.
+    const pick = { ...formFromSettings("a", before), modelSource: "pick" as const, model: "openai/gpt-5" }
+    expect(sent(agentPatch(pick, before, {}))).toEqual({
+      model: "openai/gpt-5",
+      variant: "high",
+      reset: ["modelSource"],
+    })
+  })
 })

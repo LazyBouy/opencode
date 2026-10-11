@@ -212,7 +212,12 @@ export function AgentDetail(props: { name: string; directory: string; tab: strin
             <Match when={props.tab === "overview"}>
               <dl data-component="operator-facts" data-layout="stacked">
                 <Fact label={language.t("operator.column.model")} help={language.t("operator.help.agentModelFact")}>
-                  <AgentModel source={current().modelSource} directory={directory()} />
+                  <AgentModel
+                    source={current().modelSource}
+                    directory={directory()}
+                    small={current().settings.modelSource === "small"}
+                    cleared={current().variantCleared}
+                  />
                 </Fact>
                 <Fact label={language.t("operator.prompts.profile")} help={language.t("operator.help.agentProfile")}>
                   <Show when={prompt.data} fallback="—">

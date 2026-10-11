@@ -41,6 +41,8 @@ test("creating an agent sends its settings and rules, then opens it", async ({ p
     format: "file",
     description: "Writes docs",
     mode: "subagent",
+    // The default model in effect, copied in (default_models_spec.md §8).
+    model: "opencode/claude-opus-4-6",
     temperature: 0.3,
     home: "/work/docs",
     prompt: "Write clear docs.",

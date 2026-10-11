@@ -1728,6 +1728,7 @@ export type AgentConfig = {
   maxSteps?: number
   permission?: PermissionConfig
   home?: string
+  modelSource?: "small" | "fixed"
   [key: string]:
     | unknown
     | string
@@ -1752,6 +1753,8 @@ export type AgentConfig = {
     | "info"
     | number
     | PermissionConfig
+    | "small"
+    | "fixed"
     | undefined
 }
 
@@ -4055,6 +4058,12 @@ export type OperatorModelSource = {
   agent?: OperatorAgentModel
 }
 
+export type OperatorAgentVariantCleared = {
+  variant: string
+  model: string
+  at: number
+}
+
 export type OperatorAgent = {
   name: string
   description?: string
@@ -4095,6 +4104,7 @@ export type OperatorAgent = {
     lastUsed?: number
   }
   modelSource?: OperatorModelSource
+  variantCleared?: OperatorAgentVariantCleared
 }
 
 export type OperatorAgentFormat = "file" | "config"
@@ -16757,6 +16767,7 @@ export type OperatorAgentCreateData = {
     description?: string
     mode?: "subagent" | "primary" | "all"
     model?: string
+    modelSource?: "small" | "fixed"
     variant?: string
     temperature?: number
     top_p?: number
@@ -16771,6 +16782,7 @@ export type OperatorAgentCreateData = {
       | "description"
       | "mode"
       | "model"
+      | "modelSource"
       | "variant"
       | "temperature"
       | "top_p"
@@ -16864,6 +16876,7 @@ export type OperatorAgentUpdateData = {
     description?: string
     mode?: "subagent" | "primary" | "all"
     model?: string
+    modelSource?: "small" | "fixed"
     variant?: string
     temperature?: number
     top_p?: number
@@ -16878,6 +16891,7 @@ export type OperatorAgentUpdateData = {
       | "description"
       | "mode"
       | "model"
+      | "modelSource"
       | "variant"
       | "temperature"
       | "top_p"

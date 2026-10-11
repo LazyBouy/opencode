@@ -3,10 +3,18 @@ import type { PermissionConfig } from "../ui/rules"
 // Form values for the agent editor, and the patch they turn into. Text inputs hold strings; empty
 // means "not set".
 
+/**
+ * Where the agent's model comes from (agent_form_spec.md §2): the default model (no `model`), the small model
+ * (`modelSource: "small"`; the server fills in and keeps `model` in step), or a model picked here.
+ */
+export type ModelSource = "default" | "small" | "pick"
+
 export interface AgentForm {
   name: string
   description: string
   mode: "primary" | "subagent" | "all"
+  modelSource: ModelSource
+  /** provider/model, for Pick a model */
   model: string
   variant: string
   temperature: string
@@ -26,6 +34,8 @@ export function formFromSettings(name: string, settings: Record<string, unknown>
     name,
     description: text(settings.description),
     mode: mode === "primary" || mode === "subagent" ? mode : "all",
+    // A model with no source is a picked one (§2.2).
+    modelSource: settings.modelSource === "small" ? "small" : settings.model ? "pick" : "default",
     model: text(settings.model),
     variant: text(settings.variant),
     temperature: text(settings.temperature),
@@ -42,6 +52,7 @@ export type ResetKey =
   | "description"
   | "mode"
   | "model"
+  | "modelSource"
   | "variant"
   | "temperature"
   | "top_p"
@@ -67,8 +78,15 @@ export function agentPatch(form: AgentForm, before: Record<string, unknown>, per
   const patch = {
     description: keep("description", words(form.description)),
     mode: keep("mode", form.mode === "all" && before.mode === undefined ? undefined : form.mode),
-    model: keep("model", words(form.model)),
-    variant: keep("variant", words(form.variant)),
+    // Default model: neither a model nor a source. Small model: the source (the server fills in `model`).
+    // Pick a model: the model, and no source.
+    model:
+      form.modelSource === "small"
+        ? undefined
+        : keep("model", form.modelSource === "pick" ? words(form.model) : undefined),
+    modelSource: keep("modelSource", form.modelSource === "small" ? ("small" as const) : undefined),
+    // A variant applies only to an agent's own model.
+    variant: keep("variant", form.modelSource === "default" ? undefined : words(form.variant)),
     temperature: keep("temperature", number(form.temperature)),
     top_p: keep("top_p", number(form.top_p)),
     steps: keep("steps", number(form.steps)),

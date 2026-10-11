@@ -19,6 +19,7 @@ import { OperatorProjects } from "./projects"
 import { OperatorConfig } from "./config"
 import { OperatorProjectConfig } from "./project-config"
 import { OperatorModels } from "./models"
+import { OperatorSmallAgentNotes } from "./small-agent-notes"
 import { OperatorTrashFiles } from "./trash-files"
 
 export const Source = Schema.Struct({
@@ -41,6 +42,13 @@ export const Info = Schema.Struct({
   modelSource: Schema.optional(OperatorModels.Source).annotate({
     description: "The model the agent's requests use, and where it is set (not for turned-off agents)",
   }),
+  variantCleared: Schema.optional(
+    Schema.Struct({ variant: Schema.String, model: Schema.String, at: Schema.Finite }).annotate({
+      identifier: "OperatorAgentVariantCleared",
+    }),
+  ).annotate({
+    description: "An agent on the small model: the variant cleared when the small model changed to one without it",
+  }),
 }).annotate({ identifier: "OperatorAgent" })
 export type Info = typeof Info.Type
 
@@ -49,6 +57,7 @@ export const ResetKey = Schema.Literals([
   "description",
   "mode",
   "model",
+  "modelSource",
   "variant",
   "temperature",
   "top_p",
@@ -67,6 +76,10 @@ export const Patch = Schema.Struct({
   description: Schema.optional(Schema.String),
   mode: Schema.optional(Schema.Literals(["subagent", "primary", "all"])),
   model: Schema.optional(Schema.String).annotate({ description: "provider/model" }),
+  modelSource: Schema.optional(Schema.Literals(["small", "fixed"])).annotate({
+    description:
+      "small: the agent runs on its project's small model (its `model` is filled in and kept in step); fixed or unset: `model` as given",
+  }),
   variant: Schema.optional(Schema.String),
   temperature: Schema.optional(Schema.Finite),
   top_p: Schema.optional(Schema.Finite),
@@ -195,10 +208,15 @@ const layer = Layer.effect(
         const used = byAgent.get(name)
         return { total: used?.total ?? 0, lastUsed: used?.lastUsed ?? undefined }
       }
+      // Agents on the small model whose variant was cleared when the small model changed (small-agents.ts).
+      const notes = yield* Effect.promise(() => OperatorSmallAgentNotes.forProject(OperatorConfig.projectRoot(ctx)))
+      const cleared = (name: string) =>
+        configured[name]?.modelSource === "small" && notes[name] ? { variantCleared: notes[name] } : {}
       const active = yield* Effect.forEach(yield* agents.list(), (agent) => {
         const file = paths.get(agent.name)
         return models.resolve(agent, file).pipe(
           Effect.map((modelSource) => ({
+            ...cleared(agent.name),
             ...agent,
             source: {
               kind: agent.native ? ("builtin" as const) : file ? ("file" as const) : ("config" as const),

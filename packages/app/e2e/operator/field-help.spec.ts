@@ -26,7 +26,7 @@ test("every field has an (i) with its help, and Settings → Appearance → Fiel
   )
   await expect(page.getByLabel("Home folder", { exact: true })).toBeVisible()
   await expect(page.getByRole("button", { name: "About Temperature" })).toBeVisible()
-  await expect(page.getByRole("group", { name: "Mode" })).toBeVisible()
+  await expect(page.getByRole("group", { name: "Mode", exact: true })).toBeVisible()
 
   // Upstream's settings rows carry it too; the switch turns it off everywhere.
   await page.getByRole("navigation", { name: "Operator" }).getByRole("button", { name: "Settings" }).click()

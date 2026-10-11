@@ -627,7 +627,14 @@ export function NamespaceModels(props: { summary: OperatorNamespaceSummary }) {
  * An agent's model on its page (§7): its own model, or, for an agent without one (OpenCode's built-ins), the
  * project's default model and where it comes from (the small model for the title agent).
  */
-export function AgentModel(props: { source: OperatorModelSource | undefined; directory: string }) {
+export function AgentModel(props: {
+  source: OperatorModelSource | undefined
+  directory: string
+  /** It runs on the small model (`modelSource: "small"`): its model follows the project's small model. */
+  small?: boolean
+  /** The variant cleared when the small model changed to one without it. */
+  cleared?: { variant: string; model: string }
+}) {
   const language = useLanguage()
   const chains = useProjectModels(() => props.directory)
   const models = useConnectedModels(() => props.directory)
@@ -638,29 +645,48 @@ export function AgentModel(props: { source: OperatorModelSource | undefined; dir
     const id = ready(settings)?.find((item) => item.key === props.directory)?.namespace
     return ready(namespaces)?.find((item) => item.namespace.id === id)?.namespace.name ?? id ?? ""
   }
-  // Its own model, or its own model standing in for an unavailable one: as before.
-  const own = () => props.source?.source === "agent" || !!props.source?.agent || props.source?.source === "chosen"
-  const small = () => props.source?.source === "small" || props.source?.source === "small-family"
+  // Its own model, or its own model standing in for an unavailable one: as before (an agent on the small model
+  // shows the small model it follows).
+  const own = () =>
+    !props.small && (props.source?.source === "agent" || !!props.source?.agent || props.source?.source === "chosen")
+  const small = () => props.small || props.source?.source === "small" || props.source?.source === "small-family"
   return (
-    <Show when={!own() && ready(chains)} fallback={<ModelWithSource source={props.source} />}>
-      {(found) => {
-        const effective = () => (small() ? found().chain.small.effective : found().chain.model.effective)
-        return (
-          <span class="flex flex-col gap-0.5" data-testid="agent-model">
-            <span>
-              {language.t(small() ? "operator.modelChain.agentSmall" : "operator.modelChain.agentDefault", {
-                model: words.full(effective().model) || language.t("operator.modelSource.none"),
-              })}
+    <>
+      <Show when={!own() && ready(chains)} fallback={<ModelWithSource source={props.source} />}>
+        {(found) => {
+          const effective = () => (small() ? found().chain.small.effective : found().chain.model.effective)
+          return (
+            <span class="flex flex-col gap-0.5" data-testid="agent-model">
+              <span>
+                {language.t(
+                  props.small
+                    ? "operator.agentModel.smallCurrent"
+                    : small()
+                      ? "operator.modelChain.agentSmall"
+                      : "operator.modelChain.agentDefault",
+                  { model: words.full(effective().model) || language.t("operator.modelSource.none") },
+                )}
+              </span>
+              <span data-slot="operator-note">
+                {effective().from === "opencode"
+                  ? language.t("operator.modelChain.decides")
+                  : language.t("operator.modelChain.fromLine", { from: words.from(effective(), namespace()) })}
+              </span>
+              <Unavailable effective={effective()} />
             </span>
-            <span data-slot="operator-note">
-              {effective().from === "opencode"
-                ? language.t("operator.modelChain.decides")
-                : language.t("operator.modelChain.fromLine", { from: words.from(effective(), namespace()) })}
-            </span>
-            <Unavailable effective={effective()} />
-          </span>
-        )
-      }}
-    </Show>
+          )
+        }}
+      </Show>
+      <Show when={props.cleared}>
+        {(cleared) => (
+          <p data-slot="operator-note" data-warning role="status" data-testid="agent-variant-cleared">
+            {language.t("operator.agentModel.variantCleared", {
+              variant: cleared().variant,
+              model: words.full(cleared().model),
+            })}
+          </p>
+        )}
+      </Show>
+    </>
   )
 }

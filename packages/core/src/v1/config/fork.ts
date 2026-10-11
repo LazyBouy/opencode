@@ -56,5 +56,9 @@ export const agentFields = {
   home: Schema.optional(Schema.String).annotate({
     description: "Folder this agent works in: new sessions started as this agent open there",
   }),
+  modelSource: Schema.optional(Schema.Literals(["small", "fixed"])).annotate({
+    description:
+      "small: the agent runs on its project's small model; `model` holds that model and the console rewrites it when the small model changes (existing sessions keep theirs). fixed or unset: `model` as written.",
+  }),
 }
 export const agentKeys = Object.keys(agentFields)

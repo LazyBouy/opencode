@@ -163,4 +163,22 @@ describe("model defaults by level", () => {
     expect(other.body.namespaces).toEqual([])
     expect(other.body.projects).toEqual([])
   })
+
+  test("a write moves the agents on the small model to the small model now in effect", async () => {
+    const agent = path.join(app_, ".opencode", "agents", "scout.md")
+    await fs.mkdir(path.dirname(agent), { recursive: true })
+    await fs.writeFile(agent, "---\nmodelSource: small\nmodel: test/old\n---\nQuick searches.\n")
+    const done = await put({
+      level: "project",
+      directory: app_,
+      key: "small_model",
+      model: "test/c",
+      confirmCopy: true,
+    })
+    expect(done.status).toBe(200)
+    const text = await fs.readFile(agent, "utf8")
+    expect(text).toContain("model: test/c")
+    expect(text).toContain("modelSource: small")
+    expect(text).toContain("Quick searches.")
+  })
 })

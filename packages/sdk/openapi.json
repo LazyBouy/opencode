@@ -14638,6 +14638,10 @@
                   "model": {
                     "type": "string"
                   },
+                  "modelSource": {
+                    "type": "string",
+                    "enum": ["small", "fixed"]
+                  },
                   "variant": {
                     "type": "string"
                   },
@@ -14677,6 +14681,7 @@
                         "description",
                         "mode",
                         "model",
+                        "modelSource",
                         "variant",
                         "temperature",
                         "top_p",
@@ -14826,6 +14831,10 @@
                   "model": {
                     "type": "string"
                   },
+                  "modelSource": {
+                    "type": "string",
+                    "enum": ["small", "fixed"]
+                  },
                   "variant": {
                     "type": "string"
                   },
@@ -14865,6 +14874,7 @@
                         "description",
                         "mode",
                         "model",
+                        "modelSource",
                         "variant",
                         "temperature",
                         "top_p",
@@ -30876,6 +30886,10 @@
           },
           "home": {
             "type": "string"
+          },
+          "modelSource": {
+            "type": "string",
+            "enum": ["small", "fixed"]
           }
         },
         "additionalProperties": {}
@@ -36787,6 +36801,22 @@
         "required": ["model", "source"],
         "additionalProperties": false
       },
+      "OperatorAgentVariantCleared": {
+        "type": "object",
+        "properties": {
+          "variant": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "at": {
+            "type": "number"
+          }
+        },
+        "required": ["variant", "model", "at"],
+        "additionalProperties": false
+      },
       "OperatorAgent": {
         "type": "object",
         "properties": {
@@ -36873,6 +36903,9 @@
           },
           "modelSource": {
             "$ref": "#/components/schemas/OperatorModelSource"
+          },
+          "variantCleared": {
+            "$ref": "#/components/schemas/OperatorAgentVariantCleared"
           }
         },
         "required": ["name", "mode", "permission", "options", "source", "disabled", "settings", "sessions"],

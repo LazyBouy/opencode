@@ -9,6 +9,7 @@ import { OperatorProfileStore } from "@/operator/profile-store"
 import { OperatorProjectConfig } from "@/operator/project-config"
 import { OperatorProjects } from "@/operator/projects"
 import { OperatorReloadWhenIdle } from "@/operator/reload-when-idle"
+import { OperatorSmallAgents } from "@/operator/small-agents"
 import { InstanceStore } from "@/project/instance-store"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -60,13 +61,27 @@ export const operatorModelDefaultsHandlers = HttpApiBuilder.group(
         return (yield* store.namespaces()).find((item) => item.namespace.id === namespace)?.namespace.name ?? namespace
       })
 
+      // Agents on the small model follow it (small-agents.ts): those of the projects the write reaches (and
+      // Global's, for Settings) get their `model` rewritten, before the projects reload.
+      const syncSmall = Effect.fnUntraced(function* (projects: ReadonlyArray<string>, global: boolean) {
+        const found = yield* Effect.promise(() => OperatorSmallAgents.holders(projects))
+        const where = [...found.projects, ...(global && found.global ? [yield* folderOf()] : [])]
+        for (const directory of new Set(where))
+          yield* instances.provide({ directory }, OperatorSmallAgents.sync()).pipe(Effect.ignore)
+      })
+
       const write = Effect.fnUntraced(function* (input: typeof WriteInput.Type) {
         const patch = { [input.key]: input.model }
         if (input.level === "settings") {
           const result = yield* instances
             .provide({ directory: yield* folderOf() }, operatorConfig.update("global", patch))
             .pipe(Effect.mapError(copyOr(failConfig)))
-          return result.changed ? { ...result, reload: yield* reloads.want("global") } : result
+          if (!result.changed) return result
+          yield* syncSmall(
+            (yield* store.projects()).map((item) => item.key),
+            true,
+          )
+          return { ...result, reload: yield* reloads.want("global") }
         }
         if (input.level === "namespace") {
           if (!input.namespace) return yield* fail("level namespace needs a namespace")
@@ -77,6 +92,10 @@ export const operatorModelDefaultsHandlers = HttpApiBuilder.group(
             .provide({ directory: yield* folderOf(place.id) }, operatorConfig.update("namespace", patch, place.id))
             .pipe(Effect.mapError(copyOr(failConfig)))
           if (!result.changed) return result
+          yield* syncSmall(
+            (yield* store.projects()).filter((item) => item.namespace === place.id).map((item) => item.key),
+            false,
+          )
           const reloaded = yield* Effect.forEach(
             OperatorNamespaceScope.instancesOf({ namespace: place.id }),
             (directory) => reloads.want({ directory }),
@@ -93,6 +112,7 @@ export const operatorModelDefaultsHandlers = HttpApiBuilder.group(
           )
           .pipe(Effect.mapError(copyOr(failConfig)))
         if (!result.changed) return result
+        yield* syncSmall([project.key], false)
         const directories = new Set([project.key, ...OperatorNamespaceScope.instancesOf({ project: project.key })])
         const reloaded = yield* Effect.forEach([...directories], (directory) => reloads.want({ directory }))
         return { ...result, reload: reloaded.includes("when-idle") ? ("when-idle" as const) : ("now" as const) }
