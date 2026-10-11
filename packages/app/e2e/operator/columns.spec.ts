@@ -58,8 +58,9 @@ test("the agent's Overview shows its profile and its model with where each comes
   await page.goto(`/operator/agents/build${dir}`)
   const facts = page.locator('[data-component="operator-facts"]')
   await expect(facts).toContainText("OpenCode (from: namespace default)")
-  await expect(facts.getByTestId("model-source")).toContainText("opencode/claude-opus-4-6")
-  await expect(facts.getByTestId("model-source")).toContainText("Not set: OpenCode's own choice")
+  // No model of its own: the project's default model, and where it comes from (default_models_spec.md §7).
+  await expect(facts.getByTestId("agent-model")).toContainText("Default model · Claude Opus 4.6 · OpenCode")
+  await expect(facts.getByTestId("agent-model")).toContainText("OpenCode decides")
   // The label and its (i) share a line; the value is below.
   const label = facts.locator("dt").first()
   const help = label.getByRole("button", { name: /^About / })
