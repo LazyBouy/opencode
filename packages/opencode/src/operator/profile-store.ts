@@ -348,15 +348,24 @@ async function adopt(ns: string): Promise<void> {
     for (const item of groups)
       if (!(await exists("group", own(item.id))))
         await writeItem(ns, "group", { id: own(item.id), name: item.name, types: [...item.types], builtin: false })
+    // Instruction files apply only to OpenCode's and Global's projects (memory_spec.md §7): another
+    // namespace's profiles leave the Instructions layer out (it would be empty).
+    const instructions = OperatorLayout.isGlobal(ns, await OperatorLayout.snapshot())
+      ? undefined
+      : own(`${OperatorProfile.PREFIX}generated.instructions`)
     for (const item of profiles)
-      if (!(await exists("profile", own(item.id))))
+      if (!(await exists("profile", own(item.id)))) {
+        const slots = ownSlots(item.slots)
         await writeItem(ns, "profile", {
           id: own(item.id),
           name: item.name,
           group: own(item.group),
-          slots: ownSlots(item.slots),
+          slots: Object.fromEntries(
+            Object.entries(slots).map(([type, ids]) => [type, ids.filter((id) => id !== instructions)]),
+          ),
           builtin: false,
         })
+      }
     // The memory layers, when a namespace first takes them: its OpenCode and Spec profiles hold them, last in
     // Dynamic (OpenCode's own OpenCode profile stays upstream's; the user's choice of 2026-10-10).
     if (layers.some((item) => OperatorResolverBuiltins.MEMORY_LAYERS.includes(item.id))) await addMemoryLayers(ns)

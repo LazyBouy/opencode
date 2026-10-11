@@ -17,6 +17,8 @@ import { OperatorResolverBuiltins as B } from "@/operator/resolver-builtins"
 import { SessionCompaction } from "@/session/compaction"
 import { Session } from "@/session/session"
 import { ToolRegistry } from "@/tool/registry"
+import { Instruction } from "@/session/instruction"
+import { MessageID } from "@/session/schema"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { TestLLMServer } from "../lib/llm-server"
@@ -687,6 +689,37 @@ unix("the purpose generator drafts a project purpose from its files and a brief"
       expect(sent).toContain("A notes app for teams.")
       expect(sent).toContain("Keep it short.")
       expect(sent).toContain("You write purpose statements")
+    }),
+  ),
+)
+
+unix("instruction files apply only to the OpenCode namespace's projects: elsewhere none are sent or attached", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      const { directory } = yield* configure()
+      yield* write(path.join(directory, "AGENTS.md"), "Project rules\n")
+      yield* write(path.join(directory, "sub", "AGENTS.md"), "Nested rules\n")
+      const store = yield* OperatorProfileStore.Service
+      const prompts = yield* OperatorPrompts.Service
+      const instruction = yield* Instruction.Service
+      const before = yield* prompts.preview({ agent: "build" })
+      expect(before.system[0]).toContain(`Instructions from: ${path.join(directory, "AGENTS.md")}`)
+      const nested = (messageID: string) =>
+        instruction.resolve([], path.join(directory, "sub", "file.ts"), MessageID.make(messageID))
+      expect((yield* nested("msg_before")).map((item) => item.filepath)).toEqual([
+        path.join(directory, "sub", "AGENTS.md"),
+      ])
+
+      const acme = yield* store.createNamespace({ name: "Acme", folder: yield* folderFor("Acme") })
+      yield* store.setProject(before.project.key, { namespace: acme.id })
+      const after = yield* prompts.preview({ agent: "build" })
+      expect(after.namespace.id).toBe(acme.id)
+      expect(after.system[0]).not.toContain("Instructions from:")
+      // Its profiles leave the Instructions layer out; no section's text differs from OpenCode's.
+      expect(after.sections.some((item) => item.layer.endsWith("generated.instructions"))).toBe(false)
+      expect(after.sections.filter((item) => item.parity === "differs")).toEqual([])
+      expect(yield* instruction.system()).toEqual([])
+      expect(yield* nested("msg_after")).toEqual([])
     }),
   ),
 )

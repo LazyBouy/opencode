@@ -10,6 +10,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { withTransientReadRetry } from "@/util/effect-http-client"
+import { OperatorInstructionScope } from "@/operator/instruction-scope"
 import { Global } from "@opencode-ai/core/global"
 import type { MessageV2 } from "./message-v2"
 import type { MessageID } from "./schema"
@@ -153,6 +154,7 @@ const layer: Layer.Layer<
     })
 
     const system = Effect.fn("Instruction.system")(function* () {
+      if (!(yield* OperatorInstructionScope.here())) return [] // fork: OpenCode namespace only (memory_spec.md §7)
       const config = yield* cfg.get()
       const paths = yield* systemPaths()
       const urls = (config.instructions ?? []).filter(
@@ -181,6 +183,7 @@ const layer: Layer.Layer<
       filepath: string,
       messageID: MessageID,
     ) {
+      if (!(yield* OperatorInstructionScope.here())) return [] // fork: OpenCode namespace only (memory_spec.md §7)
       const sys = yield* systemPaths()
       const already = extract(messages)
       const results: { filepath: string; content: string }[] = []

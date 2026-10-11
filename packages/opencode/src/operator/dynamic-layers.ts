@@ -24,6 +24,7 @@ import type { Provider } from "@/provider/provider"
 import { Skill } from "@/skill"
 import { OperatorFileCache } from "./file-cache"
 import { OperatorHelperTexts } from "./helper-texts"
+import { OperatorInstructionScope } from "./instruction-scope"
 import { OperatorMemoryFolders } from "./memory-folders"
 import { OperatorMemoryFormat } from "./memory-format"
 import { OperatorMemoryService } from "./memory-service"
@@ -236,6 +237,8 @@ const layer = Layer.effect(
     // As session/instruction.ts finds them (systemPaths, system).
     const instructions = Effect.fnUntraced(function* (fetched: ReadonlyArray<string> | undefined) {
       const ctx = yield* InstanceState.context
+      // Only the OpenCode namespace's projects (and Global's) read instruction files, as upstream's seam says.
+      if (!(yield* OperatorInstructionScope.here())) return undefined
       const config = yield* cfg.get()
       const names = B.INSTRUCTION_NAMES.filter((name) => name !== "CLAUDE.md" || !flags.disableClaudeCodePrompt)
       const globalFiles = [
@@ -492,8 +495,15 @@ const layer = Layer.effect(
         const resolver = B.RESOLVERS[id]!
         if (id === B.ENVIRONMENT) result.set(id, OperatorResolver.run(resolver, yield* environment(input.model)))
         if (id === B.REFERENCES) result.set(id, OperatorResolver.run(resolver, yield* references()))
-        if (id === B.INSTRUCTIONS)
-          result.set(id, OperatorResolver.run(resolver, yield* instructions(input.instructions)))
+        if (id === B.INSTRUCTIONS) {
+          const found = yield* instructions(input.instructions)
+          result.set(
+            id,
+            found
+              ? OperatorResolver.run(resolver, found)
+              : OperatorResolver.run(resolver, [], { off: OperatorInstructionScope.NOT_HERE }),
+          )
+        }
         if (id === B.MCP)
           result.set(
             id,
