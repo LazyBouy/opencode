@@ -3826,6 +3826,172 @@
         ]
       }
     },
+    "/operator/onboarding/status": {
+      "get": {
+        "tags": ["operator onboarding"],
+        "operationId": "operator.onboarding.status",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Whether onboarding waits, and what it suggests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorOnboardingStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Whether this installation waits for onboarding; the suggested working folder and project name; the workspace roots; and each merged agent's data folder, with whether it is inside the home folder.",
+        "summary": "Onboarding",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.onboarding.status({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/onboarding/check": {
+      "post": {
+        "tags": ["operator onboarding"],
+        "operationId": "operator.onboarding.check",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The folders it would make, and what stops it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorOnboardingPreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The working folder, OpenCode's folder and the project's folder these would give, why they can't be used if they can't, and whether Global's folder is on another file system. Nothing is made.",
+        "summary": "Check onboarding's folders",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "workingDir": {
+                    "type": "string",
+                    "description": "An absolute folder; OpenCode's folder is <it>/opencode"
+                  },
+                  "project": {
+                    "type": "string",
+                    "description": "The default project's folder name, made in OpenCode's folder"
+                  },
+                  "git": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["workingDir", "project"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.onboarding.check({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/onboarding/finish": {
+      "post": {
+        "tags": ["operator onboarding"],
+        "operationId": "operator.onboarding.finish",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "What was made",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorOnboardingResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorOnboardingError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorOnboardingError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Sets the working folder (Global and OpenCode become separate namespaces), makes OpenCode's folder and the project's folder in it (a git repository unless git is false), makes the project OpenCode's default project, and records onboarding as done. It runs once.",
+        "summary": "Onboard",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "workingDir": {
+                    "type": "string",
+                    "description": "An absolute folder; OpenCode's folder is <it>/opencode"
+                  },
+                  "project": {
+                    "type": "string",
+                    "description": "The default project's folder name, made in OpenCode's folder"
+                  },
+                  "git": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["workingDir", "project"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.onboarding.finish({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/operator/namespace/{id}/config": {
       "get": {
         "tags": ["operator namespace config"],
@@ -33563,6 +33729,168 @@
         "required": ["id", "plan", "status", "moved", "skipped", "byHand", "startedAt"],
         "additionalProperties": false
       },
+      "OperatorOnboardingDone": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "number"
+          },
+          "workingDir": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          }
+        },
+        "required": ["at", "workingDir", "project"],
+        "additionalProperties": false
+      },
+      "OperatorOnboardingAgent": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "folder": {
+            "type": "string",
+            "description": "Where the merged agent keeps its records per working folder"
+          },
+          "exists": {
+            "type": "boolean"
+          },
+          "insideHome": {
+            "type": "boolean",
+            "description": "Outside the home folder, a move can't update its pointers and moves across file systems are skipped"
+          }
+        },
+        "required": ["id", "name", "folder", "exists", "insideHome"],
+        "additionalProperties": false
+      },
+      "OperatorOnboardingStatus": {
+        "type": "object",
+        "properties": {
+          "pending": {
+            "type": "boolean",
+            "description": "A new installation that hasn't been onboarded yet"
+          },
+          "done": {
+            "$ref": "#/components/schemas/OperatorOnboardingDone"
+          },
+          "workingDir": {
+            "type": "string"
+          },
+          "suggested": {
+            "type": "string",
+            "description": "The working folder to suggest: the server's current folder when it can be one, else ~/opencode-home"
+          },
+          "project": {
+            "type": "string",
+            "description": "The default project's suggested folder name"
+          },
+          "home": {
+            "type": "string"
+          },
+          "roots": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The workspace roots the working folder must be in"
+          },
+          "globalFolder": {
+            "type": "string"
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorOnboardingAgent"
+            }
+          }
+        },
+        "required": ["pending", "suggested", "project", "home", "roots", "globalFolder", "agents"],
+        "additionalProperties": false
+      },
+      "OperatorOnboardingPreview": {
+        "type": "object",
+        "properties": {
+          "workingDir": {
+            "type": "string"
+          },
+          "opencodeFolder": {
+            "type": "string"
+          },
+          "projectFolder": {
+            "type": "string"
+          },
+          "projectExists": {
+            "type": "boolean",
+            "description": "The project's folder is there already: it is used as it is"
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Why onboarding can't go ahead with these"
+          },
+          "separateFileSystems": {
+            "type": "boolean",
+            "description": "Global's folder and the working folder are on different file systems"
+          }
+        },
+        "required": [
+          "workingDir",
+          "opencodeFolder",
+          "projectFolder",
+          "projectExists",
+          "problems",
+          "separateFileSystems"
+        ],
+        "additionalProperties": false
+      },
+      "OperatorOnboardingResult": {
+        "type": "object",
+        "properties": {
+          "workingDir": {
+            "type": "string"
+          },
+          "opencodeFolder": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "git": {
+            "type": "boolean"
+          }
+        },
+        "required": ["workingDir", "opencodeFolder", "project", "git"],
+        "additionalProperties": false
+      },
+      "OperatorOnboardingError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorOnboardingError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
       "OperatorNamespaceConfig": {
         "type": "object",
         "properties": {
@@ -53836,6 +54164,10 @@
     {
       "name": "operator layout",
       "description": "Where namespaces and projects live."
+    },
+    {
+      "name": "operator onboarding",
+      "description": "The first start of a new installation."
     },
     {
       "name": "operator namespace config",

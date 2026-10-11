@@ -257,6 +257,68 @@ export type MemoryMock = {
   /** The namespaces whose own level was asked for. */
   namespaceQueries: string[]
 }
+export type OnboardingMock = {
+  status: {
+    pending: boolean
+    done?: { at: number; workingDir: string; project: string }
+    workingDir?: string
+    suggested: string
+    project: string
+    home: string
+    roots: string[]
+    globalFolder: string
+    agents: Array<{ id: string; name: string; folder: string; exists: boolean; insideHome: boolean }>
+  }
+  /** What the next check answers as problems. */
+  problems: string[]
+  writes: Array<{ action: "check" | "finish"; body: Record<string, unknown> }>
+}
+// Onboarding (memory_spec.md §10): not waiting unless a test says so.
+function onboardingMock(): OnboardingMock {
+  return {
+    status: {
+      pending: false,
+      suggested: "/root/opencode-home",
+      project: "opencode",
+      home: "/root",
+      roots: ["/root/projects", "/root/opencode-home"],
+      globalFolder: "/root/.config/opencode",
+      agents: [],
+    },
+    problems: [],
+    writes: [],
+  }
+}
+function onboardingRoute(onboarding: OnboardingMock, url: URL, method: string, body: () => unknown) {
+  if (url.pathname === "/operator/onboarding/status" && method === "GET") return { body: onboarding.status }
+  const input = (method === "POST" ? body() : {}) as { workingDir: string; project: string; git?: boolean }
+  const opencodeFolder = `${input.workingDir}/opencode`
+  if (url.pathname === "/operator/onboarding/check" && method === "POST") {
+    onboarding.writes.push({ action: "check", body: input })
+    return {
+      body: {
+        workingDir: input.workingDir,
+        opencodeFolder,
+        projectFolder: `${opencodeFolder}/${input.project}`,
+        projectExists: false,
+        problems: onboarding.problems,
+        separateFileSystems: false,
+      },
+    }
+  }
+  if (url.pathname === "/operator/onboarding/finish" && method === "POST") {
+    onboarding.writes.push({ action: "finish", body: input })
+    const project = `${opencodeFolder}/${input.project}`
+    onboarding.status = {
+      ...onboarding.status,
+      pending: false,
+      done: { at: Date.now(), workingDir: input.workingDir, project },
+    }
+    return { body: { workingDir: input.workingDir, opencodeFolder, project, git: input.git !== false } }
+  }
+  return undefined
+}
+
 function memoryMock(): MemoryMock {
   const level = (name: MemoryLevel["level"], folder: string, entries: MemoryEntry[]): MemoryLevel => ({
     level: name,
@@ -456,6 +518,8 @@ export interface OperatorMock {
   readonly memoryWrites: Array<{ url: string; body: unknown }>
   /** Short-term memory: the three levels, the writes to them, and the settings (memory_spec.md §8). */
   readonly memory: MemoryMock
+  /** Onboarding: whether it waits, and the checks and finish sent (memory_spec.md §10). */
+  readonly onboarding: OnboardingMock
   readonly projectsOpened: string[]
   readonly folders: Set<string>
   readonly prompt: PromptMock
@@ -610,6 +674,7 @@ export async function mockOperator(page: Page) {
     folderWrites: [],
     memoryWrites: [],
     memory: memoryMock(),
+    onboarding: onboardingMock(),
     projectsOpened: [],
     folders: new Set([`${workspace}/apps`, `${workspace}/site`]),
     prompt: prompt.state,
@@ -1393,6 +1458,8 @@ export async function mockOperator(page: Page) {
       return json(route, { path: body.path })
     }
     if (url.pathname === "/operator/memory/overview") return json(route, memoryOverview)
+    const onboarding = onboardingRoute(state.onboarding, url, method, () => route.request().postDataJSON())
+    if (onboarding) return json(route, onboarding.body)
     const memory = memoryRoute(state.memory, url, method, () => route.request().postDataJSON())
     if (memory) return json(route, memory.body, memory.status)
     if (url.pathname === "/operator/memory/file" && method === "GET")

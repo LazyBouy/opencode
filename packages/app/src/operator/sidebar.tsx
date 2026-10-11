@@ -9,6 +9,7 @@ import { useOperatorCommands } from "./commands"
 import { isChatPage, rememberChat, useOpenDefaultChat } from "./session-views/chat"
 import { SessionViewCommands } from "./session-views/switch"
 import { OperatorTitlebarControls } from "./titlebar-controls"
+import { OnboardingGate } from "./onboarding"
 import { ProjectGate } from "./project-gate"
 import { useTrailKeeper } from "./ui/overlay-nav"
 import { isActivePage, operatorPages } from "./pages"
@@ -95,6 +96,7 @@ export function OperatorSidebar() {
       <SessionViewCommands />
       <OperatorTitlebarControls />
       <ProjectGate />
+      <OnboardingGate />
       <div data-slot="operator-sidebar-footer">
         <button
           type="button"

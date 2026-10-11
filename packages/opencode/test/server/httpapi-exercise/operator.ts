@@ -809,6 +809,34 @@ export const operatorScenarios: Scenario[] = [
     .get("/operator/layout/move/{id}", "operator.layout.moveReport")
     .at((ctx) => ({ path: route("/operator/layout/move/{id}", { id: "mv_missing" }), headers: ctx.headers() }))
     .status(400),
+  // Onboarding: finishing would set the working directory for every later scenario, so only its checks and a
+  // refusal are exercised. Onboarding itself is tested in test/operator/onboarding.test.ts.
+  http.protected.get("/operator/onboarding/status", "operator.onboarding.status").json(200, (body) => {
+    object(body)
+    check(typeof body.pending === "boolean", "onboarding should say whether it waits")
+    check(typeof body.suggested === "string", "onboarding should suggest a working folder")
+    array(body.agents)
+  }),
+  http.protected
+    .post("/operator/onboarding/check", "operator.onboarding.check")
+    .at((ctx) => ({
+      path: "/operator/onboarding/check",
+      headers: ctx.headers(),
+      body: { workingDir: "relative/dir", project: "opencode" },
+    }))
+    .json(200, (body) => {
+      object(body)
+      array(body.problems)
+      check(body.problems.length > 0, "a relative working folder should be refused")
+    }),
+  http.protected
+    .post("/operator/onboarding/finish", "operator.onboarding.finish")
+    .at((ctx) => ({
+      path: "/operator/onboarding/finish",
+      headers: ctx.headers(),
+      body: { workingDir: "relative/dir", project: "opencode" },
+    }))
+    .status(400),
   http.protected.get("/operator/namespaces", "operator.namespace.list").json(200, (body) => {
     array(body)
     check(

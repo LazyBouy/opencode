@@ -20,6 +20,8 @@ const built: Partial<Record<OperatorPage["id"], Component>> = {
 }
 const AgentPage = lazy(() => import("./pages/agent"))
 const AgentFormPage = lazy(() => import("./pages/agent-form"))
+// The first start of a new installation (onboarding.tsx): not in the sidebar.
+const WelcomePage = lazy(() => import("./pages/welcome"))
 
 // All /operator routes. Mounted once from app.tsx inside the new layout.
 export function OperatorRoutes() {
@@ -34,6 +36,7 @@ export function OperatorRoutes() {
       <Route path="/agents/new" component={AgentFormPage} />
       <Route path="/agents/:name/edit" component={AgentFormPage} />
       <Route path="/agents/:name" component={AgentPage} />
+      <Route path="/welcome" component={WelcomePage} />
       <Route path="*" component={() => <Navigate href="/operator" />} />
     </Route>
   )

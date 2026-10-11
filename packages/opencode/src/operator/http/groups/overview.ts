@@ -13,6 +13,7 @@ import { OperatorNamespaceGroup } from "./namespaces"
 import { OperatorPermissionDecisionGroup } from "./permission-decisions"
 import { OperatorTrashGroup } from "./trash"
 import { OperatorLayoutGroup } from "./layout"
+import { OperatorOnboardingGroup } from "./onboarding"
 import { OperatorNamespaceConfigGroup } from "./namespace-config"
 
 export const OperatorOverviewPaths = {
@@ -105,6 +106,7 @@ export const OperatorRootApi = HttpApi.make("operator-root")
   .add(OperatorNamespaceGroup)
   .add(OperatorTrashGroup)
   .add(OperatorLayoutGroup)
+  .add(OperatorOnboardingGroup)
   .add(OperatorNamespaceConfigGroup)
   .add(OperatorProjectRecordGroup)
   .add(OperatorPermissionDecisionGroup)

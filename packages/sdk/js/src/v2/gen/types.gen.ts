@@ -2931,6 +2931,82 @@ export type OperatorLayoutMoveReport = {
   finishedAt?: number
 }
 
+export type OperatorOnboardingDone = {
+  at: number
+  workingDir: string
+  project: string
+}
+
+export type OperatorOnboardingAgent = {
+  id: string
+  name: string
+  /**
+   * Where the merged agent keeps its records per working folder
+   */
+  folder: string
+  exists: boolean
+  /**
+   * Outside the home folder, a move can't update its pointers and moves across file systems are skipped
+   */
+  insideHome: boolean
+}
+
+export type OperatorOnboardingStatus = {
+  /**
+   * A new installation that hasn't been onboarded yet
+   */
+  pending: boolean
+  done?: OperatorOnboardingDone
+  workingDir?: string
+  /**
+   * The working folder to suggest: the server's current folder when it can be one, else ~/opencode-home
+   */
+  suggested: string
+  /**
+   * The default project's suggested folder name
+   */
+  project: string
+  home: string
+  /**
+   * The workspace roots the working folder must be in
+   */
+  roots: Array<string>
+  globalFolder: string
+  agents: Array<OperatorOnboardingAgent>
+}
+
+export type OperatorOnboardingPreview = {
+  workingDir: string
+  opencodeFolder: string
+  projectFolder: string
+  /**
+   * The project's folder is there already: it is used as it is
+   */
+  projectExists: boolean
+  /**
+   * Why onboarding can't go ahead with these
+   */
+  problems: Array<string>
+  /**
+   * Global's folder and the working folder are on different file systems
+   */
+  separateFileSystems: boolean
+}
+
+export type OperatorOnboardingResult = {
+  workingDir: string
+  opencodeFolder: string
+  project: string
+  git: boolean
+}
+
+export type OperatorOnboardingError = {
+  name: "OperatorOnboardingError"
+  data: {
+    message: string
+  }
+}
+
 export type OperatorNamespaceConfig = {
   id: string
   name: string
@@ -11998,6 +12074,103 @@ export type OperatorLayoutMoveReportResponses = {
 
 export type OperatorLayoutMoveReportResponse =
   OperatorLayoutMoveReportResponses[keyof OperatorLayoutMoveReportResponses]
+
+export type OperatorOnboardingStatusData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/operator/onboarding/status"
+}
+
+export type OperatorOnboardingStatusErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorOnboardingStatusError = OperatorOnboardingStatusErrors[keyof OperatorOnboardingStatusErrors]
+
+export type OperatorOnboardingStatusResponses = {
+  /**
+   * Whether onboarding waits, and what it suggests
+   */
+  200: OperatorOnboardingStatus
+}
+
+export type OperatorOnboardingStatusResponse =
+  OperatorOnboardingStatusResponses[keyof OperatorOnboardingStatusResponses]
+
+export type OperatorOnboardingCheckData = {
+  body?: {
+    /**
+     * An absolute folder; OpenCode's folder is <it>/opencode
+     */
+    workingDir: string
+    /**
+     * The default project's folder name, made in OpenCode's folder
+     */
+    project: string
+    git?: boolean
+  }
+  path?: never
+  query?: never
+  url: "/operator/onboarding/check"
+}
+
+export type OperatorOnboardingCheckErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorOnboardingCheckError = OperatorOnboardingCheckErrors[keyof OperatorOnboardingCheckErrors]
+
+export type OperatorOnboardingCheckResponses = {
+  /**
+   * The folders it would make, and what stops it
+   */
+  200: OperatorOnboardingPreview
+}
+
+export type OperatorOnboardingCheckResponse = OperatorOnboardingCheckResponses[keyof OperatorOnboardingCheckResponses]
+
+export type OperatorOnboardingFinishData = {
+  body?: {
+    /**
+     * An absolute folder; OpenCode's folder is <it>/opencode
+     */
+    workingDir: string
+    /**
+     * The default project's folder name, made in OpenCode's folder
+     */
+    project: string
+    git?: boolean
+  }
+  path?: never
+  query?: never
+  url: "/operator/onboarding/finish"
+}
+
+export type OperatorOnboardingFinishErrors = {
+  /**
+   * OperatorOnboardingError | InvalidRequestError
+   */
+  400: OperatorOnboardingError | InvalidRequestError
+}
+
+export type OperatorOnboardingFinishError = OperatorOnboardingFinishErrors[keyof OperatorOnboardingFinishErrors]
+
+export type OperatorOnboardingFinishResponses = {
+  /**
+   * What was made
+   */
+  200: OperatorOnboardingResult
+}
+
+export type OperatorOnboardingFinishResponse =
+  OperatorOnboardingFinishResponses[keyof OperatorOnboardingFinishResponses]
 
 export type OperatorNamespaceConfigGetData = {
   body?: never

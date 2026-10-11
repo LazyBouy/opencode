@@ -300,6 +300,12 @@ import type {
   OperatorNamespaceTypeUpdateResponses,
   OperatorNamespaceUpdateErrors,
   OperatorNamespaceUpdateResponses,
+  OperatorOnboardingCheckErrors,
+  OperatorOnboardingCheckResponses,
+  OperatorOnboardingFinishErrors,
+  OperatorOnboardingFinishResponses,
+  OperatorOnboardingStatusErrors,
+  OperatorOnboardingStatusResponses,
   OperatorPermissionDecideErrors,
   OperatorPermissionDecideInput,
   OperatorPermissionDecideResponses,
@@ -3249,6 +3255,103 @@ export class Layout extends HeyApiClient {
       url: "/operator/layout/move/{id}",
       ...options,
       ...params,
+    })
+  }
+}
+
+export class Onboarding extends HeyApiClient {
+  /**
+   * Onboarding
+   *
+   * Whether this installation waits for onboarding; the suggested working folder and project name; the workspace roots; and each merged agent's data folder, with whether it is inside the home folder.
+   */
+  public status<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<
+      OperatorOnboardingStatusResponses,
+      OperatorOnboardingStatusErrors,
+      ThrowOnError
+    >({ url: "/operator/onboarding/status", ...options })
+  }
+
+  /**
+   * Check onboarding's folders
+   *
+   * The working folder, OpenCode's folder and the project's folder these would give, why they can't be used if they can't, and whether Global's folder is on another file system. Nothing is made.
+   */
+  public check<ThrowOnError extends boolean = false>(
+    parameters?: {
+      workingDir?: string
+      project?: string
+      git?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "workingDir" },
+            { in: "body", key: "project" },
+            { in: "body", key: "git" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorOnboardingCheckResponses,
+      OperatorOnboardingCheckErrors,
+      ThrowOnError
+    >({
+      url: "/operator/onboarding/check",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Onboard
+   *
+   * Sets the working folder (Global and OpenCode become separate namespaces), makes OpenCode's folder and the project's folder in it (a git repository unless git is false), makes the project OpenCode's default project, and records onboarding as done. It runs once.
+   */
+  public finish<ThrowOnError extends boolean = false>(
+    parameters?: {
+      workingDir?: string
+      project?: string
+      git?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "workingDir" },
+            { in: "body", key: "project" },
+            { in: "body", key: "git" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorOnboardingFinishResponses,
+      OperatorOnboardingFinishErrors,
+      ThrowOnError
+    >({
+      url: "/operator/onboarding/finish",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 }
@@ -6354,6 +6457,11 @@ export class Operator extends HeyApiClient {
   private _layout?: Layout
   get layout(): Layout {
     return (this._layout ??= new Layout({ client: this.client }))
+  }
+
+  private _onboarding?: Onboarding
+  get onboarding(): Onboarding {
+    return (this._onboarding ??= new Onboarding({ client: this.client }))
   }
 
   private _namespaceConfig?: NamespaceConfig

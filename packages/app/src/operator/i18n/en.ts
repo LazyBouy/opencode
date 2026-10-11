@@ -448,7 +448,8 @@ export const dict = {
   "operator.page.integrations.planned":
     "Channel setup, chat-to-session links and allowlists, starting with a two-way Telegram bridge with approval buttons.",
   "operator.page.memory.title": "Memory",
-  "operator.page.memory.description": "What agents remember in a namespace: its own memory, each project's and each agent's; the files OpenCode adds to its projects' prompts; their compaction summaries; and the memory settings.",
+  "operator.page.memory.description":
+    "What agents remember in a namespace: its own memory, each project's and each agent's; the files OpenCode adds to its projects' prompts; their compaction summaries; and the memory settings.",
   "operator.page.memory.planned":
     "Browse, search, pin and forget what agents remember, for every project, per project or per agent.",
 
@@ -1797,6 +1798,51 @@ export const dict = {
   "operator.memory.database": "Database",
   "operator.memory.dbEngine": "Engine",
   "operator.memory.dbEngineHint": "One database for every namespace; other engines (Postgres, MariaDB) can come later.",
+  "operator.welcome.title": "Welcome to OpenCode",
+  "operator.welcome.description":
+    "Choose where OpenCode keeps its namespaces and projects. This runs once, on a new installation.",
+  "operator.welcome.steps": "Steps",
+  "operator.welcome.step.folder": "Working folder",
+  "operator.welcome.step.project": "Default project",
+  "operator.welcome.step.agents": "Merged agents",
+  "operator.welcome.step.summary": "Summary",
+  "operator.welcome.workingDir": "Working folder",
+  "operator.welcome.workingDirSet": "The working folder was set already (Settings → Namespaces): onboarding uses it.",
+  "operator.welcome.opencodeFolder": "OpenCode's folder: {{folder}}",
+  "operator.welcome.projectName": "Project folder name",
+  "operator.welcome.projectFolder": "The project's folder: {{folder}}",
+  "operator.welcome.git": "Git repository",
+  "operator.welcome.gitLabel": "Make it a git repository",
+  "operator.welcome.repoNote":
+    "The OpenCode source code isn't added as a project. To work on it, add it from Projects later.",
+  "operator.welcome.agentsIntro":
+    "Agents merged into OpenCode sessions (/merge) keep their own records for each folder they ran in. When a project folder moves, OpenCode updates those records where it can reach them.",
+  "operator.welcome.noAgents": "No merged agents.",
+  "operator.welcome.agentInside": "Inside your home folder ({{home}}): its sessions keep resuming after a move.",
+  "operator.welcome.agentOutside":
+    "{{agent}} keeps its data in {{folder}}, outside your home folder ({{home}}). When a folder moves, OpenCode can't update {{agent}}'s pointers to it, so its sessions there start anew instead of resuming; and moves across file systems are skipped.",
+  "operator.welcome.agentMissing": "{{agent}} hasn't kept anything there yet.",
+  "operator.welcome.separateFileSystems":
+    "Global's folder ({{folder}}) and the working folder are on different file systems: a project can't move between Global and another namespace (moves across file systems are skipped).",
+  "operator.welcome.opencode": "OpenCode's folder",
+  "operator.welcome.defaultProject": "Default project",
+  "operator.welcome.projectExists": "(there already: used as it is)",
+  "operator.welcome.projectGit": "(a new git repository)",
+  "operator.welcome.projectPlain": "(a new folder, not a git repository)",
+  "operator.welcome.global": "Global's folder",
+  "operator.welcome.warnings": "Warnings",
+  "operator.welcome.warningCount": "{{count}}: see Merged agents",
+  "operator.welcome.noWarnings": "None",
+  "operator.welcome.later":
+    "Nothing is made until you set it up. Later, Settings → Namespaces can change the working folder (which moves every namespace folder) and OpenCode's default project.",
+  "operator.welcome.back": "Back",
+  "operator.welcome.next": "Next",
+  "operator.welcome.setUp": "Set up",
+  "operator.welcome.ready": "OpenCode is set up",
+  "operator.welcome.openConsole": "Open the console",
+  "operator.welcome.doneAlready": "Onboarding ran on {{date}}, with the working folder {{folder}}.",
+  "operator.welcome.notNeeded":
+    "This installation was set up before onboarding came: there is nothing to do here. Settings → Namespaces holds the working folder.",
   "operator.memory.summariesHint": "In this project",
   "operator.memory.summariesBody": "The latest summaries that replaced older turns in this project's sessions.",
   "operator.memory.noSummaries": "No sessions here have been compacted yet.",
@@ -1880,6 +1926,18 @@ export const dict = {
   "operator.help.memoryAgent":
     "The agent whose own memory the Agent level shows: in its home's .memory folder, or the project's .memory/agents/<name>/ when it has none.",
   "operator.help.memoryProject": "A project of the namespace: its memory, and its agents' memory below.",
+  "operator.help.welcomeWorkingDir":
+    "Every namespace but Global lives in this folder, at <working folder>/<namespace>; OpenCode's is <working folder>/opencode. It must be inside the workspace roots ({{roots}}), outside Global's folder and outside any git repository. It is made if missing.",
+  "operator.help.welcomeOpenCode":
+    "The OpenCode namespace's folder: it holds OpenCode's projects and its own config (.opencode).",
+  "operator.help.welcomeProject":
+    "OpenCode's default project, made in OpenCode's folder. New sessions in OpenCode start in it unless another project is chosen.",
+  "operator.help.welcomeGit":
+    "A git repository starts with an empty first commit. OpenCode can undo a session's file changes only in a git repository.",
+  "operator.help.welcomeGlobal":
+    "Global's folder holds the config every namespace builds on (providers, models) and Global's own projects. It doesn't move.",
+  "operator.help.welcomeWarnings":
+    "What the merged agents step warned about: data outside your home folder, or folders on different file systems.",
   "operator.help.memoryTitle":
     "A short title, at most 80 characters, on one line. It names the memory in MEMORY.md, and its file name is made from it.",
   "operator.help.memoryDescription":

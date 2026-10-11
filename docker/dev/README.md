@@ -39,10 +39,13 @@ merged agents' records of its sessions along (Claude Code's `~/.claude/projects/
 sessions resume in the new place. The container runs as root: with a home folder that isn't root's, the
 files it writes there are root's.
 
-Every namespace but Global lives in the working directory (`OPENCODE_WORKING_DIR`, below), at
-`<working dir>/<namespace>`; **Operator → Projects → Add project** makes a project at
-`<namespace folder>/<name>` (a git repository by default, so it is its own project), or adds a folder
-that exists.
+**A fresh stack opens onboarding** in the web UI: it asks for the working folder (default
+`~/opencode-home`), where every namespace but Global lives, at `<working folder>/<namespace>` (OpenCode at
+`<working folder>/opencode`), and makes OpenCode's default project in it (`<working folder>/opencode/opencode`
+by default). It warns about a merged agent whose data is outside your home folder. This repository is never
+added as a project; add it from **Operator → Projects** to work on it. Set `OPENCODE_WORKING_DIR` (below) to
+skip onboarding. **Operator → Projects → Add project** makes a project at `<namespace folder>/<name>` (a git
+repository by default, so it is its own project), or adds a folder that exists.
 
 Connect a model provider for OpenCode's own agents under **Settings → Providers**.
 
@@ -115,17 +118,16 @@ containers. See `FORK.md`.
 
 Override in the shell or in `docker/dev/.env`:
 
-| Variable                                                                                                             | Default                                            | Purpose                                                                                                         |
-| -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `HOME`                                                                                                               | your shell's, else `/root`                         | home folder mounted into the server, same path                                                                  |
-| `WORKSPACE`                                                                                                          | `/root/projects`                                   | where projects live (inside `HOME`); isolated mode mounts it alone                                              |
-| `OPENCODE_WEB_PORT`                                                                                                  | `4444`                                             | web UI port on the host (127.0.0.1 only)                                                                        |
-| `OPENCODE_WEB_HOST`                                                                                                  | `127.0.0.1`                                        | the address you open the web UI at: the app's one server is `http://<it>:<OPENCODE_WEB_PORT>`                   |
-| `OPENCODE_SERVER_PASSWORD`                                                                                           | unset                                              | require basic auth on the API                                                                                   |
-| `OPENCODE_WORKING_DIR`                                                                                               | `/root/projects/agent-harnesses`                   | the working directory: every namespace but Global lives in it (OpenCode at `<it>/opencode`), set on first start |
-| `OPENCODE_DEFAULT_PROJECT`                                                                                           | `/root/projects/agent-harnesses/opencode/opencode` | the OpenCode namespace's default project, set on first start                                                    |
-| `SERVER_CPUS` / `SERVER_MEMORY`, `WEB_CPUS` / `WEB_MEMORY`, `TOOLS_CPUS` / `TOOLS_MEMORY`, `E2E_CPUS` / `E2E_MEMORY` | see table                                          | resource limits                                                                                                 |
-| `E2E_WORKERS`                                                                                                        | `2`                                                | Playwright workers                                                                                              |
+| Variable                                                                                                             | Default                    | Purpose                                                                                                                            |
+| -------------------------------------------------------------------------------------------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `HOME`                                                                                                               | your shell's, else `/root` | home folder mounted into the server, same path                                                                                     |
+| `WORKSPACE`                                                                                                          | `/root/projects`           | where projects live (inside `HOME`); a workspace root with `~/opencode-home`; isolated mode mounts it alone                        |
+| `OPENCODE_WEB_PORT`                                                                                                  | `4444`                     | web UI port on the host (127.0.0.1 only)                                                                                           |
+| `OPENCODE_WEB_HOST`                                                                                                  | `127.0.0.1`                | the address you open the web UI at: the app's one server is `http://<it>:<OPENCODE_WEB_PORT>`                                      |
+| `OPENCODE_SERVER_PASSWORD`                                                                                           | unset                      | require basic auth on the API                                                                                                      |
+| `OPENCODE_WORKING_DIR`                                                                                               | unset                      | the working folder, set on first start instead of onboarding: every namespace but Global lives in it (OpenCode at `<it>/opencode`) |
+| `SERVER_CPUS` / `SERVER_MEMORY`, `WEB_CPUS` / `WEB_MEMORY`, `TOOLS_CPUS` / `TOOLS_MEMORY`, `E2E_CPUS` / `E2E_MEMORY` | see table                  | resource limits                                                                                                                    |
+| `E2E_WORKERS`                                                                                                        | `2`                        | Playwright workers                                                                                                                 |
 
 ## Stop
 

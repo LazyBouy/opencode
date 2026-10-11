@@ -26,12 +26,13 @@ services:
       CLAUDE_CONFIG_DIR: ${HOME:-/root}/.claude
       OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD:-}
       OPENCODE_DISABLE_AUTOUPDATE: "1"
-      # Operator → Projects → Add project browses and creates folders only inside these roots.
-      OPENCODE_WORKSPACE_ROOTS: ${WORKSPACE:-/root/projects}
-      # The OpenCode namespace's folder and default project, set on first start while it has no folder.
-      # Every namespace but Global lives here, at <working dir>/<namespace>; OpenCode at <working dir>/opencode.
-      OPENCODE_OPERATOR_WORKING_DIR: ${OPENCODE_WORKING_DIR:-/root/projects/agent-harnesses}
-      OPENCODE_OPERATOR_DEFAULT_PROJECT: ${OPENCODE_DEFAULT_PROJECT:-/root/projects/agent-harnesses/opencode/opencode}
+      # Operator → Projects → Add project browses and creates folders only inside these roots: your projects,
+      # and ~/opencode-home, the working folder onboarding suggests.
+      OPENCODE_WORKSPACE_ROOTS: ${WORKSPACE:-/root/projects}:${HOME:-/root}/opencode-home
+      # A new installation asks for its working folder in the web UI (onboarding): every namespace but Global
+      # lives there, at <working folder>/<namespace>, OpenCode at <working folder>/opencode, with a default
+      # project made in it. Set OPENCODE_WORKING_DIR to set it on first start instead (no onboarding).
+      OPENCODE_OPERATOR_WORKING_DIR: ${OPENCODE_WORKING_DIR:-}
     volumes:
       # Your whole home folder, at the same path as on the host (the production model; README.md): Global's
       # folder (~/.config/opencode), OpenCode's data and state, Claude Code's ~/.claude and the workspace

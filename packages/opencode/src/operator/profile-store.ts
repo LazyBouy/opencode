@@ -11,6 +11,7 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { Glob } from "@opencode-ai/core/util/glob"
 import { OperatorFolders } from "./folders"
 import { OperatorLayout } from "./layout"
+import { OperatorOnboarding } from "./onboarding"
 import { OperatorProfile } from "./profile"
 import { OperatorResolver } from "./resolver"
 import { OperatorResolverBuiltins } from "./resolver-builtins"
@@ -523,6 +524,8 @@ export async function ensure(env: NodeJS.ProcessEnv = process.env) {
   if (!(await Bun.file(settingsFile).exists())) {
     const derived = OperatorLayout.derivedWorkingDir(env, current?.folder)
     await writeJson(settingsFile, { workingDir: derived ?? "" }).catch(() => undefined)
+    // A new installation without a working directory given: the web UI onboards it (onboarding.ts).
+    if (!derived) await OperatorOnboarding.markPending().catch(() => undefined)
   }
   await settleLayout()
   const project = env.OPENCODE_OPERATOR_DEFAULT_PROJECT?.trim()

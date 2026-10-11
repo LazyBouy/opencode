@@ -11,6 +11,8 @@ services:
     environment:
       HOME: /root
       CLAUDE_CONFIG_DIR: /claude-config
+      # Only the workspace is mounted: onboarding suggests <workspace>/opencode-home as the working folder.
+      OPENCODE_WORKSPACE_ROOTS: ${WORKSPACE:-/root/projects}
     volumes: !override # Projects are mounted at the same path as on the host, so paths shown in the UI match the host.
       - ${WORKSPACE:-/root/projects}:${WORKSPACE:-/root/projects}
       - opencode-data:/root/.local/share/opencode
