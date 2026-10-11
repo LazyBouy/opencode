@@ -22,13 +22,21 @@ export const operatorMemoryHandlers = HttpApiBuilder.group(InstanceHttpApi, "ope
 
     return handlers
       .handle("overview", (ctx) => memory.overview(ctx.query.agent))
-      .handle("levels", (ctx) => page.levels(ctx.query.agent))
+      .handle("levels", (ctx) =>
+        page
+          .levels({
+            ...(ctx.query.agent ? { agent: ctx.query.agent } : {}),
+            ...(ctx.query.namespace ? { namespace: ctx.query.namespace } : {}),
+          })
+          .pipe(Effect.mapError(invalid)),
+      )
       .handle("entry", (ctx) =>
         page
           .entry({
             level: ctx.query.level,
             file: ctx.query.file,
             ...(ctx.query.agent ? { agent: ctx.query.agent } : {}),
+            ...(ctx.query.namespace ? { namespace: ctx.query.namespace } : {}),
           })
           .pipe(Effect.mapError(invalid)),
       )
@@ -39,12 +47,17 @@ export const operatorMemoryHandlers = HttpApiBuilder.group(InstanceHttpApi, "ope
             level: ctx.query.level,
             file: ctx.query.file,
             ...(ctx.query.agent ? { agent: ctx.query.agent } : {}),
+            ...(ctx.query.namespace ? { namespace: ctx.query.namespace } : {}),
           })
           .pipe(Effect.as(true), Effect.mapError(invalid)),
       )
       .handle("writeIndex", (ctx) => page.writeIndex(ctx.payload).pipe(Effect.mapError(invalid)))
-      .handle("settings", () =>
-        store.projects().pipe(Effect.flatMap((known) => Effect.promise(() => OperatorMemoryFolders.view(known)))),
+      .handle("settings", (ctx) =>
+        store
+          .projects()
+          .pipe(
+            Effect.flatMap((known) => Effect.promise(() => OperatorMemoryFolders.view(known, ctx.query.namespace))),
+          ),
       )
       .handle("saveSettings", (ctx) =>
         Effect.flatMap(store.projects(), (known) =>

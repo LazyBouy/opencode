@@ -17,7 +17,7 @@ it.instance("the three levels; new, edit, MEMORY.md as text, and delete to Trash
   Effect.gen(function* () {
     const { directory } = yield* configure()
     const page = yield* OperatorMemoryPage.Service
-    const empty = yield* page.levels()
+    const empty = yield* page.levels({})
     expect(empty.agent).toBe("build")
     expect(empty.instructions).toBe(true)
     expect(empty.limits).toEqual({ lines: 200, chars: 25_000 })
@@ -60,7 +60,7 @@ it.instance("the three levels; new, edit, MEMORY.md as text, and delete to Trash
     expect(level.lines).toBe(1)
 
     yield* page.forget({ level: "project", file: "release-checklist.md" })
-    expect((yield* page.levels()).levels[1]!.entries).toEqual([])
+    expect((yield* page.levels({})).levels[1]!.entries).toEqual([])
     const trashed = yield* Effect.promise(() => OperatorTrashFiles.list())
     expect(trashed.some((entry) => entry.name === "Release checklist (project memory)")).toBe(true)
 
@@ -76,8 +76,20 @@ it.instance("the three levels; new, edit, MEMORY.md as text, and delete to Trash
 it.instance("an agent's level is in its home when it has one", () =>
   Effect.gen(function* () {
     const { directory } = yield* configure({ agent: { docs: { home: "agents/docs/" } } })
-    const levels = yield* (yield* OperatorMemoryPage.Service).levels("docs")
+    const levels = yield* (yield* OperatorMemoryPage.Service).levels({ agent: "docs" })
     expect(levels.agent).toBe("docs")
     expect(levels.levels[2]!.folder).toBe(path.join(directory, "agents", "docs", ".memory"))
+  }),
+)
+
+it.instance("a namespace named alone shows its own level only", () =>
+  Effect.gen(function* () {
+    yield* configure()
+    const levels = yield* (yield* OperatorMemoryPage.Service).levels({ namespace: "opencode" })
+    expect(levels.project).toBeUndefined()
+    expect(levels.levels.map((item) => item.level)).toEqual(["namespace"])
+    expect(Exit.isFailure(yield* Effect.exit((yield* OperatorMemoryPage.Service).levels({ namespace: "nope" })))).toBe(
+      true,
+    )
   }),
 )

@@ -4226,6 +4226,10 @@ export type OperatorMemoryNotAllowedError = {
 
 export type OperatorMemorySettings = {
   /**
+   * The namespace these settings are for
+   */
+  namespace: string
+  /**
    * Commit .memory folders to git (default: off)
    */
   commit: boolean
@@ -4238,7 +4242,11 @@ export type OperatorMemorySettings = {
    */
   indexChars: number
   /**
-   * The projects with a .memory folder or a choice of their own
+   * Whether the namespace has settings of its own (else it follows OpenCode's); always for OpenCode
+   */
+  own: boolean
+  /**
+   * The namespace's projects with a .memory folder or a choice of their own
    */
   projects: Array<{
     key: string
@@ -4298,7 +4306,7 @@ export type OperatorMemoryLevel = {
 }
 
 export type OperatorMemoryLevels = {
-  project: string
+  project?: string
   namespace: {
     id: string
     name: string
@@ -4315,6 +4323,13 @@ export type OperatorMemoryLevels = {
   levels: Array<OperatorMemoryLevel>
 }
 
+export type OperatorMemoryInvalidError = {
+  name: "OperatorMemoryInvalidError"
+  data: {
+    message: string
+  }
+}
+
 export type OperatorMemoryDetail = {
   level: OperatorMemoryLevelName
   file: string
@@ -4325,13 +4340,6 @@ export type OperatorMemoryDetail = {
   updated?: string
   by?: string
   content: string
-}
-
-export type OperatorMemoryInvalidError = {
-  name: "OperatorMemoryInvalidError"
-  data: {
-    message: string
-  }
 }
 
 export type OperatorAgentPrompt = {
@@ -16865,6 +16873,7 @@ export type OperatorMemorySettingsData = {
   query?: {
     directory?: string
     workspace?: string
+    namespace?: string
   }
   url: "/operator/memory/settings"
 }
@@ -16889,9 +16898,11 @@ export type OperatorMemorySettingsResponse = OperatorMemorySettingsResponses[key
 
 export type OperatorMemorySaveSettingsData = {
   body?: {
+    namespace?: string
     commit?: boolean
     indexLines?: number
     indexChars?: number
+    follow?: boolean
     project?: {
       key: string
       commit: boolean
@@ -16935,15 +16946,16 @@ export type OperatorMemoryLevelsData = {
     directory?: string
     workspace?: string
     agent?: string
+    namespace?: string
   }
   url: "/operator/memory/levels"
 }
 
 export type OperatorMemoryLevelsErrors = {
   /**
-   * Bad request
+   * OperatorMemoryInvalidError | InvalidRequestError
    */
-  400: BadRequestError
+  400: OperatorMemoryInvalidError | InvalidRequestError
 }
 
 export type OperatorMemoryLevelsError = OperatorMemoryLevelsErrors[keyof OperatorMemoryLevelsErrors]
@@ -16966,6 +16978,7 @@ export type OperatorMemoryForgetEntryData = {
     level: OperatorMemoryLevelName
     file: string
     agent?: string
+    namespace?: string
   }
   url: "/operator/memory/entry"
 }
@@ -16998,6 +17011,7 @@ export type OperatorMemoryEntryData = {
     level: OperatorMemoryLevelName
     file: string
     agent?: string
+    namespace?: string
   }
   url: "/operator/memory/entry"
 }
@@ -17024,6 +17038,7 @@ export type OperatorMemorySaveEntryData = {
   body?: {
     level: OperatorMemoryLevelName
     agent?: string
+    namespace?: string
     file?: string
     title: string
     description: string
@@ -17059,6 +17074,7 @@ export type OperatorMemoryWriteIndexData = {
   body?: {
     level: OperatorMemoryLevelName
     agent?: string
+    namespace?: string
     text: string
   }
   path?: never

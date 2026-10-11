@@ -89,10 +89,8 @@ test("memory lists files and the database, and edits AGENTS.md", async ({ page }
   })
   await overlay.getByRole("button", { name: "Close" }).click()
 
-  await page.getByRole("tab", { name: "Database" }).click()
-  await expect(page.locator('[data-slot="operator-tiles"]')).toContainText("5 MB")
-  await expect(page.locator('[data-component="operator-table"]')).toContainText("session")
-  // A compaction summary opens in the overlay too.
-  await page.getByRole("button", { name: /Fix the parser/ }).click()
+  // Compaction summaries of the namespace's projects; the database itself is in Settings.
+  await page.getByRole("tab", { name: "Summaries" }).click()
+  await page.getByRole("row", { name: /Fix the parser/ }).click()
   await expect(overlay.getByText("We fixed the tokenizer and added tests.")).toBeVisible()
 })

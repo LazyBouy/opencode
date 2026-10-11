@@ -4298,12 +4298,13 @@ export class Memory extends HeyApiClient {
   /**
    * Get memory settings
    *
-   * Whether .memory folders are committed to git (the default and each project's choice, with its repository's state), and how much of each level's index prompts show.
+   * A namespace's memory settings (OpenCode's unless it has its own): whether .memory folders are committed to git, with each of its projects' choice and its repository's state, and how much of each level's index prompts show.
    */
   public settings<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
       workspace?: string
+      namespace?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4314,6 +4315,7 @@ export class Memory extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "namespace" },
           ],
         },
       ],
@@ -4338,9 +4340,11 @@ export class Memory extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
+      namespace?: string
       commit?: boolean
       indexLines?: number
       indexChars?: number
+      follow?: boolean
       project?: {
         key: string
         commit: boolean
@@ -4355,9 +4359,11 @@ export class Memory extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "body", key: "namespace" },
             { in: "body", key: "commit" },
             { in: "body", key: "indexLines" },
             { in: "body", key: "indexChars" },
+            { in: "body", key: "follow" },
             { in: "body", key: "project" },
           ],
         },
@@ -4382,13 +4388,14 @@ export class Memory extends HeyApiClient {
   /**
    * List memory levels
    *
-   * The project's short-term memory: its namespace's, its own and an agent's (build unless named), each with its folder, entries, lines that are not entries, files no line names, and its size against the prompts' limits.
+   * The project's short-term memory: its namespace's, its own and an agent's (build unless named), each with its folder, entries, lines that are not entries, files no line names, and its size against the prompts' limits. With `namespace`: that namespace's own level only.
    */
   public levels<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
       workspace?: string
       agent?: string
+      namespace?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4400,6 +4407,7 @@ export class Memory extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "query", key: "agent" },
+            { in: "query", key: "namespace" },
           ],
         },
       ],
@@ -4427,6 +4435,7 @@ export class Memory extends HeyApiClient {
       level: OperatorMemoryLevelName
       file: string
       agent?: string
+      namespace?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4440,6 +4449,7 @@ export class Memory extends HeyApiClient {
             { in: "query", key: "level" },
             { in: "query", key: "file" },
             { in: "query", key: "agent" },
+            { in: "query", key: "namespace" },
           ],
         },
       ],
@@ -4467,6 +4477,7 @@ export class Memory extends HeyApiClient {
       level: OperatorMemoryLevelName
       file: string
       agent?: string
+      namespace?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4480,6 +4491,7 @@ export class Memory extends HeyApiClient {
             { in: "query", key: "level" },
             { in: "query", key: "file" },
             { in: "query", key: "agent" },
+            { in: "query", key: "namespace" },
           ],
         },
       ],
@@ -4502,6 +4514,7 @@ export class Memory extends HeyApiClient {
       workspace?: string
       level?: OperatorMemoryLevelName
       agent?: string
+      namespace?: string
       file?: string
       title?: string
       description?: string
@@ -4518,6 +4531,7 @@ export class Memory extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "body", key: "level" },
             { in: "body", key: "agent" },
+            { in: "body", key: "namespace" },
             { in: "body", key: "file" },
             { in: "body", key: "title" },
             { in: "body", key: "description" },
@@ -4553,6 +4567,7 @@ export class Memory extends HeyApiClient {
       workspace?: string
       level?: OperatorMemoryLevelName
       agent?: string
+      namespace?: string
       text?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -4566,6 +4581,7 @@ export class Memory extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "body", key: "level" },
             { in: "body", key: "agent" },
+            { in: "body", key: "namespace" },
             { in: "body", key: "text" },
           ],
         },

@@ -1,6 +1,7 @@
 export * as OperatorMemoryPage from "./memory-page"
 
 import fs from "fs/promises"
+import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Config } from "@/config/config"
@@ -45,7 +46,9 @@ export const Level = Schema.Struct({
 }).annotate({ identifier: "OperatorMemoryLevel" })
 
 export const Levels = Schema.Struct({
-  project: Schema.String,
+  project: Schema.optional(Schema.String).annotate({
+    description: "The project (none when a namespace is named alone)",
+  }),
   namespace: Schema.Struct({ id: Schema.String, name: Schema.String }),
   instructions: Schema.Boolean.annotate({
     description: "Whether instruction files (AGENTS.md, …) apply to the project: the OpenCode and Global namespaces",
@@ -68,9 +71,14 @@ export const Detail = Schema.Struct({
   content: Schema.String,
 }).annotate({ identifier: "OperatorMemoryDetail" })
 
+const namespaceField = Schema.optional(Schema.String).annotate({
+  description: "A namespace's own level, without a project (the namespace level only)",
+})
+
 export const SaveInput = Schema.Struct({
   level: LevelName,
   agent: Schema.optional(Schema.String).annotate({ description: "The agent level's agent" }),
+  namespace: namespaceField,
   file: Schema.optional(Schema.String).annotate({ description: "A memory to change; none: a new one" }),
   title: Schema.String,
   description: Schema.String,
@@ -80,6 +88,7 @@ export const SaveInput = Schema.Struct({
 export const IndexInput = Schema.Struct({
   level: LevelName,
   agent: Schema.optional(Schema.String),
+  namespace: namespaceField,
   text: Schema.String,
 })
 
@@ -88,7 +97,8 @@ export class InvalidError extends Schema.TaggedErrorClass<InvalidError>()("Opera
 }) {}
 
 export interface Interface {
-  readonly levels: (agent?: string) => Effect.Effect<Levels>
+  /** A project's three levels (the agent's for `agent`), or a namespace's own level when it is named. */
+  readonly levels: (input: { agent?: string; namespace?: string }) => Effect.Effect<Levels, InvalidError>
   readonly entry: (input: {
     level: OperatorMemoryFolders.Level
     file: string
@@ -112,8 +122,9 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const config = yield* Config.Service
 
-    // The project's folders, the agent's from its home.
-    const where = Effect.fnUntraced(function* (agent: string | undefined) {
+    // The project's folders, the agent's from its home. A namespace named instead (the page's namespace
+    // section, with no project chosen): its folder only.
+    const where = Effect.fnUntraced(function* (agent: string | undefined, namespace?: string) {
       const ctx = yield* InstanceState.context
       const project = yield* Effect.promise(() => OperatorProjects.keyOf(ctx))
       const name = agent ?? DEFAULT_AGENT
@@ -121,9 +132,18 @@ const layer = Layer.effect(
       const folders = yield* Effect.promise(() =>
         OperatorMemoryFolders.of({ project, agent: { name, ...(home ? { home } : {}) } }),
       )
+      const named = namespace
+        ? yield* Effect.promise(async () => {
+            const place = OperatorLayout.placeOf(namespace, await OperatorLayout.snapshot())
+            if (!place) return undefined
+            return { id: place.id, folder: path.join(place.folder, OperatorMemoryFolders.FOLDER) }
+          })
+        : undefined
+      if (namespace && !named) return yield* new InvalidError({ message: `No namespace "${namespace}"` })
+      const space = named ?? folders.namespace
       const folderOf = (level: OperatorMemoryFolders.Level) =>
-        level === "namespace" ? folders.namespace.folder : level === "project" ? folders.project : folders.agent!
-      return { project, agent: name, folders, folderOf }
+        level === "namespace" ? space.folder : level === "project" ? folders.project : folders.agent!
+      return { project, agent: name, folders: { ...folders, namespace: space }, folderOf, named: !!named }
     })
 
     const fail = (error: unknown) =>
@@ -161,19 +181,20 @@ const layer = Layer.effect(
         }
       })
 
-    const levels = Effect.fn("OperatorMemoryPage.levels")(function* (agent?: string) {
-      const found = yield* where(agent)
+    const levels = Effect.fn("OperatorMemoryPage.levels")(function* (input: { agent?: string; namespace?: string }) {
+      const found = yield* where(input.agent, input.namespace)
       const layout = yield* Effect.promise(() => OperatorLayout.snapshot())
       const id = found.folders.namespace.id
       const record = yield* Effect.promise(() => OperatorProfileStore.readNamespace(id))
-      const settings = yield* Effect.promise(() => OperatorMemoryFolders.settings())
+      const limits = OperatorMemoryFolders.limitsOf(yield* Effect.promise(() => OperatorMemoryFolders.settings()), id)
+      // A namespace named alone: its own level only.
+      const shown = found.named ? (["namespace"] as const) : OperatorMemoryFolders.LEVELS
       return {
-        project: found.project,
+        ...(found.named ? {} : { project: found.project, agent: found.agent }),
         namespace: { id, name: record?.namespace.name ?? id },
         instructions: id === OperatorLayout.OPENCODE || OperatorLayout.isGlobal(id, layout),
-        agent: found.agent,
-        limits: { lines: settings.indexLines, chars: settings.indexChars },
-        levels: yield* Effect.forEach(OperatorMemoryFolders.LEVELS, (level) => levelOf(level, found.folderOf(level))),
+        limits: { lines: limits.indexLines, chars: limits.indexChars },
+        levels: yield* Effect.forEach(shown, (level) => levelOf(level, found.folderOf(level))),
       }
     })
 
@@ -196,13 +217,14 @@ const layer = Layer.effect(
       level: OperatorMemoryFolders.Level
       file: string
       agent?: string
+      namespace?: string
     }) {
-      const found = yield* where(input.agent)
+      const found = yield* where(input.agent, input.namespace)
       return yield* detailOf(input.level, found.folderOf(input.level), input.file)
     })
 
     const save = Effect.fn("OperatorMemoryPage.save")(function* (input: typeof SaveInput.Type) {
-      const found = yield* where(input.agent)
+      const found = yield* where(input.agent, input.namespace)
       const folder = found.folderOf(input.level)
       const saved = yield* Effect.tryPromise({
         try: () =>
@@ -235,8 +257,9 @@ const layer = Layer.effect(
       level: OperatorMemoryFolders.Level
       file: string
       agent?: string
+      namespace?: string
     }) {
-      const found = yield* where(input.agent)
+      const found = yield* where(input.agent, input.namespace)
       const folder = found.folderOf(input.level)
       const detail = yield* detailOf(input.level, folder, input.file)
       yield* Effect.tryPromise({
@@ -257,7 +280,7 @@ const layer = Layer.effect(
     })
 
     const writeIndex = Effect.fn("OperatorMemoryPage.writeIndex")(function* (input: typeof IndexInput.Type) {
-      const found = yield* where(input.agent)
+      const found = yield* where(input.agent, input.namespace)
       const folder = found.folderOf(input.level)
       yield* Effect.tryPromise({
         try: () => OperatorMemoryStore.writeIndex({ folder, project: found.project, text: input.text }),

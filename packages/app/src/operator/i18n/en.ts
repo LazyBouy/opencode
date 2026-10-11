@@ -448,8 +448,7 @@ export const dict = {
   "operator.page.integrations.planned":
     "Channel setup, chat-to-session links and allowlists, starting with a two-way Telegram bridge with approval buttons.",
   "operator.page.memory.title": "Memory",
-  "operator.page.memory.description":
-    "What agents remember for this project: its namespace's, its own and each agent's short-term memory; and, for OpenCode's projects, the files OpenCode adds to prompts and its database.",
+  "operator.page.memory.description": "What agents remember in a namespace: its own memory, each project's and each agent's; the files OpenCode adds to its projects' prompts; their compaction summaries; and the memory settings.",
   "operator.page.memory.planned":
     "Browse, search, pin and forget what agents remember, for every project, per project or per agent.",
 
@@ -1679,6 +1678,7 @@ export const dict = {
   "operator.memory.tab.database": "Database",
   "operator.memory.tab.memory": "Memory",
   "operator.memory.tab.settings": "Settings",
+  "operator.memory.tab.summaries": "Summaries",
   "operator.memoryLevels.level.namespace": "Namespace memory · {{name}}",
   "operator.memoryLevels.level.project": "Project memory",
   "operator.memoryLevels.level.agent": "Agent memory · {{name}}",
@@ -1704,6 +1704,10 @@ export const dict = {
   "operator.memoryLevels.indexText": "MEMORY.md",
   "operator.memoryLevels.instructionsElsewhere":
     "Instruction files (AGENTS.md, CLAUDE.md, CONTEXT.md) apply only to the OpenCode namespace's projects. This project uses its profile and its .memory folders.",
+  "operator.memoryLevels.project": "Project",
+  "operator.memoryLevels.noProjects":
+    "This namespace has no projects yet: its own memory is above; a project's and its agents' come with its first project.",
+  "operator.memoryLevels.agentInstructions": "{{name}}'s sessions load these instruction files every time: {{files}}.",
   "operator.memorySettings.commit": "Commit .memory folders to git",
   "operator.memorySettings.commitHint":
     "Off: each repository's .git/info/exclude keeps .memory out (its .gitignore is never changed).",
@@ -1711,7 +1715,7 @@ export const dict = {
   "operator.memorySettings.chars": "Index characters in prompts",
   "operator.memorySettings.projects": "Projects",
   "operator.memorySettings.projectsHint":
-    "Each project with a .memory folder or a choice of its own, and whether its repository keeps .memory out.",
+    "The namespace's projects with a .memory folder or a choice of their own, and whether their repository keeps .memory out.",
   "operator.memorySettings.noProjects": "No project has a .memory folder yet.",
   "operator.memorySettings.choice": "Commit .memory",
   "operator.memorySettings.choiceOf": "Commit .memory in {{name}}",
@@ -1722,6 +1726,10 @@ export const dict = {
   "operator.memorySettings.excluded": "{{repo}}: kept out",
   "operator.memorySettings.included": "{{repo}}: committed",
   "operator.memorySettings.noRepo": "Not in a repository",
+  "operator.memorySettings.title": "Memory",
+  "operator.memorySettings.own": "This namespace has its own memory settings.",
+  "operator.memorySettings.follows": "This namespace follows OpenCode's memory settings until you change one here.",
+  "operator.memorySettings.useOpenCode": "Use OpenCode's",
   "operator.toolPattern.title": "Permission pattern",
   "operator.toolPattern.permission": "Permission",
   "operator.toolPattern.verbs": "Verbs",
@@ -1779,13 +1787,16 @@ export const dict = {
   "operator.memory.kindHint.url": "Fetched from the web",
   "operator.memory.kindHint.skill": "A skill the agent can load",
   "operator.memory.databaseHint":
-    "Sessions, messages and their parts are kept in OpenCode's database. When a conversation gets too long, older turns are replaced with a summary.",
+    "The server's database: sessions, messages and the rest, for every namespace. Rows are counted, never read.",
   "operator.memory.dbSize": "Database size",
   "operator.memory.dbRows": "Rows",
   "operator.memory.dbTables": "{{count}} tables",
   "operator.memory.tables": "Tables",
   "operator.memory.rows": "Rows",
   "operator.memory.summaries": "Compaction summaries",
+  "operator.memory.database": "Database",
+  "operator.memory.dbEngine": "Engine",
+  "operator.memory.dbEngineHint": "One database for every namespace; other engines (Postgres, MariaDB) can come later.",
   "operator.memory.summariesHint": "In this project",
   "operator.memory.summariesBody": "The latest summaries that replaced older turns in this project's sessions.",
   "operator.memory.noSummaries": "No sessions here have been compacted yet.",
@@ -1868,6 +1879,7 @@ export const dict = {
     "A session of the agent: its permissions decide what the layer may list, and helper sources use the text written for it. Without one, a helper writes a sample now.",
   "operator.help.memoryAgent":
     "The agent whose own memory the Agent level shows: in its home's .memory folder, or the project's .memory/agents/<name>/ when it has none.",
+  "operator.help.memoryProject": "A project of the namespace: its memory, and its agents' memory below.",
   "operator.help.memoryTitle":
     "A short title, at most 80 characters, on one line. It names the memory in MEMORY.md, and its file name is made from it.",
   "operator.help.memoryDescription":

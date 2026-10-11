@@ -715,7 +715,7 @@ function ProjectRecord(props: {
               label={language.t("operator.memorySettings.choice")}
               help={language.t("operator.help.memoryCommit")}
             >
-              <ProjectMemoryCommit project={props.row.worktree} name={nameOf(props.row)} />
+              <ProjectMemoryCommit project={props.row.worktree} name={nameOf(props.row)} namespace={props.row.ns} />
             </RecordField>
             <Show when={props.row.registered}>
               <ProjectRecordFields setting={props.setting} />

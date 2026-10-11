@@ -29,11 +29,15 @@ export class ApiMemoryInvalidError extends Schema.ErrorClass<{
   { httpApiStatus: 400 },
 ) {}
 
+const namespaceQuery = Schema.optional(Schema.String).annotate({
+  description: "A namespace's own level, without a project",
+})
 const EntryQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
   level: OperatorMemoryPage.LevelName,
   file: Schema.String,
   agent: Schema.optional(Schema.String),
+  namespace: namespaceQuery,
 })
 
 export class ApiMemoryNotAllowedError extends Schema.ErrorClass<{
@@ -89,14 +93,17 @@ export const OperatorMemoryApi = HttpApi.make("operator-memory")
           }),
         ),
         HttpApiEndpoint.get("settings", OperatorMemoryPaths.settings, {
-          query: WorkspaceRoutingQuery,
+          query: Schema.Struct({
+            ...WorkspaceRoutingQueryFields,
+            namespace: Schema.optional(Schema.String).annotate({ description: "The namespace (default: OpenCode)" }),
+          }),
           success: described(OperatorMemoryFolders.SettingsView, "Memory settings"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "operator.memory.settings",
             summary: "Get memory settings",
             description:
-              "Whether .memory folders are committed to git (the default and each project's choice, with its repository's state), and how much of each level's index prompts show.",
+              "A namespace's memory settings (OpenCode's unless it has its own): whether .memory folders are committed to git, with each of its projects' choice and its repository's state, and how much of each level's index prompts show.",
           }),
         ),
         HttpApiEndpoint.put("saveSettings", OperatorMemoryPaths.settings, {
@@ -113,14 +120,19 @@ export const OperatorMemoryApi = HttpApi.make("operator-memory")
           }),
         ),
         HttpApiEndpoint.get("levels", OperatorMemoryPaths.levels, {
-          query: Schema.Struct({ ...WorkspaceRoutingQueryFields, agent: Schema.optional(Schema.String) }),
+          query: Schema.Struct({
+            ...WorkspaceRoutingQueryFields,
+            agent: Schema.optional(Schema.String),
+            namespace: namespaceQuery,
+          }),
           success: described(OperatorMemoryPage.Levels, "The project's memory levels"),
+          error: ApiMemoryInvalidError,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "operator.memory.levels",
             summary: "List memory levels",
             description:
-              "The project's short-term memory: its namespace's, its own and an agent's (build unless named), each with its folder, entries, lines that are not entries, files no line names, and its size against the prompts' limits.",
+              "The project's short-term memory: its namespace's, its own and an agent's (build unless named), each with its folder, entries, lines that are not entries, files no line names, and its size against the prompts' limits. With `namespace`: that namespace's own level only.",
           }),
         ),
         HttpApiEndpoint.get("entry", OperatorMemoryPaths.entry, {

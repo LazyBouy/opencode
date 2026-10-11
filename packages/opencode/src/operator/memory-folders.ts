@@ -46,36 +46,54 @@ export async function of(input: { project: string; agent?: { name: string; home?
 }
 
 // ---- Settings (Memory → Settings): committing .memory folders, and the index limits in prompts ----
+// Per namespace: OpenCode's are the default every other namespace follows until it sets its own; a
+// project can choose for itself whether its .memory folders are committed.
 
-export type Settings = {
+export type Limits = {
   /** Commit `.memory` folders to git (default: off). */
   readonly commit: boolean
   /** Each level's index in prompts is cut at this many lines … */
   readonly indexLines: number
   /** … or this many characters, whichever comes first. */
   readonly indexChars: number
-  /** Projects' own choice for committing (none: the default). */
+}
+export type Settings = Limits & {
+  /** Namespaces' own settings (OpenCode's are the top-level ones). */
+  readonly namespaces: Readonly<Record<string, Partial<Limits>>>
+  /** Projects' own choice for committing (none: their namespace's). */
   readonly projects: Readonly<Record<string, { readonly commit: boolean }>>
 }
 
-export const DEFAULTS: Settings = { commit: false, indexLines: 200, indexChars: 25_000, projects: {} }
+export const DEFAULTS: Settings = { commit: false, indexLines: 200, indexChars: 25_000, namespaces: {}, projects: {} }
 
 const settingsFile = () => path.join(Global.Path.config, "namespaces", "memory.json")
 
+const positive = (value: unknown) =>
+  typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined
+
 export async function settings(): Promise<Settings> {
-  const data = (await OperatorFileCache.json(settingsFile())) as Partial<Record<keyof Settings, unknown>> | undefined
-  const number = (value: unknown, fallback: number) =>
-    typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback
-  const projects = data?.projects && typeof data.projects === "object" ? (data.projects as Record<string, unknown>) : {}
+  const data = (await OperatorFileCache.json(settingsFile())) as Record<string, unknown> | undefined
+  const record = (value: unknown) => (value && typeof value === "object" ? (value as Record<string, unknown>) : {})
   return {
     commit: data?.commit === true,
-    indexLines: number(data?.indexLines, DEFAULTS.indexLines),
-    indexChars: number(data?.indexChars, DEFAULTS.indexChars),
+    indexLines: positive(data?.indexLines) ?? DEFAULTS.indexLines,
+    indexChars: positive(data?.indexChars) ?? DEFAULTS.indexChars,
+    namespaces: Object.fromEntries(
+      Object.entries(record(data?.namespaces)).map(([id, value]) => {
+        const own = record(value)
+        return [
+          id,
+          {
+            ...(typeof own.commit === "boolean" ? { commit: own.commit } : {}),
+            ...(positive(own.indexLines) ? { indexLines: positive(own.indexLines)! } : {}),
+            ...(positive(own.indexChars) ? { indexChars: positive(own.indexChars)! } : {}),
+          },
+        ]
+      }),
+    ),
     projects: Object.fromEntries(
-      Object.entries(projects).flatMap(([key, value]) =>
-        value && typeof value === "object" && typeof (value as { commit?: unknown }).commit === "boolean"
-          ? [[key, { commit: (value as { commit: boolean }).commit }]]
-          : [],
+      Object.entries(record(data?.projects)).flatMap(([key, value]) =>
+        typeof record(value).commit === "boolean" ? [[key, { commit: record(value).commit as boolean }]] : [],
       ),
     ),
   }
@@ -86,21 +104,41 @@ export async function saveSettings(next: Settings) {
   await Bun.write(settingsFile(), JSON.stringify(next, null, 2) + "\n")
 }
 
-/** Whether a project's `.memory` folders are committed: its own choice, else the default. */
-export function commits(all: Settings, project: string) {
-  return all.projects[project]?.commit ?? all.commit
+/** A namespace's settings: its own, else OpenCode's. */
+export function limitsOf(all: Settings, namespace: string): Limits {
+  const own = namespace === OperatorLayout.OPENCODE ? {} : (all.namespaces[namespace] ?? {})
+  return {
+    commit: own.commit ?? all.commit,
+    indexLines: own.indexLines ?? all.indexLines,
+    indexChars: own.indexChars ?? all.indexChars,
+  }
+}
+
+/** Whether a project's `.memory` folders are committed: its own choice, else its namespace's. */
+export function commits(all: Settings, project: string, namespace: string) {
+  return all.projects[project]?.commit ?? limitsOf(all, namespace).commit
+}
+
+/** The namespace a project is in (by where its folder is, layout.ts). */
+export async function namespaceOf(project: string) {
+  const projects = await OperatorProfileStore.readProjects()
+  return OperatorLayout.membership(project, await OperatorLayout.snapshot(), projects[project]?.namespace).namespace
 }
 
 export const SettingsView = Schema.Struct({
+  namespace: Schema.String.annotate({ description: "The namespace these settings are for" }),
   commit: Schema.Boolean.annotate({ description: "Commit .memory folders to git (default: off)" }),
   indexLines: Schema.Finite.annotate({ description: "Each level's index in prompts is cut at this many lines" }),
   indexChars: Schema.Finite.annotate({ description: "… or at this many characters, whichever comes first" }),
+  own: Schema.Boolean.annotate({
+    description: "Whether the namespace has settings of its own (else it follows OpenCode's); always for OpenCode",
+  }),
   projects: Schema.Array(
     Schema.Struct({
       key: Schema.String,
       name: Schema.String,
       override: Schema.optional(Schema.Boolean).annotate({
-        description: "The project's own choice; none: the default",
+        description: "The project's own choice; none: the namespace's",
       }),
       commits: Schema.Boolean.annotate({ description: "Whether its .memory folders are committed" }),
       repo: Schema.optional(Schema.String).annotate({ description: "The repository the project is in" }),
@@ -108,31 +146,38 @@ export const SettingsView = Schema.Struct({
         description: "Whether the repository's .git/info/exclude keeps .memory out (the project is in a repository)",
       }),
     }),
-  ).annotate({ description: "The projects with a .memory folder or a choice of their own" }),
+  ).annotate({ description: "The namespace's projects with a .memory folder or a choice of their own" }),
 }).annotate({ identifier: "OperatorMemorySettings" })
 export type SettingsView = typeof SettingsView.Type
 
 export const SettingsInput = Schema.Struct({
+  namespace: Schema.optional(Schema.String).annotate({ description: "The namespace to change (default: OpenCode)" }),
   commit: Schema.optional(Schema.Boolean),
   indexLines: Schema.optional(Schema.Finite),
   indexChars: Schema.optional(Schema.Finite),
+  follow: Schema.optional(Schema.Boolean).annotate({
+    description: "A namespace other than OpenCode drops its own settings and follows OpenCode's",
+  }),
   project: Schema.optional(
     Schema.Struct({
       key: Schema.String,
-      commit: Schema.NullOr(Schema.Boolean).annotate({ description: "null: use the default" }),
+      commit: Schema.NullOr(Schema.Boolean).annotate({ description: "null: use the namespace's" }),
     }),
   ).annotate({ description: "One project's own choice for committing" }),
 })
 export type SettingsInput = typeof SettingsInput.Type
 
-// The projects OpenCode knows (OperatorProfileStore's `projects()`: git projects, registered folders).
-export type Known = ReadonlyArray<{ readonly key: string; readonly name: string }>
+// The projects OpenCode knows (OperatorProfileStore's `projects()`: git projects, registered folders),
+// with the namespace each is in.
+export type Known = ReadonlyArray<{ readonly key: string; readonly name: string; readonly namespace?: string }>
 
-/** The settings, with each project's choice and its repository's state. */
-export async function view(known: Known): Promise<SettingsView> {
+/** A namespace's settings, with its projects' choices and their repositories' state. */
+export async function view(known: Known, namespace: string = OperatorLayout.OPENCODE): Promise<SettingsView> {
   const all = await settings()
-  const names = new Map(known.map((item) => [item.key, item.name]))
-  const keys = [...new Set([...names.keys(), ...Object.keys(all.projects)])]
+  const limits = limitsOf(all, namespace)
+  const mine = known.filter((item) => (item.namespace ?? OperatorLayout.OPENCODE) === namespace)
+  const names = new Map(mine.map((item) => [item.key, item.name]))
+  const keys = [...names.keys()]
   const projects = await Promise.all(
     keys.map(async (key) => {
       const folder = path.join(key, FOLDER)
@@ -146,15 +191,15 @@ export async function view(known: Known): Promise<SettingsView> {
         key,
         name: names.get(key) ?? path.basename(key),
         ...(all.projects[key] ? { override: all.projects[key]!.commit } : {}),
-        commits: commits(all, key),
+        commits: commits(all, key, namespace),
         ...(git ? { repo: git.repo, excluded: git.excluded } : {}),
       }
     }),
   )
   return {
-    commit: all.commit,
-    indexLines: all.indexLines,
-    indexChars: all.indexChars,
+    namespace,
+    ...limits,
+    own: namespace === OperatorLayout.OPENCODE || all.namespaces[namespace] !== undefined,
     projects: projects.filter((item) => item !== undefined),
   }
 }
@@ -162,24 +207,67 @@ export async function view(known: Known): Promise<SettingsView> {
 /** Saves a change (a limit below 1 is refused) and applies the commit choice to the repositories. */
 export async function update(input: SettingsInput, known: Known) {
   const all = await settings()
-  const limit = (value: number | undefined, fallback: number) => {
-    if (value === undefined) return fallback
+  const namespace = input.namespace ?? OperatorLayout.OPENCODE
+  const limit = (value: number | undefined) => {
+    if (value === undefined) return undefined
     if (!Number.isFinite(value) || value < 1) throw new Error("A limit must be at least 1")
     return Math.floor(value)
+  }
+  const change = {
+    ...(input.commit !== undefined ? { commit: input.commit } : {}),
+    ...(limit(input.indexLines) !== undefined ? { indexLines: limit(input.indexLines)! } : {}),
+    ...(limit(input.indexChars) !== undefined ? { indexChars: limit(input.indexChars)! } : {}),
   }
   const projects = { ...all.projects }
   if (input.project) {
     if (input.project.commit === null) delete projects[input.project.key]
     else projects[input.project.key] = { commit: input.project.commit }
   }
+  const namespaces = { ...all.namespaces }
+  if (namespace !== OperatorLayout.OPENCODE) {
+    if (input.follow) delete namespaces[namespace]
+    else if (Object.keys(change).length)
+      namespaces[namespace] = { ...limitsOf(all, namespace), ...namespaces[namespace], ...change }
+  }
   await saveSettings({
-    commit: input.commit ?? all.commit,
-    indexLines: limit(input.indexLines, all.indexLines),
-    indexChars: limit(input.indexChars, all.indexChars),
+    ...all,
+    ...(namespace === OperatorLayout.OPENCODE ? change : {}),
+    namespaces,
     projects,
   })
   await applyAll(known)
-  return view(known)
+  return view(known, namespace)
+}
+
+/** A `.memory` folder made (or found) for a project: created, and kept out of git unless the project commits it. */
+export async function ensure(folder: string, project: string) {
+  await fs.mkdir(folder, { recursive: true })
+  await setExcluded(folder, !commits(await settings(), project, await namespaceOf(project))).catch(() => undefined)
+  return folder
+}
+
+/**
+ * Applies the commit settings to every project with a `.memory` folder (after they changed), and to the
+ * namespaces' folders (by their own settings).
+ */
+export async function applyAll(known: Known) {
+  const all = await settings()
+  const exists = (folder: string) =>
+    fs.stat(folder).then(
+      (info) => info.isDirectory(),
+      () => false,
+    )
+  const namespaces = new Map(known.map((item) => [item.key, item.namespace ?? OperatorLayout.OPENCODE]))
+  for (const project of new Set([...known.map((item) => item.key), ...Object.keys(all.projects)])) {
+    const folder = path.join(project, FOLDER)
+    const namespace = namespaces.get(project) ?? (await namespaceOf(project))
+    if (await exists(folder)) await setExcluded(folder, !commits(all, project, namespace)).catch(() => undefined)
+  }
+  const layout = await OperatorLayout.snapshot()
+  for (const place of layout.places) {
+    const folder = path.join(place.folder, FOLDER)
+    if (await exists(folder)) await setExcluded(folder, !limitsOf(all, place.id).commit).catch(() => undefined)
+  }
 }
 
 // ---- Keeping .memory out of git ----
@@ -243,34 +331,4 @@ export async function setExcluded(folder: string, excluded: boolean) {
     await fs.writeFile(found.file, lines.join("\n"))
   }
   return found.repo
-}
-
-/** A `.memory` folder made (or found) for a project: created, and kept out of git unless the project commits it. */
-export async function ensure(folder: string, project: string) {
-  await fs.mkdir(folder, { recursive: true })
-  await setExcluded(folder, !commits(await settings(), project)).catch(() => undefined)
-  return folder
-}
-
-/**
- * Applies the commit setting to every project with a `.memory` folder (after the setting changed), and
- * to the namespaces' folders (by the default).
- */
-export async function applyAll(known: Known) {
-  const all = await settings()
-  const projects = new Set([...known.map((item) => item.key), ...Object.keys(all.projects)])
-  const exists = (folder: string) =>
-    fs.stat(folder).then(
-      (info) => info.isDirectory(),
-      () => false,
-    )
-  for (const project of projects) {
-    const folder = path.join(project, FOLDER)
-    if (await exists(folder)) await setExcluded(folder, !commits(all, project)).catch(() => undefined)
-  }
-  const layout = await OperatorLayout.snapshot()
-  for (const place of layout.places) {
-    const folder = path.join(place.folder, FOLDER)
-    if (await exists(folder)) await setExcluded(folder, !all.commit).catch(() => undefined)
-  }
 }

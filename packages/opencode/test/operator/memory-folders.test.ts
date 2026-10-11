@@ -77,3 +77,23 @@ describe("keeping .memory out of git", () => {
     expect((await F.update({ indexLines: 50 }, [])).indexLines).toBe(50)
   })
 })
+
+describe("settings per namespace", () => {
+  test("a namespace follows OpenCode's until it sets its own; its projects can still choose", async () => {
+    const known = [
+      { key: "/p/a", name: "a", namespace: "acme" },
+      { key: "/p/o", name: "o", namespace: "opencode" },
+    ]
+    expect(await F.view(known, "acme")).toMatchObject({ namespace: "acme", commit: false, indexLines: 200, own: false })
+    await F.update({ indexLines: 120 }, known)
+    expect((await F.view(known, "acme")).indexLines).toBe(120)
+    const acme = await F.update({ namespace: "acme", commit: true, indexChars: 9000 }, known)
+    expect(acme).toMatchObject({ commit: true, indexLines: 120, indexChars: 9000, own: true })
+    expect(await F.view(known, "opencode")).toMatchObject({ commit: false, indexChars: 25_000 })
+    expect(F.commits(await F.settings(), "/p/a", "acme")).toBe(true)
+    expect(F.commits(await F.settings(), "/p/a", "opencode")).toBe(false)
+    await F.update({ project: { key: "/p/a", commit: false } }, known)
+    expect(F.commits(await F.settings(), "/p/a", "acme")).toBe(false)
+    expect(await F.update({ namespace: "acme", follow: true }, known)).toMatchObject({ own: false, commit: false })
+  })
+})

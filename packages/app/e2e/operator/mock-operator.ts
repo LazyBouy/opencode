@@ -254,6 +254,8 @@ export type MemoryMock = {
     }>
   }
   writes: Array<{ method: string; path: string; body: unknown }>
+  /** The namespaces whose own level was asked for. */
+  namespaceQueries: string[]
 }
 function memoryMock(): MemoryMock {
   const level = (name: MemoryLevel["level"], folder: string, entries: MemoryEntry[]): MemoryLevel => ({
@@ -305,24 +307,55 @@ function memoryMock(): MemoryMock {
       projects: [{ key: directory, name: "smoke-project", commits: false, repo: directory, excluded: true }],
     },
     writes: [],
+    namespaceQueries: [],
   }
 }
 function memoryRoute(memory: MemoryMock, url: URL, method: string, body: () => unknown) {
   const query = (key: string) => url.searchParams.get(key) ?? ""
   const find = (name: string) => memory.levels.find((item) => item.level === name)
-  if (url.pathname === "/operator/memory/levels")
+  if (url.pathname === "/operator/memory/levels") {
+    const limits = { lines: memory.settings.indexLines, chars: memory.settings.indexChars }
+    // A namespace named alone: its own level only.
+    if (query("namespace")) {
+      memory.namespaceQueries.push(query("namespace"))
+      const id = query("namespace")
+      return {
+        body: {
+          namespace: { id, name: id === "opencode" ? "OpenCode" : id.charAt(0).toUpperCase() + id.slice(1) },
+          instructions: id === "opencode",
+          limits,
+          levels:
+            id === "opencode"
+              ? memory.levels.filter((item) => item.level === "namespace")
+              : [
+                  {
+                    level: "namespace",
+                    folder: `/workspace/${id}/.memory`,
+                    exists: false,
+                    entries: [],
+                    invalid: [],
+                    unindexed: [],
+                    lines: 0,
+                    chars: 0,
+                  },
+                ],
+        },
+      }
+    }
     return {
       body: {
         project: directory,
         namespace: { id: "opencode", name: "OpenCode" },
         instructions: memory.instructions,
         agent: query("agent") || "build",
-        limits: { lines: memory.settings.indexLines, chars: memory.settings.indexChars },
+        limits,
         levels: memory.levels,
       },
     }
+  }
   if (url.pathname === "/operator/memory/settings") {
-    if (method === "GET") return { body: memory.settings }
+    if (method === "GET")
+      return { body: { ...memory.settings, namespace: query("namespace") || "opencode", own: true } }
     const input = body() as {
       commit?: boolean
       indexLines?: number
@@ -345,7 +378,7 @@ function memoryRoute(memory: MemoryMock, url: URL, method: string, body: () => u
             }
           : item,
       )
-    return { body: memory.settings }
+    return { body: { ...memory.settings, namespace: query("namespace") || "opencode", own: true } }
   }
   if (url.pathname === "/operator/memory/index" && method === "PUT") {
     const input = body() as { level: string; text: string }
@@ -372,7 +405,15 @@ function memoryRoute(memory: MemoryMock, url: URL, method: string, body: () => u
     }
   }
   if (method === "DELETE") {
-    memory.writes.push({ method, path: url.pathname, body: { level: query("level"), file: query("file") } })
+    memory.writes.push({
+      method,
+      path: url.pathname,
+      body: {
+        level: query("level"),
+        file: query("file"),
+        ...(query("namespace") ? { namespace: query("namespace") } : {}),
+      },
+    })
     const level = find(query("level"))
     if (level) level.entries = level.entries.filter((item) => item.file !== query("file"))
     return { body: true }

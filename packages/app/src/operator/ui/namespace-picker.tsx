@@ -61,18 +61,19 @@ export function useNamespaceScope() {
   }
 }
 
-// The namespace selector at the top right of a page.
-export function NamespacePicker(props: { onChange?: (ns: string) => void }) {
+// The namespace selector at the top right of a page. `all: false` for a page that shows one namespace
+// (it then shows `current`, the page's choice when all namespaces are in scope).
+export function NamespacePicker(props: { onChange?: (ns: string) => void; all?: boolean; current?: string }) {
   const language = useLanguage()
   const scope = useNamespaceScope()
-  const options = () => [ALL, ...scope.namespaces().map((item) => item.namespace.id)]
+  const options = () => [...(props.all === false ? [] : [ALL]), ...scope.namespaces().map((item) => item.namespace.id)]
   return (
     <span class="inline-flex items-center">
       <SelectV2<string>
         appearance="base"
         aria-label={language.t("operator.profile.namespace")}
         options={options()}
-        current={scope.ns()}
+        current={props.current ?? scope.ns()}
         label={(id) => (id === ALL ? language.t("operator.namespace.all") : scope.name(id))}
         onSelect={(id) => {
           if (!id) return

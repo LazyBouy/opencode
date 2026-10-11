@@ -138,7 +138,10 @@ const layer = Layer.effect(
         ...(input.sessionID ? { sessionID: input.sessionID } : {}),
         agent: input.agent.name,
       })
-      const limits = yield* Effect.promise(() => OperatorMemoryFolders.settings())
+      const limits = OperatorMemoryFolders.limitsOf(
+        yield* Effect.promise(() => OperatorMemoryFolders.settings()),
+        found.namespace,
+      )
       const result = new Map<string, Resolution>()
       for (const [id, level] of Object.entries(B.MEMORY_LEVEL)) {
         const folder = found.folders[level]

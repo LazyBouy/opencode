@@ -15431,6 +15431,14 @@
               "type": "string"
             },
             "required": false
+          },
+          {
+            "name": "namespace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -15455,7 +15463,7 @@
             }
           }
         },
-        "description": "Whether .memory folders are committed to git (the default and each project's choice, with its repository's state), and how much of each level's index prompts show.",
+        "description": "A namespace's memory settings (OpenCode's unless it has its own): whether .memory folders are committed to git, with each of its projects' choice and its repository's state, and how much of each level's index prompts show.",
         "summary": "Get memory settings",
         "x-codeSamples": [
           {
@@ -15525,6 +15533,9 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "namespace": {
+                    "type": "string"
+                  },
                   "commit": {
                     "type": "boolean"
                   },
@@ -15533,6 +15544,9 @@
                   },
                   "indexChars": {
                     "type": "number"
+                  },
+                  "follow": {
+                    "type": "boolean"
                   },
                   "project": {
                     "type": "object",
@@ -15589,6 +15603,14 @@
               "type": "string"
             },
             "required": false
+          },
+          {
+            "name": "namespace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -15603,17 +15625,24 @@
             }
           },
           "400": {
-            "description": "Bad request",
+            "description": "OperatorMemoryInvalidError | InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorMemoryInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
                 }
               }
             }
           }
         },
-        "description": "The project's short-term memory: its namespace's, its own and an agent's (build unless named), each with its folder, entries, lines that are not entries, files no line names, and its size against the prompts' limits.",
+        "description": "The project's short-term memory: its namespace's, its own and an agent's (build unless named), each with its folder, entries, lines that are not entries, files no line names, and its size against the prompts' limits. With `namespace`: that namespace's own level only.",
         "summary": "List memory levels",
         "x-codeSamples": [
           {
@@ -15662,6 +15691,14 @@
           },
           {
             "name": "agent",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "namespace",
             "in": "query",
             "schema": {
               "type": "string"
@@ -15771,6 +15808,9 @@
                   "agent": {
                     "type": "string"
                   },
+                  "namespace": {
+                    "type": "string"
+                  },
                   "file": {
                     "type": "string"
                   },
@@ -15835,6 +15875,14 @@
           },
           {
             "name": "agent",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "namespace",
             "in": "query",
             "schema": {
               "type": "string"
@@ -15945,6 +15993,9 @@
                     "$ref": "#/components/schemas/OperatorMemoryLevelName"
                   },
                   "agent": {
+                    "type": "string"
+                  },
+                  "namespace": {
                     "type": "string"
                   },
                   "text": {
@@ -36843,6 +36894,10 @@
       "OperatorMemorySettings": {
         "type": "object",
         "properties": {
+          "namespace": {
+            "type": "string",
+            "description": "The namespace these settings are for"
+          },
           "commit": {
             "type": "boolean",
             "description": "Commit .memory folders to git (default: off)"
@@ -36854,6 +36909,10 @@
           "indexChars": {
             "type": "number",
             "description": "… or at this many characters, whichever comes first"
+          },
+          "own": {
+            "type": "boolean",
+            "description": "Whether the namespace has settings of its own (else it follows OpenCode's); always for OpenCode"
           },
           "projects": {
             "type": "array",
@@ -36883,10 +36942,10 @@
               "required": ["key", "name", "commits"],
               "additionalProperties": false
             },
-            "description": "The projects with a .memory folder or a choice of their own"
+            "description": "The namespace's projects with a .memory folder or a choice of their own"
           }
         },
-        "required": ["commit", "indexLines", "indexChars", "projects"],
+        "required": ["namespace", "commit", "indexLines", "indexChars", "own", "projects"],
         "additionalProperties": false
       },
       "OperatorMemoryLevelName": {
@@ -37023,7 +37082,28 @@
             }
           }
         },
-        "required": ["project", "namespace", "instructions", "limits", "levels"],
+        "required": ["namespace", "instructions", "limits", "levels"],
+        "additionalProperties": false
+      },
+      "OperatorMemoryInvalidError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorMemoryInvalidError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
         "additionalProperties": false
       },
       "OperatorMemoryDetail": {
@@ -37058,27 +37138,6 @@
           }
         },
         "required": ["level", "file", "path", "title", "description", "content"],
-        "additionalProperties": false
-      },
-      "OperatorMemoryInvalidError": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "enum": ["OperatorMemoryInvalidError"]
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "message": {
-                "type": "string"
-              }
-            },
-            "required": ["message"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["name", "data"],
         "additionalProperties": false
       },
       "OperatorAgentPrompt": {

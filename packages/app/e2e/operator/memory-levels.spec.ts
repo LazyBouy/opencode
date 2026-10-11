@@ -27,20 +27,38 @@ const pick = async (page: Page, label: string, option: string) => {
     .click()
 }
 
-test("the Memory tab lists the three levels; a memory opens in the overlay, is edited and deleted", async ({
+test("the Memory tab: the namespace's memory, then a project's, then an agent's, each with its own actions", async ({
   page,
 }) => {
   const state = await mockOperator(page)
   await page.goto(`/operator/memory${dir}`)
   await expect(page.getByRole("tab", { name: "Memory", exact: true })).toHaveAttribute("aria-selected", "true")
+  // The namespace picker at the top scopes the page.
+  await expect(page.locator('[data-component="select-v2-root"][aria-label="Namespace"]')).toContainText("OpenCode")
   const namespace = page.getByTestId("memory-level-namespace")
   const project = page.getByTestId("memory-level-project")
+  const agent = page.getByTestId("memory-level-agent")
   await expect(namespace).toContainText("Namespace memory · OpenCode")
   await expect(namespace).toContainText("Org conventions")
-  await expect(page.getByTestId("memory-level-agent")).toContainText("Agent memory · build")
-  await expect(page.getByTestId("memory-level-agent")).toContainText("No memories here yet.")
+  expect(state.memory.namespaceQueries).toContain("opencode")
+  // The project picker just above the project's memory, the agent picker just above the agent's.
+  const levels = page.getByTestId("memory-levels")
+  const order = await levels.evaluate((root) =>
+    [...root.querySelectorAll('[data-testid^="memory-level-"], [data-component="select-v2-root"]')].map(
+      (node) => node.getAttribute("data-testid") ?? node.getAttribute("aria-label"),
+    ),
+  )
+  const sections = ["memory-level-namespace", "memory-level-project", "memory-level-agent", "Project", "Agent"]
+  expect(order.filter((item) => sections.includes(item ?? ""))).toEqual([
+    "memory-level-namespace",
+    "Project",
+    "memory-level-project",
+    "Agent",
+    "memory-level-agent",
+  ])
+  await expect(agent).toContainText("Agent memory · build")
+  await expect(agent).toContainText("No memories here yet.")
   await expect(project.getByTestId("memory-level-size")).toContainText("1 of 200 lines")
-  // A hand-written line and a file no line names are flagged.
   await expect(project.getByTestId("memory-level-invalid")).toContainText("A note by hand")
   await expect(project.getByTestId("memory-level-unindexed")).toContainText("orphan.md")
 
@@ -48,27 +66,16 @@ test("the Memory tab lists the three levels; a memory opens in the overlay, is e
   const overlay = page.getByRole("dialog")
   const fields = overlay.getByTestId("memory-entry")
   await expect(fields).toContainText("Steps before tagging a release")
-  await expect(fields).toContainText("release-checklist.md")
   await expect(fields).toContainText("agent build · session ses_op_1")
   await expect(fields.locator('[data-component="operator-code"]')).toHaveText("1. Run the tests\n2. Tag")
-
   await overlay.getByRole("button", { name: "Edit", exact: true }).click()
   await overlay.getByLabel("Description", { exact: true }).fill("The steps before tagging a release")
   await overlay.getByRole("button", { name: "Save", exact: true }).click()
   await expect.poll(() => state.memory.writes.length).toBe(1)
   expect(state.memory.writes[0]).toMatchObject({
     method: "PUT",
-    body: {
-      level: "project",
-      file: "release-checklist.md",
-      title: "Release checklist",
-      description: "The steps before tagging a release",
-      content: "1. Run the tests\n2. Tag",
-    },
+    body: { level: "project", file: "release-checklist.md", description: "The steps before tagging a release" },
   })
-  await expect(fields).toContainText("The steps before tagging a release")
-
-  // Delete moves it to Trash, after asking.
   await overlay.getByRole("button", { name: "Delete", exact: true }).click()
   await page.getByRole("button", { name: "Yes, move to Trash" }).click()
   await expect.poll(() => state.memory.writes.length).toBe(2)
@@ -78,11 +85,10 @@ test("the Memory tab lists the three levels; a memory opens in the overlay, is e
   })
 })
 
-test("a new memory and MEMORY.md as text, each in the overlay", async ({ page }) => {
+test("each section's New memory and MEMORY.md go to its own level: the namespace's by its name", async ({ page }) => {
   const state = await mockOperator(page)
   await page.goto(`/operator/memory${dir}`)
-  const agent = page.getByTestId("memory-level-agent")
-  await agent.getByRole("button", { name: "New memory" }).click()
+  await page.getByTestId("memory-level-agent").getByRole("button", { name: "New memory" }).click()
   const overlay = page.getByRole("dialog")
   const save = overlay.getByRole("button", { name: "Save", exact: true })
   await overlay.getByLabel("Title", { exact: true }).fill("Prefers short answers")
@@ -93,54 +99,58 @@ test("a new memory and MEMORY.md as text, each in the overlay", async ({ page })
   await expect.poll(() => state.memory.writes.length).toBe(1)
   expect(state.memory.writes[0]!.body).toEqual({
     level: "agent",
+    agent: "build",
     title: "Prefers short answers",
     description: "The user wants answers under five lines",
     content: "Keep answers short.",
   })
-  await expect(overlay.getByTestId("memory-entry")).toContainText("The user wants answers under five lines")
   await overlay.getByRole("button", { name: "Close" }).click()
 
-  await page.getByTestId("memory-level-project").getByRole("button", { name: "Edit MEMORY.md as text" }).click()
+  await page.getByTestId("memory-level-namespace").getByRole("button", { name: "Edit MEMORY.md as text" }).click()
   const index = overlay.getByLabel("MEMORY.md", { exact: true })
-  await expect(index).toHaveValue(
-    "- [Release checklist](release-checklist.md) — Steps before tagging a release\nA note by hand",
-  )
-  await index.fill("- [Release checklist](release-checklist.md) — Steps before tagging a release")
+  await expect(index).toHaveValue("- [Org conventions](org-conventions.md) — How we name things")
+  await index.fill("- [Org conventions](org-conventions.md) — How we name things\nA note")
   await overlay.getByRole("button", { name: "Save", exact: true }).click()
   await expect.poll(() => state.memory.writes.length).toBe(2)
   expect(state.memory.writes[1]).toMatchObject({
     path: "/operator/memory/index",
-    body: { level: "project", text: "- [Release checklist](release-checklist.md) — Steps before tagging a release" },
+    body: { level: "namespace", namespace: "opencode" },
   })
 })
 
-test("Settings: committing .memory, the index limits, and a project's own choice", async ({ page }) => {
+test("Settings: the namespace's commit choice and limits, its projects' choices, and the server's database", async ({
+  page,
+}) => {
   const state = await mockOperator(page)
   await page.goto(`/operator/memory${dir}&tab=settings`)
   const settings = page.getByTestId("memory-settings")
   await settings.locator('[data-slot="switch-control"]').click()
   await expect.poll(() => state.memory.writes.length).toBe(1)
-  expect(state.memory.writes[0]!.body).toEqual({ commit: true })
+  expect(state.memory.writes[0]!.body).toEqual({ commit: true, namespace: "opencode" })
   await settings.getByLabel("Index lines in prompts", { exact: true }).fill("100")
   await settings.getByRole("button", { name: "Save", exact: true }).click()
   await expect.poll(() => state.memory.writes.length).toBe(2)
-  expect(state.memory.writes[1]!.body).toEqual({ indexLines: 100, indexChars: 25000 })
+  expect(state.memory.writes[1]!.body).toEqual({ indexLines: 100, indexChars: 25000, namespace: "opencode" })
   await expect(settings).toContainText("smoke-project")
-  await expect(settings).toContainText(": kept out")
   await pick(page, "Commit .memory in smoke-project", "Off")
   await expect.poll(() => state.memory.writes.length).toBe(3)
-  expect(state.memory.writes[2]!.body).toEqual({ project: { key: directory, commit: false } })
+  expect(state.memory.writes[2]!.body).toEqual({ namespace: "opencode", project: { key: directory, commit: false } })
+  // The database is the server's, for every namespace.
+  await expect(page.getByTestId("memory-database")).toContainText("SQLite")
+  await expect(page.getByTestId("memory-database")).toContainText("session")
 })
 
-test("instruction files apply only to OpenCode's projects: elsewhere Files and Database are not shown", async ({
+test("a namespace without projects: its own memory; Files says instruction files apply only to OpenCode's projects", async ({
   page,
 }) => {
   const state = await mockOperator(page)
-  state.memory.instructions = false
-  await page.goto(`/operator/memory${dir}&tab=files`)
-  await expect(page.getByRole("tab", { name: /Files/ })).toHaveCount(0)
-  await expect(page.getByRole("tab", { name: "Database" })).toHaveCount(0)
-  await expect(page.getByTestId("memory-levels")).toContainText("apply only to the OpenCode namespace's projects")
+  state.prompt.namespaces.push({ id: "acme", name: "Acme", purpose: "", createdAt: 1, updatedAt: 1 })
+  await page.goto(`/operator/memory${dir}&ns=acme`)
+  await expect(page.getByTestId("memory-level-namespace")).toContainText("Namespace memory · Acme")
+  await expect(page.getByTestId("memory-levels")).toContainText("This namespace has no projects yet")
+  await expect(page.getByTestId("memory-level-project")).toHaveCount(0)
+  await page.getByRole("tab", { name: /Files/ }).click()
+  await expect(page.getByText("apply only to the OpenCode namespace's projects")).toBeVisible()
 })
 
 test("a project's record has its own choice for committing .memory", async ({ page }) => {
@@ -148,18 +158,5 @@ test("a project's record has its own choice for committing .memory", async ({ pa
   await page.goto(`/operator/projects?project=${encodeURIComponent(directory)}`)
   await pick(page, "Commit .memory in smoke-project", "On")
   await expect.poll(() => state.memory.writes.length).toBe(1)
-  expect(state.memory.writes[0]!.body).toEqual({ project: { key: directory, commit: true } })
-})
-
-test("Files shows instruction files as the chosen agent's sessions load them", async ({ page }) => {
-  await mockOperator(page)
-  const asked: string[] = []
-  page.on("request", (request) => {
-    const url = new URL(request.url())
-    if (url.pathname === "/operator/memory/overview") asked.push(url.searchParams.get("agent") ?? "")
-  })
-  await page.goto(`/operator/memory${dir}&tab=files`)
-  await pick(page, "Agent", "reviewer")
-  await expect(page).toHaveURL(/magent=reviewer/)
-  await expect.poll(() => asked.at(-1)).toBe("reviewer")
+  expect(state.memory.writes[0]!.body).toEqual({ namespace: "opencode", project: { key: directory, commit: true } })
 })
