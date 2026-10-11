@@ -2,6 +2,7 @@ export * as OperatorNamespaceScope from "./namespace-scope"
 
 import fs from "fs/promises"
 import path from "path"
+import { parse as parseJsonc } from "jsonc-parser"
 import { Effect } from "effect"
 import { Global } from "@opencode-ai/core/global"
 import { OperatorFileCache } from "./file-cache"
@@ -176,16 +177,55 @@ export const inheritsGlobal = Effect.fnUntraced(function* (directory: string, wo
   return (yield* Effect.promise(() => layerOf(directory, worktree))).inherit
 })
 
-// The namespace layer's opencode.json(c), merged right after the global config files: only for a project
-// without a config of its own (global_and_opencode_namespaces_spec.md §6, layer 2). A project's own config
-// is a full copy of its namespace's, made when a project page first saved a change (project-config.ts).
-// At the namespace's own folder the files are the namespace's, not a project's own.
+// The namespace layer's opencode.json(c), merged right after the global config files (global_and_opencode_
+// namespaces_spec.md §6, layer 2). A project with a config of its own (a copy of its namespace's, made when a
+// project page first saved a change, project-config.ts) gets only the namespace's default and small model
+// (default_models_spec.md §6.3): a file holding just those keys, so its model keeps following the namespace
+// until the project sets its own. At the namespace's own folder the files are the namespace's.
 export const configFiles = Effect.fnUntraced(function* (ctx: { directory: string; worktree: string }) {
   const layer = yield* Effect.promise(() => layerOf(ctx.directory, ctx.worktree))
   if (!layer.dir) return []
-  if (!layer.atFolder && (yield* Effect.promise(() => ownConfigFiles(layer.project))).length) return []
-  return [path.join(layer.dir, "opencode.json"), path.join(layer.dir, "opencode.jsonc")]
+  const files = [path.join(layer.dir, "opencode.json"), path.join(layer.dir, "opencode.jsonc")]
+  if (layer.atFolder || !(yield* Effect.promise(() => ownConfigFiles(layer.project))).length) return files
+  const models = yield* Effect.promise(() => namespaceModels(layer.dir!))
+  if (!Object.keys(models.value).length) return []
+  return [yield* Effect.promise(() => modelsFile(layer.namespace, models.value))]
 })
+
+/** The keys of a namespace's config that reach its projects with a config of their own. */
+export const MODEL_KEYS = ["model", "small_model"] as const
+export type ModelKeys = { model?: string; small_model?: string }
+
+/** What a namespace's config folder sets for the default and small model, and the file that sets each. */
+export async function namespaceModels(dir: string) {
+  const value: ModelKeys = {}
+  const files: { model?: string; small_model?: string } = {}
+  // Merged as the loader does: opencode.json, then opencode.jsonc.
+  for (const name of ["opencode.json", "opencode.jsonc"]) {
+    const file = path.join(dir, name)
+    const text = await OperatorFileCache.text(file)
+    if (text === undefined) continue
+    const data = parseJsonc(text) as Record<string, unknown> | undefined
+    for (const key of MODEL_KEYS)
+      if (data && typeof data[key] === "string") {
+        value[key] = data[key] as string
+        files[key] = file
+      }
+  }
+  return { value, files }
+}
+
+// The loader reads files: the namespace's model keys are written to one in the data folder, rewritten only
+// when they change.
+async function modelsFile(namespace: string, value: ModelKeys) {
+  const file = path.join(Global.Path.data, "operator", "namespace-models", `${namespace}.json`)
+  const text = JSON.stringify(value, null, 2) + "\n"
+  if ((await OperatorFileCache.text(file)) !== text) {
+    await fs.mkdir(path.dirname(file), { recursive: true })
+    await fs.writeFile(file, text)
+  }
+  return file
+}
 
 // A project's own config files (§7.1), in the order the project Config page picks the one it edits: the
 // first that exists. Upstream merges every one of them (MERGE_ORDER).

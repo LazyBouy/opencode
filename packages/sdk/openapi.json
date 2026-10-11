@@ -3992,6 +3992,192 @@
         ]
       }
     },
+    "/operator/model/namespace": {
+      "get": {
+        "tags": ["operator model defaults"],
+        "operationId": "operator.model.namespace",
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The namespace's default and small model, and where each comes from",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorNamespaceModels"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorModelDefaultError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorModelDefaultError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "The chain of the default and small model for a namespace without a project (Settings, its config, the environment) and the model in effect. What OpenCode decides is computed in the namespace's default project, else the server's folder. Without `namespace`: Settings' values (Settings → Models).",
+        "summary": "A namespace's default and small model",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.model.namespace({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/model/default": {
+      "put": {
+        "tags": ["operator model defaults"],
+        "operationId": "operator.model.write",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The file written, and when the projects reload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorConfigUpdateResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorModelDefaultError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorModelDefaultError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "OperatorProjectConfigCopyNeededError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectConfigCopyNeededError"
+                }
+              }
+            }
+          }
+        },
+        "description": "settings writes Global's config; namespace writes the namespace's config (refused for Global and for Global · OpenCode: use settings); project writes the project's config, copy-on-write (a copy of its namespace's config without its model keys, with confirmCopy). A null model removes the key.",
+        "summary": "Set a default or small model",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "level": {
+                    "type": "string",
+                    "enum": ["settings", "namespace", "project"]
+                  },
+                  "namespace": {
+                    "type": "string"
+                  },
+                  "directory": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string",
+                    "enum": ["model", "small_model"]
+                  },
+                  "model": {
+                    "type": "string"
+                  },
+                  "confirmCopy": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["level", "key", "model"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.model.write({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/model/default-for": {
+      "get": {
+        "tags": ["operator model defaults"],
+        "operationId": "operator.model.defaultFor",
+        "parameters": [
+          {
+            "name": "model",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Where the model is set as the default or small model",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorModelDefaultFor"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Settings, the namespaces and the projects whose config sets this model as the default or small model. Levels that only inherit it aren't listed.",
+        "summary": "Where a model is the default",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.model.defaultFor({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/operator/namespace/{id}/config": {
       "get": {
         "tags": ["operator namespace config"],
@@ -33891,6 +34077,286 @@
         "required": ["name", "data"],
         "additionalProperties": false
       },
+      "OperatorModelLevel": {
+        "type": "string",
+        "enum": ["settings", "namespace", "project", "environment"]
+      },
+      "OperatorModelLink": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "$ref": "#/components/schemas/OperatorModelLevel"
+          },
+          "set": {
+            "type": "boolean",
+            "description": "This level sets it"
+          },
+          "model": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string",
+            "description": "The file that sets it, else the file a write at this level goes to; for OPENCODE_CONFIG_CONTENT, the variable's name"
+          },
+          "variable": {
+            "type": "string",
+            "enum": ["OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG_CONTENT"]
+          },
+          "overriddenBy": {
+            "type": "string",
+            "enum": ["OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG_CONTENT"]
+          }
+        },
+        "required": ["level", "set", "path"],
+        "additionalProperties": false
+      },
+      "OperatorModelEffective": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string",
+            "description": "provider/model; empty when no model is available"
+          },
+          "from": {
+            "type": "string",
+            "enum": ["settings", "namespace", "project", "environment", "opencode"],
+            "description": "The level that sets it, or opencode: no level does, OpenCode decides"
+          },
+          "variable": {
+            "type": "string",
+            "enum": ["OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG_CONTENT"]
+          },
+          "rule": {
+            "type": "string",
+            "enum": ["recent", "ranking", "small-family", "default-model", "none"]
+          },
+          "unavailable": {
+            "type": "boolean"
+          }
+        },
+        "required": ["model", "from"],
+        "additionalProperties": false
+      },
+      "OperatorModelChain": {
+        "type": "object",
+        "properties": {
+          "levels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorModelLink"
+            },
+            "description": "settings, namespace (not for Global's projects: its config is Settings), project, and each environment variable that sets it, in the order they apply"
+          },
+          "effective": {
+            "$ref": "#/components/schemas/OperatorModelEffective"
+          }
+        },
+        "required": ["levels", "effective"],
+        "additionalProperties": false
+      },
+      "OperatorModelChains": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "$ref": "#/components/schemas/OperatorModelChain"
+          },
+          "small": {
+            "$ref": "#/components/schemas/OperatorModelChain"
+          }
+        },
+        "required": ["model", "small"],
+        "additionalProperties": false
+      },
+      "OperatorNamespaceModels": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "settings": {
+            "type": "boolean",
+            "description": "Its config is Settings (Global, or Global · OpenCode with a blank working directory): read-only here"
+          },
+          "path": {
+            "type": "string",
+            "description": "The file its first row writes: the namespace's config, or Settings'"
+          },
+          "chain": {
+            "$ref": "#/components/schemas/OperatorModelChains"
+          }
+        },
+        "required": ["settings", "path", "chain"],
+        "additionalProperties": false
+      },
+      "OperatorModelDefaultError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorModelDefaultError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorConfigUpdateResult": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "changed": {
+            "type": "boolean"
+          },
+          "reload": {
+            "type": "string",
+            "enum": ["now", "when-idle"]
+          }
+        },
+        "required": ["path", "changed"],
+        "additionalProperties": false
+      },
+      "OperatorProjectConfigCopyNeededError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorProjectConfigCopyNeededError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "project": {
+                "type": "string"
+              },
+              "namespace": {
+                "type": "string"
+              },
+              "file": {
+                "type": "string",
+                "description": "Where the project's own config would be written"
+              }
+            },
+            "required": ["message", "project", "namespace", "file"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorModelDefaultForSettings": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "boolean",
+            "description": "It is the default model here"
+          },
+          "small": {
+            "type": "boolean",
+            "description": "It is the small model here"
+          },
+          "path": {
+            "type": "string",
+            "description": "The config file that sets it"
+          }
+        },
+        "required": ["model", "small", "path"],
+        "additionalProperties": false
+      },
+      "OperatorModelDefaultForNamespace": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "model": {
+            "type": "boolean",
+            "description": "It is the default model here"
+          },
+          "small": {
+            "type": "boolean",
+            "description": "It is the small model here"
+          },
+          "path": {
+            "type": "string",
+            "description": "The config file that sets it"
+          }
+        },
+        "required": ["id", "name", "model", "small", "path"],
+        "additionalProperties": false
+      },
+      "OperatorModelDefaultForProject": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "model": {
+            "type": "boolean",
+            "description": "It is the default model here"
+          },
+          "small": {
+            "type": "boolean",
+            "description": "It is the small model here"
+          },
+          "path": {
+            "type": "string",
+            "description": "The config file that sets it"
+          }
+        },
+        "required": ["key", "name", "namespace", "model", "small", "path"],
+        "additionalProperties": false
+      },
+      "OperatorModelDefaultFor": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/OperatorModelDefaultForSettings"
+          },
+          "namespaces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorModelDefaultForNamespace"
+            }
+          },
+          "projects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorModelDefaultForProject"
+            }
+          }
+        },
+        "required": ["model", "namespaces", "projects"],
+        "additionalProperties": false
+      },
       "OperatorNamespaceConfig": {
         "type": "object",
         "properties": {
@@ -34004,6 +34470,12 @@
           "variable": {
             "type": "string",
             "enum": ["OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG_CONTENT"]
+          },
+          "only": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": ["kind", "path", "text"],
@@ -34215,37 +34687,6 @@
               }
             },
             "required": ["message"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["name", "data"],
-        "additionalProperties": false
-      },
-      "OperatorProjectConfigCopyNeededError": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "enum": ["OperatorProjectConfigCopyNeededError"]
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "message": {
-                "type": "string"
-              },
-              "project": {
-                "type": "string"
-              },
-              "namespace": {
-                "type": "string"
-              },
-              "file": {
-                "type": "string",
-                "description": "Where the project's own config would be written"
-              }
-            },
-            "required": ["message", "project", "namespace", "file"],
             "additionalProperties": false
           }
         },
@@ -36119,23 +36560,6 @@
         "type": "string",
         "enum": ["global", "namespace", "project"]
       },
-      "OperatorConfigUpdateResult": {
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string"
-          },
-          "changed": {
-            "type": "boolean"
-          },
-          "reload": {
-            "type": "string",
-            "enum": ["now", "when-idle"]
-          }
-        },
-        "required": ["path", "changed"],
-        "additionalProperties": false
-      },
       "OperatorConfigInvalidError": {
         "type": "object",
         "properties": {
@@ -36576,9 +37000,12 @@
             },
             "additionalProperties": false,
             "description": "What the global config sets for every project (`model`, `small_model`)"
+          },
+          "chain": {
+            "$ref": "#/components/schemas/OperatorModelChains"
           }
         },
-        "required": ["model", "small", "global"],
+        "required": ["model", "small", "global", "chain"],
         "additionalProperties": false
       },
       "OperatorPromptTool": {
@@ -54168,6 +54595,10 @@
     {
       "name": "operator onboarding",
       "description": "The first start of a new installation."
+    },
+    {
+      "name": "operator model defaults",
+      "description": "The default and small model at each level."
     },
     {
       "name": "operator namespace config",

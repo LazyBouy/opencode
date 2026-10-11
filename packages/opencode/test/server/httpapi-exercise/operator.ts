@@ -228,7 +228,35 @@ export const operatorScenarios: Scenario[] = [
     object(body.model)
     object(body.small)
     check(typeof body.model.source === "string", "the default model should say where it comes from")
+    object(body.chain)
+    check(
+      isRecord(body.chain.model) && Array.isArray(body.chain.model.levels),
+      "the default model's chain should list its levels",
+    )
   }),
+  // The default and small model by level (default_models_spec.md §11). Writes would change every later
+  // scenario's models: only refusals are exercised; writing is tested in test/operator/model-chain.test.ts.
+  http.protected.get("/operator/model/namespace", "operator.model.namespace").json(200, (body) => {
+    object(body)
+    check(body.settings === true, "without a namespace the chain is Settings'")
+    object(body.chain)
+  }),
+  http.protected
+    .put("/operator/model/default", "operator.model.write")
+    .at((ctx) => ({
+      path: "/operator/model/default",
+      headers: ctx.headers(),
+      body: { level: "namespace", key: "model", model: null },
+    }))
+    .status(400),
+  http.protected
+    .get("/operator/model/default-for", "operator.model.defaultFor")
+    .at((ctx) => ({ path: "/operator/model/default-for?model=test/none", headers: ctx.headers() }))
+    .json(200, (body) => {
+      object(body)
+      array(body.namespaces)
+      array(body.projects)
+    }),
   http.protected
     .get("/operator/agent/{name}/tool-prompt", "operator.toolPrompt.get")
     .withLlm()

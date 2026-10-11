@@ -40,6 +40,10 @@ export const Source = Schema.Struct({
   ).annotate({
     description: "env: the environment variable it comes from",
   }),
+  only: Schema.optional(Schema.Array(Schema.String)).annotate({
+    description:
+      "Only these keys of the file apply, and `text` holds just them: a project with a config of its own gets only its namespace's `model` and `small_model`",
+  }),
 }).annotate({ identifier: "OperatorConfigSource" })
 export type Source = typeof Source.Type
 
@@ -160,6 +164,24 @@ const layer = Layer.effect(
       return (yield* Effect.promise(() => OperatorNamespaceScope.ownConfigFiles(layer.project))).length > 0
     })
 
+    // The namespace's default and small model, as the source a project with its own config gets of its
+    // namespace's config (default_models_spec.md §6.3): the file that sets them, holding only those keys.
+    const namespaceModelSource = (dir: string) =>
+      Effect.promise(() => OperatorNamespaceScope.namespaceModels(dir)).pipe(
+        Effect.map((found) =>
+          Object.keys(found.value).length
+            ? [
+                {
+                  kind: "namespace" as const,
+                  path: found.files.model ?? found.files.small_model!,
+                  text: JSON.stringify(found.value, null, 2),
+                  only: [...OperatorNamespaceScope.MODEL_KEYS],
+                },
+              ]
+            : [],
+        ),
+      )
+
     // Mirrors the load order in Config.loadInstanceState so the last project source is the effective one:
     // the global files, the namespace's (unless the project has its own config), a custom file, the
     // project's, then the config folders'.
@@ -169,11 +191,15 @@ const layer = Layer.effect(
         read("global", path.join(Global.Path.config, name)),
       )
       const own = yield* namespaceFile(namespace)
+      const whole = namespace || !(yield* ownConfig())
       const ns =
-        own.dir && !("global" in own) && (namespace || !(yield* ownConfig()))
-          ? yield* Effect.forEach(["opencode.json", "opencode.jsonc"], (name) =>
-              read("namespace", path.join(own.dir!, name)),
-            )
+        own.dir && !("global" in own)
+          ? whole
+            ? yield* Effect.forEach(["opencode.json", "opencode.jsonc"], (name) =>
+                read("namespace", path.join(own.dir!, name)),
+              )
+            : // A project with its own config gets only the namespace's model keys (namespace-scope.ts configFiles).
+              [yield* namespaceModelSource(own.dir)]
           : []
       // The environment's files are "env" (global_and_opencode_namespaces_spec.md §13 #5).
       const custom = Flag.OPENCODE_CONFIG
@@ -296,11 +322,16 @@ const layer = Layer.effect(
       return { path: file, changed: true }
     })
 
-    // A write into the project's config: its own file, or a copy of its namespace's (with consent).
-    const project = Effect.fnUntraced(function* (edit: (text: string) => string) {
+    // A write into the project's config: its own file, or a copy of its namespace's (with consent). A whole
+    // text (the Config page) still holds the namespace's model keys where the user left them: they go.
+    const project = Effect.fnUntraced(function* (edit: (text: string) => string, whole = false) {
       const prepared = yield* OperatorProjectConfig.prepare(yield* InstanceState.context)
       if (prepared.own) return yield* save(prepared.file, prepared.text, edit(prepared.text))
-      const after = OperatorProjectConfig.withoutLocked(edit(prepared.text), prepared.copy?.locks ?? [])
+      const edited = edit(prepared.text)
+      const after = OperatorProjectConfig.withoutLocked(
+        whole ? OperatorProjectConfig.withoutModels(edited, prepared.copy?.models, false) : edited,
+        prepared.copy?.locks ?? [],
+      )
       const result = yield* save(prepared.file, "", after)
       yield* Effect.promise(() => OperatorProjectConfig.finish(prepared, result.path))
       return result
@@ -322,7 +353,7 @@ const layer = Layer.effect(
     })
 
     const write = Effect.fn("OperatorConfig.write")(function* (scope: WriteScope, text: string, namespace?: string) {
-      if (scope === "project") return yield* project(() => text)
+      if (scope === "project") return yield* project(() => text, true)
       const file = yield* target(scope, namespace)
       return yield* save(file, (yield* current(file)) ?? "", text)
     })

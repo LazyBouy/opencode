@@ -3007,6 +3007,147 @@ export type OperatorOnboardingError = {
   }
 }
 
+export type OperatorModelLevel = "settings" | "namespace" | "project" | "environment"
+
+export type OperatorModelLink = {
+  level: OperatorModelLevel
+  /**
+   * This level sets it
+   */
+  set: boolean
+  model?: string
+  /**
+   * The file that sets it, else the file a write at this level goes to; for OPENCODE_CONFIG_CONTENT, the variable's name
+   */
+  path: string
+  variable?: "OPENCODE_CONFIG" | "OPENCODE_CONFIG_DIR" | "OPENCODE_CONFIG_CONTENT"
+  overriddenBy?: "OPENCODE_CONFIG" | "OPENCODE_CONFIG_DIR" | "OPENCODE_CONFIG_CONTENT"
+}
+
+export type OperatorModelEffective = {
+  /**
+   * provider/model; empty when no model is available
+   */
+  model: string
+  /**
+   * The level that sets it, or opencode: no level does, OpenCode decides
+   */
+  from: "settings" | "namespace" | "project" | "environment" | "opencode"
+  variable?: "OPENCODE_CONFIG" | "OPENCODE_CONFIG_DIR" | "OPENCODE_CONFIG_CONTENT"
+  rule?: "recent" | "ranking" | "small-family" | "default-model" | "none"
+  unavailable?: boolean
+}
+
+export type OperatorModelChain = {
+  /**
+   * settings, namespace (not for Global's projects: its config is Settings), project, and each environment variable that sets it, in the order they apply
+   */
+  levels: Array<OperatorModelLink>
+  effective: OperatorModelEffective
+}
+
+export type OperatorModelChains = {
+  model: OperatorModelChain
+  small: OperatorModelChain
+}
+
+export type OperatorNamespaceModels = {
+  namespace?: string
+  name?: string
+  /**
+   * Its config is Settings (Global, or Global · OpenCode with a blank working directory): read-only here
+   */
+  settings: boolean
+  /**
+   * The file its first row writes: the namespace's config, or Settings'
+   */
+  path: string
+  chain: OperatorModelChains
+}
+
+export type OperatorModelDefaultError = {
+  name: "OperatorModelDefaultError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorConfigUpdateResult = {
+  path: string
+  changed: boolean
+  reload?: "now" | "when-idle"
+}
+
+export type OperatorProjectConfigCopyNeededError = {
+  name: "OperatorProjectConfigCopyNeededError"
+  data: {
+    message: string
+    project: string
+    namespace: string
+    /**
+     * Where the project's own config would be written
+     */
+    file: string
+  }
+}
+
+export type OperatorModelDefaultForSettings = {
+  /**
+   * It is the default model here
+   */
+  model: boolean
+  /**
+   * It is the small model here
+   */
+  small: boolean
+  /**
+   * The config file that sets it
+   */
+  path: string
+}
+
+export type OperatorModelDefaultForNamespace = {
+  id: string
+  name: string
+  /**
+   * It is the default model here
+   */
+  model: boolean
+  /**
+   * It is the small model here
+   */
+  small: boolean
+  /**
+   * The config file that sets it
+   */
+  path: string
+}
+
+export type OperatorModelDefaultForProject = {
+  key: string
+  name: string
+  namespace: string
+  /**
+   * It is the default model here
+   */
+  model: boolean
+  /**
+   * It is the small model here
+   */
+  small: boolean
+  /**
+   * The config file that sets it
+   */
+  path: string
+}
+
+export type OperatorModelDefaultFor = {
+  model: string
+  settings?: OperatorModelDefaultForSettings
+  namespaces: Array<OperatorModelDefaultForNamespace>
+  projects: Array<OperatorModelDefaultForProject>
+}
+
 export type OperatorNamespaceConfig = {
   id: string
   name: string
@@ -3057,6 +3198,7 @@ export type OperatorConfigSource = {
   path: string
   text: string
   variable?: "OPENCODE_CONFIG" | "OPENCODE_CONFIG_DIR" | "OPENCODE_CONFIG_CONTENT"
+  only?: Array<string>
 }
 
 export type OperatorNamespaceEffectiveConfig = {
@@ -3148,19 +3290,6 @@ export type OperatorPermissionGoneError = {
   name: "OperatorPermissionGoneError"
   data: {
     message: string
-  }
-}
-
-export type OperatorProjectConfigCopyNeededError = {
-  name: "OperatorProjectConfigCopyNeededError"
-  data: {
-    message: string
-    project: string
-    namespace: string
-    /**
-     * Where the project's own config would be written
-     */
-    file: string
   }
 }
 
@@ -3822,12 +3951,6 @@ export type OperatorConfigLayers = {
 
 export type OperatorConfigWriteScope = "global" | "namespace" | "project"
 
-export type OperatorConfigUpdateResult = {
-  path: string
-  changed: boolean
-  reload?: "now" | "when-idle"
-}
-
 export type OperatorConfigInvalidError = {
   name: "OperatorConfigInvalidError"
   data: {
@@ -4020,6 +4143,7 @@ export type OperatorModelDefaults = {
     small?: string
     path?: string
   }
+  chain: OperatorModelChains
 }
 
 export type OperatorPromptTool = {
@@ -12171,6 +12295,96 @@ export type OperatorOnboardingFinishResponses = {
 
 export type OperatorOnboardingFinishResponse =
   OperatorOnboardingFinishResponses[keyof OperatorOnboardingFinishResponses]
+
+export type OperatorModelNamespaceData = {
+  body?: never
+  path?: never
+  query?: {
+    namespace?: string
+  }
+  url: "/operator/model/namespace"
+}
+
+export type OperatorModelNamespaceErrors = {
+  /**
+   * OperatorModelDefaultError | InvalidRequestError
+   */
+  400: OperatorModelDefaultError | InvalidRequestError
+}
+
+export type OperatorModelNamespaceError = OperatorModelNamespaceErrors[keyof OperatorModelNamespaceErrors]
+
+export type OperatorModelNamespaceResponses = {
+  /**
+   * The namespace's default and small model, and where each comes from
+   */
+  200: OperatorNamespaceModels
+}
+
+export type OperatorModelNamespaceResponse = OperatorModelNamespaceResponses[keyof OperatorModelNamespaceResponses]
+
+export type OperatorModelWriteData = {
+  body?: {
+    level: "settings" | "namespace" | "project"
+    namespace?: string
+    directory?: string
+    key: "model" | "small_model"
+    model: string
+    confirmCopy?: boolean
+  }
+  path?: never
+  query?: never
+  url: "/operator/model/default"
+}
+
+export type OperatorModelWriteErrors = {
+  /**
+   * OperatorModelDefaultError | InvalidRequestError
+   */
+  400: OperatorModelDefaultError | InvalidRequestError
+  /**
+   * OperatorProjectConfigCopyNeededError
+   */
+  409: OperatorProjectConfigCopyNeededError
+}
+
+export type OperatorModelWriteError = OperatorModelWriteErrors[keyof OperatorModelWriteErrors]
+
+export type OperatorModelWriteResponses = {
+  /**
+   * The file written, and when the projects reload
+   */
+  200: OperatorConfigUpdateResult
+}
+
+export type OperatorModelWriteResponse = OperatorModelWriteResponses[keyof OperatorModelWriteResponses]
+
+export type OperatorModelDefaultForData = {
+  body?: never
+  path?: never
+  query: {
+    model: string
+  }
+  url: "/operator/model/default-for"
+}
+
+export type OperatorModelDefaultForErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorModelDefaultForError = OperatorModelDefaultForErrors[keyof OperatorModelDefaultForErrors]
+
+export type OperatorModelDefaultForResponses = {
+  /**
+   * Where the model is set as the default or small model
+   */
+  200: OperatorModelDefaultFor
+}
+
+export type OperatorModelDefaultForResponse = OperatorModelDefaultForResponses[keyof OperatorModelDefaultForResponses]
 
 export type OperatorNamespaceConfigGetData = {
   body?: never

@@ -166,6 +166,24 @@ export function withoutLocked(text: string, locks: ReadonlyArray<OperatorPermiss
   )
 }
 
+/**
+ * A copy leaves out the namespace's default and small model (default_models_spec.md §6.3): the project keeps
+ * following them (namespace-scope.ts configFiles) until it sets its own. With `all` false, only a key whose
+ * value is still the namespace's (`from`) goes: a whole text saved from the Config page keeps a model the
+ * user changed there.
+ */
+export function withoutModels(text: string, from: OperatorNamespaceScope.ModelKeys = {}, all = true) {
+  const value = parse(text) as Record<string, unknown> | undefined
+  if (!value || typeof value !== "object") return text
+  return OperatorNamespaceScope.MODEL_KEYS.filter(
+    (key) => key in value && (all || (from[key] !== undefined && value[key] === from[key])),
+  ).reduce(
+    (result, key) =>
+      applyEdits(result, modify(result, [key], undefined, { formattingOptions: { insertSpaces: true, tabSize: 2 } })),
+    text,
+  )
+}
+
 export type Prepared = {
   project: string
   /** The file the write goes to: the project's own config, or where its copy will be. */
@@ -173,7 +191,13 @@ export type Prepared = {
   /** Its text now: the own file's, or the namespace's (without its locked lines) for a copy. */
   text: string
   own: boolean
-  copy?: { namespace: string; namespaceHash: string; locks: ReadonlyArray<OperatorPermissionMarks.Key> }
+  copy?: {
+    namespace: string
+    namespaceHash: string
+    locks: ReadonlyArray<OperatorPermissionMarks.Key>
+    /** The namespace's default and small model, left out of the copy. */
+    models: OperatorNamespaceScope.ModelKeys
+  }
 }
 
 /** Where a write into the project's config goes, and the text it changes (§7.3). */
@@ -197,13 +221,18 @@ export const prepare = Effect.fnUntraced(function* (ctx: { directory: string; wo
   const locks = source.global
     ? []
     : (yield* Effect.promise(() => OperatorPermissionMarks.namespaceMarks(source.id))).locks
+  const value = parse(source.text ?? "{}") as Record<string, unknown> | undefined
+  const models = Object.fromEntries(
+    OperatorNamespaceScope.MODEL_KEYS.flatMap((key) => (typeof value?.[key] === "string" ? [[key, value[key]]] : [])),
+  ) as OperatorNamespaceScope.ModelKeys
   return {
     project,
     file,
-    // The editor shows `emptyText` for a namespace without a config; a copy of none starts empty.
-    text: withoutLocked(source.text ?? "{}\n", locks),
+    // The editor shows `emptyText` for a namespace without a config; a copy of none starts empty. The copy
+    // has neither the namespace's locked lines nor its default and small model.
+    text: withoutModels(withoutLocked(source.text ?? "{}\n", locks)),
     own: false,
-    copy: { namespace: source.id, namespaceHash: hash(source.text ?? ""), locks },
+    copy: { namespace: source.id, namespaceHash: hash(source.text ?? ""), locks, models },
   } satisfies Prepared
 })
 

@@ -248,8 +248,14 @@ import type {
   OperatorMemoryWriteIndexErrors,
   OperatorMemoryWriteIndexResponses,
   OperatorMemoryWriteResponses,
+  OperatorModelDefaultForErrors,
+  OperatorModelDefaultForResponses,
   OperatorModelDefaultsErrors,
   OperatorModelDefaultsResponses,
+  OperatorModelNamespaceErrors,
+  OperatorModelNamespaceResponses,
+  OperatorModelWriteErrors,
+  OperatorModelWriteResponses,
   OperatorNamespaceCatalogErrors,
   OperatorNamespaceCatalogResponses,
   OperatorNamespaceConfigEffectiveErrors,
@@ -3356,6 +3362,131 @@ export class Onboarding extends HeyApiClient {
   }
 }
 
+export class Model extends HeyApiClient {
+  /**
+   * A namespace's default and small model
+   *
+   * The chain of the default and small model for a namespace without a project (Settings, its config, the environment) and the model in effect. What OpenCode decides is computed in the namespace's default project, else the server's folder. Without `namespace`: Settings' values (Settings → Models).
+   */
+  public namespace<ThrowOnError extends boolean = false>(
+    parameters?: {
+      namespace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "namespace" }] }])
+    return (options?.client ?? this.client).get<
+      OperatorModelNamespaceResponses,
+      OperatorModelNamespaceErrors,
+      ThrowOnError
+    >({
+      url: "/operator/model/namespace",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Set a default or small model
+   *
+   * settings writes Global's config; namespace writes the namespace's config (refused for Global and for Global · OpenCode: use settings); project writes the project's config, copy-on-write (a copy of its namespace's config without its model keys, with confirmCopy). A null model removes the key.
+   */
+  public write<ThrowOnError extends boolean = false>(
+    parameters?: {
+      level?: "settings" | "namespace" | "project"
+      namespace?: string
+      directory?: string
+      key?: "model" | "small_model"
+      model?: string
+      confirmCopy?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "level" },
+            { in: "body", key: "namespace" },
+            { in: "body", key: "directory" },
+            { in: "body", key: "key" },
+            { in: "body", key: "model" },
+            { in: "body", key: "confirmCopy" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<OperatorModelWriteResponses, OperatorModelWriteErrors, ThrowOnError>({
+      url: "/operator/model/default",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Where a model is the default
+   *
+   * Settings, the namespaces and the projects whose config sets this model as the default or small model. Levels that only inherit it aren't listed.
+   */
+  public defaultFor<ThrowOnError extends boolean = false>(
+    parameters: {
+      model: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "model" }] }])
+    return (options?.client ?? this.client).get<
+      OperatorModelDefaultForResponses,
+      OperatorModelDefaultForErrors,
+      ThrowOnError
+    >({
+      url: "/operator/model/default-for",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Default and small model
+   *
+   * The model this project's agents use when they set none (config `model`, else the TUI's recent models, else OpenCode's own ranking), and the small model the title agent uses (config `small_model`, else OpenCode's search), each with where it is set.
+   */
+  public defaults<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorModelDefaultsResponses,
+      OperatorModelDefaultsErrors,
+      ThrowOnError
+    >({
+      url: "/operator/model",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class NamespaceConfig extends HeyApiClient {
   /**
    * A namespace's config
@@ -4043,42 +4174,6 @@ export class Tool extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<OperatorToolListResponses, OperatorToolListErrors, ThrowOnError>({
       url: "/operator/tool",
-      ...options,
-      ...params,
-    })
-  }
-}
-
-export class Model extends HeyApiClient {
-  /**
-   * Default and small model
-   *
-   * The model this project's agents use when they set none (config `model`, else the TUI's recent models, else OpenCode's own ranking), and the small model the title agent uses (config `small_model`, else OpenCode's search), each with where it is set.
-   */
-  public defaults<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<
-      OperatorModelDefaultsResponses,
-      OperatorModelDefaultsErrors,
-      ThrowOnError
-    >({
-      url: "/operator/model",
       ...options,
       ...params,
     })
@@ -6464,6 +6559,11 @@ export class Operator extends HeyApiClient {
     return (this._onboarding ??= new Onboarding({ client: this.client }))
   }
 
+  private _model?: Model
+  get model(): Model {
+    return (this._model ??= new Model({ client: this.client }))
+  }
+
   private _namespaceConfig?: NamespaceConfig
   get namespaceConfig(): NamespaceConfig {
     return (this._namespaceConfig ??= new NamespaceConfig({ client: this.client }))
@@ -6487,11 +6587,6 @@ export class Operator extends HeyApiClient {
   private _tool?: Tool
   get tool(): Tool {
     return (this._tool ??= new Tool({ client: this.client }))
-  }
-
-  private _model?: Model
-  get model(): Model {
-    return (this._model ??= new Model({ client: this.client }))
   }
 
   private _prompt?: Prompt

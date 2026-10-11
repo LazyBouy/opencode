@@ -17,6 +17,7 @@ import { operatorQueueHandlers } from "./handlers/queue"
 import { operatorTrashHandlers, operatorTrashItemHandlers } from "./handlers/trash"
 import { operatorLayoutHandlers } from "./handlers/layout"
 import { operatorOnboardingHandlers } from "./handlers/onboarding"
+import { operatorModelDefaultsHandlers } from "./handlers/model-defaults"
 import { operatorNamespaceConfigHandlers } from "./handlers/namespace-config"
 import { operatorProjectRecordHandlers } from "./handlers/project-records"
 import { operatorPermissionDecisionHandlers } from "./handlers/permission-decisions"
@@ -48,6 +49,7 @@ export const operatorRootHandlers = [
   operatorTrashHandlers,
   operatorLayoutHandlers,
   operatorOnboardingHandlers,
+  operatorModelDefaultsHandlers,
   operatorNamespaceConfigHandlers,
   operatorProjectRecordHandlers,
   operatorPermissionDecisionHandlers,
