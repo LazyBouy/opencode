@@ -21,6 +21,7 @@ import { FieldHelp } from "../ui/field-help"
 import { AgentModel } from "../ui/model-defaults"
 import { PermissionRequests } from "../ui/permission-requests"
 import { homeFolder } from "./agent-home"
+import { flavorOf, typeOf } from "./agent-type"
 
 // Agents open in an overlay on the Agents page; this route (links to /operator/agents/<name>) opens it
 // there, keeping the tab and the folder.
@@ -166,7 +167,10 @@ export function AgentDetail(props: { name: string; directory: string; tab: strin
           title={
             <>
               {current().name}
-              <Tag>{language.t(`operator.agents.mode.${current().mode}`)}</Tag>
+              <Tag data-testid="agent-type">{language.t(`operator.agents.type.${typeOf(current())}`)}</Tag>
+              <Show when={typeOf(current()) === "both"}>
+                <Tag>{language.t(`operator.agents.flavor.${flavorOf(current().settings)}`)}</Tag>
+              </Show>
               <Show when={current().source.kind !== "builtin"}>
                 <Tag variant="accent">{language.t(`operator.agents.source.${current().source.kind}`)}</Tag>
               </Show>

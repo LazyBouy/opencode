@@ -1,4 +1,5 @@
 import type { PermissionConfig } from "../ui/rules"
+import { type Flavor, flavorOf, type Mode, modeOf } from "./agent-type"
 
 // Form values for the agent editor, and the patch they turn into. Text inputs hold strings; empty
 // means "not set".
@@ -12,7 +13,10 @@ export type ModelSource = "default" | "small" | "pick"
 export interface AgentForm {
   name: string
   description: string
-  mode: "primary" | "subagent" | "all"
+  /** The Type (agent-type.ts): Usual, Subagent, Usual + subagent */
+  mode: Mode
+  /** A subagent's Flavor: only saved for Subagent and Usual + subagent */
+  subagentMemory: Flavor
   modelSource: ModelSource
   /** provider/model, for Pick a model */
   model: string
@@ -29,11 +33,11 @@ export interface AgentForm {
 const text = (value: unknown) => (value === undefined || value === null ? "" : String(value))
 
 export function formFromSettings(name: string, settings: Record<string, unknown>): AgentForm {
-  const mode = settings.mode
   return {
     name,
     description: text(settings.description),
-    mode: mode === "primary" || mode === "subagent" ? mode : "all",
+    mode: modeOf(settings.mode),
+    subagentMemory: flavorOf(settings),
     // A model with no source is a picked one (§2.2).
     modelSource: settings.modelSource === "small" ? "small" : settings.model ? "pick" : "default",
     model: text(settings.model),
@@ -51,6 +55,7 @@ export function formFromSettings(name: string, settings: Record<string, unknown>
 export type ResetKey =
   | "description"
   | "mode"
+  | "subagentMemory"
   | "model"
   | "modelSource"
   | "variant"
@@ -78,6 +83,11 @@ export function agentPatch(form: AgentForm, before: Record<string, unknown>, per
   const patch = {
     description: keep("description", words(form.description)),
     mode: keep("mode", form.mode === "all" && before.mode === undefined ? undefined : form.mode),
+    // Incognito is the default (nothing saved); a Usual agent has no Flavor.
+    subagentMemory: keep(
+      "subagentMemory",
+      form.mode !== "primary" && form.subagentMemory === "retentive" ? ("retentive" as const) : undefined,
+    ),
     // Default model: neither a model nor a source. Small model: the source (the server fills in `model`).
     // Pick a model: the model, and no source.
     model:

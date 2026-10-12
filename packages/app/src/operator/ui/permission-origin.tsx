@@ -42,6 +42,8 @@ export function useOriginText() {
           : language.t("operator.origin.sessionClient")
       case "session-opencode":
         return language.t("operator.origin.sessionOpencode")
+      case "session-incognito":
+        return language.t("operator.origin.sessionIncognito")
       case "agent-written":
         return language.t("operator.origin.agentWritten")
       case "lock":

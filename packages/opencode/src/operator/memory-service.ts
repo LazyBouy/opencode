@@ -18,11 +18,12 @@ import { OperatorProfile } from "./profile"
 import { OperatorProfileStore } from "./profile-store"
 import { OperatorProjects } from "./projects"
 import { OperatorRegistry } from "./registry"
+import { OperatorSubagentMemory } from "./subagent-memory"
 
 // Short-term memory for the memory tool (memory-tool.ts) and the requests that offer it
 // (specs/docs/feedbacks/memory/memory_spec.md §4.3, §5, §6):
-// - a call's context: the session's three `.memory` folders, whether it runs incognito (a subagent
-//   session: Stage 6 adds retentive subagents), and each level's READ decision from the session's rules;
+// - a call's context: the session's three `.memory` folders, whether it runs incognito (a subagent's session
+//   whose agent isn't retentive: subagent-memory.ts), and each level's READ decision from the session's rules;
 // - the tool is offered (permission-effective.ts `offered`) in every namespace but OpenCode's; there it is
 //   opt-in (its tool list stays upstream's): offered when the agent's profile holds a memory layer, or a
 //   `memory` allow is set below Global;
@@ -67,8 +68,10 @@ const layer = Layer.effect(
       const session = input.sessionID
         ? yield* sessions.get(SessionID.make(input.sessionID)).pipe(Effect.option)
         : Option.none()
-      const incognito = Option.isSome(session) && !!session.value.parentID
-      const home = (yield* config.get()).agent?.[input.agent]?.home
+      const agentConfig = (yield* config.get()).agent?.[input.agent]
+      // A subagent's session runs incognito unless the agent is retentive (subagent-memory.ts).
+      const incognito = OperatorSubagentMemory.incognito(Option.getOrUndefined(session), agentConfig)
+      const home = agentConfig?.home
       const folders = yield* Effect.promise(() =>
         OperatorMemoryFolders.of({ project, agent: { name: input.agent, ...(home ? { home } : {}) } }),
       )

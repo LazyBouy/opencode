@@ -58,6 +58,7 @@ export const ResetKey = Schema.Literals([
   "mode",
   "model",
   "modelSource",
+  "subagentMemory",
   "variant",
   "temperature",
   "top_p",
@@ -79,6 +80,9 @@ export const Patch = Schema.Struct({
   modelSource: Schema.optional(Schema.Literals(["small", "fixed"])).annotate({
     description:
       "small: the agent runs on its project's small model (its `model` is filled in and kept in step); fixed or unset: `model` as given",
+  }),
+  subagentMemory: Schema.optional(Schema.Literals(["incognito", "retentive"])).annotate({
+    description: "A subagent's Flavor: incognito (default) or retentive",
   }),
   variant: Schema.optional(Schema.String),
   temperature: Schema.optional(Schema.Finite),

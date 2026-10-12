@@ -26,6 +26,8 @@ import { ScopePicker } from "../ui/scope-picker"
 import { FieldHelp } from "../ui/field-help"
 import { ModelWithSource } from "../ui/prompt-trace"
 import { closeTopOverlay, useOverlayParams } from "../ui/overlay-nav"
+import { SelectV2 } from "../ui/select"
+import { TYPE_KEYS, type TypeKey, typeOf } from "./agent-type"
 
 export function useAgents() {
   const api = useOperatorClient()
@@ -105,9 +107,14 @@ export default function AgentsPage() {
   const projects = useOperatorProjects()
   const agents = usePageAgents()
   const [store, setStore] = persisted(Persist.global("operator.agents"), createStore({ showHidden: false }))
-  const [filter, setFilter] = createStore({ text: "" })
+  const [filter, setFilter] = createStore({ text: "", type: "" as TypeKey | "" })
 
-  const rows = createMemo(() => agents.rows().filter((agent) => store.showHidden || !agent.hidden))
+  const rows = createMemo(() =>
+    agents
+      .rows()
+      .filter((agent) => store.showHidden || !agent.hidden)
+      .filter((agent) => !filter.type || typeOf(agent) === filter.type),
+  )
   // Shown on the toggle, so hidden agents can be told apart from missing ones.
   const hiddenCount = createMemo(() => agents.rows().filter((agent) => agent.hidden).length)
   // An agent opens in the overlay: `agent` and its project `adir`, and the section `atab` (`aedit`:
@@ -167,11 +174,11 @@ export default function AgentsPage() {
           },
         ]),
     {
-      id: "mode",
+      id: "type",
       optional: true,
-      header: language.t("operator.column.mode"),
-      value: (agent) => agent.mode,
-      cell: (agent) => language.t(`operator.agents.mode.${agent.mode}`),
+      header: language.t("operator.column.type"),
+      value: (agent) => language.t(`operator.agents.type.${typeOf(agent)}`),
+      cell: (agent) => language.t(`operator.agents.type.${typeOf(agent)}`),
     },
     {
       id: "model",
@@ -275,6 +282,14 @@ export default function AgentsPage() {
             onInput={(event) => setFilter("text", event.currentTarget.value)}
             placeholder={language.t("operator.agents.search")}
             aria-label={language.t("operator.agents.search")}
+          />
+          <SelectV2<TypeKey | "">
+            appearance="base"
+            aria-label={language.t("operator.agents.typeFilter")}
+            options={["", ...TYPE_KEYS]}
+            current={filter.type}
+            label={(key) => (key ? language.t(`operator.agents.type.${key}`) : language.t("operator.agents.type.all"))}
+            onSelect={(key) => setFilter("type", key ?? "")}
           />
           <span class="inline-flex items-center">
             <Switch checked={store.showHidden} onChange={(checked) => setStore("showHidden", checked)}>

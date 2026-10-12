@@ -1728,6 +1728,7 @@ export type AgentConfig = {
   maxSteps?: number
   permission?: PermissionConfig
   home?: string
+  subagentMemory?: "incognito" | "retentive"
   modelSource?: "small" | "fixed"
   [key: string]:
     | unknown
@@ -1753,6 +1754,8 @@ export type AgentConfig = {
     | "info"
     | number
     | PermissionConfig
+    | "incognito"
+    | "retentive"
     | "small"
     | "fixed"
     | undefined
@@ -2231,7 +2234,7 @@ export type PermissionRequest = {
 
 export type OperatorPermissionOrigin = {
   /**
-   * opencode-default / opencode-agent: OpenCode's code (its defaults, its definition of the agent); config-permission / config-tools: a config file's `permission` or legacy `tools` key; agent: the agent's own `permission` (its agent file or config entry); truncation: OpenCode's truncation folder allow; session-*: the session's own rules, set by you, by Always allow (a client's Always), by Allow for session (the fork's reply card), added by `task` for a subagent, by a client's tool switch, or by OpenCode; agent-written: the agent's own rules saved since its project loaded (applied at once); lock: a locked rule, applied again last
+   * opencode-default / opencode-agent: OpenCode's code (its defaults, its definition of the agent); config-permission / config-tools: a config file's `permission` or legacy `tools` key; agent: the agent's own `permission` (its agent file or config entry); truncation: OpenCode's truncation folder allow; session-*: the session's own rules, set by you, by Always allow (a client's Always), by Allow for session (the fork's reply card), added by `task` for a subagent, by a client's tool switch, or by OpenCode; session-incognito: the memory lines of an incognito subagent's session, locked from OpenCode's level; agent-written: the agent's own rules saved since its project loaded (applied at once); lock: a locked rule, applied again last
    */
   kind:
     | "opencode-default"
@@ -2246,6 +2249,7 @@ export type OperatorPermissionOrigin = {
     | "session-task"
     | "session-client"
     | "session-opencode"
+    | "session-incognito"
     | "agent-written"
     | "lock"
   path?: string
@@ -16768,6 +16772,7 @@ export type OperatorAgentCreateData = {
     mode?: "subagent" | "primary" | "all"
     model?: string
     modelSource?: "small" | "fixed"
+    subagentMemory?: "incognito" | "retentive"
     variant?: string
     temperature?: number
     top_p?: number
@@ -16783,6 +16788,7 @@ export type OperatorAgentCreateData = {
       | "mode"
       | "model"
       | "modelSource"
+      | "subagentMemory"
       | "variant"
       | "temperature"
       | "top_p"
@@ -16877,6 +16883,7 @@ export type OperatorAgentUpdateData = {
     mode?: "subagent" | "primary" | "all"
     model?: string
     modelSource?: "small" | "fixed"
+    subagentMemory?: "incognito" | "retentive"
     variant?: string
     temperature?: number
     top_p?: number
@@ -16892,6 +16899,7 @@ export type OperatorAgentUpdateData = {
       | "mode"
       | "model"
       | "modelSource"
+      | "subagentMemory"
       | "variant"
       | "temperature"
       | "top_p"

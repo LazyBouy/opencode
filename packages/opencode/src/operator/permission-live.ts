@@ -1,5 +1,6 @@
 export * as OperatorPermissionLive from "./permission-live"
 
+import { Config } from "@/config/config"
 import path from "path"
 import { parse } from "jsonc-parser"
 import { Context, Effect, Layer } from "effect"
@@ -23,6 +24,7 @@ import { OperatorPermissionMarks } from "./permission-marks"
 import { OperatorProjectConfig } from "./project-config"
 import { OperatorPermissionModel as Model } from "./permission-model"
 import { OperatorPermissionRules } from "./permission-rules"
+import { OperatorSubagentMemory } from "./subagent-memory"
 import { OperatorProjects } from "./projects"
 
 // A session's permission lines in levels, and the decisions they make (permission-model.ts says how):
@@ -154,6 +156,7 @@ const layer = Layer.effect(
     const agents = yield* Agent.Service
     const rules = yield* OperatorPermissionRules.Service
     const operatorConfig = yield* OperatorConfig.Service
+    const config = yield* Config.Service
     const operatorAgents = yield* OperatorAgents.Service
     const written = new Map<string, ReadonlyArray<Rule>>()
 
@@ -379,7 +382,27 @@ const layer = Layer.effect(
               part: rule.part ?? "session",
               from: rule.from ?? { kind: "session-opencode" },
             }))
-      const levels: Model.Level<Meta>[] = [...base.levels, { lines: session, deleted: sessionDeleted }]
+      // An incognito subagent's session (subagent-memory.ts): its memory lines, locked from OpenCode's level so
+      // that no line below lifts them, not even a narrower allow of the agent's (a lock binds only the levels
+      // below it). They stay the session's lines (part and origin).
+      const incognito =
+        input.permission !== "doom_loop" &&
+        OperatorSubagentMemory.incognito(input.session, (yield* config.get()).agent?.[input.agent ?? ""])
+      const locked: Array<Rule & Meta> = incognito
+        ? OperatorSubagentMemory.LINES.map((rule) => ({
+            ...rule,
+            part: "session" as const,
+            from: { kind: "session-incognito" as const },
+          }))
+        : []
+      const [top, ...below] = base.levels
+      const levels: Model.Level<Meta>[] = [
+        locked.length
+          ? { ...top!, lines: [...top!.lines, ...locked], locks: [...(top!.locks ?? []), ...locked] }
+          : top!,
+        ...below,
+        { lines: session, deleted: sessionDeleted },
+      ]
       const upTo = input.upTo ? LEVEL[input.upTo] : levels.length - 1
       // OpenCode's own lines can't be deleted in the OpenCode namespace.
       return Model.build<Meta>(levels.slice(0, upTo + 1), {
@@ -479,5 +502,5 @@ function safeJson(text: string) {
 export const node = LayerNode.make({
   service: Service,
   layer,
-  deps: [Session.node, Agent.node, OperatorPermissionRules.node, OperatorConfig.node, OperatorAgents.node],
+  deps: [Session.node, Agent.node, OperatorPermissionRules.node, OperatorConfig.node, OperatorAgents.node, Config.node],
 })

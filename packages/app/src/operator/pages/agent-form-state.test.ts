@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { agentPatch, formFromSettings } from "./agent-form-state"
+import { typeOf } from "./agent-type"
 
 // Settings left undefined are not sent; compare what would be.
 const sent = (value: unknown) => JSON.parse(JSON.stringify(value))
@@ -16,7 +17,31 @@ describe("agent form", () => {
       hidden: true,
       home: "/srv",
       model: "",
+      subagentMemory: "incognito",
     })
+  })
+
+  test("a subagent's Flavor: incognito is the default and isn't saved; retentive is; a Usual agent has none", () => {
+    const subagent = { ...formFromSettings("scout", {}), mode: "subagent" as const }
+    expect(sent(agentPatch(subagent, {}, {}))).toEqual({ mode: "subagent" })
+    const retentive = { ...subagent, subagentMemory: "retentive" as const }
+    expect(sent(agentPatch(retentive, {}, {}))).toEqual({ mode: "subagent", subagentMemory: "retentive" })
+    expect(formFromSettings("scout", { subagentMemory: "retentive" }).subagentMemory).toBe("retentive")
+    // Back to incognito, or made a Usual agent: the setting goes.
+    const before = { mode: "all", subagentMemory: "retentive" }
+    expect(agentPatch({ ...formFromSettings("scout", before), subagentMemory: "incognito" }, before, {}).reset).toEqual(
+      ["subagentMemory"],
+    )
+    expect(agentPatch({ ...formFromSettings("scout", before), mode: "primary" }, before, {}).reset).toEqual([
+      "subagentMemory",
+    ])
+  })
+
+  test("the Type the Agents page shows", () => {
+    expect(typeOf({ mode: "primary" })).toBe("usual")
+    expect(typeOf({ mode: "all" })).toBe("both")
+    expect(typeOf({ mode: "subagent" })).toBe("subagent-incognito")
+    expect(typeOf({ mode: "subagent", settings: { subagentMemory: "retentive" } })).toBe("subagent-retentive")
   })
 
   test("a new agent sends only what was filled in", () => {

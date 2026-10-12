@@ -22,6 +22,7 @@ import { AgentModelFields } from "./agent-model-fields"
 import { type Scope, ScopeSwitch } from "../ui/scope-switch"
 import { useAgents } from "./agents"
 import { agentPatch, type AgentForm, formFromSettings } from "./agent-form-state"
+import type { Flavor, Mode } from "./agent-type"
 import { requestError } from "./config-helpers"
 import { usePromptCatalog, useProfileNames } from "./profile-data"
 import { OPENCODE } from "./profile-model"
@@ -268,22 +269,36 @@ export default function AgentFormPage() {
               onInput={(event) => set("description", event.currentTarget.value)}
             />
           </Field>
-          <Field group label={language.t("operator.column.mode")} hint={language.t("operator.help.agentMode")}>
+          <Field group label={language.t("operator.column.type")} hint={language.t("operator.help.agentType")}>
             <SegmentedControlV2
               class="operator-segmented-wide"
               value={store.form.mode}
-              onChange={(value) => value && set("mode", value as AgentForm["mode"])}
+              onChange={(value) => value && set("mode", value as Mode)}
             >
               <SegmentedControlItemV2 value="primary">
-                {language.t("operator.agents.mode.primary")}
+                {language.t("operator.agents.type.usual")}
               </SegmentedControlItemV2>
               <SegmentedControlItemV2 value="subagent">
-                {language.t("operator.agents.mode.subagent")}
+                {language.t("operator.agents.type.subagent")}
               </SegmentedControlItemV2>
-              <SegmentedControlItemV2 value="all">{language.t("operator.agents.mode.all")}</SegmentedControlItemV2>
+              <SegmentedControlItemV2 value="all">{language.t("operator.agents.type.both")}</SegmentedControlItemV2>
             </SegmentedControlV2>
           </Field>
           <Show when={subagent()}>
+            <Field group label={language.t("operator.agents.flavor")} hint={language.t("operator.help.agentFlavor")}>
+              <SegmentedControlV2
+                class="operator-segmented-wide"
+                value={store.form.subagentMemory}
+                onChange={(value) => value && set("subagentMemory", value as Flavor)}
+              >
+                <SegmentedControlItemV2 value="incognito">
+                  {language.t("operator.agents.flavor.incognito")}
+                </SegmentedControlItemV2>
+                <SegmentedControlItemV2 value="retentive">
+                  {language.t("operator.agents.flavor.retentive")}
+                </SegmentedControlItemV2>
+              </SegmentedControlV2>
+            </Field>
             <Field group label={language.t("operator.locks.inherit")} hint={language.t("operator.help.lockInherit")}>
               <SegmentedControlV2
                 class="operator-segmented-wide"

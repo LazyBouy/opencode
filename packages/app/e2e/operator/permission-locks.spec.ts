@@ -76,7 +76,7 @@ test("a subagent's locks can include its parent's", async ({ page }) => {
   await page.getByLabel("Name", { exact: true }).fill("helper")
   // Shown for an agent that can run as a subagent (a new agent is both, by default), not for a primary one.
   await expect(page.getByRole("button", { name: "Own (default)" })).toBeVisible()
-  await page.getByRole("button", { name: "Primary", exact: true }).click()
+  await page.getByRole("button", { name: "Usual", exact: true }).click()
   await expect(page.getByRole("button", { name: "Own (default)" })).toHaveCount(0)
   await page.getByRole("button", { name: "Subagent", exact: true }).click()
   await page.getByRole("button", { name: "Own + parent's" }).click()

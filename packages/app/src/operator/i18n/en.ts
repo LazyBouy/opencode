@@ -319,8 +319,10 @@ export const dict = {
   "operator.help.sessionArchived": "Also list sessions that were archived.",
   "operator.help.newFolder": "A new folder inside the folder shown above. It is created on the server.",
   "operator.help.gitOption": "Run git init in the new folder, so it becomes its own project.",
-  "operator.help.agentMode":
-    "Primary agents are the ones you pick for a session; subagents are called by other agents or with @; All allows both.",
+  "operator.help.agentType":
+    "Usual agents are the ones you chat with; they have their own memory. Subagents are called by other agents (the task tool) or with @, and run in a child session of the caller's. Usual + subagent allows both. Saved as OpenCode's mode: primary, subagent or all.",
+  "operator.help.agentFlavor":
+    "How it remembers when it runs as a subagent. Incognito (the default): it reads the namespace's and the project's memory, has no agent memory, and stores nothing: saving, updating and forgetting memory are denied, even if its own rules allow them. Its session is still kept. Retentive: like a usual agent, with its own memory in its agent folder, written as its memory permission allows. Chatted with directly, an agent always has its memory.",
   "operator.help.variant":
     "A variant of the model, such as a reasoning effort, when the model offers several. Leave empty for its default.",
   "operator.help.temperature":
@@ -572,7 +574,7 @@ export const dict = {
   "operator.help.mcpTools": "The tools the server gives the agents while connected.",
   "operator.column.agent": "Agent",
   "operator.column.model": "Model",
-  "operator.column.mode": "Mode",
+  "operator.column.type": "Type",
   "operator.column.source": "Source",
   "operator.column.description": "Description",
   "operator.column.namespace": "Namespace",
@@ -626,9 +628,16 @@ export const dict = {
   "operator.agents.source.builtin": "Built in",
   "operator.agents.source.config": "Config",
   "operator.agents.source.file": "File",
-  "operator.agents.mode.primary": "Primary",
-  "operator.agents.mode.subagent": "Subagent",
-  "operator.agents.mode.all": "Primary and subagent",
+  "operator.agents.type.usual": "Usual",
+  "operator.agents.type.subagent": "Subagent",
+  "operator.agents.type.both": "Usual + subagent",
+  "operator.agents.type.subagent-incognito": "Subagent · incognito",
+  "operator.agents.type.subagent-retentive": "Subagent · retentive",
+  "operator.agents.type.all": "All types",
+  "operator.agents.typeFilter": "Filter by type",
+  "operator.agents.flavor": "Flavor",
+  "operator.agents.flavor.incognito": "Incognito",
+  "operator.agents.flavor.retentive": "Retentive",
   "operator.agent.notFound": "Agent not found in this project",
   "operator.chat.failed": "Couldn't open the chat",
   "operator.nav.chatHint":
@@ -2181,6 +2190,7 @@ export const dict = {
   "operator.origin.sessionClient": "Session · client tool switch",
   "operator.origin.sessionClientAt": "Session · client tool switch ({{time}})",
   "operator.origin.sessionOpencode": "Session · added automatically",
+  "operator.origin.sessionIncognito": "Session · incognito subagent: no agent memory, stores nothing (locked)",
   "operator.origin.agentWritten": "Agent's own rules · saved, applied before the project reloads",
   "operator.origin.lock": "Locked · applied last, sessions can't override",
 
