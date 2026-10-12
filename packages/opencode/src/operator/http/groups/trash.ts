@@ -48,7 +48,7 @@ export const OperatorTrashGroup = HttpApiGroup.make("operatorTrash")
       doc(
         "operator.trash.project",
         "Move a project to Trash",
-        "Move a project to Trash: its whole folder, its prompt and agent settings, and its sessions (archived). Restore puts them back; deleting it from Trash deletes them for good.",
+        "Move a project to Trash: the project, never its folder. Its prompt and agent settings go to Trash, its sessions are archived, and it leaves the lists; the folder isn't touched. Restore puts them back; deleting it from Trash deletes its sessions and OpenCode's record of it for good (still never the folder).",
       ),
     ),
     HttpApiEndpoint.post("session", OperatorTrashPaths.session, {

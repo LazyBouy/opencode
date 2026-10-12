@@ -6,7 +6,7 @@ import { and, eq, inArray, isNull, like, or } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Global } from "@opencode-ai/core/global"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { InstanceStore } from "@/project/instance-store"
 import { Session } from "@/session/session"
@@ -34,7 +34,11 @@ export class TrashError extends Schema.TaggedErrorClass<TrashError>()("OperatorT
 
 export interface Interface {
   readonly list: () => Effect.Effect<Entry[]>
-  /** Moves a project to Trash: its folder, its prompt settings, and (archived) its sessions. */
+  /**
+   * Moves a project to Trash: the project, never its folder (a project is OpenCode's record of a folder, not
+   * the files: the user, 2026-10-12). Its prompt and agent settings go to Trash, its sessions are archived, and
+   * it leaves the lists; the folder stays as it is.
+   */
   readonly project: (key: string) => Effect.Effect<Entry, TrashError>
   /** Moves a session (and its subagents' sessions) to Trash: archived until restored or deleted. */
   readonly session: (sessionID: string) => Effect.Effect<Entry, TrashError>
@@ -87,15 +91,6 @@ const layer = Layer.effect(
 
     const project = Effect.fn("OperatorTrash.project")(function* (key: string) {
       const folder = path.resolve(key)
-      // Folders that hold more than a project, or OpenCode itself, are never moved.
-      const home = process.env.HOME ? path.resolve(process.env.HOME) : undefined
-      const running = path.resolve(process.cwd())
-      if (folder === path.parse(folder).root || folder === home)
-        return yield* fail(`${folder} is not a project folder that can be deleted`)
-      if (running === folder || running.startsWith(folder + path.sep))
-        return yield* fail(`OpenCode runs from ${folder}; it cannot move its own folder to Trash`)
-      if ([Global.Path.data, Global.Path.config].some((dir) => path.resolve(dir).startsWith(folder + path.sep)))
-        return yield* fail(`${folder} holds OpenCode's own data; it cannot be moved to Trash`)
       const found = yield* sessionsUnder(folder)
       const open = found.filter((row) => row.archived === null).map((row) => row.id)
       yield* archive(open)
@@ -106,6 +101,7 @@ const layer = Layer.effect(
           const agents = await OperatorProfileStore.readAgents()
           const settings = { project: projects[folder], agents: agents[folder] }
           await OperatorProfileStore.forgetProject(folder)
+          // No paths: the folder is never moved.
           return put({
             kind: "project",
             name: path.basename(folder),
@@ -113,7 +109,6 @@ const layer = Layer.effect(
             settings,
             sessions: found.map((row) => row.id),
             archived: open,
-            paths: [folder],
           })
         },
         catch: (error) => fail(error instanceof Error ? error.message : String(error)),
@@ -193,10 +188,33 @@ const layer = Layer.effect(
       return entry
     })
 
+    // A project deleted for good: OpenCode's record of it goes too, when it is this folder's alone (upstream gives
+    // clones of one repository the same id) and no session elsewhere still uses it. Deleting the record cascades
+    // to what hangs off it (its workspaces, permissions and folders), never to files.
+    const forgetRecord = Effect.fnUntraced(function* (folder: string) {
+      const rows = (yield* db
+        .select({ id: ProjectTable.id, worktree: ProjectTable.worktree })
+        .from(ProjectTable)
+        .all()
+        .pipe(Effect.orDie)).filter((row) => String(row.worktree) === folder)
+      for (const row of rows) {
+        const others = yield* db
+          .select({ directory: SessionTable.directory })
+          .from(SessionTable)
+          .where(eq(SessionTable.project_id, row.id))
+          .all()
+          .pipe(Effect.orDie)
+        const prefix = folder + path.sep
+        if (others.some((item) => item.directory !== folder && !item.directory.startsWith(prefix))) continue
+        yield* db.delete(ProjectTable).where(eq(ProjectTable.id, row.id)).run().pipe(Effect.orDie)
+      }
+    })
+
     const purge = Effect.fn("OperatorTrash.purge")(function* (id: string) {
       const entry = yield* Effect.promise(() => get(id))
       if (!entry) return yield* fail(`Nothing in Trash with id ${id}`)
       for (const session of entry.sessions ?? []) yield* sessions.remove(SessionID.make(session)).pipe(Effect.ignore)
+      if (entry.kind === "project" && entry.project) yield* forgetRecord(entry.project).pipe(Effect.ignore)
       yield* Effect.promise(() => fs.rm(path.join(root(), id), { recursive: true, force: true }))
     })
 

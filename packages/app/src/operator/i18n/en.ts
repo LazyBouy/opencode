@@ -538,7 +538,7 @@ export const dict = {
   "operator.trash.kind.plugin": "Plugin",
   "operator.page.trash.title": "Trash",
   "operator.page.trash.description":
-    "Everything deleted in these pages, until it is restored or deleted for good. A project's whole folder is kept here, with its sessions archived.",
+    "Everything deleted in these pages, until it is restored or deleted for good. A project in Trash is OpenCode's record of it (its settings, with its sessions archived): its folder is never moved or deleted.",
   "operator.capabilities.template": "Template",
   "operator.models.yes": "Yes",
   "operator.models.no": "No",

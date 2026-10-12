@@ -28,7 +28,7 @@ const exists = (file: string) =>
     .catch(() => false)
 
 describe("Trash", () => {
-  test("a project goes to Trash with its folder, settings and sessions; it can be restored, then deleted for good", async () => {
+  test("a project goes to Trash with its settings and sessions, never its folder; restored, then deleted for good", async () => {
     await using tmp = await tmpdir()
     const folder = path.join(tmp.path, "notes")
     await fs.mkdir(folder)
@@ -45,8 +45,9 @@ describe("Trash", () => {
     const trashed = await call("POST", "/operator/trash/project", { key: folder })
     expect(trashed.status).toBe(200)
     const entry = await read<Entry>(trashed)
-    expect(entry).toMatchObject({ kind: "project", name: "notes" })
-    expect(await exists(folder)).toBe(false)
+    expect(entry).toMatchObject({ kind: "project", name: "notes", files: [] })
+    // A project is OpenCode's record of the folder, not the files: the folder stays as it is.
+    expect(await fs.readFile(path.join(folder, "todo.md"), "utf8")).toBe("Ship it.\n")
     const listed = await read<Entry[]>(await call("GET", "/operator/trash"))
     expect(listed.map((item) => item.id)).toContain(entry.id)
     const projects = await read<{ key: string }[]>(await call("GET", "/operator/project-settings"))
@@ -66,13 +67,26 @@ describe("Trash", () => {
     const again = await read<Entry>(await call("POST", "/operator/trash/project", { key: folder }))
     expect((await call("DELETE", `/operator/trash/${again.id}`)).status).toBe(200)
     expect((await app().request(`/session/${session.id}`)).status).toBe(404)
+    // Deleted for good: its sessions and OpenCode's record of it; the folder still stays.
+    expect(await fs.readFile(path.join(folder, "todo.md"), "utf8")).toBe("Ship it.\n")
     expect((await read<Entry[]>(await call("GET", "/operator/trash"))).map((item) => item.id)).not.toContain(again.id)
   })
 
-  test("the folder OpenCode runs from cannot go to Trash", async () => {
-    const response = await call("POST", "/operator/trash/project", { key: process.cwd() })
-    expect(response.status).toBe(400)
-    expect((await read<{ data: { message: string } }>(response)).data.message).toContain("OpenCode runs from")
+  test("a git project goes to Trash and back with its folder and repository untouched", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await fs.writeFile(path.join(tmp.path, "main.ts"), "export {}\n")
+    // OpenCode records the repository once it has seen it.
+    expect((await app().request(`/project/current?directory=${encodeURIComponent(tmp.path)}`)).status).toBe(200)
+    const entry = await read<Entry>(await call("POST", "/operator/trash/project", { key: tmp.path }))
+    expect(entry.files).toEqual([])
+    expect(await exists(path.join(tmp.path, ".git"))).toBe(true)
+    expect(await exists(path.join(tmp.path, "main.ts"))).toBe(true)
+    const listed = await read<{ key: string }[]>(await call("GET", "/operator/project-settings"))
+    expect(listed.map((item) => item.key)).not.toContain(tmp.path)
+    expect((await call("POST", `/operator/trash/${entry.id}/restore`)).status).toBe(200)
+    expect(
+      (await read<{ key: string }[]>(await call("GET", "/operator/project-settings"))).map((item) => item.key),
+    ).toContain(tmp.path)
   })
 
   test("a layer goes to Trash and comes back", async () => {
