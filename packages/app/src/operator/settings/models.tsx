@@ -167,7 +167,7 @@ export const SettingsModelsOperator: Component = () => {
             )}
           </For>
           <p class="operator-settings-defaults-note">{language.t("operator.settingsModels.note")}</p>
-          <span>
+          <span class="operator-settings-defaults-refresh">
             <ButtonV2
               size="small"
               variant="outline"
@@ -177,6 +177,10 @@ export const SettingsModelsOperator: Component = () => {
             >
               {language.t("operator.settingsModels.refresh")}
             </ButtonV2>
+            <FieldHelp
+              field={language.t("operator.settingsModels.refresh")}
+              text={language.t("operator.settingsModels.refreshHelp")}
+            />
           </span>
           <Show when={last()}>
             {(change) => (

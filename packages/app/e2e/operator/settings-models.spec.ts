@@ -141,6 +141,8 @@ test("Refresh runs OpenCode's logic again for both fields, and shows a change ma
   await expect(small).toContainText("Claude Haiku 4.5")
   // OpenCode's pick changes (another provider connected, another model used in the TUI).
   mock.decides.small = "openai/gpt-5"
+  await dialog.getByRole("button", { name: "About Refresh" }).hover()
+  await expect(tooltip(page)).toContainText("Runs OpenCode's own logic again for both fields")
   await dialog.getByTestId("settings-models-refresh").click()
   await expect(small).toContainText("GPT-5")
   await expect(small.getByTestId("settings-default-auto")).toBeVisible()

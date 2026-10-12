@@ -1862,6 +1862,8 @@ export const dict = {
   "operator.settingsModels.showFirst": "Turn Show on to make it a default.",
   "operator.settingsModels.keepShown": "It's a default model: choose another before hiding it.",
   "operator.settingsModels.refresh": "Refresh",
+  "operator.settingsModels.refreshHelp":
+    "Runs OpenCode's own logic again for both fields, as it would for a new chat now: it reads the connected providers and the model last used in the terminal app (TUI) each time. It also reads what Settings sets, so a change made in the config file or in another browser shows. Nothing is saved.",
   "operator.settingsModels.auto": "Auto",
   "operator.settingsModels.autoTip":
     "Not set in Settings: OpenCode's own logic picked it. Choose one in the list below to set it.",

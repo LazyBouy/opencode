@@ -93,3 +93,9 @@
   justify-content: flex-end;
   padding: 0 0 6px;
 }
+
+.operator-settings-defaults-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
