@@ -1,0 +1,102 @@
+/* Long lists (paged.ts): search and A→Z / Z→A above, the pager below; the picker (list-picker.tsx). */
+[data-component="operator-list-controls"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+[data-component="operator-list-controls"] .operator-list-search {
+  flex: 1;
+  min-width: 0;
+}
+
+[data-component="operator-pager"] {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 0;
+  color: var(--v2-text-text-muted);
+  font-size: 12px;
+}
+
+[data-component="operator-pager"] [data-slot="operator-pager-range"] {
+  margin-right: auto;
+}
+
+[data-component="operator-pager"] [data-slot="operator-pager-size"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+[data-component="operator-pager"] select {
+  background: transparent;
+  color: inherit;
+  border: 1px solid var(--v2-border-border-base);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+[data-component="operator-list-picker"] {
+  display: inline-flex;
+  min-width: 0;
+  width: 100%;
+}
+
+[data-component="operator-list-picker-content"] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(380px, calc(100vw - 32px));
+  max-height: min(480px, calc(100vh - 32px));
+  padding: 8px;
+  background: var(--v2-background-bg-layer-01);
+  border: 1px solid var(--v2-border-border-base);
+  border-radius: 6px;
+  box-shadow: var(--v2-elevation-overlay);
+  z-index: 60;
+}
+
+[data-component="operator-list-picker-content"] [role="listbox"] {
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  min-height: 0;
+}
+
+[data-component="operator-list-picker-content"] [role="option"] {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 4px;
+  text-align: left;
+  color: var(--v2-text-text-base);
+  background: transparent;
+  cursor: pointer;
+}
+
+[data-component="operator-list-picker-content"] [role="option"]:hover,
+[data-component="operator-list-picker-content"] [role="option"]:focus-visible {
+  background: var(--v2-background-bg-base);
+  outline: none;
+}
+
+[data-component="operator-list-picker-content"] [role="option"][aria-selected="true"] {
+  font-weight: 500;
+}
+
+[data-component="operator-list-picker-content"] [data-slot="list-picker-group"] {
+  margin-left: auto;
+  color: var(--v2-text-text-muted);
+  font-size: 12px;
+}
+
+[data-component="operator-list-picker-content"] [data-slot="list-picker-empty"] {
+  padding: 6px 8px;
+  color: var(--v2-text-text-muted);
+}

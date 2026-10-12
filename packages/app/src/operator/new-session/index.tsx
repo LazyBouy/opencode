@@ -1,5 +1,5 @@
 import { useNavigate } from "@solidjs/router"
-import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
+import { SelectV2 } from "../ui/select"
 import { createEffect, createMemo, createSignal, type JSX, on, onCleanup, Show } from "solid-js"
 import type { PromptProjectController } from "@/components/prompt-project-selector"
 import { PromptGitStatus, PromptWorkspaceSelector } from "@/components/prompt-workspace-selector"

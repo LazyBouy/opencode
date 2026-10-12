@@ -1,4 +1,4 @@
-import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
+import { SelectV2 } from "./select"
 import { createMemo } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useOperatorProjects, useScopedProject } from "../project"

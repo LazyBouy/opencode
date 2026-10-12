@@ -1,5 +1,5 @@
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
+import { SelectV2 } from "./select"
 import type { OperatorNamespaceSummary } from "@opencode-ai/sdk/v2/client"
 import { createSignal, Show } from "solid-js"
 import { useLanguage } from "@/context/language"

@@ -1,6 +1,6 @@
 import { Icon } from "@opencode-ai/ui/icon"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
+import { SelectV2 } from "./select"
 import type {
   OperatorModelSource,
   OperatorModelChain,
@@ -10,7 +10,7 @@ import type {
 } from "@opencode-ai/sdk/v2/client"
 import { useSearchParams } from "@solidjs/router"
 import { useQuery, useQueryClient } from "@tanstack/solid-query"
-import { createEffect, createMemo, For, type JSX, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, type JSX, on, Show } from "solid-js"
 import { useSettingsDialog } from "@/components/settings-dialog"
 import { useLanguage } from "@/context/language"
 import { useModels } from "@/context/models"
@@ -286,14 +286,24 @@ function ModelCell(props: {
     const at = key.indexOf("/")
     return key === own() || visibility.visible({ providerID: key.slice(0, at), modelID: key.slice(at + 1) })
   }
-  const options = () => [
-    INHERIT,
-    ...models()
-      .filter((model) => shown(model.key))
-      .map((model) => model.key),
-  ]
-  const optionLabel = (key: string) => {
-    if (key !== INHERIT) return words.name(key)
+  // Provider first, then one of its models (shown ones only); a long list of either can be searched, sorted and
+  // paged (ui/select.tsx). Choosing a provider writes nothing: its model does.
+  const providerOf = (key: string | undefined) => (key ? key.slice(0, key.indexOf("/")) : undefined)
+  const [picked, setPicked] = createSignal<string>()
+  createEffect(on(own, (value) => setPicked(providerOf(value))))
+  const providers = () => {
+    const seen = new Map<string, string>()
+    for (const model of models()) if (shown(model.key)) seen.set(providerOf(model.key)!, model.provider)
+    return [...seen]
+  }
+  const providerOptions = () => [INHERIT, ...providers().map(([id]) => id)]
+  const modelOptions = () =>
+    models()
+      .filter((model) => providerOf(model.key) === picked() && shown(model.key))
+      .map((model) => model.key)
+  const providerLabel = (id: string) =>
+    id === INHERIT ? inheritLabel() : (providers().find(([key]) => key === id)?.[1] ?? id)
+  const inheritLabel = () => {
     const found = inherited()
     if (!found) return language.t("operator.modelChain.inherit")
     return found.from === "opencode"
@@ -341,9 +351,13 @@ function ModelCell(props: {
         showToast({ title: language.t("operator.models.setFailed"), description: requestError(error) }),
       )
   }
-  const choose = (key: string) => {
-    if ((key === INHERIT && !own()) || key === own()) return
-    void write(key === INHERIT ? null : key)
+  const chooseProvider = (id: string) => {
+    if (id !== INHERIT) return setPicked(id)
+    setPicked(undefined)
+    if (own()) void write(null)
+  }
+  const chooseModel = (key: string) => {
+    if (key !== own()) void write(key)
   }
   const fromLine = (): JSX.Element => {
     const chain = props.chain
@@ -373,15 +387,28 @@ function ModelCell(props: {
   }
   return (
     <div class="flex flex-col gap-1">
-      <SelectV2<string>
-        appearance="base"
-        aria-label={props.label}
-        options={options()}
-        current={own() ?? INHERIT}
-        label={optionLabel}
-        groupBy={(key) => (key === INHERIT ? "" : (models().find((model) => model.key === key)?.provider ?? ""))}
-        onSelect={(key) => key && choose(key)}
-      />
+      <div class="flex flex-wrap gap-1" data-testid="model-pickers">
+        <SelectV2<string>
+          appearance="base"
+          aria-label={language.t("operator.modelDefaults.pickerProvider", { label: props.label })}
+          options={providerOptions()}
+          current={picked() ?? INHERIT}
+          label={providerLabel}
+          pinned={(id) => id === INHERIT}
+          onSelect={(id) => id && chooseProvider(id)}
+        />
+        <Show when={picked()}>
+          <SelectV2<string>
+            appearance="base"
+            aria-label={language.t("operator.modelDefaults.pickerModel", { label: props.label })}
+            options={modelOptions()}
+            current={providerOf(own()) === picked() ? own() : undefined}
+            placeholder={language.t("operator.agentModel.choose")}
+            label={(key) => words.name(key)}
+            onSelect={(key) => key && chooseModel(key)}
+          />
+        </Show>
+      </div>
       <span data-slot="operator-note" data-testid="model-from">
         {fromLine()}
       </span>

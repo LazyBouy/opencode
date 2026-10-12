@@ -3,7 +3,7 @@ import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
 import { CheckboxV2 } from "@opencode-ai/ui/v2/checkbox-v2"
-import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
+import { SelectV2 } from "../ui/select"
 import type { OperatorNamespaceSummary } from "@opencode-ai/sdk/v2/client"
 import {
   type Component,

@@ -1,5 +1,5 @@
 import { SegmentedControlItemV2, SegmentedControlV2 } from "@opencode-ai/ui/v2/segmented-control-v2"
-import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
+import { SelectV2 } from "../ui/select"
 import { useQuery } from "@tanstack/solid-query"
 import { createEffect, createMemo, on, Show } from "solid-js"
 import { useLanguage } from "@/context/language"

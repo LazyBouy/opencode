@@ -4,6 +4,8 @@ import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
 import { ColumnPicker } from "./column-picker"
 import { FieldHelp } from "./field-help"
+import { ListSearch, Pager } from "./list-controls"
+import { isLong, pageOf } from "./paged"
 import { filterRows, nextSort, type Sort, sortRows } from "./table"
 
 export interface Column<T> {
@@ -37,10 +39,16 @@ export interface DataTableProps<T> {
 }
 
 // Sortable, filterable table for operator pages. Rows open with a click or Enter when onRowClick is set.
-// Optional columns can be added or removed from the picker at the end of the header row.
+// Optional columns can be added or removed from the picker at the end of the header row. More than 10 rows
+// (paged.ts) are shown a page at a time, and get a search box when the page has no search of its own.
 export function DataTable<T>(props: DataTableProps<T>) {
   const language = useLanguage()
-  const [store, setStore] = createStore<{ sort?: Sort }>({ sort: props.initialSort })
+  const [store, setStore] = createStore<{ sort?: Sort; query: string; page: number; size: number }>({
+    sort: props.initialSort,
+    query: "",
+    page: 0,
+    size: 10,
+  })
   const fresh = createStore({ shown: {} as Record<string, boolean> })
   const [choice, setChoice] = props.columnsKey
     ? persisted(Persist.global(`operator.columns.${props.columnsKey}`), fresh)
@@ -48,13 +56,24 @@ export function DataTable<T>(props: DataTableProps<T>) {
   const visible = (column: Column<T>) => !column.optional || (choice.shown[column.id] ?? !column.hidden)
   const columns = createMemo(() => props.columns.filter(visible))
   const picker = () => !!props.columnsKey && props.columns.some((column) => column.optional)
-  const rows = createMemo(() => {
-    // A server that answers with an unexpected shape shows an empty table rather than breaking the page.
-    const source = Array.isArray(props.rows) ? props.rows : []
-    const search = props.search
-    const filtered = search && props.filter ? filterRows(source, props.filter, search) : source
+  // A server that answers with an unexpected shape shows an empty table rather than breaking the page.
+  const source = () => (Array.isArray(props.rows) ? props.rows : [])
+  // The page's own search, else the table's (a long table on a page without one).
+  const ownSearch = () => props.filter === undefined && isLong(source().length)
+  const textOf = (row: T) =>
+    props.search
+      ? props.search(row)
+      : props.columns
+          .map((column) => column.value?.(row))
+          .filter((value) => value !== undefined && value !== null)
+          .join(" ")
+  const sorted = createMemo(() => {
+    const query = ownSearch() ? store.query : props.filter
+    const filtered = query ? filterRows(source(), query, textOf) : source()
     return sortRows(filtered, store.sort, (row, id) => props.columns.find((column) => column.id === id)?.value?.(row))
   })
+  const page = createMemo(() => pageOf(sorted(), { text: () => "", sorted: false, page: store.page, size: store.size }))
+  const rows = () => (isLong(sorted().length) ? page().items : sorted())
   const direction = (column: Column<T>) => {
     if (store.sort?.column !== column.id) return column.value ? "none" : undefined
     return store.sort.direction === "asc" ? "ascending" : "descending"
@@ -62,6 +81,13 @@ export function DataTable<T>(props: DataTableProps<T>) {
 
   return (
     <div data-component="operator-table" aria-busy={props.loading ? "true" : undefined}>
+      <Show when={ownSearch()}>
+        <ListSearch
+          label={language.t("operator.list.search", { what: props.label })}
+          query={store.query}
+          onQuery={(query) => setStore({ query, page: 0 })}
+        />
+      </Show>
       <table aria-label={props.label}>
         <thead>
           <tr>
@@ -77,7 +103,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
                     <button
                       type="button"
                       data-slot="operator-table-sort"
-                      onClick={() => setStore("sort", nextSort(store.sort, column.id))}
+                      onClick={() => setStore({ sort: nextSort(store.sort, column.id), page: 0 })}
                     >
                       {column.header}
                       <span
@@ -133,6 +159,14 @@ export function DataTable<T>(props: DataTableProps<T>) {
           </For>
         </tbody>
       </table>
+      <Show when={isLong(sorted().length)}>
+        <Pager
+          page={page()}
+          onPage={(next) => setStore("page", next)}
+          size={store.size}
+          onSize={(size) => setStore({ size, page: 0 })}
+        />
+      </Show>
       <Show when={rows().length === 0}>
         <div data-slot="operator-table-empty">
           <Show

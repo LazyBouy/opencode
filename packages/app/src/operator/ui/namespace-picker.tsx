@@ -1,7 +1,7 @@
 import { useSearchParams } from "@solidjs/router"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
-import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
+import { SelectV2 } from "./select"
 import type { OperatorNamespaceSummary } from "@opencode-ai/sdk/v2/client"
 import { createEffect, createSignal, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"

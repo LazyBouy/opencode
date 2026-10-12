@@ -1,5 +1,5 @@
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
+import { SelectV2 } from "../ui/select"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { Show } from "solid-js"
 import { createStore } from "solid-js/store"

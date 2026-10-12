@@ -1,5 +1,5 @@
 import { CheckboxV2 } from "@opencode-ai/ui/v2/checkbox-v2"
-import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
+import { SelectV2 } from "../ui/select"
 import type { OperatorCapability, OperatorCapabilityKind, OperatorNamespaceSummary } from "@opencode-ai/sdk/v2/client"
 import { useQuery } from "@tanstack/solid-query"
 import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js"

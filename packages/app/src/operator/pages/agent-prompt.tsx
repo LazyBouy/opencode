@@ -1,7 +1,7 @@
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { CheckboxV2 } from "@opencode-ai/ui/v2/checkbox-v2"
-import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
+import { SelectV2 } from "../ui/select"
 import type { OperatorModelSource, OperatorPromptOverride } from "@opencode-ai/sdk/v2/client"
 import { useQuery } from "@tanstack/solid-query"
 import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js"

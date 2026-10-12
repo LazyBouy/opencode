@@ -23,6 +23,8 @@ import { showToast } from "@/utils/toast"
 import { ready, useOperatorClient } from "../data"
 import { requestError } from "../pages/config-helpers"
 import { FieldHelp } from "../ui/field-help"
+import { Pager } from "../ui/list-controls"
+import { type Direction, isLong, LONG, pageOf } from "../ui/paged"
 import "./models.css"
 
 // Settings → Models (default_models_spec.md §4): upstream's list of models, each shown or hidden in the chat's
@@ -95,6 +97,8 @@ export const SettingsModelsOperator: Component = () => {
   // it would close the dialog.
   const [last, setLast] = createSignal<{ key: Key; before: string | null; text: string }>()
   const list = useFilteredList<ModelItem>(listOptions(() => models.list()))
+  // Each long provider group's order and page.
+  const [paging, setPaging] = createStore<Record<string, { direction: Direction; page: number }>>({})
 
   const chainOf = (key: Key) => (key === "model" ? ready(settings)?.chain.model : ready(settings)?.chain.small)
   // What Settings itself sets (its first level), not what the environment may set after it.
@@ -245,6 +249,16 @@ export const SettingsModelsOperator: Component = () => {
               {(group) => {
                 const searching = () => list.filter().length > 0
                 const expanded = () => searching() || !store.collapsed[group.category]
+                // A provider with more than 10 models (OpenRouter): A→Z / Z→A and pages of 10.
+                const long = () => isLong(group.items.length)
+                const paged = () =>
+                  pageOf(group.items, {
+                    text: (item) => item.name,
+                    direction: paging[group.category]?.direction ?? "asc",
+                    page: paging[group.category]?.page ?? 0,
+                    size: LONG,
+                  })
+                const items = () => (long() ? paged().items : group.items)
 
                 return (
                   <div
@@ -292,8 +306,27 @@ export const SettingsModelsOperator: Component = () => {
                       </button>
                     </h3>
                     <Show when={expanded()}>
+                      <Show when={long()}>
+                        <div class="operator-settings-model-sort">
+                          <ButtonV2
+                            size="small"
+                            variant="outline"
+                            data-testid="list-sort"
+                            onClick={() =>
+                              setPaging(group.category, {
+                                direction: paging[group.category]?.direction === "desc" ? "asc" : "desc",
+                                page: 0,
+                              })
+                            }
+                          >
+                            {paging[group.category]?.direction === "desc"
+                              ? language.t("operator.list.desc")
+                              : language.t("operator.list.asc")}
+                          </ButtonV2>
+                        </div>
+                      </Show>
                       <SettingsListV2>
-                        <For each={group.items}>
+                        <For each={items()}>
                           {(item) => {
                             const key = { providerID: item.provider.id, modelID: item.id }
                             const value = `${item.provider.id}/${item.id}`
@@ -354,6 +387,17 @@ export const SettingsModelsOperator: Component = () => {
                           }}
                         </For>
                       </SettingsListV2>
+                      <Show when={long()}>
+                        <Pager
+                          page={paged()}
+                          onPage={(page) =>
+                            setPaging(group.category, {
+                              direction: paging[group.category]?.direction ?? "asc",
+                              page,
+                            })
+                          }
+                        />
+                      </Show>
                     </Show>
                   </div>
                 )

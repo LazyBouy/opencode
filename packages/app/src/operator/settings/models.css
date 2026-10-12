@@ -86,3 +86,10 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* A long provider group (more than 10 models): its A→Z / Z→A above the rows, its pager below. */
+.operator-settings-model-sort {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 0 6px;
+}

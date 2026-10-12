@@ -50,7 +50,9 @@ test("the namespace's row writes its config; a project's row writes its own, aft
   )
 
   // The namespace's own small model: its config.
-  await choose(page, "Small model for All projects (OpenCode's config)", "Claude Opus 4.6")
+  // Provider first, then one of its models.
+  await choose(page, "Small model for All projects (OpenCode's config): provider", "OpenCode")
+  await choose(page, "Small model for All projects (OpenCode's config): model", "Claude Opus 4.6")
   const question = page.getByRole("dialog").filter({ hasText: "Change the Small model for All projects" })
   await expect(question).toContainText("Writes `small_model: opencode/claude-opus-4-6` to")
   await question.getByRole("button", { name: "Save" }).click()
@@ -60,7 +62,8 @@ test("the namespace's row writes its config; a project's row writes its own, aft
   await expect(row.getByTestId("model-from").last()).toHaveText("From OpenCode's config")
 
   // The project's default model: its own config, which it doesn't have yet.
-  await choose(page, "Default model for smoke-project", "Claude Opus 4.6")
+  await choose(page, "Default model for smoke-project: provider", "OpenCode")
+  await choose(page, "Default model for smoke-project: model", "Claude Opus 4.6")
   await page.getByRole("dialog").getByRole("button", { name: "Save" }).click()
   await expect(page.getByRole("dialog").filter({ hasText: "Save as this project's own config?" })).toBeVisible()
   await page.getByRole("button", { name: "Save as project config" }).click()
