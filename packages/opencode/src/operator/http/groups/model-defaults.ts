@@ -13,6 +13,7 @@ export const OperatorModelDefaultsPaths = {
   namespace: "/operator/model/namespace",
   write: "/operator/model/default",
   defaultFor: "/operator/model/default-for",
+  waiting: "/operator/model/providers-waiting",
 } as const
 
 export class ApiModelDefaultError extends Schema.ErrorClass<{
@@ -103,6 +104,15 @@ export const OperatorModelDefaultsGroup = HttpApiGroup.make("operatorModelDefaul
         "operator.model.defaultFor",
         "Where a model is the default",
         "Settings, the namespaces and the projects whose config sets this model as the default or small model. Levels that only inherit it aren't listed.",
+      ),
+    ),
+    HttpApiEndpoint.get("providersWaiting", OperatorModelDefaultsPaths.waiting, {
+      success: described(Schema.Array(Schema.String), "Project folders waiting to reload"),
+    }).annotateMerge(
+      doc(
+        "operator.model.providersWaiting",
+        "Projects whose provider list waits",
+        "After a provider is connected or disconnected, every project reloads its provider list when none of its sessions is running; these project folders are still waiting.",
       ),
     ),
   )

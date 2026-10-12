@@ -9,6 +9,7 @@ import { OperatorProfileStore } from "@/operator/profile-store"
 import { OperatorProjectConfig } from "@/operator/project-config"
 import { OperatorProjects } from "@/operator/projects"
 import { OperatorReloadWhenIdle } from "@/operator/reload-when-idle"
+import { OperatorProviderRefresh } from "@/operator/provider-refresh"
 import { OperatorSmallAgents } from "@/operator/small-agents"
 import { InstanceStore } from "@/project/instance-store"
 import { Effect } from "effect"
@@ -30,6 +31,7 @@ export const operatorModelDefaultsHandlers = HttpApiBuilder.group(
       const instances = yield* InstanceStore.Service
       const store = yield* OperatorProfileStore.Service
       const reloads = yield* OperatorReloadWhenIdle.Service
+      const refresh = yield* OperatorProviderRefresh.Service
 
       // Where a namespace's own values are computed (what OpenCode decides needs the connected providers): its
       // default project, else its own folder (an instance there is the namespace level; Global's folder for
@@ -136,6 +138,7 @@ export const operatorModelDefaultsHandlers = HttpApiBuilder.group(
           }),
         )
         .handle("write", (ctx) => write(ctx.payload))
+        .handle("providersWaiting", () => refresh.waiting())
         .handle("defaultFor", (ctx) =>
           Effect.gen(function* () {
             const model = ctx.query.model

@@ -565,6 +565,8 @@ export interface OperatorMock {
   helperWrites: Array<{ method: string; url: string; body: unknown }>
   helperRuns: Array<Record<string, unknown>>
   helperSettings: { runDays: number }
+  /** Projects whose provider list waits for their sessions to end (issue 001). */
+  providersWaiting: string[]
   notes: Array<Record<string, unknown> & { id: string }>
   // A reason the next move to Trash fails with.
   trashFail?: string
@@ -755,6 +757,7 @@ export async function mockOperator(page: Page) {
       },
     ],
     helperSettings: { runDays: 30 },
+    providersWaiting: [],
     notes: [
       {
         id: "n1",
@@ -1059,6 +1062,7 @@ export async function mockOperator(page: Page) {
         ? json(route, found)
         : json(route, { name: "OperatorCallNotFoundError", data: { message: "No call" } }, 404)
     }
+    if (url.pathname === "/operator/model/providers-waiting") return json(route, state.providersWaiting)
     if (url.pathname === "/operator/tokenizers/count") {
       const text = (route.request().postDataJSON() as { text?: string }).text ?? ""
       return json(route, { tokens: Math.ceil(text.length / 4) })

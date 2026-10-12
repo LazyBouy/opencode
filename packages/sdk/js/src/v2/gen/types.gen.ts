@@ -12783,6 +12783,33 @@ export type OperatorModelDefaultForResponses = {
 
 export type OperatorModelDefaultForResponse = OperatorModelDefaultForResponses[keyof OperatorModelDefaultForResponses]
 
+export type OperatorModelProvidersWaitingData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/operator/model/providers-waiting"
+}
+
+export type OperatorModelProvidersWaitingErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorModelProvidersWaitingError =
+  OperatorModelProvidersWaitingErrors[keyof OperatorModelProvidersWaitingErrors]
+
+export type OperatorModelProvidersWaitingResponses = {
+  /**
+   * Project folders waiting to reload
+   */
+  200: Array<string>
+}
+
+export type OperatorModelProvidersWaitingResponse =
+  OperatorModelProvidersWaitingResponses[keyof OperatorModelProvidersWaitingResponses]
+
 export type OperatorNamespaceConfigGetData = {
   body?: never
   path: {

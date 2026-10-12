@@ -4,11 +4,12 @@ import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import type { Model } from "@opencode-ai/sdk/v2/client"
-import { useQuery } from "@tanstack/solid-query"
-import { createMemo, For, Show } from "solid-js"
+import { useQuery, useQueryClient } from "@tanstack/solid-query"
+import { createMemo, For, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSettingsDialog } from "@/components/settings-dialog"
 import { useLanguage } from "@/context/language"
+import { useServerSDK } from "@/context/server-sdk"
 import { useOperatorClient } from "../data"
 import { formatCost, formatCount, shortPath } from "../format"
 import { type Column, DataTable } from "../ui/data-table"
@@ -102,6 +103,35 @@ function DefaultTags(props: { row: Row; namespace: string; effective: Effective;
   )
 }
 
+// Providers connected or disconnected show here at once (specs/docs/issues/001): every project reloads its provider
+// list when none of its sessions runs (provider-refresh.ts), and the lists are fetched again when a project reloads.
+// A project still running is listed as waiting.
+function useProviderUpdates() {
+  const api = useOperatorClient()
+  const serverSdk = useServerSDK()
+  const queryClient = useQueryClient()
+  const waiting = useQuery(() => ({
+    queryKey: api.key("providers-waiting"),
+    queryFn: () =>
+      api
+        .client()
+        .operator.model.providersWaiting()
+        .then((result) => result.data ?? []),
+    refetchInterval: (query) => (query.state.data?.length ? 3000 : false),
+  }))
+  const stop = serverSdk().event.listen((event) => {
+    const type = (event.details as { type?: string } | undefined)?.type
+    if (type !== "server.instance.disposed" && type !== "global.disposed" && type !== "integration.connection.updated")
+      return
+    void queryClient.invalidateQueries({
+      predicate: (query) => query.queryKey[1] === "operator" && query.queryKey[2] === "providers",
+    })
+    void waiting.refetch()
+  })
+  onCleanup(stop)
+  return waiting
+}
+
 // A model opens in the overlay (`model`, as provider/model): the providers on the left.
 export default function ModelsPage() {
   const language = useLanguage()
@@ -109,6 +139,7 @@ export default function ModelsPage() {
   const choose = useSettingsDialog("models")
   const [filter, setFilter] = createStore({ text: "" })
   const { providers, rows, directory, scope, effective, connected } = useModels()
+  const waiting = useProviderUpdates()
   const words = useModelWords(connected)
   const inScope = () =>
     scope.all() ? language.t("operator.modelChain.settingsName") : (scope.scoped()[0]?.namespace.name ?? "")
@@ -246,6 +277,11 @@ export default function ModelsPage() {
           )}
         </For>
       </div>
+      <Show when={directory() && waiting.data?.includes(directory()!)}>
+        <p data-slot="operator-note" role="status" data-testid="providers-waiting">
+          {language.t("operator.models.providersWaiting")}
+        </p>
+      </Show>
       <p data-slot="operator-note" data-testid="models-listed-from">
         {directory()
           ? language.t("operator.models.listedFrom", { project: shortPath(directory()!) })

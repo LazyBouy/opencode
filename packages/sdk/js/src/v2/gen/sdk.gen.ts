@@ -271,6 +271,8 @@ import type {
   OperatorModelDefaultsResponses,
   OperatorModelNamespaceErrors,
   OperatorModelNamespaceResponses,
+  OperatorModelProvidersWaitingErrors,
+  OperatorModelProvidersWaitingResponses,
   OperatorModelWriteErrors,
   OperatorModelWriteResponses,
   OperatorNamespaceCatalogErrors,
@@ -3745,6 +3747,19 @@ export class Model extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  /**
+   * Projects whose provider list waits
+   *
+   * After a provider is connected or disconnected, every project reloads its provider list when none of its sessions is running; these project folders are still waiting.
+   */
+  public providersWaiting<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<
+      OperatorModelProvidersWaitingResponses,
+      OperatorModelProvidersWaitingErrors,
+      ThrowOnError
+    >({ url: "/operator/model/providers-waiting", ...options })
   }
 
   /**

@@ -740,6 +740,8 @@ export const dict = {
   "operator.help.helperRunDays":
     "Helper runs older than this are deleted, with their sessions: 1 to 3650 days, 30 by default.",
   "operator.notes.tab": "Notes ({{count}})",
+  "operator.models.providersWaiting":
+    "A provider was connected or disconnected. This project's list updates when none of its sessions is running.",
   "operator.notes.title": "Notes from helpers",
   "operator.notes.time": "Posted",
   "operator.notes.helper": "Helper",

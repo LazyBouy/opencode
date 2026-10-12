@@ -4734,6 +4734,47 @@
         ]
       }
     },
+    "/operator/model/providers-waiting": {
+      "get": {
+        "tags": ["operator model defaults"],
+        "operationId": "operator.model.providersWaiting",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Project folders waiting to reload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Project folders waiting to reload"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "After a provider is connected or disconnected, every project reloads its provider list when none of its sessions is running; these project folders are still waiting.",
+        "summary": "Projects whose provider list waits",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.model.providersWaiting({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/operator/namespace/{id}/config": {
       "get": {
         "tags": ["operator namespace config"],

@@ -280,6 +280,11 @@ export function instancesOf(target: { namespace: string } | { project: string })
     .map(([directory]) => directory)
 }
 
+// Every loaded instance folder (provider-refresh.ts reloads them all when a key changes).
+export function loadedInstances() {
+  return [...loaded.keys()]
+}
+
 // The loaded instance folders in a folder (or the folder itself): a move stops them first.
 export function instancesUnder(folder: string) {
   const root = path.resolve(folder)

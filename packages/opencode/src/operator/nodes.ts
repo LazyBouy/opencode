@@ -31,6 +31,7 @@ import { OperatorPermissionLive } from "./permission-live"
 import { OperatorPermissionDecisions } from "./permission-decisions"
 import { OperatorPermissionDecide } from "./permission-decide"
 import { OperatorReloadWhenIdle } from "./reload-when-idle"
+import { OperatorProviderRefresh } from "./provider-refresh"
 import { OperatorPermissionLocks } from "./permission-locks"
 import { OperatorResolutions } from "./resolutions"
 import { OperatorDynamicLayers } from "./dynamic-layers"
@@ -60,6 +61,7 @@ export const operatorNodes = [
   OperatorPermissionDecisions.node,
   OperatorPermissionDecide.node,
   OperatorReloadWhenIdle.node,
+  OperatorProviderRefresh.node,
   OperatorPermissionLocks.node,
   OperatorResolutions.node,
   OperatorDynamicLayers.node,
