@@ -1,0 +1,107 @@
+/* Resizable overlays (resizable-dialogs.ts): handles on every dialog container's edges and corners; once dragged,
+   the box keeps its own place and size (not in Full screen or Settings' Maximize). */
+[data-slot="dialog-container"][data-resizable] {
+  position: relative;
+}
+
+[data-slot="dialog-container"][data-resized]:not(.operator-overlay-full) {
+  position: fixed !important;
+  left: var(--operator-dialog-left) !important;
+  top: var(--operator-dialog-top) !important;
+  width: var(--operator-dialog-width) !important;
+  height: var(--operator-dialog-height) !important;
+  max-width: none !important;
+  max-height: none !important;
+  margin: 0 !important;
+}
+
+[data-slot="dialog-container"][data-resizing] {
+  user-select: none;
+}
+
+[data-resize-handle] {
+  position: absolute;
+  z-index: 30;
+  touch-action: none;
+}
+
+[data-resize-handle="n"],
+[data-resize-handle="s"] {
+  left: 10px;
+  right: 10px;
+  height: 6px;
+  cursor: ns-resize;
+}
+
+[data-resize-handle="n"] {
+  top: 0;
+}
+
+[data-resize-handle="s"] {
+  bottom: 0;
+}
+
+[data-resize-handle="e"],
+[data-resize-handle="w"] {
+  top: 10px;
+  bottom: 10px;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+[data-resize-handle="e"] {
+  right: 0;
+}
+
+[data-resize-handle="w"] {
+  left: 0;
+}
+
+[data-resize-handle="ne"],
+[data-resize-handle="nw"],
+[data-resize-handle="se"],
+[data-resize-handle="sw"] {
+  width: 12px;
+  height: 12px;
+}
+
+[data-resize-handle="ne"] {
+  top: 0;
+  right: 0;
+  cursor: nesw-resize;
+}
+
+[data-resize-handle="nw"] {
+  top: 0;
+  left: 0;
+  cursor: nwse-resize;
+}
+
+[data-resize-handle="se"] {
+  bottom: 0;
+  right: 0;
+  cursor: nwse-resize;
+}
+
+[data-resize-handle="sw"] {
+  bottom: 0;
+  left: 0;
+  cursor: nesw-resize;
+}
+
+/* A grip in the bottom-right corner, so the handles can be found. */
+[data-resize-handle="se"]::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 6px;
+  height: 6px;
+  border-right: 1px solid var(--v2-text-text-faint);
+  border-bottom: 1px solid var(--v2-text-text-faint);
+  opacity: 0.7;
+}
+
+.operator-overlay-full > [data-resize-handle] {
+  display: none;
+}

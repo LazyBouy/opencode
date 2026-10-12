@@ -12,6 +12,7 @@ import { OperatorTitlebarControls } from "./titlebar-controls"
 import { OnboardingGate } from "./onboarding"
 import { ProjectGate } from "./project-gate"
 import { useTrailKeeper } from "./ui/overlay-nav"
+import { useResizableDialogs } from "./ui/resizable-dialogs"
 import { isActivePage, operatorPages } from "./pages"
 import "./operator.css"
 import "./ui/selectable.css"
@@ -30,6 +31,8 @@ export function OperatorSidebar() {
   useOperatorCommands()
   // The back path, and the questions before an edit is lost (ui/overlay-nav.ts).
   useTrailKeeper()
+  // Every overlay box can be resized: edges and corners.
+  useResizableDialogs()
   const openChat = useOpenDefaultChat()
   // Chats returns to the chat tab shown last.
   createEffect(() => rememberChat(location.pathname + location.search))
