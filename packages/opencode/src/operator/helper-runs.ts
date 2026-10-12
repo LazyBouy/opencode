@@ -264,6 +264,8 @@ const layer = Layer.effect(
         agent,
         metadata: { operator: { kind: "helper-run", helper: input.name, namespace: input.namespace, run: record.id } },
       })
+      // Without a session it works for (a layer's preview), it is not a child of one: archived, it stays out of Chats.
+      if (!input.parentSessionID) yield* sessions.setArchived({ sessionID: session.id, time: Date.now() })
       const started: Run = { ...record, sessionID: session.id }
       Object.assign(record, started)
       yield* Effect.promise(() => writeRun(record))
@@ -475,8 +477,24 @@ const layer = Layer.effect(
     // The registry's hooks run with the request's instance.
     const inInstance = <A, E>(instance: unknown, effect: Effect.Effect<A, E>) =>
       instances.provide({ directory: (instance as InstanceContext).directory }, effect)
+
+    // The model of this project's namespace's role helper, for a role OpenCode's code calls with a model of its
+    // choosing (the agent generator: agent/agent.ts); none without one.
+    const roleModel = Effect.fnUntraced(function* (role: string) {
+      const ns = yield* namespaceHere()
+      const holder = yield* Effect.promise(() => OperatorHelperAgents.roleHolder(ns, role))
+      if (!holder) return undefined
+      const model = yield* modelFor(holder.model)
+      return { providerID: String(model.providerID), modelID: String(model.id) }
+    })
     const hooks: typeof OperatorRegistry.helpers = {
       agent: OperatorHelperAgents.agent,
+      roleModel: (input) =>
+        Effect.runPromise(
+          instances
+            .provide({ directory: input.directory }, roleModel(input.role))
+            .pipe(Effect.orElseSucceed(() => undefined)),
+        ),
       describe: (input) =>
         Effect.runPromise(
           inInstance(input.instance, describe(input.agent)).pipe(Effect.orElseSucceed(() => undefined)),
@@ -506,6 +524,19 @@ const layer = Layer.effect(
           ),
           { signal: input.abort },
         ),
+      run: (input) =>
+        Effect.runPromise(
+          inInstance(
+            input.instance,
+            run({
+              namespace: input.namespace,
+              name: input.name,
+              input: input.input,
+              startedBy: input.startedBy,
+              ...(input.parentSessionID ? { parentSessionID: input.parentSessionID } : {}),
+            }).pipe(Effect.map((result) => result.output)),
+          ),
+        ),
       action: (input) =>
         Effect.runPromise(
           inInstance(input.instance, action({ sessionID: input.sessionID, action: input.action, args: input.args })),
@@ -514,8 +545,10 @@ const layer = Layer.effect(
     yield* Effect.acquireRelease(
       Effect.sync(() => {
         OperatorRegistry.helpers.agent = hooks.agent
+        OperatorRegistry.helpers.roleModel = hooks.roleModel
         OperatorRegistry.helpers.describe = hooks.describe
         OperatorRegistry.helpers.call = hooks.call
+        OperatorRegistry.helpers.run = hooks.run
         OperatorRegistry.helpers.action = hooks.action
         OperatorPermissionEffective.offers.add(offer)
       }),
@@ -523,8 +556,10 @@ const layer = Layer.effect(
         Effect.sync(() => {
           if (OperatorRegistry.helpers.call === hooks.call) {
             OperatorRegistry.helpers.agent = undefined
+            OperatorRegistry.helpers.roleModel = undefined
             OperatorRegistry.helpers.describe = undefined
             OperatorRegistry.helpers.call = undefined
+            OperatorRegistry.helpers.run = undefined
             OperatorRegistry.helpers.action = undefined
           }
           OperatorPermissionEffective.offers.delete(offer)

@@ -114,6 +114,7 @@ test("New agent → Type: Helper creates a namespace helper, on the small model 
     callable: false,
     usage: "",
     actions: [],
+    roles: [],
   })
   await expect(page).toHaveURL(/\/operator\/agents\?.*helper=labeler&hns=opencode/)
 })
@@ -188,4 +189,70 @@ test("helpers' notes are in the Inbox, and can be dismissed", async ({ page }) =
   await expect(notes).toContainText("sorter · opencode")
   await notes.getByRole("button", { name: "Dismiss" }).click()
   await expect.poll(() => state.notes.length).toBe(0)
+})
+
+test("a helper takes over roles: each role's contract, a role moved from another helper, the OpenCode warning", async ({
+  page,
+}) => {
+  const state = await mockOperator(page)
+  state.helpers.find((item) => item.name === "sorter")!.roles = ["purpose-generator"]
+  await page.goto(`/operator/agents/new${dir}`)
+  await page.getByRole("group", { name: "Type", exact: true }).getByRole("button", { name: "Helper" }).click()
+  await page.getByLabel("Name", { exact: true }).fill("titler")
+  await page.getByRole("textbox", { name: "Helper text" }).fill("One short title line.")
+
+  const addRole = page.locator(
+    '[data-component="select-v2-root"][aria-label="Take over a role…"] [data-component="select-v2"]',
+  )
+  await addRole.click()
+  await page.getByRole("option", { name: "Title", exact: true }).click()
+  await expect(page.getByTestId("role-contract-title")).toContainText("returns one title line")
+  await expect(page.getByTestId("role-opencode-warning")).toContainText(
+    "The OpenCode namespace then no longer matches upstream for Title.",
+  )
+  await addRole.click()
+  await page.getByRole("option", { name: "Purpose generator" }).click()
+  await expect(page.getByTestId("role-contract-purpose-generator")).toContainText(
+    "sorter holds it now: saving moves it here.",
+  )
+  // A role helper has no actions.
+  await expect(page.getByText("A helper that takes over a role has no actions")).toBeVisible()
+  await expect(page.locator('[data-component="select-v2-root"][aria-label="Add an action…"]')).toHaveCount(0)
+
+  await page.getByRole("button", { name: "Create helper" }).click()
+  await expect.poll(() => state.helperWrites.length).toBe(1)
+  expect(state.helperWrites[0]!.body).toMatchObject({
+    name: "titler",
+    roles: ["title", "purpose-generator"],
+    actions: [],
+  })
+})
+
+test("a built-in helper a namespace's helper replaced says so", async ({ page }) => {
+  const state = await mockOperator(page)
+  state.helpers.find((item) => item.name === "purpose-generator")!.replacedBy = "sorter"
+  await page.goto(`/operator/agents${dir}`)
+  const table = page.getByRole("table", { name: "Agents" })
+  await page.getByRole("searchbox", { name: "Search agents" }).fill("purpose")
+  await expect(table.getByRole("row", { name: /^purpose-generator/ })).toContainText("Built in · replaced by sorter")
+  await table.getByRole("row", { name: /^purpose-generator/ }).click()
+  await expect(page.getByTestId("helper-replaced")).toContainText("In this namespace sorter does this job instead.")
+})
+
+test("a Dynamic layer of yours names the helper that writes it", async ({ page }) => {
+  const state = await mockOperator(page)
+  await page.goto("/operator/profile?ns=opencode&tab=layers")
+  await page.locator('[data-section="dynamic"]').getByRole("button", { name: "New Dynamic layer" }).click()
+  const overlay = page.getByRole("dialog")
+  await overlay.getByLabel("Name", { exact: true }).fill("Today's focus")
+  await overlay.getByLabel("Prompt", { exact: true }).fill("Say what to focus on today.")
+  const writer = overlay.locator(
+    '[data-component="select-v2-root"][aria-label="Written by"] [data-component="select-v2"]',
+  )
+  await expect(writer).toContainText("Default: OpenCode's Dynamic generator")
+  await writer.click()
+  await page.locator('[data-component="menu-v2-item"]').filter({ hasText: /^sorter$/ }).click()
+  await overlay.getByRole("button", { name: "Save", exact: true }).click()
+  await expect.poll(() => state.prompt.writes.length).toBe(1)
+  expect(state.prompt.writes[0]!.body).toMatchObject({ prompt: "Say what to focus on today.", writer: "sorter" })
 })

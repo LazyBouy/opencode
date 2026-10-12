@@ -372,7 +372,12 @@ const layer = Layer.effect(
         model?: { providerID: ProviderV2.ID; modelID: ModelV2.ID }
       }) {
         const cfg = yield* config.get()
-        const model = input.model ?? (yield* provider.defaultModel())
+        // operator: the namespace's Agent-generator role helper's model (operator/helper-runs.ts)
+        const directory = yield* InstanceState.directory
+        const role = yield* Effect.promise(async () =>
+          input.model ? undefined : OperatorRegistry.helpers.roleModel?.({ directory, role: "agent-generator" }),
+        )
+        const model = input.model ?? (role as typeof input.model) ?? (yield* provider.defaultModel())
         const resolved = yield* provider.getModel(model.providerID, model.modelID)
         const language = yield* provider.getLanguage(resolved)
         const tracer = cfg.experimental?.openTelemetry

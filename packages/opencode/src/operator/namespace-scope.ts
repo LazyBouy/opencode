@@ -7,6 +7,7 @@ import { Effect } from "effect"
 import { Global } from "@opencode-ai/core/global"
 import { OperatorFileCache } from "./file-cache"
 import { OperatorLayout } from "./layout"
+import { OperatorHelperFiles } from "./helper-files"
 
 // The namespace layer of a project's capabilities (capability_scopes_spec.md §4): the folder
 // `<namespace folder>/.opencode/`, laid out as a project's `.opencode` (opencode.jsonc, commands/,
@@ -182,15 +183,46 @@ export const inheritsGlobal = Effect.fnUntraced(function* (directory: string, wo
 // project page first saved a change, project-config.ts) gets only the namespace's default and small model
 // (default_models_spec.md §6.3): a file holding just those keys, so its model keeps following the namespace
 // until the project sets its own. At the namespace's own folder the files are the namespace's.
+// Last, the namespace's role helpers' models for OpenCode's title and compaction (rolesFile).
 export const configFiles = Effect.fnUntraced(function* (ctx: { directory: string; worktree: string }) {
   const layer = yield* Effect.promise(() => layerOf(ctx.directory, ctx.worktree))
-  if (!layer.dir) return []
+  const roles = yield* Effect.promise(() => rolesFile(layer.namespace, layer.dir))
+  const after = roles ? [roles] : []
+  if (!layer.dir) return after
   const files = [path.join(layer.dir, "opencode.json"), path.join(layer.dir, "opencode.jsonc")]
-  if (layer.atFolder || !(yield* Effect.promise(() => ownConfigFiles(layer.project))).length) return files
+  if (layer.atFolder || !(yield* Effect.promise(() => ownConfigFiles(layer.project))).length)
+    return [...files, ...after]
   const models = yield* Effect.promise(() => namespaceModels(layer.dir!))
-  if (!Object.keys(models.value).length) return []
-  return [yield* Effect.promise(() => modelsFile(layer.namespace, models.value))]
+  if (!Object.keys(models.value).length) return after
+  return [yield* Effect.promise(() => modelsFile(layer.namespace, models.value)), ...after]
 })
+
+// OpenCode calls its title and compaction agents by name, with the agent's model from config: a namespace's
+// helper that takes over one of these roles (agent_types_spec.md §4.4) gives it its model as `agent.<role>.model`, in
+// a file the loader reads after the namespace's config (rewritten only when it changes). Small model and Default
+// model are the namespace's when its config sets them; else OpenCode chooses as it does without a helper.
+async function rolesFile(namespace: string, dir: string | undefined) {
+  const helpers = await OperatorHelperFiles.read(namespace)
+  const holders = ["title", "compaction"].flatMap((role) => {
+    const holder = helpers.find((item) => item.roles?.includes(role))
+    return holder ? [{ role, model: holder.model }] : []
+  })
+  if (!holders.length) return undefined
+  const keys = dir ? (await namespaceModels(dir)).value : {}
+  const agent: Record<string, { model: string }> = {}
+  for (const { role, model } of holders) {
+    const chosen = model.source === "pick" ? model.model : model.source === "small" ? keys.small_model : keys.model
+    if (chosen) agent[role] = { model: chosen }
+  }
+  if (!Object.keys(agent).length) return undefined
+  const file = path.join(Global.Path.data, "operator", "role-agents", `${namespace}.json`)
+  const text = JSON.stringify({ agent }, null, 2) + "\n"
+  if ((await OperatorFileCache.text(file)) !== text) {
+    await fs.mkdir(path.dirname(file), { recursive: true })
+    await fs.writeFile(file, text)
+  }
+  return file
+}
 
 /** The keys of a namespace's config that reach its projects with a config of their own. */
 export const MODEL_KEYS = ["model", "small_model"] as const

@@ -171,6 +171,8 @@ export interface Interface {
       prompt?: string
       /** A Dynamic layer's own rules; null: back to the default (the helper's, OpenCode's). */
       resolver?: OperatorResolver.Resolver | null
+      /** Your Dynamic layer's writer, a helper of the namespace with reading actions only; null: the default. */
+      writer?: string | null
     },
   ) => Effect.Effect<OperatorProfile.Layer, Failure>
   /** Makes an editable copy of one of OpenCode's texts; `text` gives a tool description's text. */
@@ -996,10 +998,19 @@ const layer = Layer.effect(
         text: string
         prompt?: string
         resolver?: OperatorResolver.Resolver | null
+        writer?: string | null
       },
     ) {
       const found = yield* load(ns)
       const before = yield* existing(found.layers, "layer", id)
+      // Your Dynamic layer's writer: a helper of the namespace that only reads (agent_types_spec.md §4.6).
+      const writer = input.writer === undefined ? before?.writer : (input.writer ?? undefined)
+      if (writer && input.writer !== undefined) {
+        const helper = yield* Effect.promise(() => OperatorHelperFiles.readOne(ns, writer))
+        yield* refuse(!helper ? `No helper "${writer}" in this namespace` : undefined)
+        const other = helper?.actions?.find((item) => !OperatorHelperFiles.LAYER_ACTIONS.includes(item))
+        yield* refuse(other ? `${writer} declares ${other}: a helper that writes a layer may only read` : undefined)
+      }
       // Your Dynamic layers hold a prompt; the dynamic generator writes their text for each session.
       // (A namespace's copy of one of OpenCode's per-request layers holds nothing.)
       const written = (before?.type ?? input.type) === OperatorProfile.DYNAMIC && !before?.replaces
@@ -1040,6 +1051,7 @@ const layer = Layer.effect(
         ...(before?.basedOn ? { basedOn: before.basedOn } : {}),
         text: written ? "" : input.text,
         ...(written ? { prompt: input.prompt?.trim() ?? "" } : {}),
+        ...(written && writer ? { writer } : {}),
         ...(rules ? { resolver: rules } : written ? { resolver: OperatorResolverBuiltins.HELPER_RESOLVER } : {}),
         origin: "user",
       }
@@ -1548,6 +1560,7 @@ async function writeItem(
       section: value.section,
       ...(value.replaces ? { replaces: value.replaces } : {}),
       ...(value.basedOn ? { basedOn: value.basedOn } : {}),
+      ...(value.writer ? { writer: value.writer } : {}),
       // A Dynamic layer's own rules (the default ones, the helper's or OpenCode's, are not written).
       ...(value.resolver && !OperatorProfile.sameRules(value.resolver, OperatorProfile.defaultResolver(value))
         ? { resolver: value.resolver }
@@ -1625,6 +1638,7 @@ async function readLayers(dir: string): Promise<OperatorProfile.Layer[]> {
         ...(rules ? { resolver: rules } : {}),
         ...(original?.delivery ? { delivery: original.delivery } : {}),
         ...(basedOn ? { basedOn } : {}),
+        ...(written && typeof data.writer === "string" && data.writer ? { writer: data.writer } : {}),
         // OpenCode changed its text since this copy was made (a release).
         ...(basedOn && original?.text && OperatorProfile.fingerprint(original.text) !== basedOn
           ? { outdated: true }

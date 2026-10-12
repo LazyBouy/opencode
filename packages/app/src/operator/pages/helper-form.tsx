@@ -3,7 +3,7 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
-import type { OperatorHelper, OperatorHelperModel } from "@opencode-ai/sdk/v2/client"
+import type { OperatorHelper, OperatorHelperModel, OperatorHelperRole } from "@opencode-ai/sdk/v2/client"
 import { useQueryClient } from "@tanstack/solid-query"
 import { createMemo, createSignal, For, type JSX, Show } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -19,6 +19,7 @@ import { AgentModelFields, type ModelForm } from "./agent-model-fields"
 import { useInventory } from "./capability-scope"
 import { requestError } from "./config-helpers"
 import { useNamespaces } from "./profile-data"
+import { useHelpers } from "./helper-data"
 
 // A helper's form (agent_types_spec.md §4.3): its namespace (instead of Save in), name, description, model (Small
 // model by default: the small model of the project it serves, the namespace's default project here), its text
@@ -32,6 +33,10 @@ export const TIMEOUT = { default: 120, min: 10, max: 600 }
 // As helpers.ts has them.
 export const SYSTEM_ACTIONS = ["list_sessions", "archive_session", "trash_session", "notify", "memory"]
 export const READ_ONLY = ["read", "glob", "grep", "webfetch", "list_sessions", "memory"]
+// What a helper that writes a Dynamic layer may declare.
+export const LAYER_ACTIONS = ["read", "glob", "grep", "webfetch", "list_sessions"]
+// The built-in roles a helper can take over in its namespace (§4.4).
+export const ROLES = ["title", "compaction", "summary", "agent-generator", "purpose-generator", "dynamic-generator"]
 const NOT_DECLARABLE = ["question", "task", "helper", "invalid"]
 
 type Form = ModelForm & {
@@ -44,6 +49,7 @@ type Form = ModelForm & {
   callable: boolean
   usage: string
   actions: string[]
+  roles: string[]
 }
 
 function formOf(namespace: string, helper: OperatorHelper | undefined): Form {
@@ -61,6 +67,7 @@ function formOf(namespace: string, helper: OperatorHelper | undefined): Form {
     callable: helper?.callable ?? false,
     usage: helper?.usage ?? "",
     actions: [...(helper?.actions ?? [])],
+    roles: [...(helper?.roles ?? [])],
   }
 }
 
@@ -105,6 +112,14 @@ export function HelperForm(props: {
 
   // What it may declare: the tools of the project it serves, and the fork's system actions.
   const confirm = useConfirm()
+  // Roles (§4.4): one helper per role in a namespace; taking one moves it here.
+  const helpers = useHelpers(() => store.form.namespace)
+  const holderOf = (role: string) =>
+    (ready(helpers) ?? []).find(
+      (item) => !item.builtin && item.name !== props.helper?.name && (item.roles as string[]).includes(role),
+    )
+  const roleLabel = (role: string) => language.t(`operator.helper.role.${role}` as "operator.helper.role.title")
+  const [rolePicker, setRolePicker] = createSignal(1)
   const inventory = useInventory(project, () => undefined)
   const tools = createMemo(() =>
     [
@@ -147,6 +162,7 @@ export function HelperForm(props: {
       callable: store.form.callable,
       usage: store.form.usage.trim(),
       actions: [...store.form.actions],
+      roles: [...store.form.roles] as OperatorHelperRole[],
     }
     const request = props.helper
       ? client.operator.helper.update(
@@ -259,6 +275,69 @@ export function HelperForm(props: {
             />
           </Field>
         </Show>
+        <Field group label={language.t("operator.helper.roles")} hint={language.t("operator.help.helperRoles")}>
+          <div class="flex flex-wrap items-center gap-2" data-testid="helper-roles">
+            <Show
+              when={store.form.roles.length}
+              fallback={<span data-slot="operator-note">{language.t("operator.helper.noRoles")}</span>}
+            >
+              <For each={store.form.roles}>
+                {(role) => (
+                  <Tag>
+                    {roleLabel(role)}
+                    <button
+                      type="button"
+                      data-slot="operator-tag-remove"
+                      aria-label={language.t("operator.helper.removeRole", { role: roleLabel(role) })}
+                      onClick={() =>
+                        set(
+                          "roles",
+                          store.form.roles.filter((item) => item !== role),
+                        )
+                      }
+                    >
+                      ×
+                    </button>
+                  </Tag>
+                )}
+              </For>
+            </Show>
+          </div>
+          <Show when={!store.form.actions.length}>
+            <Show when={rolePicker()} keyed>
+              {(_) => (
+                <SelectV2<string>
+                  appearance="base"
+                  aria-label={language.t("operator.helper.addRole")}
+                  placeholder={language.t("operator.helper.addRole")}
+                  options={ROLES.filter((role) => !store.form.roles.includes(role))}
+                  current={undefined}
+                  label={roleLabel}
+                  onSelect={(role) => {
+                    setRolePicker((value) => value + 1)
+                    if (role) set("roles", [...store.form.roles, role])
+                  }}
+                />
+              )}
+            </Show>
+          </Show>
+          <For each={store.form.roles}>
+            {(role) => (
+              <p data-slot="operator-note" data-testid={`role-contract-${role}`}>
+                <strong>{roleLabel(role)}:</strong>{" "}
+                {language.t(`operator.helper.contract.${role}` as "operator.helper.contract.title")}
+                <Show when={holderOf(role)}>
+                  {(holder) => <> {language.t("operator.helper.roleMoves", { name: holder().name })}</>}
+                </Show>
+              </p>
+            )}
+          </For>
+          <Show when={store.form.namespace === "opencode" && store.form.roles.length}>
+            <p data-slot="operator-note" data-warning="" role="status" data-testid="role-opencode-warning">
+              {language.t("operator.helper.opencodeWarning", { roles: store.form.roles.map(roleLabel).join(", ") })}
+            </p>
+          </Show>
+        </Field>
         <Field group label={language.t("operator.helper.actions")} hint={language.t("operator.help.helperActions")}>
           <div class="flex flex-wrap items-center gap-2" data-testid="helper-actions">
             <Show
@@ -287,8 +366,11 @@ export function HelperForm(props: {
               </For>
             </Show>
           </div>
+          <Show when={store.form.roles.length}>
+            <p data-slot="operator-note">{language.t("operator.helper.rolesNoActions")}</p>
+          </Show>
           {/* Made again after each pick, so it always starts empty (and the same action can be picked again). */}
-          <Show when={picker()} keyed>
+          <Show when={!store.form.roles.length && picker()} keyed>
             {(_) => (
               <SelectV2<string>
                 appearance="base"

@@ -91,6 +91,10 @@ export const Layer = Schema.Struct({
   prompt: Schema.optional(Schema.String).annotate({
     description: "Your Dynamic layers: what the dynamic generator writes for each session",
   }),
+  writer: Schema.optional(Schema.String).annotate({
+    description:
+      "Your Dynamic layers: the namespace's helper that writes the text (agent_types_spec.md §4.6); without one, the namespace's Dynamic generator role, else OpenCode's",
+  }),
   file: Schema.optional(Schema.String).annotate({
     description: "OpenCode's built-ins: the file in OpenCode's code the text comes from (repo path)",
   }),

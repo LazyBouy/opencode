@@ -37,8 +37,14 @@ export const Stored = Schema.Struct({
   actions: Schema.optional(Schema.Array(Schema.String)).annotate({
     description: "What it may do: tools and system actions; everything else is denied",
   }),
+  roles: Schema.optional(Schema.Array(Schema.String)).annotate({
+    description: "The built-in roles it takes over in its namespace (helpers.ts Role)",
+  }),
 }).annotate({ identifier: "OperatorHelperStored" })
 export type Stored = typeof Stored.Type
+
+// What a helper that writes a Dynamic layer may declare (agent_types_spec.md §4.6): reading only.
+export const LAYER_ACTIONS: ReadonlyArray<string> = ["read", "glob", "grep", "webfetch", "list_sessions"]
 
 const decode = Schema.decodeUnknownOption(Stored)
 

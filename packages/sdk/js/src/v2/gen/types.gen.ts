@@ -2572,6 +2572,7 @@ export type OperatorPromptLayer = {
   basedOn?: string
   outdated?: boolean
   prompt?: string
+  writer?: string
   file?: string
   resolver?: OperatorResolver
 }
@@ -2806,6 +2807,7 @@ export type OperatorHelper = {
   text: string
   steps?: number
   timeout?: number
+  replacedBy?: string
   /**
    * Agents of its namespace may call it with the helper tool
    */
@@ -11361,6 +11363,7 @@ export type OperatorNamespaceLayerCreateData = {
     text: string
     prompt?: string
     resolver?: OperatorResolver
+    writer?: string
   }
   path: {
     ns: string
@@ -11438,6 +11441,7 @@ export type OperatorNamespaceLayerUpdateData = {
     text: string
     prompt?: string
     resolver?: OperatorResolver
+    writer?: string
   }
   path: {
     ns: string
@@ -12207,6 +12211,7 @@ export type OperatorHelperCreateData = {
     callable?: boolean
     usage?: string
     actions?: Array<string>
+    roles?: Array<OperatorHelperRole>
   }
   path: {
     ns: string
@@ -12271,6 +12276,7 @@ export type OperatorHelperUpdateData = {
     callable?: boolean
     usage?: string
     actions?: Array<string>
+    roles?: Array<OperatorHelperRole>
   }
   path: {
     ns: string

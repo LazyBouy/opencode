@@ -11,6 +11,7 @@ import type { InstanceContext } from "@/project/instance-context"
 import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { OperatorGenerate } from "./generate"
+import { OperatorHelperAgents } from "./helper-agents"
 import { OperatorProfile } from "./profile"
 import { OperatorProfileStore } from "./profile-store"
 import { OperatorProjects } from "./projects"
@@ -22,6 +23,8 @@ import { OperatorRegistry } from "./registry"
 //   text). The text is kept with the session and written again when the prompt changes.
 // - Purpose drafts: the purpose generator drafts an org or project purpose from the project's files
 //   (or the namespace's projects) and an optional brief, for the user to edit before saving.
+// A namespace's helper can take over either generator's role, and a Dynamic layer can name the helper that writes it
+// (agent_types_spec.md §4.4, §4.6): then that helper runs (helper-runs.ts) with the same input, and its run is recorded.
 
 export interface Interface {
   /** The texts of your Dynamic layers (by id) for a request of a session of this project. */
@@ -53,6 +56,30 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const generate = yield* OperatorGenerate.Service
     const sessions = yield* Session.Service
+
+    // A helper's output, as the built-in generator's would be: run by the server's helper runs (helper-runs.ts,
+    // through OperatorRegistry). Without them, the built-in.
+    const runHelper = (
+      input: Omit<Parameters<NonNullable<typeof OperatorRegistry.helpers.run>>[0], "instance">,
+      builtin: Effect.Effect<string, OperatorGenerate.GenerateError>,
+    ) =>
+      Effect.gen(function* () {
+        const hook = OperatorRegistry.helpers.run
+        if (!hook) return yield* builtin
+        const instance = yield* InstanceState.context
+        return yield* Effect.tryPromise({
+          try: () => hook({ instance, ...input }),
+          catch: (error) =>
+            new OperatorGenerate.GenerateError({ message: error instanceof Error ? error.message : String(error) }),
+        }).pipe(Effect.map((text) => text.trim()))
+      })
+    // The helper that writes a Dynamic layer: its own writer, else the namespace's Dynamic generator role.
+    const writerOf = (namespace: string, layer: OperatorProfile.Layer) =>
+      layer.writer
+        ? Effect.succeed<string | undefined>(layer.writer)
+        : Effect.promise(() => OperatorHelperAgents.roleHolder(namespace, OperatorProfile.DYNAMIC_GENERATOR)).pipe(
+            Effect.map((holder) => holder?.name),
+          )
 
     // The project of this instance: its folder, name, prompt settings and the files that describe it.
     const project = Effect.fnUntraced(function* () {
@@ -105,16 +132,32 @@ const layer = Layer.effect(
         .slice(0, FILE_LIMIT)
     })
 
-    const write = (layer: OperatorProfile.Layer, context: string, message: string | undefined, sessionID?: string) =>
-      generate.text({
-        agent: OperatorProfile.DYNAMIC_GENERATOR,
-        sessionID,
-        prompt: [
-          `<instructions>\n${layer.prompt ?? ""}\n</instructions>`,
-          context,
-          ...(message ? [`<session>\n<first-message>\n${message}\n</first-message>\n</session>`] : []),
-        ].join("\n"),
-      })
+    const write = Effect.fnUntraced(function* (
+      namespace: string,
+      layer: OperatorProfile.Layer,
+      context: string,
+      message: string | undefined,
+      sessionID?: string,
+    ) {
+      const prompt = [
+        `<instructions>\n${layer.prompt ?? ""}\n</instructions>`,
+        context,
+        ...(message ? [`<session>\n<first-message>\n${message}\n</first-message>\n</session>`] : []),
+      ].join("\n")
+      const builtin = generate.text({ agent: OperatorProfile.DYNAMIC_GENERATOR, sessionID, prompt })
+      const writer = yield* writerOf(namespace, layer)
+      if (!writer) return yield* builtin
+      return yield* runHelper(
+        {
+          namespace,
+          name: writer,
+          input: prompt,
+          startedBy: { kind: "layer", layer: layer.name, ...(sessionID ? { sessionID } : {}) },
+          ...(sessionID ? { parentSessionID: sessionID } : {}),
+        },
+        builtin,
+      )
+    })
 
     const dynamic = Effect.fn("OperatorHelperTexts.dynamic")(function* (input: {
       sessionID?: string
@@ -137,14 +180,16 @@ const layer = Layer.effect(
       const context = describe(found)
       const texts: Record<string, string> = {}
       let changed = false
+      const namespace = found.loaded.catalog.namespace.id
       for (const item of layers) {
-        const hash = hashOf(item.prompt ?? "")
+        // Written again when its prompt or its writer changes.
+        const hash = hashOf(`${(yield* writerOf(namespace, item)) ?? ""}\n${item.prompt ?? ""}`)
         const known = cached[item.id]
         if (known && known.hash === hash) {
           texts[item.id] = known.text
           continue
         }
-        const text = yield* write(item, context, message, root).pipe(
+        const text = yield* write(namespace, item, context, message, root).pipe(
           Effect.tapError((error) => Effect.logWarning("dynamic layer not written", { layer: item.id, error })),
           Effect.option,
         )
@@ -163,7 +208,7 @@ const layer = Layer.effect(
 
     const sample = Effect.fn("OperatorHelperTexts.sample")(function* (layer: OperatorProfile.Layer) {
       const found = yield* project()
-      return yield* write(layer, describe(found), undefined)
+      return yield* write(found.loaded.catalog.namespace.id, layer, describe(found), undefined)
     })
 
     const purpose = Effect.fn("OperatorHelperTexts.purpose")(function* (input: {
@@ -173,11 +218,28 @@ const layer = Layer.effect(
     }) {
       const found = yield* project()
       const brief = input.brief?.trim() ? `<brief>\n${input.brief.trim()}\n</brief>` : ""
+      // The namespace's Purpose generator role helper, else the built-in.
+      const draft = Effect.fnUntraced(function* (namespace: string, prompt: string) {
+        const holder = yield* Effect.promise(() =>
+          OperatorHelperAgents.roleHolder(namespace, OperatorProfile.PURPOSE_GENERATOR),
+        )
+        const builtin = generate.text({ agent: OperatorProfile.PURPOSE_GENERATOR, prompt })
+        if (!holder) return yield* builtin
+        return yield* runHelper(
+          {
+            namespace,
+            name: holder.name,
+            input: prompt,
+            startedBy: { kind: "role", role: OperatorProfile.PURPOSE_GENERATOR },
+          },
+          builtin,
+        )
+      })
       if (input.kind === "project")
-        return yield* generate.text({
-          agent: OperatorProfile.PURPOSE_GENERATOR,
-          prompt: ["Write the purpose of this project.", brief, describe(found)].filter(Boolean).join("\n"),
-        })
+        return yield* draft(
+          found.loaded.catalog.namespace.id,
+          ["Write the purpose of this project.", brief, describe(found)].filter(Boolean).join("\n"),
+        )
       const catalog =
         (input.ns ? yield* Effect.promise(() => OperatorProfileStore.readNamespace(input.ns!)) : undefined) ??
         found.loaded.catalog
@@ -188,16 +250,16 @@ const layer = Layer.effect(
           const linked = pair[1].purpose ? catalog.layers.find((item) => item.id === pair[1].purpose) : undefined
           return `<project name="${path.basename(pair[0])}">${linked ? `\n${linked.text}\n` : ""}</project>`
         })
-      return yield* generate.text({
-        agent: OperatorProfile.PURPOSE_GENERATOR,
-        prompt: [
+      return yield* draft(
+        catalog.namespace.id,
+        [
           `Write the purpose of the organisation "${catalog.namespace.name}".`,
           brief,
           members.length ? `<projects>\n${members.join("\n")}\n</projects>` : "",
         ]
           .filter(Boolean)
           .join("\n"),
-      })
+      )
     })
 
     // The prompt plugin writes your Dynamic layers through this, in the request's project.

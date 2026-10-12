@@ -222,6 +222,7 @@ import type {
   OperatorHelperModel,
   OperatorHelperRemoveErrors,
   OperatorHelperRemoveResponses,
+  OperatorHelperRole,
   OperatorHelperRunsErrors,
   OperatorHelperRunsResponses,
   OperatorHelperSaveSettingsErrors,
@@ -2084,6 +2085,7 @@ export class Layer extends HeyApiClient {
       text?: string
       prompt?: string
       resolver?: OperatorResolver
+      writer?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2099,6 +2101,7 @@ export class Layer extends HeyApiClient {
             { in: "body", key: "text" },
             { in: "body", key: "prompt" },
             { in: "body", key: "resolver" },
+            { in: "body", key: "writer" },
           ],
         },
       ],
@@ -2168,6 +2171,7 @@ export class Layer extends HeyApiClient {
       text?: string
       prompt?: string
       resolver?: OperatorResolver
+      writer?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2184,6 +2188,7 @@ export class Layer extends HeyApiClient {
             { in: "body", key: "text" },
             { in: "body", key: "prompt" },
             { in: "body", key: "resolver" },
+            { in: "body", key: "writer" },
           ],
         },
       ],
@@ -3201,6 +3206,7 @@ export class Helper extends HeyApiClient {
       callable?: boolean
       usage?: string
       actions?: Array<string>
+      roles?: Array<OperatorHelperRole>
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3219,6 +3225,7 @@ export class Helper extends HeyApiClient {
             { in: "body", key: "callable" },
             { in: "body", key: "usage" },
             { in: "body", key: "actions" },
+            { in: "body", key: "roles" },
           ],
         },
       ],
@@ -3290,6 +3297,7 @@ export class Helper extends HeyApiClient {
       callable?: boolean
       usage?: string
       actions?: Array<string>
+      roles?: Array<OperatorHelperRole>
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3308,6 +3316,7 @@ export class Helper extends HeyApiClient {
             { in: "body", key: "callable" },
             { in: "body", key: "usage" },
             { in: "body", key: "actions" },
+            { in: "body", key: "roles" },
           ],
         },
       ],

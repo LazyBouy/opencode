@@ -9,7 +9,7 @@ import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { useQuery } from "@tanstack/solid-query"
-import { useOperatorClient } from "../data"
+import { ready, useOperatorClient } from "../data"
 import { shortPath } from "../format"
 import { useOperatorProjects } from "../project"
 import { useRememberedProject } from "../scope"
@@ -41,6 +41,8 @@ import {
 } from "./profile-model"
 import { PurposeDraft } from "./purpose-draft"
 import { hasHelper, RulesForm, RulesView } from "./layer-rules"
+import { useHelpers } from "./helper-data"
+import { LAYER_ACTIONS } from "./helper-form"
 import { useOverlayParams } from "../ui/overlay-nav"
 
 // Test resolve's model and session choices: the agent's own model; no session.
@@ -345,7 +347,30 @@ function LayerRecord(props: {
     busy: false,
     editing: false,
     rules: undefined as OperatorResolver | undefined,
+    // Your Dynamic layer's writer: a helper of the namespace that only reads ("": the default).
+    writer: "",
   })
+  // The helpers that may write a Dynamic layer (agent_types_spec.md §4.6): the namespace's own, reading only. Asked
+  // for only for your Dynamic layers in one namespace, and read without holding the form back.
+  const DEFAULT_WRITER = "@default"
+  const helpers = useHelpers(
+    () => props.ns,
+    () =>
+      !!props.ns &&
+      props.ns !== ALL &&
+      (isWrittenDynamic(layer()) || SECTIONS.find((item) => item.id === creating())?.type === DYNAMIC),
+  )
+  const writers = () =>
+    (ready(helpers) ?? [])
+      .filter((item) => !item.builtin && item.actions.every((action) => LAYER_ACTIONS.includes(action)))
+      .map((item) => item.name)
+  // Without a writer of its own: the namespace's Dynamic generator role, else OpenCode's.
+  const defaultWriter = () => {
+    const holder = (ready(helpers) ?? []).find((item) => !item.builtin && item.roles.includes("dynamic-generator"))
+    return holder
+      ? language.t("operator.layer.writerRole", { name: holder.name })
+      : language.t("operator.layer.writerBuiltin")
+  }
   // A Dynamic layer's rules: its own, else OpenCode's (its built-in's, for a copy), else the helper's.
   const rulesOf = (found: Layer | undefined): OperatorResolver | undefined => {
     if (!found)
@@ -362,6 +387,7 @@ function LayerRecord(props: {
       prompt: found?.prompt ?? "",
       editing: !!creating() || (props.edit && found?.origin === "user"),
       rules: rulesOf(found),
+      writer: found?.writer ?? "",
     })
   }
   // Only a change of record resets the form (not a refresh of the data around it).
@@ -440,7 +466,8 @@ function LayerRecord(props: {
       name: store.name.trim(),
       type: store.type,
       text: prompted() ? "" : store.text,
-      ...(prompted() ? { prompt: store.prompt.trim() } : {}),
+      // null clears the writer (the generated client's types leave the null out).
+      ...(prompted() ? { prompt: store.prompt.trim(), writer: (store.writer || null) as string } : {}),
       ...(rulesEditable() && store.rules ? { resolver: store.rules } : {}),
     }
     await (
@@ -563,6 +590,16 @@ function LayerRecord(props: {
                   rows={8}
                   value={store.prompt}
                   onInput={(event) => setStore("prompt", event.currentTarget.value)}
+                />
+              </Field>
+              <Field group label={language.t("operator.layer.writer")} hint={language.t("operator.help.layerWriter")}>
+                <SelectV2<string>
+                  appearance="base"
+                  aria-label={language.t("operator.layer.writer")}
+                  options={[DEFAULT_WRITER, ...writers()]}
+                  current={store.writer || DEFAULT_WRITER}
+                  label={(name) => (name === DEFAULT_WRITER ? defaultWriter() : name)}
+                  onSelect={(name) => setStore("writer", !name || name === DEFAULT_WRITER ? "" : name)}
                 />
               </Field>
             </Show>
@@ -799,6 +836,9 @@ function LayerRecord(props: {
                   help={language.t("operator.help.layerPrompt")}
                 >
                   <pre data-component="operator-code">{found().prompt}</pre>
+                </RecordField>
+                <RecordField label={language.t("operator.layer.writer")} help={language.t("operator.help.layerWriter")}>
+                  <span data-testid="layer-writer">{found().writer ?? defaultWriter()}</span>
                 </RecordField>
               </dl>
             </Show>

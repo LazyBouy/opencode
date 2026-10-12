@@ -17,6 +17,7 @@ import { TextCounters } from "../ui/text-counters"
 import { Fact } from "./agent"
 import { requestError } from "./config-helpers"
 import { HelperForm, SYSTEM_ACTIONS } from "./helper-form"
+import { useHelpers } from "./helper-data"
 import { useSessionOverlay } from "./session-overlay"
 import { useNamespaces } from "./profile-data"
 
@@ -25,19 +26,6 @@ import { useNamespaces } from "./profile-data"
 // before) and Runs (§4.7: each run, its session's transcript in the session overlay). Roles come in a later phase.
 
 export const HELPER_TABS = ["overview", "text", "runs"] as const
-
-/** One namespace's helpers, or every namespace's. */
-export function useHelpers(ns: () => string | undefined) {
-  const api = useOperatorClient()
-  return useQuery(() => ({
-    queryKey: api.key("helpers", ns() ?? "all"),
-    queryFn: () =>
-      api
-        .client()
-        .operator.helper.list(ns() ? { ns: ns() } : {})
-        .then((result) => result.data ?? []),
-  }))
-}
 
 /** A helper's model in words: its source, and for Small and Default the model in effect for its namespace. */
 export function useHelperModel() {
@@ -60,7 +48,7 @@ export function HelperDetail(props: { namespace: string; name: string; tab: stri
   const confirm = useConfirm()
   const helpers = useHelpers(() => props.namespace)
   const namespaces = useNamespaces()
-  const current = createMemo(() => helpers.data?.find((item) => item.name === props.name))
+  const current = createMemo(() => ready(helpers)?.find((item) => item.name === props.name))
   const summary = () => namespaces.data?.find((item) => item.namespace.id === props.namespace)
   const chain = useProjectModels(() => summary()?.defaultProject)
   const modelWords = useHelperModel()
@@ -127,6 +115,13 @@ export function HelperDetail(props: { namespace: string; name: string; tab: stri
             }
           >
             {(text) => <p data-slot="operator-note">{text()}</p>}
+          </Show>
+          <Show when={helper().replacedBy}>
+            {(name) => (
+              <p data-slot="operator-note" role="status" data-testid="helper-replaced">
+                {language.t("operator.helper.replacedBy", { name: name() })}
+              </p>
+            )}
           </Show>
           <Switch>
             <Match when={props.tab === "overview" && editing()}>

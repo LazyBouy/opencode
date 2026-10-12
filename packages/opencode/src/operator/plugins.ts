@@ -39,7 +39,7 @@ const PromptPlugin: Plugin = async (input) => {
       loaded,
       slots: OperatorProfile.slotsFor(loaded.catalog, {
         agent,
-        setting: agent ? settingOf(loaded, agent) : undefined,
+        setting: agent ? await settingOf(loaded, agent) : undefined,
         project: loaded.project,
       }),
     }
@@ -90,7 +90,7 @@ const PromptPlugin: Plugin = async (input) => {
           catalog: loaded.catalog,
           project: loaded.project,
           agent: { name: OperatorProfile.AGENT_GENERATOR },
-          setting: loaded.agents[OperatorProfile.AGENT_GENERATOR],
+          setting: await settingOf(loaded, OperatorProfile.AGENT_GENERATOR),
           model: hook.model,
           parts: { environment: [], instructions: [] },
         })
@@ -99,7 +99,7 @@ const PromptPlugin: Plugin = async (input) => {
       }
       if (!hook.agent) return
       const loaded = await context()
-      const setting = settingOf(loaded, hook.agent)
+      const setting = await settingOf(loaded, hook.agent)
       // OpenCode's per-request Dynamic layers, and the agent's layers with rules of their own, through the
       // pipeline (dynamic-layers.ts); without it, OpenCode's as upstream wrote them and yours as written.
       const agentSlots = OperatorProfile.slotsFor(loaded.catalog, {
@@ -207,11 +207,14 @@ const PromptPlugin: Plugin = async (input) => {
   }
 }
 
-// An agent's prompt setting: its own; a helper's agent uses its helper profile (helper-agents.ts).
-function settingOf(loaded: Awaited<ReturnType<typeof OperatorProfileStore.forProject>>, agent: string) {
+// An agent's prompt setting: its own; a helper's agent uses its helper profile, and a built-in role's agent (title,
+// compaction, the generators) the profile of the namespace's helper that took the role over (helper-agents.ts).
+async function settingOf(loaded: Awaited<ReturnType<typeof OperatorProfileStore.forProject>>, agent: string) {
   const own = loaded.agents[agent]
   if (own) return own
-  const profile = OperatorHelperAgents.profileOf(agent)
+  const profile =
+    OperatorHelperAgents.profileOf(agent) ??
+    (await OperatorHelperAgents.roleProfile(loaded.catalog.namespace.id, agent))
   return profile ? { profile } : undefined
 }
 
@@ -225,7 +228,7 @@ async function written(
 ) {
   const slots = OperatorProfile.slotsFor(loaded.catalog, {
     agent,
-    setting: settingOf(loaded, agent),
+    setting: await settingOf(loaded, agent),
     project: loaded.project,
   })
   const layers = (slots[OperatorProfile.DYNAMIC] ?? []).filter((id) =>

@@ -1884,6 +1884,9 @@
                   },
                   "resolver": {
                     "$ref": "#/components/schemas/OperatorResolver"
+                  },
+                  "writer": {
+                    "type": "string"
                   }
                 },
                 "required": ["name", "type", "text"],
@@ -1987,6 +1990,9 @@
                   },
                   "resolver": {
                     "$ref": "#/components/schemas/OperatorResolver"
+                  },
+                  "writer": {
+                    "type": "string"
                   }
                 },
                 "required": ["name", "type", "text"],
@@ -3670,6 +3676,12 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "roles": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/OperatorHelperRole"
+                    }
                   }
                 },
                 "required": ["name", "model", "text"],
@@ -3770,6 +3782,12 @@
                     "type": "array",
                     "items": {
                       "type": "string"
+                    }
+                  },
+                  "roles": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/OperatorHelperRole"
                     }
                   }
                 },
@@ -33707,6 +33725,9 @@
           "prompt": {
             "type": "string"
           },
+          "writer": {
+            "type": "string"
+          },
           "file": {
             "type": "string"
           },
@@ -34274,6 +34295,9 @@
           },
           "timeout": {
             "type": "number"
+          },
+          "replacedBy": {
+            "type": "string"
           },
           "callable": {
             "type": "boolean",

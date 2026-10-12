@@ -88,3 +88,27 @@ export function runOf(sessionID: string | undefined, agent: string | undefined):
   if (!isHelper(agent)) return undefined
   return stored(agent!)?.actions ?? []
 }
+
+// The built-in roles a namespace's helper can take over (helpers.ts Role), by the agent names OpenCode and the fork
+// call them with.
+const ROLES = new Set(["title", "compaction", "summary", "agent-generator", "purpose-generator", "dynamic-generator"])
+
+// Each namespace's role holders, read again when a helper changes (or after a second, for changes made elsewhere).
+const holders = new Map<string, { at: number; revision: number; roles: Map<string, OperatorHelperFiles.Stored> }>()
+export async function roleHolder(namespace: string, role: string): Promise<OperatorHelperFiles.Stored | undefined> {
+  if (!ROLES.has(role)) return undefined
+  const found = holders.get(namespace)
+  const revision = OperatorHelperFiles.helperRevision()
+  if (found && found.revision === revision && Date.now() - found.at < 1000) return found.roles.get(role)
+  const roles = new Map<string, OperatorHelperFiles.Stored>()
+  for (const helper of await OperatorHelperFiles.read(namespace))
+    for (const item of helper.roles ?? []) roles.set(item, helper)
+  if (holders.size > 100) holders.clear()
+  holders.set(namespace, { at: Date.now(), revision, roles })
+  return roles.get(role)
+}
+
+/** The profile a built-in role's agent uses in a namespace whose helper took the role over (the prompt plugin). */
+export async function roleProfile(namespace: string, agent: string) {
+  return (await roleHolder(namespace, agent))?.profile
+}

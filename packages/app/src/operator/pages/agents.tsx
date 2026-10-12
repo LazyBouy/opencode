@@ -11,7 +11,7 @@ import { createMemo, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
-import { useOperatorClient } from "../data"
+import { ready, useOperatorClient } from "../data"
 import { formatAgo, formatCount } from "../format"
 import { useOperatorProjects, useScopedProject } from "../project"
 import { useOperatorScope } from "../scope"
@@ -33,7 +33,8 @@ import { Field } from "../ui/field"
 import { requestError } from "./config-helpers"
 import { SelectV2 } from "../ui/select"
 import { TYPE_KEYS, type TypeKey, typeOf } from "./agent-type"
-import { HELPER_TABS, HelperDetail, useHelperModel, useHelpers } from "./helper"
+import { HELPER_TABS, HelperDetail, useHelperModel } from "./helper"
+import { useHelpers } from "./helper-data"
 
 export function useAgents() {
   const api = useOperatorClient()
@@ -129,7 +130,7 @@ export default function AgentsPage() {
   }
   const helpers = useHelpers(helperNamespace)
   const helperRows = createMemo<HelperRow[]>(() =>
-    (helpers.data ?? []).map((helper) => ({ ...helper, kind: "helper" as const })),
+    (ready(helpers) ?? []).map((helper) => ({ ...helper, kind: "helper" as const })),
   )
   const agentRows = createMemo(() => agents.rows().filter((agent) => store.showHidden || !agent.hidden))
   const rows = createMemo<Row[]>(() =>
@@ -168,7 +169,9 @@ export default function AgentsPage() {
       : (settings.data?.find((item) => item.key === row.project)?.namespace ?? OPENCODE)
   const sourceLabel = (agent: OperatorAgent) => language.t(`operator.agents.source.${agent.source.kind}`)
   const helperSource = (helper: OperatorHelper) =>
-    language.t(helper.builtin ? "operator.agents.source.builtin" : "operator.agents.source.helper")
+    helper.replacedBy
+      ? language.t("operator.agents.source.replaced", { name: helper.replacedBy })
+      : language.t(helper.builtin ? "operator.agents.source.builtin" : "operator.agents.source.helper")
   const projectName = (key: string) =>
     projects().find((item) => item.directory === key)?.label ?? key.split("/").filter(Boolean).at(-1) ?? key
   // The profile each agent uses: resolved from its project's namespace's catalog.

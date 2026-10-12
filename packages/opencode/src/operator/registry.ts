@@ -74,6 +74,14 @@ export const helpers: {
    * are never in OpenCode's agent list, so they stay out of `GET /config` and every agent list.
    */
   agent?: (name: string) => unknown
+  /**
+   * The model of the namespace's helper that took over a role OpenCode's code calls with a model of its choosing (the
+   * agent generator, agent/agent.ts), for the project in `directory`; none without one.
+   */
+  roleModel?: (input: {
+    directory: string
+    role: string
+  }) => Promise<{ providerID: string; modelID: string } | undefined>
   /** Runs one of the session's namespace's callable helpers, for the `helper` tool. */
   call?: (input: {
     instance: unknown
@@ -83,6 +91,18 @@ export const helpers: {
     input: string
     abort: AbortSignal
   }) => Promise<{ output: string; run: string; sessionID?: string }>
+  /**
+   * Runs a helper in place of a built-in generator (a role, or a Dynamic layer's writer: helper-texts.ts) and gives
+   * its output.
+   */
+  run?: (input: {
+    instance: unknown
+    namespace: string
+    name: string
+    input: string
+    startedBy: { kind: "role" | "layer"; role?: string; layer?: string; sessionID?: string }
+    parentSessionID?: string
+  }) => Promise<string>
   /** The `helper` tool's description for an agent of this project: its namespace's callable helpers. */
   describe?: (input: { instance: unknown; agent: string }) => Promise<string | undefined>
   /** A system action of a helper run (list_sessions, archive_session, trash_session, notify). */

@@ -57,6 +57,10 @@ const LayerInput = Schema.Struct({
     description:
       "Your Dynamic layers, and copies of OpenCode's per-request layers: their own rules (null: back to the default, the helper's or OpenCode's)",
   }),
+  writer: Schema.optional(Schema.NullOr(Schema.String)).annotate({
+    description:
+      "Your Dynamic layers: the namespace's helper that writes the text, with reading actions only (null: the namespace's Dynamic generator role, else OpenCode's)",
+  }),
 })
 const GroupInput = Schema.Struct({ name: Schema.String, types: Schema.Array(Schema.String) })
 const ProfileInput = Schema.Struct({ name: Schema.String, group: Schema.String, slots: OperatorProfile.Slots })

@@ -670,8 +670,31 @@ export const dict = {
   "operator.helper.notFound": "This helper no longer exists.",
   "operator.helper.roles": "Roles",
   "operator.help.helperRoles":
-    "The built-in jobs it does. A built-in helper has its own; taking over a built-in role in a namespace comes later.",
+    "The built-in jobs it takes over in its namespace: it gets the same input as the built-in and must return the same kind of output. One helper per role; with none, the built-in does it. A role helper has no actions. Title and compaction take its text and model: Pick a model, or the namespace's small or default model when its config sets one.",
   "operator.helper.noRoles": "None",
+  "operator.helper.addRole": "Take over a role…",
+  "operator.helper.removeRole": "Give up {{role}}",
+  "operator.helper.roleMoves": "{{name}} holds it now: saving moves it here.",
+  "operator.helper.opencodeWarning": "The OpenCode namespace then no longer matches upstream for {{roles}}.",
+  "operator.helper.rolesNoActions":
+    "A helper that takes over a role has no actions: OpenCode's code uses its output directly.",
+  "operator.helper.replacedBy": "In this namespace {{name}} does this job instead.",
+  "operator.helper.contract.title": "gets the chat's first messages and returns one title line.",
+  "operator.helper.contract.compaction":
+    "gets the conversation and returns a summary the chat goes on from (written into the same session).",
+  "operator.helper.contract.summary": "OpenCode defines it but never calls it.",
+  "operator.helper.contract.agent-generator":
+    "gets a description (opencode agent create) and returns the agent as JSON: identifier, whenToUse, systemPrompt.",
+  "operator.helper.contract.purpose-generator":
+    "gets the project's files (or the namespace's projects) and a brief, and returns a purpose to edit.",
+  "operator.helper.contract.dynamic-generator":
+    "gets a Dynamic layer's instructions, the project and the session's first message, and returns the layer's text.",
+  "operator.agents.source.replaced": "Built in · replaced by {{name}}",
+  "operator.layer.writer": "Written by",
+  "operator.help.layerWriter":
+    "The helper that writes this layer's text for each session: one of the namespace's helpers that only read. Without one, the namespace's Dynamic generator role, else OpenCode's.",
+  "operator.layer.writerRole": "Default: {{name}} (this namespace's Dynamic generator)",
+  "operator.layer.writerBuiltin": "Default: OpenCode's Dynamic generator",
   "operator.helper.role.title": "Title",
   "operator.helper.role.compaction": "Compaction",
   "operator.helper.role.summary": "Summary",
