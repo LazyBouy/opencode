@@ -519,20 +519,28 @@ export async function ensure(env: NodeJS.ProcessEnv = process.env) {
   }
   if (settled.has(file)) return
   settled.add(file)
-  const current = await readNamespaceRecord(OperatorProfile.OPENCODE)
-  const settingsFile = path.join(root(), "settings.json")
-  if (!(await Bun.file(settingsFile).exists())) {
-    const derived = OperatorLayout.derivedWorkingDir(env, current?.folder)
-    await writeJson(settingsFile, { workingDir: derived ?? "" }).catch(() => undefined)
-    // A new installation without a working directory given: the web UI onboards it (onboarding.ts).
-    if (!derived) await OperatorOnboarding.markPending().catch(() => undefined)
-  }
+  await firstStart(env)
   await settleLayout()
   const project = env.OPENCODE_OPERATOR_DEFAULT_PROJECT?.trim()
   // The record as settling left it (it may have written OpenCode's inheritance).
   const latest = await readNamespaceRecord(OperatorProfile.OPENCODE)
   if (latest && project && path.isAbsolute(project) && !latest.defaultProject)
     await writeNamespace({ ...latest, defaultProject: path.resolve(project) }).catch(() => undefined)
+}
+
+// The first start of an installation sets the working directory once: settings.json has no `workingDir` yet
+// (another writer, such as the memory defaults, may have made the file first, so its presence doesn't say).
+// Without one given, a new installation waits for onboarding (onboarding.ts).
+export async function firstStart(env: NodeJS.ProcessEnv = process.env) {
+  const settingsFile = path.join(root(), "settings.json")
+  const raw = (await Bun.file(settingsFile)
+    .json()
+    .catch(() => undefined)) as Record<string, unknown> | undefined
+  if (raw && typeof raw === "object" && "workingDir" in raw) return
+  const current = await readNamespaceRecord(OperatorProfile.OPENCODE)
+  const derived = OperatorLayout.derivedWorkingDir(env, current?.folder)
+  await writeJson(settingsFile, { ...raw, workingDir: derived ?? "" }).catch(() => undefined)
+  if (!derived) await OperatorOnboarding.markPending().catch(() => undefined)
 }
 
 // With a working directory, Global is a namespace of its own: its record, OpenCode's MCP logins copied to

@@ -68,7 +68,7 @@ export const operatorOnboardingHandlers = HttpApiBuilder.group(OperatorRootApi, 
           const state = yield* Effect.promise(() => OperatorOnboarding.read())
           const settings = yield* Effect.promise(() => OperatorLayout.readSettings())
           const roots = OperatorFolders.workspaceRoots()
-          const suggested = settings.workingDir ?? (yield* Effect.promise(() => OperatorOnboarding.suggested(roots)))
+          const suggested = settings.workingDir || (yield* Effect.promise(() => OperatorOnboarding.suggested(roots)))
           // Merged agents keep records per working folder (Claude Code's transcripts): a move updates them only
           // where the server can reach them, which in production is the home folder.
           const agents = yield* Effect.forEach(

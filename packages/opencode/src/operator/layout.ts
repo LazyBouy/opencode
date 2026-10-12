@@ -45,7 +45,8 @@ const readJson = (file: string): Promise<Record<string, unknown>> =>
 export async function readSettings(): Promise<Settings> {
   const data = await readJson(settingsFile())
   return {
-    ...(typeof data.workingDir === "string" && data.workingDir ? { workingDir: data.workingDir } : {}),
+    // Kept when empty too: an empty working directory is a choice made (blank), not a first start (firstStart).
+    ...(typeof data.workingDir === "string" ? { workingDir: data.workingDir } : {}),
     ...(data.mcpLoginsCopied === true ? { mcpLoginsCopied: true } : {}),
     ...(data.upgradeDone === true ? { upgradeDone: true } : {}),
     ...(data.memoryDefaults === true ? { memoryDefaults: true } : {}),

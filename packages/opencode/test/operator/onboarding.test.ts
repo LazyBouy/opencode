@@ -3,7 +3,9 @@ import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
+import { OperatorLayout } from "@/operator/layout"
 import { OperatorOnboarding } from "@/operator/onboarding"
+import { OperatorProfileStore } from "@/operator/profile-store"
 import { Server } from "../../src/server/server"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
@@ -166,5 +168,24 @@ describe("onboarding", () => {
     await OperatorOnboarding.markDone({ workingDir: work, project: path.join(work, "opencode", "opencode") })
     await OperatorOnboarding.markPending()
     expect(await OperatorOnboarding.read()).toMatchObject({ done: true })
+  })
+
+  test("a first start is told by settings.json having no working directory yet, even if another writer made it", async () => {
+    // The memory defaults wrote the file first (they ran before the namespace store settled).
+    await fs.writeFile(path.join(store(), "settings.json"), JSON.stringify({ memoryDefaults: true }))
+    await fs.rm(stateFile(), { force: true })
+    await OperatorProfileStore.firstStart({})
+    expect(await readJson(path.join(store(), "settings.json"))).toEqual({ memoryDefaults: true, workingDir: "" })
+    expect(await OperatorOnboarding.read()).toEqual({ pending: true })
+    // A blank working directory chosen before is kept through other writes, and isn't a first start again.
+    expect((await OperatorLayout.readSettings()).workingDir).toBe("")
+    await fs.rm(stateFile(), { force: true })
+    await OperatorProfileStore.firstStart({})
+    expect(await OperatorOnboarding.read()).toBeUndefined()
+    // Given a working directory, it's set at once and nothing waits.
+    await fs.writeFile(path.join(store(), "settings.json"), JSON.stringify({ memoryDefaults: true }))
+    await OperatorProfileStore.firstStart({ OPENCODE_OPERATOR_WORKING_DIR: work })
+    expect((await readJson(path.join(store(), "settings.json"))).workingDir).toBe(work)
+    expect(await OperatorOnboarding.read()).toBeUndefined()
   })
 })
