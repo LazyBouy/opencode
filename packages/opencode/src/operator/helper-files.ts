@@ -30,6 +30,13 @@ export const Stored = Schema.Struct({
   layer: Schema.String.annotate({ description: "The helper layer holding its text" }),
   steps: Schema.Finite,
   timeout: Schema.Finite.annotate({ description: "Seconds" }),
+  callable: Schema.optional(Schema.Boolean).annotate({ description: "Agents may call it with the helper tool" }),
+  usage: Schema.optional(Schema.String).annotate({
+    description: "What to give it and what you get back, in one line, for the helper tool",
+  }),
+  actions: Schema.optional(Schema.Array(Schema.String)).annotate({
+    description: "What it may do: tools and system actions; everything else is denied",
+  }),
 }).annotate({ identifier: "OperatorHelperStored" })
 export type Stored = typeof Stored.Type
 
@@ -58,4 +65,12 @@ export async function readOne(ns: string, name: string): Promise<Stored | undefi
 export async function write(ns: string, helper: Stored) {
   await fs.mkdir(folder(ns), { recursive: true })
   await Bun.write(file(ns, helper.name), JSON.stringify(helper, null, 2) + "\n")
+  revision++
+}
+
+// Bumped on every write and removal here, so readers that keep a read (helper-runs.ts) see a change at once.
+let revision = 0
+export const helperRevision = () => revision
+export const changed = () => {
+  revision++
 }

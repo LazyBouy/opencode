@@ -31,6 +31,7 @@ import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/l
 import { Reference } from "@opencode-ai/core/reference"
 import { Location } from "@opencode-ai/core/location"
 import { PluginV2 } from "@opencode-ai/core/plugin"
+import { OperatorRegistry } from "@/operator/registry"
 
 export const Info = Schema.Struct({
   name: Schema.String,
@@ -310,7 +311,8 @@ const layer = Layer.effect(
         }
 
         const get = Effect.fnUntraced(function* (agent: string) {
-          return agents[agent]
+          // operator: a helper (operator/helper-runs.ts), never listed
+          return agents[agent] ?? (OperatorRegistry.helpers.agent?.(agent) as Info | undefined)
         })
 
         const list = Effect.fnUntraced(function* () {

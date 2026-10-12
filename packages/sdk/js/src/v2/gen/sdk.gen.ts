@@ -222,6 +222,12 @@ import type {
   OperatorHelperModel,
   OperatorHelperRemoveErrors,
   OperatorHelperRemoveResponses,
+  OperatorHelperRunsErrors,
+  OperatorHelperRunsResponses,
+  OperatorHelperSaveSettingsErrors,
+  OperatorHelperSaveSettingsResponses,
+  OperatorHelperSettingsErrors,
+  OperatorHelperSettingsResponses,
   OperatorHelperUpdateErrors,
   OperatorHelperUpdateResponses,
   OperatorLayoutGetErrors,
@@ -317,6 +323,10 @@ import type {
   OperatorNamespaceTypeUpdateResponses,
   OperatorNamespaceUpdateErrors,
   OperatorNamespaceUpdateResponses,
+  OperatorNotificationDismissErrors,
+  OperatorNotificationDismissResponses,
+  OperatorNotificationListErrors,
+  OperatorNotificationListResponses,
   OperatorOnboardingCheckErrors,
   OperatorOnboardingCheckResponses,
   OperatorOnboardingFinishErrors,
@@ -3186,6 +3196,9 @@ export class Helper extends HeyApiClient {
       text?: string
       steps?: number
       timeout?: number
+      callable?: boolean
+      usage?: string
+      actions?: Array<string>
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3201,6 +3214,9 @@ export class Helper extends HeyApiClient {
             { in: "body", key: "text" },
             { in: "body", key: "steps" },
             { in: "body", key: "timeout" },
+            { in: "body", key: "callable" },
+            { in: "body", key: "usage" },
+            { in: "body", key: "actions" },
           ],
         },
       ],
@@ -3269,6 +3285,9 @@ export class Helper extends HeyApiClient {
       text?: string
       steps?: number
       timeout?: number
+      callable?: boolean
+      usage?: string
+      actions?: Array<string>
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3284,6 +3303,9 @@ export class Helper extends HeyApiClient {
             { in: "body", key: "text" },
             { in: "body", key: "steps" },
             { in: "body", key: "timeout" },
+            { in: "body", key: "callable" },
+            { in: "body", key: "usage" },
+            { in: "body", key: "actions" },
           ],
         },
       ],
@@ -3301,6 +3323,115 @@ export class Helper extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * List a helper's runs
+   *
+   * A helper's runs, newest first: who started it, its status, duration, cost, input and result, and for a run with actions its session (its transcript). Runs older than the helper settings' days are deleted.
+   */
+  public runs<ThrowOnError extends boolean = false>(
+    parameters: {
+      ns: string
+      name: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "ns" },
+            { in: "path", key: "name" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<OperatorHelperRunsResponses, OperatorHelperRunsErrors, ThrowOnError>({
+      url: "/operator/helper/{ns}/{name}/runs",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get the helper settings
+   *
+   * How long helper runs are kept.
+   */
+  public settings<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<
+      OperatorHelperSettingsResponses,
+      OperatorHelperSettingsErrors,
+      ThrowOnError
+    >({ url: "/operator/helper-settings", ...options })
+  }
+
+  /**
+   * Save the helper settings
+   *
+   * How many days helper runs are kept (1–3650, default 30); older runs are deleted with their sessions.
+   */
+  public saveSettings<ThrowOnError extends boolean = false>(
+    parameters?: {
+      runDays?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "runDays" }] }])
+    return (options?.client ?? this.client).put<
+      OperatorHelperSaveSettingsResponses,
+      OperatorHelperSaveSettingsErrors,
+      ThrowOnError
+    >({
+      url: "/operator/helper-settings",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Notification extends HeyApiClient {
+  /**
+   * List helpers' notes
+   *
+   * Notes helpers posted with the notify system action, newest first, each with the project it is about when given.
+   */
+  public list<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<
+      OperatorNotificationListResponses,
+      OperatorNotificationListErrors,
+      ThrowOnError
+    >({ url: "/operator/notifications", ...options })
+  }
+
+  /**
+   * Dismiss a note
+   *
+   * Removes a helper's note.
+   */
+  public dismiss<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
+    return (options?.client ?? this.client).delete<
+      OperatorNotificationDismissResponses,
+      OperatorNotificationDismissErrors,
+      ThrowOnError
+    >({
+      url: "/operator/notifications/{id}",
+      ...options,
+      ...params,
     })
   }
 }
@@ -6767,6 +6898,11 @@ export class Operator extends HeyApiClient {
   private _helper?: Helper
   get helper(): Helper {
     return (this._helper ??= new Helper({ client: this.client }))
+  }
+
+  private _notification?: Notification
+  get notification(): Notification {
+    return (this._notification ??= new Notification({ client: this.client }))
   }
 
   private _layout?: Layout

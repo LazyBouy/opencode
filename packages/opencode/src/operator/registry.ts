@@ -42,6 +42,8 @@ export const memory: {
     namespace: string
     folders: { namespace: string; project: string; agent?: string }
     incognito: boolean
+    /** It may save, update and forget (not an incognito subagent; a helper run, at project or namespace level). */
+    writes: boolean
     read: Record<"namespace" | "project" | "agent", "allow" | "ask" | "deny">
   }>
 } = {}
@@ -64,4 +66,30 @@ export const dynamicLayers: {
     /** The memory layers too (the agent's profile holds one). */
     memory?: boolean
   }) => Promise<ReadonlyMap<string, { text: string; trace: unknown }>>
+} = {}
+
+export const helpers: {
+  /**
+   * A helper's agent (helper-runs.ts) for a name OpenCode's Agent.get doesn't know (`helper:<ns>:<name>`): helpers
+   * are never in OpenCode's agent list, so they stay out of `GET /config` and every agent list.
+   */
+  agent?: (name: string) => unknown
+  /** Runs one of the session's namespace's callable helpers, for the `helper` tool. */
+  call?: (input: {
+    instance: unknown
+    sessionID: string
+    agent: string
+    name: string
+    input: string
+    abort: AbortSignal
+  }) => Promise<{ output: string; run: string; sessionID?: string }>
+  /** The `helper` tool's description for an agent of this project: its namespace's callable helpers. */
+  describe?: (input: { instance: unknown; agent: string }) => Promise<string | undefined>
+  /** A system action of a helper run (list_sessions, archive_session, trash_session, notify). */
+  action?: (input: {
+    instance: unknown
+    sessionID: string
+    action: string
+    args: Record<string, unknown>
+  }) => Promise<string>
 } = {}

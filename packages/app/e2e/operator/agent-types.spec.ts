@@ -111,6 +111,81 @@ test("New agent → Type: Helper creates a namespace helper, on the small model 
     text: "Label the issue.",
     steps: 5,
     timeout: 120,
+    callable: false,
+    usage: "",
+    actions: [],
   })
   await expect(page).toHaveURL(/\/operator\/agents\?.*helper=labeler&hns=opencode/)
+})
+
+test("a helper is made callable and declares actions; any tool but a read-only one is confirmed first", async ({
+  page,
+}) => {
+  const state = await mockOperator(page)
+  await page.goto(`/operator/agents/new${dir}`)
+  await page.getByRole("group", { name: "Type", exact: true }).getByRole("button", { name: "Helper" }).click()
+  await page.getByLabel("Name", { exact: true }).fill("archiver")
+  await page.getByRole("textbox", { name: "Helper text" }).fill("Archive old sessions.")
+  await page.getByRole("group", { name: "Callable by agents" }).locator('[data-slot="switch-control"]').click()
+  await page.getByLabel("What to give it / what you get back", { exact: true }).fill("a date → what was archived")
+
+  const add = page.locator(
+    '[data-component="select-v2-root"][aria-label="Add an action…"] [data-component="select-v2"]',
+  )
+  // A read-only tool is added at once.
+  await add.click()
+  await page.getByRole("option", { name: "read", exact: true }).click()
+  await expect(page.getByTestId("helper-actions")).toContainText("read")
+  // A system action that changes things asks first; cancelled, it isn't added.
+  await add.click()
+  await page.getByRole("option", { name: "Archive a session" }).click()
+  const dialog = page.getByRole("dialog").filter({ hasText: "unattended" })
+  await expect(dialog).toContainText("This helper will run archive_session unattended")
+  await dialog.getByRole("button", { name: "Cancel" }).click()
+  await expect(page.getByTestId("helper-actions")).not.toContainText("Archive a session")
+  await add.click()
+  await page.getByRole("option", { name: "Archive a session" }).click()
+  await page.getByRole("dialog").filter({ hasText: "unattended" }).getByRole("button", { name: "Allow it" }).click()
+  await expect(page.getByTestId("helper-actions")).toContainText("Archive a session")
+
+  await page.getByRole("button", { name: "Create helper" }).click()
+  await expect.poll(() => state.helperWrites.length).toBe(1)
+  expect(state.helperWrites[0]!.body).toMatchObject({
+    name: "archiver",
+    callable: true,
+    usage: "a date → what was archived",
+    actions: ["read", "archive_session"],
+  })
+})
+
+test("helper settings keep runs for some days; a helper's runs are listed, each opening its session", async ({
+  page,
+}) => {
+  const state = await mockOperator(page)
+  await page.goto(`/operator/agents${dir}`)
+  await page.getByRole("button", { name: "Helper settings" }).click()
+  const days = page.getByLabel("Keep runs for (days)", { exact: true })
+  await expect(days).toHaveValue("30")
+  await days.fill("14")
+  await page.getByRole("dialog").getByRole("button", { name: "Save" }).click()
+  await expect.poll(() => state.helperSettings.runDays).toBe(14)
+
+  await page.goto(`/operator/agents${dir}&helper=sorter&hns=opencode&htab=runs`)
+  const runs = page.getByRole("table", { name: "Runs" })
+  const run = runs.getByRole("row").filter({ hasText: "Agent build" })
+  await expect(run).toContainText("Done")
+  await expect(run).toContainText("bug")
+  await run.click()
+  await expect(page).toHaveURL(/session=ses_helper_run/)
+})
+
+test("helpers' notes are in the Inbox, and can be dismissed", async ({ page }) => {
+  const state = await mockOperator(page)
+  await page.goto("/operator/inbox")
+  await page.getByRole("button", { name: "Notes (1)" }).click()
+  const notes = page.getByRole("table", { name: "Notes from helpers" })
+  await expect(notes).toContainText("Archived 3 sessions untouched for a year.")
+  await expect(notes).toContainText("sorter · opencode")
+  await notes.getByRole("button", { name: "Dismiss" }).click()
+  await expect.poll(() => state.notes.length).toBe(0)
 })

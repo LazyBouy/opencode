@@ -1,4 +1,6 @@
 import { OperatorHelpers } from "@/operator/helpers"
+import { OperatorHelperRuns } from "@/operator/helper-runs"
+import { OperatorNotifications } from "@/operator/notifications"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { OperatorRootApi } from "../groups/overview"
@@ -7,6 +9,7 @@ import { ApiHelperError } from "../groups/helpers"
 export const operatorHelperHandlers = HttpApiBuilder.group(OperatorRootApi, "operatorHelpers", (handlers) =>
   Effect.gen(function* () {
     const helpers = yield* OperatorHelpers.Service
+    const runs = yield* OperatorHelperRuns.Service
     const failed = (error: OperatorHelpers.HelperError) =>
       new ApiHelperError({ name: "OperatorHelperError", data: { message: error.message } })
     return handlers
@@ -16,5 +19,18 @@ export const operatorHelperHandlers = HttpApiBuilder.group(OperatorRootApi, "ope
         helpers.update(ctx.params.ns, ctx.params.name, ctx.payload).pipe(Effect.mapError(failed)),
       )
       .handle("remove", (ctx) => helpers.remove(ctx.params.ns, ctx.params.name).pipe(Effect.mapError(failed)))
+      .handle("runs", (ctx) => runs.runs(ctx.params.ns, ctx.params.name))
+      .handle("settings", () => runs.settings())
+      .handle("saveSettings", (ctx) =>
+        runs
+          .setSettings(ctx.payload)
+          .pipe(
+            Effect.mapError(
+              (error) => new ApiHelperError({ name: "OperatorHelperError", data: { message: error.message } }),
+            ),
+          ),
+      )
+      .handle("notifications", () => Effect.promise(() => OperatorNotifications.list()))
+      .handle("dismiss", (ctx) => Effect.promise(() => OperatorNotifications.dismiss(ctx.params.id)))
   }),
 )

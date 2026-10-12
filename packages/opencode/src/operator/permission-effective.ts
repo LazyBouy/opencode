@@ -35,16 +35,19 @@ export const handlers: {
     draft?: Draft
     permission?: string
   }) => Effect.Effect<Effective>
-  /**
-   * The fork's opt-in tools offered to this agent here (memory-service.ts): the handler above adds them
-   * to the effective set, so every list built from it leaves the others out.
-   */
-  offered?: (input: {
-    sessionID?: string
-    agent: string
-    lines: ReadonlyArray<Model.Line<unknown>>
-  }) => Effect.Effect<ReadonlyArray<string>>
 } = {}
+
+/**
+ * The fork's opt-in tools offered to this agent here, one handler per service (memory-service.ts: memory;
+ * helper-runs.ts: the helper tool and helper runs' system actions): the handler above adds them to the effective
+ * set, so every list built from it leaves the others out.
+ */
+export type Offer = (input: {
+  sessionID?: string
+  agent: string
+  lines: ReadonlyArray<Model.Line<unknown>>
+}) => Effect.Effect<ReadonlyArray<string>>
+export const offers = new Set<Offer>()
 
 // The session a loop step runs for, by fiber: the fork's messages hook records it at the start of the
 // step, so the step's skills list (which upstream builds from the agent alone) can use the session's R.
@@ -179,7 +182,7 @@ export function unreachable(tools: ReadonlyArray<string>, effective: Effective) 
   )
 }
 
-// The fork's tools offered only where a hook says so (`handlers.offered`): the memory tool, so OpenCode's
+// The fork's tools offered only where a hook says so (`offers`): the memory tool, so OpenCode's
 // tool list stays upstream's unless memory is opted into.
 const optIn = new Set<string>()
 export function declareOptIn(tool: string) {

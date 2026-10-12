@@ -1,6 +1,8 @@
 import type { Plugin } from "@opencode-ai/plugin"
 import { Context, Fiber } from "effect"
 import { InstanceRef } from "@/effect/instance-ref"
+import { OperatorHelperAgents } from "./helper-agents"
+import { OperatorHelperTool } from "./helper-tool"
 import { OperatorMemoryTool } from "./memory-tool"
 import { OperatorPermissionEffective } from "./permission-effective"
 import { OperatorProfile } from "./profile"
@@ -37,15 +39,19 @@ const PromptPlugin: Plugin = async (input) => {
       loaded,
       slots: OperatorProfile.slotsFor(loaded.catalog, {
         agent,
-        setting: agent ? loaded.agents[agent] : undefined,
+        setting: agent ? settingOf(loaded, agent) : undefined,
         project: loaded.project,
       }),
     }
   }
 
   return {
-    // The fork's own tools: short-term memory (memory-tool.ts).
-    tool: { memory: OperatorMemoryTool.memoryTool },
+    // The fork's own tools: short-term memory (memory-tool.ts), helpers and their system actions (helper-tool.ts).
+    tool: {
+      memory: OperatorMemoryTool.memoryTool,
+      helper: OperatorHelperTool.helperTool,
+      ...OperatorHelperTool.actionTools,
+    },
     // Registers the model call for recording (provider-tap.ts): its id goes in a header the provider tap
     // removes before the request leaves. Recording never gets in the way of the request.
     "chat.headers": async (hook, output) => {
@@ -93,7 +99,7 @@ const PromptPlugin: Plugin = async (input) => {
       }
       if (!hook.agent) return
       const loaded = await context()
-      const setting = loaded.agents[hook.agent]
+      const setting = settingOf(loaded, hook.agent)
       // OpenCode's per-request Dynamic layers, and the agent's layers with rules of their own, through the
       // pipeline (dynamic-layers.ts); without it, OpenCode's as upstream wrote them and yours as written.
       const agentSlots = OperatorProfile.slotsFor(loaded.catalog, {
@@ -180,6 +186,16 @@ const PromptPlugin: Plugin = async (input) => {
       }
     },
     "tool.definition": async (hook, output) => {
+      // The helper tool lists the agent's namespace's callable helpers (helper-runs.ts).
+      if (hook.toolID === "helper" && hook.agent) {
+        const fiber = Fiber.getCurrent()
+        const instance = fiber ? Context.getReferenceUnsafe(fiber.context, InstanceRef) : undefined
+        const text = instance
+          ? await OperatorRegistry.helpers.describe?.({ instance, agent: hook.agent }).catch(() => undefined)
+          : undefined
+        if (text) output.description = text
+        return
+      }
       const found = await slots(hook.agent)
       const version = OperatorProfile.versionOf({
         catalog: found.loaded.catalog,
@@ -189,6 +205,14 @@ const PromptPlugin: Plugin = async (input) => {
       if (version !== undefined) output.description = version
     },
   }
+}
+
+// An agent's prompt setting: its own; a helper's agent uses its helper profile (helper-agents.ts).
+function settingOf(loaded: Awaited<ReturnType<typeof OperatorProfileStore.forProject>>, agent: string) {
+  const own = loaded.agents[agent]
+  if (own) return own
+  const profile = OperatorHelperAgents.profileOf(agent)
+  return profile ? { profile } : undefined
 }
 
 // The texts of your Dynamic layers in the agent's profile, written (once per session) by the server's
@@ -201,7 +225,7 @@ async function written(
 ) {
   const slots = OperatorProfile.slotsFor(loaded.catalog, {
     agent,
-    setting: loaded.agents[agent],
+    setting: settingOf(loaded, agent),
     project: loaded.project,
   })
   const layers = (slots[OperatorProfile.DYNAMIC] ?? []).filter((id) =>

@@ -119,7 +119,7 @@ export const memoryTool = tool({
       return { title: file, output: `${read.path}\n\n${read.text}`, metadata: { path: read.path } }
     }
 
-    if (found.incognito) throw new Error(INCOGNITO)
+    if (!found.writes) throw new Error(INCOGNITO)
     const folder = folderOf(where)
 
     if (args.action === "save") {

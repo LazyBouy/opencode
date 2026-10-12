@@ -1,7 +1,7 @@
 export * as OperatorOverview from "./overview"
 
 import path from "path"
-import { and, count, desc, eq, gte, inArray, isNull, like, lt, max, sql, sum, type SQL } from "drizzle-orm"
+import { and, count, desc, eq, gte, inArray, isNull, like, lt, max, not, or, sql, sum, type SQL } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -10,6 +10,7 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { Session } from "@/session/session"
 import { OperatorFolderSql } from "./folder-sql"
+import { OperatorHelperAgents } from "./helper-agents"
 import { OperatorTrashFiles } from "./trash-files"
 
 export const Status = Schema.Struct({
@@ -109,6 +110,10 @@ const layer = Layer.effect(
         input.roots ? isNull(SessionTable.parent_id) : undefined,
         input.archived ? undefined : isNull(SessionTable.time_archived),
         input.cursor ? lt(SessionTable.time_updated, input.cursor) : undefined,
+        // Helper runs (helper-runs.ts) are hidden, unless a helper's are asked for.
+        OperatorHelperAgents.isHelper(input.agent)
+          ? undefined
+          : or(isNull(SessionTable.agent), not(like(SessionTable.agent, `${OperatorHelperAgents.PREFIX}%`))),
       ].filter((condition): condition is SQL => condition !== undefined)
       const rows = yield* db
         .select()

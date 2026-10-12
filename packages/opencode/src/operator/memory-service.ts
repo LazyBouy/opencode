@@ -19,6 +19,7 @@ import { OperatorProfileStore } from "./profile-store"
 import { OperatorProjects } from "./projects"
 import { OperatorRegistry } from "./registry"
 import { OperatorSubagentMemory } from "./subagent-memory"
+import { OperatorHelperAgents } from "./helper-agents"
 
 // Short-term memory for the memory tool (memory-tool.ts) and the requests that offer it
 // (specs/docs/feedbacks/memory/memory_spec.md §4.3, §5, §6):
@@ -69,8 +70,11 @@ const layer = Layer.effect(
         ? yield* sessions.get(SessionID.make(input.sessionID)).pipe(Effect.option)
         : Option.none()
       const agentConfig = (yield* config.get()).agent?.[input.agent]
-      // A subagent's session runs incognito unless the agent is retentive (subagent-memory.ts).
-      const incognito = OperatorSubagentMemory.incognito(Option.getOrUndefined(session), agentConfig)
+      // A subagent's session runs incognito unless the agent is retentive (subagent-memory.ts). A helper run has no
+      // memory of its own either, but may write namespace and project memory if its helper declares memory (its
+      // permission says).
+      const helper = OperatorHelperAgents.isHelper(input.agent)
+      const incognito = helper || OperatorSubagentMemory.incognito(Option.getOrUndefined(session), agentConfig)
       const home = agentConfig?.home
       const folders = yield* Effect.promise(() =>
         OperatorMemoryFolders.of({ project, agent: { name: input.agent, ...(home ? { home } : {}) } }),
@@ -89,6 +93,7 @@ const layer = Layer.effect(
           ...(folders.agent && !incognito ? { agent: folders.agent } : {}),
         },
         incognito,
+        writes: helper || !incognito,
         read: { namespace: read("namespace"), project: read("project"), agent: read("agent") },
       }
     })
@@ -114,7 +119,7 @@ const layer = Layer.effect(
         recent.set(key, { at: Date.now(), revision, opted })
         return { opted }
       })
-    const offered: NonNullable<typeof OperatorPermissionEffective.handlers.offered> = (input) =>
+    const offered: OperatorPermissionEffective.Offer = (input) =>
       Effect.gen(function* () {
         // An explicit allow below Global (the namespace, project, agent or session) opts in.
         const explicit = input.lines.some(
@@ -135,13 +140,12 @@ const layer = Layer.effect(
     yield* Effect.acquireRelease(
       Effect.sync(() => {
         OperatorRegistry.memory.context = register
-        OperatorPermissionEffective.handlers.offered = offered
+        OperatorPermissionEffective.offers.add(offered)
       }),
       () =>
         Effect.sync(() => {
           if (OperatorRegistry.memory.context === register) OperatorRegistry.memory.context = undefined
-          if (OperatorPermissionEffective.handlers.offered === offered)
-            OperatorPermissionEffective.handlers.offered = undefined
+          OperatorPermissionEffective.offers.delete(offered)
         }),
     )
 

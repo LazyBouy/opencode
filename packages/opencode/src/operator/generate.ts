@@ -7,6 +7,7 @@ import { Agent } from "@/agent/agent"
 import { Provider } from "@/provider/provider"
 import { LLM } from "@/session/llm"
 import { MessageID, SessionID } from "@/session/schema"
+import { Session } from "@/session/session"
 import { OperatorPromptText } from "./prompt-text"
 
 // One model call made as one of the fork's helper agents (purpose-generator, dynamic-generator). They
@@ -22,6 +23,12 @@ export class GenerateError extends Schema.TaggedErrorClass<GenerateError>()("Ope
 export interface Interface {
   /** The helper agent's answer to `prompt`. Needs a project instance. */
   readonly text: (input: { agent: string; prompt: string; sessionID?: string }) => Effect.Effect<string, GenerateError>
+  /** The same call, with what it cost (a helper's run without actions: helper-runs.ts). */
+  readonly call: (input: {
+    agent: string
+    prompt: string
+    sessionID?: string
+  }) => Effect.Effect<{ text: string; cost: number; tokens: { input: number; output: number } }, GenerateError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorGenerate") {}
@@ -69,21 +76,36 @@ const layer = Layer.effect(
           messages: [{ role: "user", content: input.prompt }],
         })
         .pipe(
-          Stream.filter(LLMEvent.is.textDelta),
-          Stream.map((event) => event.text),
-          Stream.mkString,
+          Stream.runFold(
+            () => ({ text: "", cost: 0, tokens: { input: 0, output: 0 } }),
+            (total, event) => {
+              if (LLMEvent.is.textDelta(event)) return { ...total, text: total.text + event.text }
+              if (!LLMEvent.is.stepFinish(event) || !event.usage) return total
+              const usage = Session.getUsage({ model, usage: event.usage, metadata: event.providerMetadata })
+              return {
+                ...total,
+                cost: total.cost + usage.cost,
+                tokens: {
+                  input: total.tokens.input + usage.tokens.input,
+                  output: total.tokens.output + usage.tokens.output,
+                },
+              }
+            },
+          ),
         )
-      return result.trim()
+      return { ...result, text: result.text.trim() }
     })
-    const text = (input: { agent: string; prompt: string; sessionID?: string }) =>
+    const call = (input: { agent: string; prompt: string; sessionID?: string }) =>
       run(input).pipe(
         Effect.mapError(
           (cause) => new GenerateError({ message: cause instanceof Error ? cause.message : String(cause) }),
         ),
-        Effect.withSpan("OperatorGenerate.text"),
+        Effect.withSpan("OperatorGenerate.call"),
       )
+    const text = (input: { agent: string; prompt: string; sessionID?: string }) =>
+      call(input).pipe(Effect.map((result) => result.text))
 
-    return Service.of({ text })
+    return Service.of({ text, call })
   }),
 )
 

@@ -25,6 +25,8 @@ import { OperatorProjectConfig } from "./project-config"
 import { OperatorPermissionModel as Model } from "./permission-model"
 import { OperatorPermissionRules } from "./permission-rules"
 import { OperatorSubagentMemory } from "./subagent-memory"
+import { OperatorHelperAgents } from "./helper-agents"
+import { Wildcard } from "@opencode-ai/core/util/wildcard"
 import { OperatorProjects } from "./projects"
 
 // A session's permission lines in levels, and the decisions they make (permission-model.ts says how):
@@ -382,10 +384,13 @@ const layer = Layer.effect(
               part: rule.part ?? "session",
               from: rule.from ?? { kind: "session-opencode" },
             }))
+      // A helper run (helper-agents.ts) gets only what its helper declares (restrict, below).
+      const helperRun = OperatorHelperAgents.runOf(input.session?.id, input.session?.agent ?? input.agent)
       // An incognito subagent's session (subagent-memory.ts): its memory lines, locked from OpenCode's level so
       // that no line below lifts them, not even a narrower allow of the agent's (a lock binds only the levels
       // below it). They stay the session's lines (part and origin).
       const incognito =
+        !helperRun &&
         input.permission !== "doom_loop" &&
         OperatorSubagentMemory.incognito(input.session, (yield* config.get()).agent?.[input.agent ?? ""])
       const locked: Array<Rule & Meta> = incognito
@@ -405,9 +410,10 @@ const layer = Layer.effect(
       ]
       const upTo = input.upTo ? LEVEL[input.upTo] : levels.length - 1
       // OpenCode's own lines can't be deleted in the OpenCode namespace.
-      return Model.build<Meta>(levels.slice(0, upTo + 1), {
+      const built = Model.build<Meta>(levels.slice(0, upTo + 1), {
         keep: (line) => base.protectBuiltins && line.level === LEVEL.opencode,
       })
+      return helperRun ? restrict(built, helperRun, upTo) : built
     })
 
     const sessionLines = Effect.fnUntraced(function* (sessionID: string, permission?: string) {
@@ -450,15 +456,16 @@ const layer = Layer.effect(
         ...(input.draft?.sessionRules ? { sessionLines: input.draft.sessionRules } : {}),
         ...(input.permission ? { permission: input.permission } : {}),
       })
-      // The fork's opt-in tools this agent is offered here (memory-service.ts).
-      const hook = OperatorPermissionEffective.handlers.offered
-      const offered = hook
-        ? yield* hook({
+      // The fork's opt-in tools this agent is offered here (memory-service.ts, helper-runs.ts).
+      const offered: string[] = []
+      for (const offer of OperatorPermissionEffective.offers)
+        offered.push(
+          ...(yield* offer({
             ...(input.sessionID ? { sessionID: input.sessionID } : {}),
             agent: input.agent,
             lines: built.lines,
-          }).pipe(Effect.orElseSucceed(() => [] as ReadonlyArray<string>))
-        : []
+          }).pipe(Effect.orElseSucceed(() => [] as ReadonlyArray<string>))),
+        )
       return { lines: built.lines, rules: Model.compile(built.lines), ...(offered.length ? { offered } : {}) }
     })
 
@@ -504,3 +511,31 @@ export const node = LayerNode.make({
   layer,
   deps: [Session.node, Agent.node, OperatorPermissionRules.node, OperatorConfig.node, OperatorAgents.node, Config.node],
 })
+
+// A helper run's lines (agent_types_spec.md §4.6): what its helper declares is allowed, everything else is
+// denied, and nothing asks (nobody is there to answer). Allows are kept only for declared tools (a line for every
+// tool, `* *`, becomes one per declared tool); each declared tool is allowed at the session level, where more
+// specific lines above still decide; asks become denies; and a helper never has a memory of its own. `memory` is
+// declared within the memory permission: it adds no allow of its own.
+const AGENT_MEMORY = ["READ(agent/*)", "WRITE(agent/*)", "FORGET(agent/*)"]
+function restrict(
+  built: { lines: Model.Line<Meta>[]; blocked: Model.Blocked<Meta>[] },
+  actions: ReadonlyArray<string>,
+  sessionLevel: number,
+) {
+  const declared = [...new Set(actions.map(OperatorPermissionEffective.permissionOf))]
+  const from = { kind: "helper-run" as const }
+  const lines: Model.Line<Meta>[] = built.lines.flatMap((line) => {
+    const action = line.action === "ask" ? ("deny" as const) : line.action
+    if (action !== "allow") return [{ ...line, action }]
+    return declared
+      .filter((permission) => Wildcard.match(permission, line.permission))
+      .map((permission) => ({ ...line, permission }))
+  })
+  for (const permission of declared)
+    if (permission !== "memory")
+      lines.push({ permission, pattern: "*", action: "allow", level: sessionLevel, part: "session", from })
+  for (const pattern of AGENT_MEMORY)
+    lines.push({ permission: "memory", pattern, action: "deny", level: 0, lockedAt: 0, part: "session", from })
+  return { lines, blocked: built.blocked }
+}

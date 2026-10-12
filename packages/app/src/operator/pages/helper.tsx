@@ -2,26 +2,29 @@ import { useNavigate } from "@solidjs/router"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
-import type { OperatorHelper } from "@opencode-ai/sdk/v2/client"
+import type { OperatorHelper, OperatorHelperRun } from "@opencode-ai/sdk/v2/client"
 import { useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createEffect, createMemo, createSignal, For, Match, on, Show, Switch } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { showToast } from "@/utils/toast"
 import { ready, useOperatorClient } from "../data"
+import { formatAgo, formatCost } from "../format"
+import { type Column, DataTable } from "../ui/data-table"
 import { useConfirm } from "../ui/confirm"
 import { useProjectModels } from "../ui/model-defaults"
 import { RecordView } from "../ui/record-overlay"
 import { TextCounters } from "../ui/text-counters"
 import { Fact } from "./agent"
 import { requestError } from "./config-helpers"
-import { HelperForm } from "./helper-form"
+import { HelperForm, SYSTEM_ACTIONS } from "./helper-form"
+import { useSessionOverlay } from "./session-overlay"
 import { useNamespaces } from "./profile-data"
 
-// A helper's record (agent_types_spec.md §4): Overview (its namespace, role, model, limits; edited in place) and
-// Text (its helper layer: yours edited here; a built-in's on the Prompts page, as before). Actions, Roles and
-// Runs come in later phases.
+// A helper's record (agent_types_spec.md §4): Overview (its namespace, role, model, limits, whether agents may call
+// it, its actions; edited in place), Text (its helper layer: yours edited here; a built-in's on the Prompts page, as
+// before) and Runs (§4.7: each run, its session's transcript in the session overlay). Roles come in a later phase.
 
-export const HELPER_TABS = ["overview", "text"] as const
+export const HELPER_TABS = ["overview", "text", "runs"] as const
 
 /** One namespace's helpers, or every namespace's. */
 export function useHelpers(ns: () => string | undefined) {
@@ -167,10 +170,37 @@ export function HelperDetail(props: { namespace: string; name: string; tab: stri
                     ? language.t("operator.helper.seconds", { count: helper().timeout! })
                     : "—"}
                 </Fact>
+                <Fact label={language.t("operator.helper.callable")} help={language.t("operator.help.helperCallable")}>
+                  <span data-testid="helper-callable">
+                    {helper().callable
+                      ? helper().usage
+                        ? language.t("operator.helper.callableWith", { usage: helper().usage! })
+                        : language.t("operator.helper.callableYes")
+                      : language.t("operator.helper.callableNo")}
+                  </span>
+                </Fact>
+                <Fact label={language.t("operator.helper.actions")} help={language.t("operator.help.helperActions")}>
+                  <Show when={helper().actions.length} fallback={language.t("operator.helper.noActions")}>
+                    <span class="flex flex-wrap gap-1" data-testid="helper-actions">
+                      <For each={helper().actions}>
+                        {(name) => (
+                          <Tag>
+                            {SYSTEM_ACTIONS.includes(name)
+                              ? language.t(`operator.helper.action.${name}` as "operator.helper.action.notify")
+                              : name}
+                          </Tag>
+                        )}
+                      </For>
+                    </span>
+                  </Show>
+                </Fact>
                 <Fact label={language.t("operator.helper.triggers")} help={language.t("operator.help.helperTriggers")}>
                   {language.t("operator.helper.triggersLater")}
                 </Fact>
               </dl>
+            </Match>
+            <Match when={props.tab === "runs"}>
+              <HelperRuns helper={helper()} />
             </Match>
             <Match when={props.tab === "text"}>
               <HelperText
@@ -252,6 +282,84 @@ function HelperText(props: { helper: OperatorHelper; directory?: string; onOpenP
           {language.t("common.save")}
         </ButtonV2>
       </div>
+    </Show>
+  )
+}
+
+// A helper's runs (§4.7), newest first; one with a session opens its transcript in the session overlay.
+function HelperRuns(props: { helper: OperatorHelper }) {
+  const language = useLanguage()
+  const api = useOperatorClient()
+  const runs = useQuery(() => ({
+    queryKey: api.key("helper-runs", props.helper.namespace, props.helper.name),
+    enabled: !props.helper.builtin,
+    queryFn: () =>
+      api
+        .client()
+        .operator.helper.runs({ ns: props.helper.namespace, name: props.helper.name })
+        .then((result) => result.data ?? []),
+  }))
+  const open = useSessionOverlay(() =>
+    (runs.data ?? []).flatMap((run) => (run.sessionID ? [{ id: run.sessionID, directory: run.project }] : [])),
+  )
+  const startedBy = (run: OperatorHelperRun) => {
+    const by = run.startedBy
+    if (by.kind === "agent") return language.t("operator.helper.byAgent", { agent: by.agent ?? "" })
+    return language.t(`operator.helper.by.${by.kind}` as "operator.helper.by.role")
+  }
+  const duration = (run: OperatorHelperRun) =>
+    run.endedAt === undefined
+      ? "—"
+      : language.t("operator.helper.seconds", { count: Math.round((run.endedAt - run.startedAt) / 100) / 10 })
+  const columns: Column<OperatorHelperRun>[] = [
+    {
+      id: "time",
+      header: language.t("operator.helper.runTime"),
+      value: (run) => run.startedAt,
+      cell: (run) => formatAgo(run.startedAt, language.intl()),
+    },
+    { id: "startedBy", header: language.t("operator.helper.startedBy"), value: startedBy, cell: startedBy },
+    {
+      id: "status",
+      header: language.t("operator.helper.status"),
+      value: (run) => run.status,
+      cell: (run) => <Tag data-status={run.status}>{language.t(`operator.helper.runStatus.${run.status}`)}</Tag>,
+    },
+    {
+      id: "duration",
+      header: language.t("operator.helper.duration"),
+      align: "end",
+      value: (run) => (run.endedAt ?? 0) - run.startedAt,
+      cell: duration,
+    },
+    {
+      id: "cost",
+      header: language.t("operator.column.cost"),
+      align: "end",
+      value: (run) => run.cost,
+      cell: (run) => (run.cost === undefined ? "—" : formatCost(run.cost, language.intl())),
+    },
+    {
+      id: "result",
+      header: language.t("operator.helper.result"),
+      cell: (run) => <span data-slot="operator-cell-clamp">{run.error ?? run.output ?? ""}</span>,
+    },
+  ]
+  return (
+    <Show
+      when={!props.helper.builtin}
+      fallback={<p data-slot="operator-note">{language.t("operator.helper.builtinRuns")}</p>}
+    >
+      <p data-slot="operator-note">{language.t("operator.helper.runsNote")}</p>
+      <DataTable
+        label={language.t("operator.helper.tab.runs")}
+        rows={runs.data ?? []}
+        columns={columns}
+        loading={runs.isPending}
+        empty={language.t("operator.helper.noRuns")}
+        initialSort={{ column: "time", direction: "desc" }}
+        onRowClick={(run) => run.sessionID && open(run.sessionID)}
+      />
     </Show>
   )
 }

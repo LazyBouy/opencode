@@ -1,9 +1,12 @@
 import { useNavigate, useSearchParams } from "@solidjs/router"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
+import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import type { OperatorAgent, OperatorHelper } from "@opencode-ai/sdk/v2/client"
-import { useQueries, useQuery } from "@tanstack/solid-query"
+import { useQueries, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createMemo, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
@@ -26,6 +29,8 @@ import { ScopePicker } from "../ui/scope-picker"
 import { FieldHelp } from "../ui/field-help"
 import { ModelWithSource } from "../ui/prompt-trace"
 import { closeTopOverlay, useOverlayParams } from "../ui/overlay-nav"
+import { Field } from "../ui/field"
+import { requestError } from "./config-helpers"
 import { SelectV2 } from "../ui/select"
 import { TYPE_KEYS, type TypeKey, typeOf } from "./agent-type"
 import { HELPER_TABS, HelperDetail, useHelperModel, useHelpers } from "./helper"
@@ -154,6 +159,7 @@ export default function AgentsPage() {
     ["helper", "hns", "htab"],
   )
   const helperModel = useHelperModel()
+  const dialog = useDialog()
   const namespaces = useNamespaces()
   const namespaceName = (id: string) => namespaces.data?.find((item) => item.namespace.id === id)?.namespace.name ?? id
   const namespaceOf = (row: Row) =>
@@ -327,6 +333,9 @@ export default function AgentsPage() {
         actions={
           <>
             <ScopePicker all />
+            <ButtonV2 size="small" variant="outline" onClick={() => void dialog.show(() => <HelperSettingsDialog />)}>
+              {language.t("operator.helper.settings")}
+            </ButtonV2>
             <Show when={agents.folders().length}>
               <ProjectAction
                 size="small"
@@ -455,6 +464,7 @@ function HelperOverlay(props: { rows: () => ReadonlyArray<HelperRow> }) {
     [
       { id: "overview", icon: "eye" as const, label: language.t("operator.agent.tab.overview") },
       { id: "text", icon: "prompt" as const, label: language.t("operator.helper.tab.text") },
+      { id: "runs", icon: "bullet-list" as const, label: language.t("operator.helper.tab.runs") },
     ] as const
   return (
     <DetailOverlay
@@ -476,5 +486,65 @@ function HelperOverlay(props: { rows: () => ReadonlyArray<HelperRow> }) {
         onGone={() => closeTopOverlay()}
       />
     </DetailOverlay>
+  )
+}
+
+// The helper settings (agent_types_spec.md §4.7): how many days helper runs are kept.
+function HelperSettingsDialog() {
+  const language = useLanguage()
+  const api = useOperatorClient()
+  const dialog = useDialog()
+  const queryClient = useQueryClient()
+  const settings = useQuery(() => ({
+    queryKey: api.key("helper-settings"),
+    queryFn: () =>
+      api
+        .client()
+        .operator.helper.settings()
+        .then((result) => result.data!),
+  }))
+  const [form, setForm] = createStore({ days: "", error: "", saving: false })
+  const days = () => form.days || String(settings.data?.runDays ?? "")
+  const save = async () => {
+    setForm({ saving: true, error: "" })
+    await api
+      .client()
+      .operator.helper.saveSettings({ runDays: Number(days()) }, { throwOnError: true })
+      .then(() => {
+        void queryClient.invalidateQueries({ queryKey: api.key("helper-settings") })
+        dialog.close()
+      })
+      .catch((error: unknown) => setForm("error", requestError(error)))
+      .finally(() => setForm("saving", false))
+  }
+  return (
+    <Dialog>
+      <DialogHeader>
+        <DialogTitle>{language.t("operator.helper.settings")}</DialogTitle>
+      </DialogHeader>
+      <DialogBody>
+        <Field label={language.t("operator.helper.runDays")} hint={language.t("operator.help.helperRunDays")}>
+          <TextInputV2
+            appearance="base"
+            inputMode="numeric"
+            value={days()}
+            onInput={(event) => setForm("days", event.currentTarget.value)}
+          />
+        </Field>
+        <Show when={form.error}>
+          <p data-slot="operator-error" role="alert">
+            {form.error}
+          </p>
+        </Show>
+      </DialogBody>
+      <DialogFooter>
+        <ButtonV2 variant="neutral" onClick={() => dialog.close()}>
+          {language.t("common.cancel")}
+        </ButtonV2>
+        <ButtonV2 variant="contrast" disabled={form.saving || !days()} onClick={() => void save()}>
+          {language.t("common.save")}
+        </ButtonV2>
+      </DialogFooter>
+    </Dialog>
   )
 }

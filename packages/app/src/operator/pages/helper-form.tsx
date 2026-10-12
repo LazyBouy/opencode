@@ -1,28 +1,38 @@
+import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
 import type { OperatorHelper, OperatorHelperModel } from "@opencode-ai/sdk/v2/client"
 import { useQueryClient } from "@tanstack/solid-query"
-import { type JSX, Show } from "solid-js"
+import { createMemo, createSignal, For, type JSX, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { ready, useOperatorClient } from "../data"
 import { useOperatorProjects } from "../project"
+import { useConfirm } from "../ui/confirm"
 import { Field } from "../ui/field"
 import { useProjectModels } from "../ui/model-defaults"
 import { SelectV2 } from "../ui/select"
 import { TextCounters } from "../ui/text-counters"
 import { AgentModelFields, type ModelForm } from "./agent-model-fields"
+import { useInventory } from "./capability-scope"
 import { requestError } from "./config-helpers"
 import { useNamespaces } from "./profile-data"
 
 // A helper's form (agent_types_spec.md §4.3): its namespace (instead of Save in), name, description, model (Small
 // model by default: the small model of the project it serves, the namespace's default project here), its text
 // (a helper profile holding one helper layer, edited in place) with counters, and its step and time limits.
-// Triggers come with automations (§4.9); actions, the `helper` tool and roles in later phases.
+// Callable by agents (the `helper` tool, with a one-line usage), and its Actions (§4.6): the tools and system
+// actions its runs may use; any tool but a read-only one is added only after "This helper will run … unattended".
+// Triggers come with automations (§4.9); roles in a later phase.
 
 export const STEPS = { default: 5, max: 20 }
 export const TIMEOUT = { default: 120, min: 10, max: 600 }
+// As helpers.ts has them.
+export const SYSTEM_ACTIONS = ["list_sessions", "archive_session", "trash_session", "notify", "memory"]
+export const READ_ONLY = ["read", "glob", "grep", "webfetch", "list_sessions", "memory"]
+const NOT_DECLARABLE = ["question", "task", "helper", "invalid"]
 
 type Form = ModelForm & {
   namespace: string
@@ -31,6 +41,9 @@ type Form = ModelForm & {
   text: string
   steps: string
   timeout: string
+  callable: boolean
+  usage: string
+  actions: string[]
 }
 
 function formOf(namespace: string, helper: OperatorHelper | undefined): Form {
@@ -45,6 +58,9 @@ function formOf(namespace: string, helper: OperatorHelper | undefined): Form {
     text: helper?.text ?? "",
     steps: String(helper?.steps ?? STEPS.default),
     timeout: String(helper?.timeout ?? TIMEOUT.default),
+    callable: helper?.callable ?? false,
+    usage: helper?.usage ?? "",
+    actions: [...(helper?.actions ?? [])],
   }
 }
 
@@ -87,6 +103,38 @@ export function HelperForm(props: {
     return (store.form.modelSource === "small" ? found?.small : found?.model)?.effective.model || undefined
   }
 
+  // What it may declare: the tools of the project it serves, and the fork's system actions.
+  const confirm = useConfirm()
+  const inventory = useInventory(project, () => undefined)
+  const tools = createMemo(() =>
+    [
+      ...new Set(
+        (inventory.data?.items ?? [])
+          .filter((item) => item.kind === "tool")
+          .map((item) => item.name)
+          .filter((name) => !NOT_DECLARABLE.includes(name) && !SYSTEM_ACTIONS.includes(name)),
+      ),
+    ].toSorted(),
+  )
+  const available = () => [...SYSTEM_ACTIONS, ...tools()].filter((name) => !store.form.actions.includes(name))
+  const declare = async (name: string) => {
+    if (!READ_ONLY.includes(name)) {
+      const ok = await confirm({
+        title: language.t("operator.helper.unattendedTitle", { tool: name }),
+        description: language.t("operator.helper.unattendedBody"),
+        confirm: language.t("operator.helper.unattendedConfirm"),
+        danger: true,
+      })
+      if (!ok) return
+    }
+    set("actions", [...store.form.actions, name])
+  }
+  const [picker, setPicker] = createSignal(1)
+  const actionLabel = (name: string) =>
+    SYSTEM_ACTIONS.includes(name)
+      ? language.t(`operator.helper.action.${name}` as "operator.helper.action.notify")
+      : name
+
   const save = async () => {
     setStore({ saving: true, error: "" })
     const client = api.client()
@@ -96,6 +144,9 @@ export function HelperForm(props: {
       text: store.form.text,
       steps: Number(store.form.steps),
       timeout: Number(store.form.timeout),
+      callable: store.form.callable,
+      usage: store.form.usage.trim(),
+      actions: [...store.form.actions],
     }
     const request = props.helper
       ? client.operator.helper.update(
@@ -194,6 +245,66 @@ export function HelperForm(props: {
             />
           </Field>
         </div>
+        <Field group label={language.t("operator.helper.callable")} hint={language.t("operator.help.helperCallable")}>
+          <Switch checked={store.form.callable} onChange={(checked) => set("callable", checked)}>
+            {language.t("operator.helper.callableSwitch")}
+          </Switch>
+        </Field>
+        <Show when={store.form.callable}>
+          <Field label={language.t("operator.helper.usage")} hint={language.t("operator.help.helperUsage")}>
+            <TextInputV2
+              appearance="base"
+              value={store.form.usage}
+              onInput={(event) => set("usage", event.currentTarget.value)}
+            />
+          </Field>
+        </Show>
+        <Field group label={language.t("operator.helper.actions")} hint={language.t("operator.help.helperActions")}>
+          <div class="flex flex-wrap items-center gap-2" data-testid="helper-actions">
+            <Show
+              when={store.form.actions.length}
+              fallback={<span data-slot="operator-note">{language.t("operator.helper.noActions")}</span>}
+            >
+              <For each={store.form.actions}>
+                {(name) => (
+                  <Tag>
+                    {actionLabel(name)}
+                    <button
+                      type="button"
+                      data-slot="operator-tag-remove"
+                      aria-label={language.t("operator.helper.removeAction", { action: name })}
+                      onClick={() =>
+                        set(
+                          "actions",
+                          store.form.actions.filter((item) => item !== name),
+                        )
+                      }
+                    >
+                      ×
+                    </button>
+                  </Tag>
+                )}
+              </For>
+            </Show>
+          </div>
+          {/* Made again after each pick, so it always starts empty (and the same action can be picked again). */}
+          <Show when={picker()} keyed>
+            {(_) => (
+              <SelectV2<string>
+                appearance="base"
+                aria-label={language.t("operator.helper.addAction")}
+                placeholder={language.t("operator.helper.addAction")}
+                options={available()}
+                current={undefined}
+                label={actionLabel}
+                onSelect={(name) => {
+                  setPicker((value) => value + 1)
+                  if (name) void declare(name)
+                }}
+              />
+            )}
+          </Show>
+        </Field>
         <Field group label={language.t("operator.helper.triggers")} hint={language.t("operator.help.helperTriggers")}>
           <ButtonV2 size="small" variant="neutral" disabled>
             {language.t("operator.helper.addTrigger")}

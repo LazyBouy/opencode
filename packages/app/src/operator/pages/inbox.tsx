@@ -2,9 +2,13 @@ import { useSearchParams } from "@solidjs/router"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { SegmentedControlItemV2, SegmentedControlV2 } from "@opencode-ai/ui/v2/segmented-control-v2"
 import { createMemo, For, Show } from "solid-js"
+import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import type { OperatorNotification } from "@opencode-ai/sdk/v2/client"
+import { useQuery, useQueryClient } from "@tanstack/solid-query"
 import { useLanguage } from "@/context/language"
-import { asList, ready, usePendingPermissions } from "../data"
+import { asList, ready, useOperatorClient, usePendingPermissions } from "../data"
 import { formatAgo, shortPath } from "../format"
+import { type Column, DataTable } from "../ui/data-table"
 import { EmptyState } from "../ui/empty-state"
 import { LiveIndicator } from "../ui/live-indicator"
 import { PageHeader } from "../ui/page-header"
@@ -33,6 +37,7 @@ function useInbox() {
 export default function InboxPage() {
   const language = useLanguage()
   const { pending, groups } = useInbox()
+  const notes = useNotes()
   const [params, setParams] = useSearchParams<{ ask?: string; itab?: string }>()
   useRecordOverlay(
     () => !!params.ask,
@@ -49,71 +54,82 @@ export default function InboxPage() {
       >
         <SegmentedControlV2
           class="operator-segmented-fit"
-          value={params.itab === "decided" ? "decided" : "waiting"}
+          value={params.itab === "decided" || params.itab === "notes" ? params.itab : "waiting"}
           onChange={(value) =>
-            value && setParams({ itab: value === "decided" ? "decided" : undefined }, { replace: true })
+            value &&
+            setParams({ itab: value === "decided" || value === "notes" ? value : undefined }, { replace: true })
           }
           aria-label={language.t("operator.requests.title")}
         >
           <SegmentedControlItemV2 value="waiting">{language.t("operator.requests.waiting")}</SegmentedControlItemV2>
           <SegmentedControlItemV2 value="decided">{language.t("operator.requests.decided")}</SegmentedControlItemV2>
+          <SegmentedControlItemV2 value="notes">
+            {language.t("operator.notes.tab", { count: notes.data?.length ?? 0 })}
+          </SegmentedControlItemV2>
         </SegmentedControlV2>
       </PageHeader>
-      <Show when={params.itab !== "decided"} fallback={<DecidedRequests filter={{}} />}>
-        <Show
-          when={groups().length > 0}
-          fallback={
-            <EmptyState
-              icon="shield"
-              title={pending.isPending ? language.t("common.loading") : language.t("operator.inbox.empty")}
-              description={pending.isPending ? undefined : language.t("operator.inbox.emptyHint")}
-            />
-          }
-        >
-          <For each={groups()}>
-            {(group) => (
-              <section data-component="operator-panel">
-                <h2 data-slot="operator-panel-title" title={group.project}>
-                  {shortPath(group.project)}
-                </h2>
-                <For each={group.sessions}>
-                  {(session) => (
-                    <div data-component="operator-ask-group">
-                      <span data-slot="operator-note">{session.requests[0]?.session?.title ?? session.sessionID}</span>
-                      <For each={session.requests}>
-                        {(item) => (
-                          <article
-                            data-component="operator-ask"
-                            data-request={item.request.id}
-                            onClick={() => {
-                              // Dragging across the request selects its text to copy; only a plain click opens it.
-                              if (window.getSelection()?.toString()) return
-                              setParams({ ask: item.request.id })
-                            }}
-                          >
-                            <div data-slot="operator-ask-head">
-                              <Tag variant="accent">{item.request.permission}</Tag>
-                              <Show when={item.session?.agent}>{(agent) => <Tag>{agent()}</Tag>}</Show>
-                              <span data-slot="operator-ask-age">{formatAgo(item.time, language.intl())}</span>
-                            </div>
-                            <ul data-slot="operator-ask-patterns">
-                              <For each={item.request.patterns}>
-                                {(pattern) => (
-                                  <li>
-                                    <code>{pattern}</code>
-                                  </li>
-                                )}
-                              </For>
-                            </ul>
-                          </article>
-                        )}
-                      </For>
-                    </div>
-                  )}
-                </For>
-              </section>
-            )}
-          </For>
+      <Show when={params.itab === "notes"}>
+        <HelperNotes />
+      </Show>
+      <Show when={params.itab !== "notes"}>
+        <Show when={params.itab !== "decided"} fallback={<DecidedRequests filter={{}} />}>
+          <Show
+            when={groups().length > 0}
+            fallback={
+              <EmptyState
+                icon="shield"
+                title={pending.isPending ? language.t("common.loading") : language.t("operator.inbox.empty")}
+                description={pending.isPending ? undefined : language.t("operator.inbox.emptyHint")}
+              />
+            }
+          >
+            <For each={groups()}>
+              {(group) => (
+                <section data-component="operator-panel">
+                  <h2 data-slot="operator-panel-title" title={group.project}>
+                    {shortPath(group.project)}
+                  </h2>
+                  <For each={group.sessions}>
+                    {(session) => (
+                      <div data-component="operator-ask-group">
+                        <span data-slot="operator-note">
+                          {session.requests[0]?.session?.title ?? session.sessionID}
+                        </span>
+                        <For each={session.requests}>
+                          {(item) => (
+                            <article
+                              data-component="operator-ask"
+                              data-request={item.request.id}
+                              onClick={() => {
+                                // Dragging across the request selects its text to copy; only a plain click opens it.
+                                if (window.getSelection()?.toString()) return
+                                setParams({ ask: item.request.id })
+                              }}
+                            >
+                              <div data-slot="operator-ask-head">
+                                <Tag variant="accent">{item.request.permission}</Tag>
+                                <Show when={item.session?.agent}>{(agent) => <Tag>{agent()}</Tag>}</Show>
+                                <span data-slot="operator-ask-age">{formatAgo(item.time, language.intl())}</span>
+                              </div>
+                              <ul data-slot="operator-ask-patterns">
+                                <For each={item.request.patterns}>
+                                  {(pattern) => (
+                                    <li>
+                                      <code>{pattern}</code>
+                                    </li>
+                                  )}
+                                </For>
+                              </ul>
+                            </article>
+                          )}
+                        </For>
+                      </div>
+                    )}
+                  </For>
+                </section>
+              )}
+            </For>
+          </Show>
         </Show>
       </Show>
     </>
@@ -168,5 +184,78 @@ function AskOverlay() {
         )}
       </Show>
     </RecordOverlay>
+  )
+}
+
+// Helpers' notes (agent_types_spec.md §4.6: the notify system action), newest first; Dismiss removes one.
+function useNotes() {
+  const api = useOperatorClient()
+  return useQuery(() => ({
+    queryKey: api.key("notifications"),
+    refetchInterval: 30_000,
+    queryFn: () =>
+      api
+        .client()
+        .operator.notification.list()
+        .then((result) => result.data ?? []),
+  }))
+}
+
+function HelperNotes() {
+  const language = useLanguage()
+  const api = useOperatorClient()
+  const queryClient = useQueryClient()
+  const notes = useNotes()
+  const dismiss = (id: string) =>
+    api
+      .client()
+      .operator.notification.dismiss({ id })
+      .then(() => queryClient.invalidateQueries({ queryKey: api.key("notifications") }))
+  const columns: Column<OperatorNotification>[] = [
+    {
+      id: "time",
+      header: language.t("operator.notes.time"),
+      value: (note) => note.time,
+      cell: (note) => formatAgo(note.time, language.intl()),
+    },
+    {
+      id: "helper",
+      header: language.t("operator.notes.helper"),
+      value: (note) => note.helper,
+      cell: (note) => `${note.helper} · ${note.namespace}`,
+    },
+    {
+      id: "project",
+      header: language.t("operator.column.project"),
+      value: (note) => note.project,
+      cell: (note) => (note.project ? shortPath(note.project) : "—"),
+    },
+    { id: "message", header: language.t("operator.notes.message"), cell: (note) => note.message },
+    {
+      id: "dismiss",
+      header: "",
+      cell: (note) => (
+        <ButtonV2
+          size="small"
+          variant="outline"
+          onClick={(event: MouseEvent) => {
+            event.stopPropagation()
+            void dismiss(note.id)
+          }}
+        >
+          {language.t("operator.notes.dismiss")}
+        </ButtonV2>
+      ),
+    },
+  ]
+  return (
+    <DataTable
+      label={language.t("operator.notes.title")}
+      rows={notes.data ?? []}
+      columns={columns}
+      loading={notes.isPending}
+      empty={language.t("operator.notes.empty")}
+      initialSort={{ column: "time", direction: "desc" }}
+    />
   )
 }

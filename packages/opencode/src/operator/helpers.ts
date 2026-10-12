@@ -27,6 +27,14 @@ export const Role = Schema.Literals([
 export type Role = typeof Role.Type
 
 export const STEPS = { default: 5, min: 1, max: 20 } as const
+
+// What a helper may declare (§4.6). System actions are the fork's (helper-tool.ts; memory is the memory tool,
+// within the memory permission). Read-only tools are suggested; the form asks before any other. Tools that need
+// someone to answer (question), start other agents (task) or helpers (helper) can't be declared: a run is
+// unattended and short.
+export const SYSTEM_ACTIONS = ["list_sessions", "archive_session", "trash_session", "notify", "memory"] as const
+export const READ_ONLY = ["read", "glob", "grep", "webfetch", "list_sessions", "memory"] as const
+export const NOT_DECLARABLE = ["question", "task", "helper", "invalid"] as const
 /** Seconds. */
 export const TIMEOUT = { default: 120, min: 10, max: 600 } as const
 
@@ -62,6 +70,11 @@ export const Info = Schema.Struct({
   text: Schema.String,
   steps: Schema.optional(Schema.Finite).annotate({ description: "Step limit (not for built-ins: one call)" }),
   timeout: Schema.optional(Schema.Finite).annotate({ description: "Time limit in seconds (not for built-ins)" }),
+  callable: Schema.Boolean.annotate({ description: "Agents of its namespace may call it with the helper tool" }),
+  usage: Schema.optional(Schema.String).annotate({ description: "What to give it and what you get back" }),
+  actions: Schema.Array(Schema.String).annotate({
+    description: "Its declared tools and system actions: allowed in its runs; everything else is denied",
+  }),
   file: Schema.optional(Schema.String),
 }).annotate({ identifier: "OperatorHelper" })
 export type Info = typeof Info.Type
@@ -77,6 +90,9 @@ export const Create = Schema.Struct({
   text: Schema.String,
   steps: Schema.optional(Schema.Finite),
   timeout: Schema.optional(Schema.Finite).annotate({ description: "Seconds" }),
+  callable: Schema.optional(Schema.Boolean),
+  usage: Schema.optional(Schema.String),
+  actions: Schema.optional(Schema.Array(Schema.String)),
 }).annotate({ identifier: "OperatorHelperCreate" })
 export type Create = typeof Create.Type
 
@@ -86,6 +102,9 @@ export const Patch = Schema.Struct({
   text: Schema.optional(Schema.String),
   steps: Schema.optional(Schema.Finite),
   timeout: Schema.optional(Schema.Finite).annotate({ description: "Seconds" }),
+  callable: Schema.optional(Schema.Boolean),
+  usage: Schema.optional(Schema.String).annotate({ description: "Empty: none" }),
+  actions: Schema.optional(Schema.Array(Schema.String)),
 }).annotate({ identifier: "OperatorHelperPatch" })
 export type Patch = typeof Patch.Type
 
@@ -120,6 +139,15 @@ const checkModel = (model: OperatorHelperFiles.Model) => {
   }
 }
 
+const checkActions = (actions: ReadonlyArray<string> | undefined) => {
+  const list = [...new Set((actions ?? []).map((item) => item.trim()).filter(Boolean))]
+  const refused = list.find((item) => (NOT_DECLARABLE as ReadonlyArray<string>).includes(item))
+  if (refused) throw fail(`A helper can't declare ${refused}: it runs unattended`)
+  const odd = list.find((item) => !/^[A-Za-z0-9_.:-]+$/.test(item))
+  if (odd) throw fail(`"${odd}" is not a tool or system action`)
+  return list
+}
+
 // The helper layer of a helper profile: the namespace's own (a copy or yours), else OpenCode's.
 function textOf(catalog: OperatorProfile.Catalog, profile: OperatorProfile.Profile | undefined) {
   const id = profile?.slots[OperatorProfile.HELPER]?.[0]
@@ -140,6 +168,8 @@ function builtins(catalog: OperatorProfile.Catalog): Info[] {
       builtin: true,
       roles: [item.name],
       model: { source: item.model },
+      callable: false,
+      actions: [],
       profile: profile?.id ?? builtin,
       ...textOf(catalog, profile),
     }
@@ -160,6 +190,9 @@ function infoOf(catalog: OperatorProfile.Catalog, stored: OperatorHelperFiles.St
     text: layer?.text ?? "",
     steps: stored.steps,
     timeout: stored.timeout,
+    callable: stored.callable === true,
+    ...(stored.usage ? { usage: stored.usage } : {}),
+    actions: stored.actions ?? [],
     file: OperatorHelperFiles.file(catalog.namespace.id, stored.name),
   }
 }
@@ -171,6 +204,8 @@ const layer = Layer.effect(
     const storeError = (error: { message: string }) => fail(error.message)
 
     const catalogOf = Effect.fnUntraced(function* (ns: string) {
+      // OpenCode's namespace is made on first use, as the prompt store does.
+      yield* Effect.promise(() => OperatorProfileStore.ensure())
       const found = yield* Effect.promise(() => OperatorProfileStore.readNamespace(ns))
       if (!found) return yield* fail(`No namespace "${ns}"`)
       return OperatorProfile.migrate(found)
@@ -216,6 +251,7 @@ const layer = Layer.effect(
           model: checkModel(input.model),
           steps: limit("The step limit", input.steps, STEPS),
           timeout: limit("The time limit", input.timeout, TIMEOUT),
+          actions: checkActions(input.actions),
         }),
         catch: (error) => (error instanceof HelperError ? error : fail(String(error))),
       })
@@ -238,6 +274,9 @@ const layer = Layer.effect(
         layer: text.id,
         steps: checked.steps,
         timeout: checked.timeout,
+        ...(input.callable ? { callable: true } : {}),
+        ...(input.usage?.trim() ? { usage: input.usage.trim() } : {}),
+        ...(checked.actions.length ? { actions: checked.actions } : {}),
       }
       yield* Effect.promise(() => OperatorHelperFiles.write(ns, stored))
       return infoOf(yield* catalogOf(ns), stored)
@@ -250,6 +289,7 @@ const layer = Layer.effect(
           ...(patch.model ? { model: checkModel(patch.model) } : {}),
           ...(patch.steps !== undefined ? { steps: limit("The step limit", patch.steps, STEPS) } : {}),
           ...(patch.timeout !== undefined ? { timeout: limit("The time limit", patch.timeout, TIMEOUT) } : {}),
+          ...(patch.actions !== undefined ? { actions: checkActions(patch.actions) } : {}),
         }),
         catch: (error) => (error instanceof HelperError ? error : fail(String(error))),
       })
@@ -261,9 +301,20 @@ const layer = Layer.effect(
           .saveLayer(ns, text.id, { name: text.name, type: text.type, text: patch.text })
           .pipe(Effect.mapError(storeError))
       }
-      const { description: _, ...rest } = before
+      const { description: _, usage: __, callable: ___, actions: ____, ...rest } = before
       const description = patch.description === undefined ? before.description : patch.description.trim()
-      const next: OperatorHelperFiles.Stored = { ...rest, ...(description ? { description } : {}), ...checked }
+      const usage = patch.usage === undefined ? before.usage : patch.usage.trim()
+      const callable = patch.callable ?? before.callable
+      const actions = checked.actions ?? before.actions ?? []
+      const { actions: _checked, ...limits } = checked
+      const next: OperatorHelperFiles.Stored = {
+        ...rest,
+        ...(description ? { description } : {}),
+        ...limits,
+        ...(callable ? { callable: true } : {}),
+        ...(usage ? { usage } : {}),
+        ...(actions.length ? { actions } : {}),
+      }
       yield* Effect.promise(() => OperatorHelperFiles.write(ns, next))
       return infoOf(yield* catalogOf(ns), next)
     })
@@ -280,7 +331,7 @@ const layer = Layer.effect(
             OperatorProfileStore.itemFile(ns, "profile", found.profile),
             OperatorProfileStore.itemFile(ns, "layer", found.layer),
           ],
-        }),
+        }).finally(OperatorHelperFiles.changed),
       )
     })
 

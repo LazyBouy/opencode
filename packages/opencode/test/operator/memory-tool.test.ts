@@ -40,6 +40,7 @@ async function setup(fields: Partial<Context> = {}) {
       agent: path.join(project.path, ".memory", "agents", "build"),
     },
     incognito: false,
+    writes: true,
     read: { namespace: "deny", project: "ask", agent: "allow" },
     ...fields,
   }
@@ -134,6 +135,7 @@ describe("the memory tool", () => {
   test("an incognito session reads namespace and project memory only, and never writes", async () => {
     const { project, run } = await setup({
       incognito: true,
+      writes: false,
       folders: { namespace: "/nowhere/.memory", project: "/nowhere/p/.memory" },
       read: { namespace: "allow", project: "allow", agent: "deny" },
     })

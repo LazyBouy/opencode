@@ -2234,7 +2234,7 @@ export type PermissionRequest = {
 
 export type OperatorPermissionOrigin = {
   /**
-   * opencode-default / opencode-agent: OpenCode's code (its defaults, its definition of the agent); config-permission / config-tools: a config file's `permission` or legacy `tools` key; agent: the agent's own `permission` (its agent file or config entry); truncation: OpenCode's truncation folder allow; session-*: the session's own rules, set by you, by Always allow (a client's Always), by Allow for session (the fork's reply card), added by `task` for a subagent, by a client's tool switch, or by OpenCode; session-incognito: the memory lines of an incognito subagent's session, locked from OpenCode's level; agent-written: the agent's own rules saved since its project loaded (applied at once); lock: a locked rule, applied again last
+   * opencode-default / opencode-agent: OpenCode's code (its defaults, its definition of the agent); config-permission / config-tools: a config file's `permission` or legacy `tools` key; agent: the agent's own `permission` (its agent file or config entry); truncation: OpenCode's truncation folder allow; session-*: the session's own rules, set by you, by Always allow (a client's Always), by Allow for session (the fork's reply card), added by `task` for a subagent, by a client's tool switch, or by OpenCode; session-incognito: the memory lines of an incognito subagent's session, locked from OpenCode's level; helper-run: a helper run's own lines (its declared actions allowed, never its own memory); agent-written: the agent's own rules saved since its project loaded (applied at once); lock: a locked rule, applied again last
    */
   kind:
     | "opencode-default"
@@ -2250,6 +2250,7 @@ export type OperatorPermissionOrigin = {
     | "session-client"
     | "session-opencode"
     | "session-incognito"
+    | "helper-run"
     | "agent-written"
     | "lock"
   path?: string
@@ -2805,6 +2806,15 @@ export type OperatorHelper = {
   text: string
   steps?: number
   timeout?: number
+  /**
+   * Agents of its namespace may call it with the helper tool
+   */
+  callable: boolean
+  usage?: string
+  /**
+   * Its declared tools and system actions: allowed in its runs; everything else is denied
+   */
+  actions: Array<string>
   file?: string
 }
 
@@ -2821,6 +2831,50 @@ export type OperatorHelperModel = {
   source: OperatorHelperModelSource
   model?: string
   variant?: string
+}
+
+export type OperatorHelperRunStartedBy = {
+  kind: "agent" | "role" | "layer" | "trigger"
+  agent?: string
+  sessionID?: string
+  role?: string
+  layer?: string
+}
+
+export type OperatorHelperRun = {
+  id: string
+  helper: string
+  namespace: string
+  /**
+   * The project it served
+   */
+  project: string
+  startedBy: OperatorHelperRunStartedBy
+  status: "running" | "done" | "failed" | "timeout" | "cancelled"
+  startedAt: number
+  endedAt?: number
+  cost?: number
+  input: string
+  output?: string
+  error?: string
+  sessionID?: string
+}
+
+export type OperatorHelperSettings = {
+  /**
+   * Runs older than this many days are deleted, with their sessions
+   */
+  runDays: number
+}
+
+export type OperatorNotification = {
+  id: string
+  time: number
+  message: string
+  helper: string
+  namespace: string
+  project?: string
+  run?: string
 }
 
 export type OperatorLayoutNamespace = {
@@ -12150,6 +12204,9 @@ export type OperatorHelperCreateData = {
     text: string
     steps?: number
     timeout?: number
+    callable?: boolean
+    usage?: string
+    actions?: Array<string>
   }
   path: {
     ns: string
@@ -12211,6 +12268,9 @@ export type OperatorHelperUpdateData = {
     text?: string
     steps?: number
     timeout?: number
+    callable?: boolean
+    usage?: string
+    actions?: Array<string>
   }
   path: {
     ns: string
@@ -12237,6 +12297,145 @@ export type OperatorHelperUpdateResponses = {
 }
 
 export type OperatorHelperUpdateResponse = OperatorHelperUpdateResponses[keyof OperatorHelperUpdateResponses]
+
+export type OperatorHelperRunsData = {
+  body?: never
+  path: {
+    ns: string
+    name: string
+  }
+  query?: never
+  url: "/operator/helper/{ns}/{name}/runs"
+}
+
+export type OperatorHelperRunsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorHelperRunsError = OperatorHelperRunsErrors[keyof OperatorHelperRunsErrors]
+
+export type OperatorHelperRunsResponses = {
+  /**
+   * Its runs, newest first
+   */
+  200: Array<OperatorHelperRun>
+}
+
+export type OperatorHelperRunsResponse = OperatorHelperRunsResponses[keyof OperatorHelperRunsResponses]
+
+export type OperatorHelperSettingsData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/operator/helper-settings"
+}
+
+export type OperatorHelperSettingsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorHelperSettingsError = OperatorHelperSettingsErrors[keyof OperatorHelperSettingsErrors]
+
+export type OperatorHelperSettingsResponses = {
+  /**
+   * The helper settings
+   */
+  200: OperatorHelperSettings
+}
+
+export type OperatorHelperSettingsResponse = OperatorHelperSettingsResponses[keyof OperatorHelperSettingsResponses]
+
+export type OperatorHelperSaveSettingsData = {
+  body?: {
+    /**
+     * Runs older than this many days are deleted, with their sessions
+     */
+    runDays: number
+  }
+  path?: never
+  query?: never
+  url: "/operator/helper-settings"
+}
+
+export type OperatorHelperSaveSettingsErrors = {
+  /**
+   * OperatorHelperError | InvalidRequestError
+   */
+  400: OperatorHelperError | InvalidRequestError
+}
+
+export type OperatorHelperSaveSettingsError = OperatorHelperSaveSettingsErrors[keyof OperatorHelperSaveSettingsErrors]
+
+export type OperatorHelperSaveSettingsResponses = {
+  /**
+   * The helper settings
+   */
+  200: OperatorHelperSettings
+}
+
+export type OperatorHelperSaveSettingsResponse =
+  OperatorHelperSaveSettingsResponses[keyof OperatorHelperSaveSettingsResponses]
+
+export type OperatorNotificationListData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/operator/notifications"
+}
+
+export type OperatorNotificationListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorNotificationListError = OperatorNotificationListErrors[keyof OperatorNotificationListErrors]
+
+export type OperatorNotificationListResponses = {
+  /**
+   * Notes, newest first
+   */
+  200: Array<OperatorNotification>
+}
+
+export type OperatorNotificationListResponse =
+  OperatorNotificationListResponses[keyof OperatorNotificationListResponses]
+
+export type OperatorNotificationDismissData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/operator/notifications/{id}"
+}
+
+export type OperatorNotificationDismissErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorNotificationDismissError =
+  OperatorNotificationDismissErrors[keyof OperatorNotificationDismissErrors]
+
+export type OperatorNotificationDismissResponses = {
+  /**
+   * Whether it was there
+   */
+  200: boolean
+}
+
+export type OperatorNotificationDismissResponse =
+  OperatorNotificationDismissResponses[keyof OperatorNotificationDismissResponses]
 
 export type OperatorLayoutGetData = {
   body?: never

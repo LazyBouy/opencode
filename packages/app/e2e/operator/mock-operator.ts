@@ -563,6 +563,9 @@ export interface OperatorMock {
   /** Helpers (agent_types_spec.md §4): every namespace's, and the writes to them. */
   helpers: Array<Record<string, unknown> & { name: string; namespace: string }>
   helperWrites: Array<{ method: string; url: string; body: unknown }>
+  helperRuns: Array<Record<string, unknown>>
+  helperSettings: { runDays: number }
+  notes: Array<Record<string, unknown> & { id: string }>
   // A reason the next move to Trash fails with.
   trashFail?: string
   // The capabilities by scope (/operator/capability) and the actions taken on them.
@@ -713,6 +716,8 @@ export async function mockOperator(page: Page) {
           profile: `opencode:profile.helper.${name}`,
           layer: `opencode:helper.${name}`,
           text: `The ${name} prompt.`,
+          callable: false,
+          actions: [],
         }),
       ),
       {
@@ -727,9 +732,39 @@ export async function mockOperator(page: Page) {
         text: "Sort the issue.",
         steps: 5,
         timeout: 120,
+        callable: true,
+        usage: "an issue → bug, feature or question",
+        actions: [],
       },
     ],
     helperWrites: [],
+    helperRuns: [
+      {
+        id: "r1",
+        helper: "sorter",
+        namespace: "opencode",
+        project: directory,
+        startedBy: { kind: "agent", agent: "build", sessionID: "ses_parent" },
+        status: "done",
+        startedAt: Date.now() - 60_000,
+        endedAt: Date.now() - 57_500,
+        cost: 0.0012,
+        input: "The app crashes on start.",
+        output: "bug",
+        sessionID: "ses_helper_run",
+      },
+    ],
+    helperSettings: { runDays: 30 },
+    notes: [
+      {
+        id: "n1",
+        time: Date.now() - 120_000,
+        message: "Archived 3 sessions untouched for a year.",
+        helper: "sorter",
+        namespace: "opencode",
+        project: directory,
+      },
+    ],
     capabilities: [
       { kind: "tool", name: "read", origin: "opencode", location: "<built-in>", state: "inherited", hides: [] },
       {
@@ -1028,7 +1063,31 @@ export async function mockOperator(page: Page) {
       const text = (route.request().postDataJSON() as { text?: string }).text ?? ""
       return json(route, { tokens: Math.ceil(text.length / 4) })
     }
-    // Helpers: namespace resources.
+    // Helpers: namespace resources, their runs and settings, and their notes.
+    const runsPath = url.pathname.match(/^\/operator\/helper\/([^/]+)\/([^/]+)\/runs$/)
+    if (runsPath)
+      return json(
+        route,
+        state.helperRuns.filter(
+          (run) =>
+            run.namespace === decodeURIComponent(runsPath[1]!) && run.helper === decodeURIComponent(runsPath[2]!),
+        ),
+      )
+    if (url.pathname === "/operator/helper-settings") {
+      if (method === "PUT") {
+        const body = route.request().postDataJSON() as { runDays: number }
+        state.helperWrites.push({ method, url: url.toString(), body })
+        state.helperSettings = { runDays: body.runDays }
+      }
+      return json(route, state.helperSettings)
+    }
+    if (url.pathname === "/operator/notifications") return json(route, state.notes)
+    const notePath = url.pathname.match(/^\/operator\/notifications\/([^/]+)$/)
+    if (notePath && method === "DELETE") {
+      const before = state.notes.length
+      state.notes = state.notes.filter((note) => note.id !== decodeURIComponent(notePath[1]!))
+      return json(route, state.notes.length !== before)
+    }
     if (url.pathname === "/operator/helper" && method === "GET") {
       const ns = url.searchParams.get("ns")
       return json(route, ns ? state.helpers.filter((item) => item.namespace === ns) : state.helpers)

@@ -3658,6 +3658,18 @@
                   },
                   "timeout": {
                     "type": "number"
+                  },
+                  "callable": {
+                    "type": "boolean"
+                  },
+                  "usage": {
+                    "type": "string"
+                  },
+                  "actions": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
                 "required": ["name", "model", "text"],
@@ -3747,6 +3759,18 @@
                   },
                   "timeout": {
                     "type": "number"
+                  },
+                  "callable": {
+                    "type": "boolean"
+                  },
+                  "usage": {
+                    "type": "string"
+                  },
+                  "actions": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
                 "additionalProperties": false
@@ -3817,6 +3841,248 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.helper.remove({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/helper/{ns}/{name}/runs": {
+      "get": {
+        "tags": ["operator helpers"],
+        "operationId": "operator.helper.runs",
+        "parameters": [
+          {
+            "name": "ns",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Its runs, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorHelperRun"
+                  },
+                  "description": "Its runs, newest first"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "A helper's runs, newest first: who started it, its status, duration, cost, input and result, and for a run with actions its session (its transcript). Runs older than the helper settings' days are deleted.",
+        "summary": "List a helper's runs",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.helper.runs({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/helper-settings": {
+      "get": {
+        "tags": ["operator helpers"],
+        "operationId": "operator.helper.settings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The helper settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorHelperSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "How long helper runs are kept.",
+        "summary": "Get the helper settings",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.helper.settings({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "tags": ["operator helpers"],
+        "operationId": "operator.helper.saveSettings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The helper settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorHelperSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorHelperError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorHelperError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "How many days helper runs are kept (1–3650, default 30); older runs are deleted with their sessions.",
+        "summary": "Save the helper settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "runDays": {
+                    "type": "number",
+                    "description": "Runs older than this many days are deleted, with their sessions"
+                  }
+                },
+                "required": ["runDays"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.helper.saveSettings({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/notifications": {
+      "get": {
+        "tags": ["operator helpers"],
+        "operationId": "operator.notification.list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Notes, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorNotification"
+                  },
+                  "description": "Notes, newest first"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Notes helpers posted with the notify system action, newest first, each with the project it is about when given.",
+        "summary": "List helpers' notes",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.notification.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/notifications/{id}": {
+      "delete": {
+        "tags": ["operator helpers"],
+        "operationId": "operator.notification.dismiss",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Whether it was there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Whether it was there"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Removes a helper's note.",
+        "summary": "Dismiss a note",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.notification.dismiss({\n  ...\n})"
           }
         ]
       }
@@ -32640,10 +32906,11 @@
               "session-client",
               "session-opencode",
               "session-incognito",
+              "helper-run",
               "agent-written",
               "lock"
             ],
-            "description": "opencode-default / opencode-agent: OpenCode's code (its defaults, its definition of the agent); config-permission / config-tools: a config file's `permission` or legacy `tools` key; agent: the agent's own `permission` (its agent file or config entry); truncation: OpenCode's truncation folder allow; session-*: the session's own rules, set by you, by Always allow (a client's Always), by Allow for session (the fork's reply card), added by `task` for a subagent, by a client's tool switch, or by OpenCode; session-incognito: the memory lines of an incognito subagent's session, locked from OpenCode's level; agent-written: the agent's own rules saved since its project loaded (applied at once); lock: a locked rule, applied again last"
+            "description": "opencode-default / opencode-agent: OpenCode's code (its defaults, its definition of the agent); config-permission / config-tools: a config file's `permission` or legacy `tools` key; agent: the agent's own `permission` (its agent file or config entry); truncation: OpenCode's truncation folder allow; session-*: the session's own rules, set by you, by Always allow (a client's Always), by Allow for session (the fork's reply card), added by `task` for a subagent, by a client's tool switch, or by OpenCode; session-incognito: the memory lines of an incognito subagent's session, locked from OpenCode's level; helper-run: a helper run's own lines (its declared actions allowed, never its own memory); agent-written: the agent's own rules saved since its project loaded (applied at once); lock: a locked rule, applied again last"
           },
           "path": {
             "type": "string"
@@ -33967,11 +34234,25 @@
           "timeout": {
             "type": "number"
           },
+          "callable": {
+            "type": "boolean",
+            "description": "Agents of its namespace may call it with the helper tool"
+          },
+          "usage": {
+            "type": "string"
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Its declared tools and system actions: allowed in its runs; everything else is denied"
+          },
           "file": {
             "type": "string"
           }
         },
-        "required": ["name", "namespace", "builtin", "roles", "model", "profile", "text"],
+        "required": ["name", "namespace", "builtin", "roles", "model", "profile", "text", "callable", "actions"],
         "additionalProperties": false
       },
       "OperatorHelperError": {
@@ -34013,6 +34294,116 @@
           }
         },
         "required": ["source"],
+        "additionalProperties": false
+      },
+      "OperatorHelperRunStartedBy": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["agent", "role", "layer", "trigger"]
+          },
+          "agent": {
+            "type": "string"
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "layer": {
+            "type": "string"
+          }
+        },
+        "required": ["kind"],
+        "additionalProperties": false
+      },
+      "OperatorHelperRun": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "helper": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string",
+            "description": "The project it served"
+          },
+          "startedBy": {
+            "$ref": "#/components/schemas/OperatorHelperRunStartedBy"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["running", "done", "failed", "timeout", "cancelled"]
+          },
+          "startedAt": {
+            "type": "number"
+          },
+          "endedAt": {
+            "type": "number"
+          },
+          "cost": {
+            "type": "number"
+          },
+          "input": {
+            "type": "string"
+          },
+          "output": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "sessionID": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "helper", "namespace", "project", "startedBy", "status", "startedAt", "input"],
+        "additionalProperties": false
+      },
+      "OperatorHelperSettings": {
+        "type": "object",
+        "properties": {
+          "runDays": {
+            "type": "number",
+            "description": "Runs older than this many days are deleted, with their sessions"
+          }
+        },
+        "required": ["runDays"],
+        "additionalProperties": false
+      },
+      "OperatorNotification": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "time": {
+            "type": "number"
+          },
+          "message": {
+            "type": "string"
+          },
+          "helper": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "run": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "time", "message", "helper", "namespace"],
         "additionalProperties": false
       },
       "OperatorLayoutNamespace": {
