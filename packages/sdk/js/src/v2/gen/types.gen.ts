@@ -2708,6 +2708,7 @@ export type OperatorFolderArchiveResult = {
 export type OperatorTrashKind =
   | "project"
   | "agent"
+  | "helper"
   | "session"
   | "type"
   | "layer"
@@ -2769,6 +2770,57 @@ export type OperatorTrashError = {
 
 export type OperatorTrashEmptied = {
   purged: number
+}
+
+export type OperatorHelperRole =
+  | "title"
+  | "compaction"
+  | "summary"
+  | "agent-generator"
+  | "purpose-generator"
+  | "dynamic-generator"
+
+export type OperatorHelper = {
+  name: string
+  namespace: string
+  description?: string
+  builtin: boolean
+  /**
+   * A built-in's role
+   */
+  roles: Array<OperatorHelperRole>
+  model: {
+    /**
+     * chat (built-ins only): the model of the chat it works for
+     */
+    source: "small" | "default" | "pick" | "chat"
+    model?: string
+    variant?: string
+  }
+  /**
+   * Its helper profile
+   */
+  profile: string
+  layer?: string
+  text: string
+  steps?: number
+  timeout?: number
+  file?: string
+}
+
+export type OperatorHelperError = {
+  name: "OperatorHelperError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorHelperModelSource = "small" | "default" | "pick"
+
+export type OperatorHelperModel = {
+  source: OperatorHelperModelSource
+  model?: string
+  variant?: string
 }
 
 export type OperatorLayoutNamespace = {
@@ -5389,6 +5441,11 @@ export type OperatorTokenizerList = {
   folder: string
   tokenizers: Array<OperatorTokenizer>
   errors: Array<OperatorTokenizerLoadError>
+}
+
+export type OperatorTokenCount = {
+  tokens: number
+  tokenizer?: string
 }
 
 export type OperatorPermissionPatternForm =
@@ -12055,6 +12112,132 @@ export type OperatorTrashPurgeResponses = {
 
 export type OperatorTrashPurgeResponse = OperatorTrashPurgeResponses[keyof OperatorTrashPurgeResponses]
 
+export type OperatorHelperListData = {
+  body?: never
+  path?: never
+  query?: {
+    ns?: string
+  }
+  url: "/operator/helper"
+}
+
+export type OperatorHelperListErrors = {
+  /**
+   * OperatorHelperError | InvalidRequestError
+   */
+  400: OperatorHelperError | InvalidRequestError
+}
+
+export type OperatorHelperListError = OperatorHelperListErrors[keyof OperatorHelperListErrors]
+
+export type OperatorHelperListResponses = {
+  /**
+   * Helpers, built-ins first in each namespace
+   */
+  200: Array<OperatorHelper>
+}
+
+export type OperatorHelperListResponse = OperatorHelperListResponses[keyof OperatorHelperListResponses]
+
+export type OperatorHelperCreateData = {
+  body?: {
+    /**
+     * Letters, digits, dots, dashes and underscores; used as the file name
+     */
+    name: string
+    description?: string
+    model: OperatorHelperModel
+    text: string
+    steps?: number
+    timeout?: number
+  }
+  path: {
+    ns: string
+  }
+  query?: never
+  url: "/operator/helper/{ns}"
+}
+
+export type OperatorHelperCreateErrors = {
+  /**
+   * OperatorHelperError | InvalidRequestError
+   */
+  400: OperatorHelperError | InvalidRequestError
+}
+
+export type OperatorHelperCreateError = OperatorHelperCreateErrors[keyof OperatorHelperCreateErrors]
+
+export type OperatorHelperCreateResponses = {
+  /**
+   * The new helper
+   */
+  200: OperatorHelper
+}
+
+export type OperatorHelperCreateResponse = OperatorHelperCreateResponses[keyof OperatorHelperCreateResponses]
+
+export type OperatorHelperRemoveData = {
+  body?: never
+  path: {
+    ns: string
+    name: string
+  }
+  query?: never
+  url: "/operator/helper/{ns}/{name}"
+}
+
+export type OperatorHelperRemoveErrors = {
+  /**
+   * OperatorHelperError | InvalidRequestError
+   */
+  400: OperatorHelperError | InvalidRequestError
+}
+
+export type OperatorHelperRemoveError = OperatorHelperRemoveErrors[keyof OperatorHelperRemoveErrors]
+
+export type OperatorHelperRemoveResponses = {
+  /**
+   * The Trash entry
+   */
+  200: OperatorTrashEntry
+}
+
+export type OperatorHelperRemoveResponse = OperatorHelperRemoveResponses[keyof OperatorHelperRemoveResponses]
+
+export type OperatorHelperUpdateData = {
+  body?: {
+    description?: string
+    model?: OperatorHelperModel
+    text?: string
+    steps?: number
+    timeout?: number
+  }
+  path: {
+    ns: string
+    name: string
+  }
+  query?: never
+  url: "/operator/helper/{ns}/{name}"
+}
+
+export type OperatorHelperUpdateErrors = {
+  /**
+   * OperatorHelperError | InvalidRequestError
+   */
+  400: OperatorHelperError | InvalidRequestError
+}
+
+export type OperatorHelperUpdateError = OperatorHelperUpdateErrors[keyof OperatorHelperUpdateErrors]
+
+export type OperatorHelperUpdateResponses = {
+  /**
+   * The helper
+   */
+  200: OperatorHelper
+}
+
+export type OperatorHelperUpdateResponse = OperatorHelperUpdateResponses[keyof OperatorHelperUpdateResponses]
+
 export type OperatorLayoutGetData = {
   body?: never
   path?: never
@@ -17922,6 +18105,37 @@ export type OperatorCallTokenizersResponses = {
 }
 
 export type OperatorCallTokenizersResponse = OperatorCallTokenizersResponses[keyof OperatorCallTokenizersResponses]
+
+export type OperatorCallCountData = {
+  body?: {
+    model?: string
+    text: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/tokenizers/count"
+}
+
+export type OperatorCallCountErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorCallCountError = OperatorCallCountErrors[keyof OperatorCallCountErrors]
+
+export type OperatorCallCountResponses = {
+  /**
+   * The text's tokens
+   */
+  200: OperatorTokenCount
+}
+
+export type OperatorCallCountResponse = OperatorCallCountResponses[keyof OperatorCallCountResponses]
 
 export type OperatorAgentPermissionsGetData = {
   body?: never

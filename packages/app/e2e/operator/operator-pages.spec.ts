@@ -42,15 +42,19 @@ test("the agents table filters, hides hidden agents and opens an agent", async (
   const table = page.locator('[data-component="operator-table"]')
   await expect(table).toContainText("build")
   await expect(table).toContainText("reviewer")
-  await expect(table).not.toContainText("title")
+  // (OpenCode's title agent is also listed as a built-in helper: agent_types_spec.md §4.8.)
+  await expect(table).not.toContainText("triage")
   await page
     .getByRole("switch", { name: "Show hidden agents (2)" })
     .locator("..")
     .locator('[data-slot="switch-control"]')
     .click()
-  await expect(table).toContainText("title")
+  // With the helpers the list is longer than one page: found by searching.
+  const search = page.getByRole("searchbox", { name: "Search agents" })
+  await search.fill("triage")
+  await expect(table).toContainText("triage")
 
-  await page.getByRole("searchbox", { name: "Search agents" }).fill("review")
+  await search.fill("review")
   await expect(table.locator("tbody tr")).toHaveCount(1)
   await table.getByRole("row", { name: /reviewer/ }).click()
 

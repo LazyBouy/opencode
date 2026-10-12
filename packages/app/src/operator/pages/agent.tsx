@@ -357,7 +357,7 @@ export function AgentDetail(props: { name: string; directory: string; tab: strin
 }
 
 // A fact about the agent: its label with the field helper's (i) beside it, and its value below.
-function Fact(props: { label: string; help: string; children: JSX.Element }) {
+export function Fact(props: { label: string; help: string; children: JSX.Element }) {
   return (
     <div data-slot="operator-fact">
       <dt>

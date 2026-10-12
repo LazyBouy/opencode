@@ -70,6 +70,8 @@ export interface Interface {
   readonly recount: (sessionID: string) => Effect.Effect<void>
   /** The tokenizers loaded from the tokenizer folder (tokenizers.ts). */
   readonly tokenizers: () => Effect.Effect<OperatorTokenizers.List>
+  /** A text's tokens for a model (a form's counters): its tokenizer's count, else an estimate. */
+  readonly count: (input: { model?: string; text: string }) => Effect.Effect<OperatorTokenizers.Count>
   /** The newest recorded call of an agent of this project: its tools as sent. */
   readonly last: (agent: string) => Effect.Effect<typeof Last.Type>
   /** Registers a call about to be sent; its id, or nothing when it is not recorded. */
@@ -441,6 +443,11 @@ const layer = Layer.effect(
       return OperatorTokenizers.list()
     })
 
+    const count = Effect.fn("OperatorCalls.count")(function* (input: { model?: string; text: string }) {
+      yield* Effect.promise(() => OperatorTokenizers.ready())
+      return OperatorTokenizers.countFor(input.model, input.text)
+    })
+
     const last = Effect.fn("OperatorCalls.last")(function* (agent: string) {
       const ctx = yield* InstanceState.context
       const projectKey = yield* Effect.promise(() => OperatorProjects.keyOf(ctx))
@@ -464,7 +471,7 @@ const layer = Layer.effect(
       }
     })
 
-    return Service.of({ begin, list, detail, raw, export: exportSession, last, recount, tokenizers })
+    return Service.of({ begin, list, detail, raw, export: exportSession, last, recount, tokenizers, count })
   }),
 )
 

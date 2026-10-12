@@ -560,6 +560,9 @@ export interface OperatorMock {
     project?: string
   }>
   trashWrites: Array<{ method: string; path: string; body: unknown; directory?: string }>
+  /** Helpers (agent_types_spec.md §4): every namespace's, and the writes to them. */
+  helpers: Array<Record<string, unknown> & { name: string; namespace: string }>
+  helperWrites: Array<{ method: string; url: string; body: unknown }>
   // A reason the next move to Trash fails with.
   trashFail?: string
   // The capabilities by scope (/operator/capability) and the actions taken on them.
@@ -696,6 +699,37 @@ export async function mockOperator(page: Page) {
     decisions: [],
     trash: [],
     trashWrites: [],
+    helpers: [
+      ...["title", "summary", "compaction", "agent-generator", "purpose-generator", "dynamic-generator"].map(
+        (name) => ({
+          name,
+          namespace: "opencode",
+          builtin: true,
+          roles: [name],
+          model: {
+            source:
+              name === "compaction" || name === "summary" ? "chat" : name === "agent-generator" ? "default" : "small",
+          },
+          profile: `opencode:profile.helper.${name}`,
+          layer: `opencode:helper.${name}`,
+          text: `The ${name} prompt.`,
+        }),
+      ),
+      {
+        name: "sorter",
+        namespace: "opencode",
+        description: "Sorts issues",
+        builtin: false,
+        roles: [],
+        model: { source: "small" },
+        profile: "sorter",
+        layer: "sorter",
+        text: "Sort the issue.",
+        steps: 5,
+        timeout: 120,
+      },
+    ],
+    helperWrites: [],
     capabilities: [
       { kind: "tool", name: "read", origin: "opencode", location: "<built-in>", state: "inherited", hides: [] },
       {
@@ -989,6 +1023,52 @@ export async function mockOperator(page: Page) {
       return found
         ? json(route, found)
         : json(route, { name: "OperatorCallNotFoundError", data: { message: "No call" } }, 404)
+    }
+    if (url.pathname === "/operator/tokenizers/count") {
+      const text = (route.request().postDataJSON() as { text?: string }).text ?? ""
+      return json(route, { tokens: Math.ceil(text.length / 4) })
+    }
+    // Helpers: namespace resources.
+    if (url.pathname === "/operator/helper" && method === "GET") {
+      const ns = url.searchParams.get("ns")
+      return json(route, ns ? state.helpers.filter((item) => item.namespace === ns) : state.helpers)
+    }
+    const helperPath = url.pathname.match(/^\/operator\/helper\/([^/]+)(?:\/([^/]+))?$/)
+    if (helperPath) {
+      const ns = decodeURIComponent(helperPath[1]!)
+      const name = helperPath[2] ? decodeURIComponent(helperPath[2]) : undefined
+      const body = method === "DELETE" ? undefined : (route.request().postDataJSON() as Record<string, unknown>)
+      state.helperWrites.push({ method, url: url.toString(), body })
+      if (method === "POST") {
+        const helper = {
+          ...body,
+          name: String(body!.name),
+          namespace: ns,
+          builtin: false,
+          roles: [],
+          profile: String(body!.name),
+          layer: String(body!.name),
+          steps: body!.steps ?? 5,
+          timeout: body!.timeout ?? 120,
+        }
+        state.helpers.push(helper)
+        return json(route, helper)
+      }
+      const at = state.helpers.findIndex((item) => item.namespace === ns && item.name === name)
+      if (at < 0) return json(route, { name: "OperatorHelperError", data: { message: "No helper" } }, 400)
+      if (method === "PATCH") {
+        state.helpers[at] = { ...state.helpers[at]!, ...body }
+        return json(route, state.helpers[at])
+      }
+      const [gone] = state.helpers.splice(at, 1)
+      return json(route, {
+        id: "h1",
+        kind: "helper",
+        name: gone!.name,
+        namespace: ns,
+        deletedAt: Date.now(),
+        files: [],
+      })
     }
     if (url.pathname === "/operator/tokenizers")
       return json(route, { folder: "/root/.config/opencode/tokenizers", tokenizers: [], errors: [] })

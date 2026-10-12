@@ -13,6 +13,7 @@ import { Global } from "@opencode-ai/core/global"
 export const Kind = Schema.Literals([
   "project",
   "agent",
+  "helper",
   "session",
   "type",
   "layer",

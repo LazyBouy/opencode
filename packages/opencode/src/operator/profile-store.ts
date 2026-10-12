@@ -16,6 +16,7 @@ import { OperatorProfile } from "./profile"
 import { OperatorResolver } from "./resolver"
 import { OperatorResolverBuiltins } from "./resolver-builtins"
 import { OperatorTrashFiles } from "./trash-files"
+import { OperatorHelperFiles } from "./helper-files"
 
 // Prompt profile data is server-wide, in the global config folder; nothing goes into a project:
 //
@@ -743,6 +744,9 @@ const layer = Layer.effect(
         )
         users.push(...projects.filter((item) => item.defaultProfile === id).map((item) => `project ${item.name}`))
         if (catalog.namespace.defaultProfile === id) users.push("the namespace default")
+        // A helper's text (helpers.ts): deleted with the helper.
+        const helpers = yield* Effect.promise(() => OperatorHelperFiles.read(catalog.namespace.id))
+        users.push(...helpers.filter((item) => item.profile === id).map((item) => `helper "${item.name}"`))
       }
       return users.length ? users.join(", ") : undefined
     })

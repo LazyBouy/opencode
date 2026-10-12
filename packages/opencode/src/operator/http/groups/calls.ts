@@ -21,6 +21,7 @@ export const OperatorCallPaths = {
   raw: "/operator/session/:sessionID/call/:callID/raw",
   recount: "/operator/session/:sessionID/calls/recount",
   tokenizers: "/operator/tokenizers",
+  count: "/operator/tokenizers/count",
 } as const
 
 export class ApiCallNotFoundError extends Schema.ErrorClass<{
@@ -117,6 +118,21 @@ export const OperatorCallApi = HttpApi.make("operator-calls")
             summary: "List tokenizers",
             description:
               "The tokenizers loaded from the tokenizer folder, the models each counts for, and modules that failed to load. Without one, the Transcript estimates (characters ÷ 4).",
+          }),
+        ),
+        HttpApiEndpoint.post("count", OperatorCallPaths.count, {
+          query: WorkspaceRoutingQuery,
+          payload: Schema.Struct({
+            model: Schema.optional(Schema.String).annotate({ description: "provider/model" }),
+            text: Schema.String,
+          }),
+          success: described(OperatorTokenizers.Count, "The text's tokens"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.call.count",
+            summary: "Count a text's tokens",
+            description:
+              "A text's tokens for a model, as a form's counters show them: counted by the model's tokenizer when one is added, else estimated (characters ÷ 4).",
           }),
         ),
       )

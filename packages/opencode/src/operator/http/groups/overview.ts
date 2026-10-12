@@ -12,6 +12,7 @@ import { OperatorProjectRecordGroup } from "./project-records"
 import { OperatorNamespaceGroup } from "./namespaces"
 import { OperatorPermissionDecisionGroup } from "./permission-decisions"
 import { OperatorTrashGroup } from "./trash"
+import { OperatorHelperGroup } from "./helpers"
 import { OperatorLayoutGroup } from "./layout"
 import { OperatorOnboardingGroup } from "./onboarding"
 import { OperatorModelDefaultsGroup } from "./model-defaults"
@@ -106,6 +107,7 @@ export const OperatorRootApi = HttpApi.make("operator-root")
   .add(OperatorFolderGroup)
   .add(OperatorNamespaceGroup)
   .add(OperatorTrashGroup)
+  .add(OperatorHelperGroup)
   .add(OperatorLayoutGroup)
   .add(OperatorOnboardingGroup)
   .add(OperatorModelDefaultsGroup)

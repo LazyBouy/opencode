@@ -35,11 +35,11 @@ test("a list's optional columns can be removed and added back; required ones can
 
   await table.getByRole("button", { name: "Columns of Agents" }).click()
   const menu = page.getByRole("menu")
-  await expect(menu.getByRole("menuitemcheckbox", { name: "Name" })).toHaveCount(0)
+  await expect(menu.getByRole("menuitemcheckbox", { name: "Name", exact: true })).toHaveCount(0)
   await menu.getByRole("menuitemcheckbox", { name: "Profile" }).click()
   await page.keyboard.press("Escape")
   await expect(table.getByRole("columnheader", { name: "Profile" })).toHaveCount(0)
-  await expect(table.getByRole("columnheader", { name: "Name" })).toBeVisible()
+  await expect(table.getByRole("columnheader", { name: "Name", exact: true })).toBeVisible()
 
   // The choice is kept.
   await page.reload()

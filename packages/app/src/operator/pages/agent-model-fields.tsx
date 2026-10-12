@@ -45,12 +45,18 @@ export function useVariantLabel() {
   }
 }
 
+/** The model part of a form: the agent form's, or a helper's. */
+export type ModelForm = Pick<AgentForm, "modelSource" | "model" | "variant">
+
 export function AgentModelFields(props: {
-  form: AgentForm
-  set: <K extends keyof AgentForm>(key: K, value: AgentForm[K]) => void
+  form: ModelForm
+  /** Model source values come from the control (ModelSource); model and variant are text. */
+  set: (key: keyof ModelForm, value: string) => void
   directory: string | undefined
   scope: "project" | "global"
   editing: boolean
+  /** A new agent starts on the default model in effect, copied in; a helper keeps the source it was given. */
+  prefill?: boolean
   /** Where the agent is saved, in words (the project's name, or Settings), for the "copied in" note. */
   where: string
 }) {
@@ -105,7 +111,7 @@ export function AgentModelFields(props: {
     on(
       () => [props.scope, chains()?.model.effective.model] as const,
       ([, effective]) => {
-        if (props.editing || touched || effective === undefined) return
+        if (props.editing || props.prefill === false || touched || effective === undefined) return
         if (!effective) return props.set("modelSource", "default")
         props.set("modelSource", "pick")
         props.set("model", effective)
@@ -156,7 +162,7 @@ export function AgentModelFields(props: {
         { model, from },
       )
     }
-    if (!props.editing && !touched && props.form.model === found.model.effective.model)
+    if (props.prefill !== false && !props.editing && !touched && props.form.model === found.model.effective.model)
       return props.scope === "global"
         ? language.t("operator.agentModel.copiedInSettings")
         : language.t("operator.agentModel.copiedIn", { where: props.where })

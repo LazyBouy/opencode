@@ -144,6 +144,8 @@ import type {
   OperatorAgentSessionsStateResponses,
   OperatorAgentUpdateErrors,
   OperatorAgentUpdateResponses,
+  OperatorCallCountErrors,
+  OperatorCallCountResponses,
   OperatorCallExportErrors,
   OperatorCallExportResponses,
   OperatorCallGetErrors,
@@ -213,6 +215,15 @@ import type {
   OperatorFolderSessionsArchiveResponses,
   OperatorFolderSessionsMoveErrors,
   OperatorFolderSessionsMoveResponses,
+  OperatorHelperCreateErrors,
+  OperatorHelperCreateResponses,
+  OperatorHelperListErrors,
+  OperatorHelperListResponses,
+  OperatorHelperModel,
+  OperatorHelperRemoveErrors,
+  OperatorHelperRemoveResponses,
+  OperatorHelperUpdateErrors,
+  OperatorHelperUpdateResponses,
   OperatorLayoutGetErrors,
   OperatorLayoutGetResponses,
   OperatorLayoutLaterErrors,
@@ -3141,6 +3152,159 @@ export class Trash extends HeyApiClient {
   }
 }
 
+export class Helper extends HeyApiClient {
+  /**
+   * List helpers
+   *
+   * A namespace's helpers: the built-in ones (OpenCode's title, summary, compaction and agent generator, the fork's purpose and Dynamic generators), read-only, each with its role, and the namespace's own, each with its text (its helper profile's layer), model and limits.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      ns?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "ns" }] }])
+    return (options?.client ?? this.client).get<OperatorHelperListResponses, OperatorHelperListErrors, ThrowOnError>({
+      url: "/operator/helper",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create a helper
+   *
+   * A new helper in a namespace, usable by every project of it. Its text becomes a helper profile holding one helper layer in the namespace's catalog. Model: small (the default), default or pick. Step limit 1–20 (default 5), time limit 10–600 seconds (default 120).
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters: {
+      ns: string
+      name?: string
+      description?: string
+      model?: OperatorHelperModel
+      text?: string
+      steps?: number
+      timeout?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "ns" },
+            { in: "body", key: "name" },
+            { in: "body", key: "description" },
+            { in: "body", key: "model" },
+            { in: "body", key: "text" },
+            { in: "body", key: "steps" },
+            { in: "body", key: "timeout" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorHelperCreateResponses,
+      OperatorHelperCreateErrors,
+      ThrowOnError
+    >({
+      url: "/operator/helper/{ns}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Move a helper to Trash
+   *
+   * Move a helper, with its helper profile and layer, to Trash, from where it can be restored. Built-in helpers can't be deleted.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      ns: string
+      name: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "ns" },
+            { in: "path", key: "name" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      OperatorHelperRemoveResponses,
+      OperatorHelperRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/operator/helper/{ns}/{name}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update a helper
+   *
+   * Change a helper's description, model, limits or text (written into its helper layer). Built-in helpers are read-only; their text is edited on the Prompts page.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      ns: string
+      name: string
+      description?: string
+      model?: OperatorHelperModel
+      text?: string
+      steps?: number
+      timeout?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "ns" },
+            { in: "path", key: "name" },
+            { in: "body", key: "description" },
+            { in: "body", key: "model" },
+            { in: "body", key: "text" },
+            { in: "body", key: "steps" },
+            { in: "body", key: "timeout" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      OperatorHelperUpdateResponses,
+      OperatorHelperUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/operator/helper/{ns}/{name}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Layout extends HeyApiClient {
   /**
    * The layout
@@ -5244,6 +5408,45 @@ export class Call extends HeyApiClient {
       ...params,
     })
   }
+
+  /**
+   * Count a text's tokens
+   *
+   * A text's tokens for a model, as a form's counters show them: counted by the model's tokenizer when one is added, else estimated (characters ÷ 4).
+   */
+  public count<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      model?: string
+      text?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "model" },
+            { in: "body", key: "text" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<OperatorCallCountResponses, OperatorCallCountErrors, ThrowOnError>({
+      url: "/operator/tokenizers/count",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
 }
 
 export class AgentPermissions extends HeyApiClient {
@@ -6559,6 +6762,11 @@ export class Operator extends HeyApiClient {
   private _trash?: Trash
   get trash(): Trash {
     return (this._trash ??= new Trash({ client: this.client }))
+  }
+
+  private _helper?: Helper
+  get helper(): Helper {
+    return (this._helper ??= new Helper({ client: this.client }))
   }
 
   private _layout?: Layout

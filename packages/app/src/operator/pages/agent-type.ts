@@ -4,10 +4,10 @@
 
 export type Mode = "primary" | "subagent" | "all"
 export type Flavor = "incognito" | "retentive"
-/** What the Agents page's Type column shows and filters by. */
-export type TypeKey = "usual" | "subagent-incognito" | "subagent-retentive" | "both"
+/** What the Agents page's Type column shows and filters by (a helper is a namespace resource: helper.tsx). */
+export type TypeKey = "usual" | "subagent-incognito" | "subagent-retentive" | "both" | "helper"
 
-export const TYPE_KEYS: ReadonlyArray<TypeKey> = ["usual", "subagent-incognito", "subagent-retentive", "both"]
+export const TYPE_KEYS: ReadonlyArray<TypeKey> = ["usual", "subagent-incognito", "subagent-retentive", "both", "helper"]
 
 export const modeOf = (mode: unknown): Mode => (mode === "primary" || mode === "subagent" ? mode : "all")
 

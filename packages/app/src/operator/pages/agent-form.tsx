@@ -23,6 +23,7 @@ import { type Scope, ScopeSwitch } from "../ui/scope-switch"
 import { useAgents } from "./agents"
 import { agentPatch, type AgentForm, formFromSettings } from "./agent-form-state"
 import type { Flavor, Mode } from "./agent-type"
+import { HelperForm } from "./helper-form"
 import { requestError } from "./config-helpers"
 import { usePromptCatalog, useProfileNames } from "./profile-data"
 import { OPENCODE } from "./profile-model"
@@ -176,6 +177,29 @@ export default function AgentFormPage() {
 
   const fileAgent = () => existing()?.source.kind === "file"
 
+  // The Type (agent_types_spec.md §2): Helper (new agents only) switches to the helper's form (helper-form.tsx).
+  const [helper, setHelper] = createSignal(false)
+  const typeField = () => (
+    <Field group label={language.t("operator.column.type")} hint={language.t("operator.help.agentType")}>
+      <SegmentedControlV2
+        class="operator-segmented-wide"
+        value={helper() ? "helper" : store.form.mode}
+        onChange={(value) => {
+          if (!value) return
+          setHelper(value === "helper")
+          if (value !== "helper") set("mode", value as Mode)
+        }}
+      >
+        <SegmentedControlItemV2 value="primary">{language.t("operator.agents.type.usual")}</SegmentedControlItemV2>
+        <SegmentedControlItemV2 value="subagent">{language.t("operator.agents.type.subagent")}</SegmentedControlItemV2>
+        <SegmentedControlItemV2 value="all">{language.t("operator.agents.type.both")}</SegmentedControlItemV2>
+        <Show when={!editing()}>
+          <SegmentedControlItemV2 value="helper">{language.t("operator.agents.type.helper")}</SegmentedControlItemV2>
+        </Show>
+      </SegmentedControlV2>
+    </Field>
+  )
+
   return (
     <Show
       when={directory()}
@@ -195,245 +219,247 @@ export default function AgentFormPage() {
         }
         description={language.t("operator.agentForm.description")}
       />
-      <section data-component="operator-panel">
-        <div data-component="operator-form">
-          <Show when={profile()}>
-            {(found) => (
-              <p data-slot="operator-note" role="status">
-                {language.t("operator.agentForm.profile", { name: names.profile(found()) })}
-              </p>
-            )}
-          </Show>
-          <Show when={!editing()}>
-            <Field label={language.t("operator.agentForm.name")} hint={language.t("operator.agentForm.nameHint")}>
-              <TextInputV2
-                appearance="base"
-                value={store.form.name}
-                onInput={(event) => named(event.currentTarget.value)}
-              />
-            </Field>
-          </Show>
-          <Show
-            when={!fileAgent()}
-            fallback={
-              <p data-slot="operator-note">
-                {language.t("operator.agentForm.fileNote", { path: existing()?.source.path ?? "" })}
-              </p>
+      <Show
+        when={!helper()}
+        fallback={
+          <HelperForm
+            namespace={namespace()}
+            before={typeField()}
+            onSaved={(found) =>
+              navigate(
+                `/operator/agents?dir=${encodeURIComponent(directory() ?? "")}&helper=${encodeURIComponent(found.name)}&hns=${encodeURIComponent(found.namespace)}`,
+              )
             }
-          >
-            <Field
-              group
-              label={language.t("operator.agentForm.scope")}
-              hint={
-                editing()
-                  ? language.t("operator.agentForm.scopeEditHint")
-                  : language.t("operator.agentForm.scopeNewHint")
+            onCancel={() => history.back()}
+          />
+        }
+      >
+        <section data-component="operator-panel">
+          <div data-component="operator-form">
+            {typeField()}
+            <Show when={profile()}>
+              {(found) => (
+                <p data-slot="operator-note" role="status">
+                  {language.t("operator.agentForm.profile", { name: names.profile(found()) })}
+                </p>
+              )}
+            </Show>
+            <Show when={!editing()}>
+              <Field label={language.t("operator.agentForm.name")} hint={language.t("operator.agentForm.nameHint")}>
+                <TextInputV2
+                  appearance="base"
+                  value={store.form.name}
+                  onInput={(event) => named(event.currentTarget.value)}
+                />
+              </Field>
+            </Show>
+            <Show
+              when={!fileAgent()}
+              fallback={
+                <p data-slot="operator-note">
+                  {language.t("operator.agentForm.fileNote", { path: existing()?.source.path ?? "" })}
+                </p>
               }
             >
-              <ScopeSwitch value={store.scope} onChange={(scope) => setStore("scope", scope)} />
+              <Field
+                group
+                label={language.t("operator.agentForm.scope")}
+                hint={
+                  editing()
+                    ? language.t("operator.agentForm.scopeEditHint")
+                    : language.t("operator.agentForm.scopeNewHint")
+                }
+              >
+                <ScopeSwitch value={store.scope} onChange={(scope) => setStore("scope", scope)} />
+              </Field>
+            </Show>
+            <Show when={!editing()}>
+              <Field
+                group
+                label={language.t("operator.agentForm.format")}
+                hint={language.t("operator.agentForm.formatHint")}
+              >
+                <SegmentedControlV2
+                  value={store.format}
+                  onChange={(value) => value && setStore("format", value as "file" | "config")}
+                >
+                  <SegmentedControlItemV2 value="file">
+                    {language.t("operator.agentForm.format.file")}
+                  </SegmentedControlItemV2>
+                  <SegmentedControlItemV2 value="config">
+                    {language.t("operator.agentForm.format.config")}
+                  </SegmentedControlItemV2>
+                </SegmentedControlV2>
+              </Field>
+            </Show>
+            <Show when={!fileAgent() && target()}>
+              {(path) => (
+                <p data-slot="operator-note" data-testid="agent-target">
+                  {language.t("operator.agentForm.writesTo", { path: path() })}
+                </p>
+              )}
+            </Show>
+            <Field
+              label={language.t("operator.column.description")}
+              hint={language.t("operator.agentForm.descriptionHint")}
+            >
+              <TextInputV2
+                appearance="base"
+                value={store.form.description}
+                onInput={(event) => set("description", event.currentTarget.value)}
+              />
             </Field>
-          </Show>
-          <Show when={!editing()}>
+            <Show when={subagent()}>
+              <Field group label={language.t("operator.agents.flavor")} hint={language.t("operator.help.agentFlavor")}>
+                <SegmentedControlV2
+                  class="operator-segmented-wide"
+                  value={store.form.subagentMemory}
+                  onChange={(value) => value && set("subagentMemory", value as Flavor)}
+                >
+                  <SegmentedControlItemV2 value="incognito">
+                    {language.t("operator.agents.flavor.incognito")}
+                  </SegmentedControlItemV2>
+                  <SegmentedControlItemV2 value="retentive">
+                    {language.t("operator.agents.flavor.retentive")}
+                  </SegmentedControlItemV2>
+                </SegmentedControlV2>
+              </Field>
+              <Field group label={language.t("operator.locks.inherit")} hint={language.t("operator.help.lockInherit")}>
+                <SegmentedControlV2
+                  class="operator-segmented-wide"
+                  value={inherit()}
+                  onChange={(value) => value && setStore("inherit", value as "own" | "parent")}
+                  aria-label={language.t("operator.locks.inherit")}
+                >
+                  <SegmentedControlItemV2 value="own">{language.t("operator.locks.inheritOwn")}</SegmentedControlItemV2>
+                  <SegmentedControlItemV2 value="parent">
+                    {language.t("operator.locks.inheritParent")}
+                  </SegmentedControlItemV2>
+                </SegmentedControlV2>
+              </Field>
+            </Show>
+            <AgentModelFields
+              form={store.form}
+              set={(key, value) => set(key, value)}
+              directory={directory()}
+              scope={store.scope}
+              editing={editing()}
+              where={
+                store.scope === "global"
+                  ? language.t("operator.modelChain.settingsName")
+                  : (settings.data?.find((item) => item.key === directory())?.name ?? directory() ?? "")
+              }
+            />
+            <div data-slot="operator-form-row">
+              <Field label={language.t("operator.agent.temperature")} hint={language.t("operator.help.temperature")}>
+                <TextInputV2
+                  appearance="base"
+                  inputMode="decimal"
+                  value={store.form.temperature}
+                  onInput={(event) => set("temperature", event.currentTarget.value)}
+                />
+              </Field>
+              <Field label={language.t("operator.agent.topP")} hint={language.t("operator.help.topP")}>
+                <TextInputV2
+                  appearance="base"
+                  inputMode="decimal"
+                  value={store.form.top_p}
+                  onInput={(event) => set("top_p", event.currentTarget.value)}
+                />
+              </Field>
+              <Field label={language.t("operator.agent.steps")} hint={language.t("operator.help.steps")}>
+                <TextInputV2
+                  appearance="base"
+                  inputMode="numeric"
+                  value={store.form.steps}
+                  onInput={(event) => set("steps", event.currentTarget.value)}
+                />
+              </Field>
+            </div>
+            <div data-slot="operator-form-row">
+              <Field label={language.t("operator.agentForm.color")} hint={language.t("operator.agentForm.colorHint")}>
+                <TextInputV2
+                  appearance="base"
+                  value={store.form.color}
+                  placeholder="#FF6600"
+                  onInput={(event) => set("color", event.currentTarget.value)}
+                />
+              </Field>
+              <Field group label={language.t("operator.agents.hidden")} hint={language.t("operator.help.hidden")}>
+                <Switch checked={store.form.hidden} onChange={(checked) => set("hidden", checked)}>
+                  {language.t("operator.agentForm.hiddenHint")}
+                </Switch>
+              </Field>
+            </div>
+            <Field label={language.t("operator.agentForm.home")} hint={language.t("operator.agentForm.homeHint")}>
+              <TextInputV2
+                appearance="base"
+                value={store.form.home}
+                placeholder="agents/<name>/"
+                onInput={(event) => {
+                  setHomeChanged(true)
+                  set("home", event.currentTarget.value)
+                }}
+              />
+            </Field>
+            <Field label={language.t("operator.agentForm.prompt")} hint={language.t("operator.agentForm.promptHint")}>
+              <TextareaV2
+                class="operator-editor"
+                rows={10}
+                value={store.form.prompt}
+                onInput={(event) => set("prompt", event.currentTarget.value)}
+              />
+            </Field>
             <Field
               group
-              label={language.t("operator.agentForm.format")}
-              hint={language.t("operator.agentForm.formatHint")}
+              label={language.t("operator.agent.tab.permissions")}
+              hint={language.t("operator.agent.rulesHint")}
             >
-              <SegmentedControlV2
-                value={store.format}
-                onChange={(value) => value && setStore("format", value as "file" | "config")}
-              >
-                <SegmentedControlItemV2 value="file">
-                  {language.t("operator.agentForm.format.file")}
-                </SegmentedControlItemV2>
-                <SegmentedControlItemV2 value="config">
-                  {language.t("operator.agentForm.format.config")}
-                </SegmentedControlItemV2>
-              </SegmentedControlV2>
-            </Field>
-          </Show>
-          <Show when={!fileAgent() && target()}>
-            {(path) => (
-              <p data-slot="operator-note" data-testid="agent-target">
-                {language.t("operator.agentForm.writesTo", { path: path() })}
-              </p>
-            )}
-          </Show>
-          <Field
-            label={language.t("operator.column.description")}
-            hint={language.t("operator.agentForm.descriptionHint")}
-          >
-            <TextInputV2
-              appearance="base"
-              value={store.form.description}
-              onInput={(event) => set("description", event.currentTarget.value)}
-            />
-          </Field>
-          <Field group label={language.t("operator.column.type")} hint={language.t("operator.help.agentType")}>
-            <SegmentedControlV2
-              class="operator-segmented-wide"
-              value={store.form.mode}
-              onChange={(value) => value && set("mode", value as Mode)}
-            >
-              <SegmentedControlItemV2 value="primary">
-                {language.t("operator.agents.type.usual")}
-              </SegmentedControlItemV2>
-              <SegmentedControlItemV2 value="subagent">
-                {language.t("operator.agents.type.subagent")}
-              </SegmentedControlItemV2>
-              <SegmentedControlItemV2 value="all">{language.t("operator.agents.type.both")}</SegmentedControlItemV2>
-            </SegmentedControlV2>
-          </Field>
-          <Show when={subagent()}>
-            <Field group label={language.t("operator.agents.flavor")} hint={language.t("operator.help.agentFlavor")}>
-              <SegmentedControlV2
-                class="operator-segmented-wide"
-                value={store.form.subagentMemory}
-                onChange={(value) => value && set("subagentMemory", value as Flavor)}
-              >
-                <SegmentedControlItemV2 value="incognito">
-                  {language.t("operator.agents.flavor.incognito")}
-                </SegmentedControlItemV2>
-                <SegmentedControlItemV2 value="retentive">
-                  {language.t("operator.agents.flavor.retentive")}
-                </SegmentedControlItemV2>
-              </SegmentedControlV2>
-            </Field>
-            <Field group label={language.t("operator.locks.inherit")} hint={language.t("operator.help.lockInherit")}>
-              <SegmentedControlV2
-                class="operator-segmented-wide"
-                value={inherit()}
-                onChange={(value) => value && setStore("inherit", value as "own" | "parent")}
-                aria-label={language.t("operator.locks.inherit")}
-              >
-                <SegmentedControlItemV2 value="own">{language.t("operator.locks.inheritOwn")}</SegmentedControlItemV2>
-                <SegmentedControlItemV2 value="parent">
-                  {language.t("operator.locks.inheritParent")}
-                </SegmentedControlItemV2>
-              </SegmentedControlV2>
-            </Field>
-          </Show>
-          <AgentModelFields
-            form={store.form}
-            set={set}
-            directory={directory()}
-            scope={store.scope}
-            editing={editing()}
-            where={
-              store.scope === "global"
-                ? language.t("operator.modelChain.settingsName")
-                : (settings.data?.find((item) => item.key === directory())?.name ?? directory() ?? "")
-            }
-          />
-          <div data-slot="operator-form-row">
-            <Field label={language.t("operator.agent.temperature")} hint={language.t("operator.help.temperature")}>
-              <TextInputV2
-                appearance="base"
-                inputMode="decimal"
-                value={store.form.temperature}
-                onInput={(event) => set("temperature", event.currentTarget.value)}
-              />
-            </Field>
-            <Field label={language.t("operator.agent.topP")} hint={language.t("operator.help.topP")}>
-              <TextInputV2
-                appearance="base"
-                inputMode="decimal"
-                value={store.form.top_p}
-                onInput={(event) => set("top_p", event.currentTarget.value)}
-              />
-            </Field>
-            <Field label={language.t("operator.agent.steps")} hint={language.t("operator.help.steps")}>
-              <TextInputV2
-                appearance="base"
-                inputMode="numeric"
-                value={store.form.steps}
-                onInput={(event) => set("steps", event.currentTarget.value)}
-              />
+              <div data-slot="operator-permission-layout">
+                <LevelEditor
+                  {...(directory() ? { directory: directory() } : {})}
+                  level="agent"
+                  inherited={editing() ? (permissions.data?.inherited ?? []) : []}
+                  value={{ lines: store.rules, deleted: [], locks: [] }}
+                  onChange={(value) => setStore("rules", value.lines)}
+                  canDeleteOpenCode={false}
+                  canDelete={false}
+                  canLock={false}
+                  forms={permissions.data?.forms ?? {}}
+                  known={permissions.data?.known ?? []}
+                />
+                <Show when={editing() && existing()}>
+                  {(agent) => (
+                    <PermissionImpact
+                      agent={agent().name}
+                      directory={directory() ?? ""}
+                      agentRules={store.rules}
+                      dirty={JSON.stringify(store.rules) !== savedRules()}
+                    />
+                  )}
+                </Show>
+              </div>
             </Field>
           </div>
-          <div data-slot="operator-form-row">
-            <Field label={language.t("operator.agentForm.color")} hint={language.t("operator.agentForm.colorHint")}>
-              <TextInputV2
-                appearance="base"
-                value={store.form.color}
-                placeholder="#FF6600"
-                onInput={(event) => set("color", event.currentTarget.value)}
-              />
-            </Field>
-            <Field group label={language.t("operator.agents.hidden")} hint={language.t("operator.help.hidden")}>
-              <Switch checked={store.form.hidden} onChange={(checked) => set("hidden", checked)}>
-                {language.t("operator.agentForm.hiddenHint")}
-              </Switch>
-            </Field>
+          <Show when={store.error}>
+            <pre data-slot="operator-error" role="alert">
+              {store.error}
+            </pre>
+          </Show>
+          <div data-slot="operator-actions">
+            <ButtonV2 variant="neutral" onClick={() => history.back()}>
+              {language.t("common.cancel")}
+            </ButtonV2>
+            <ButtonV2
+              variant="contrast"
+              disabled={store.saving || (!editing() && !store.form.name.trim())}
+              onClick={() => void save()}
+            >
+              {editing() ? language.t("operator.config.save") : language.t("operator.agentForm.create")}
+            </ButtonV2>
           </div>
-          <Field label={language.t("operator.agentForm.home")} hint={language.t("operator.agentForm.homeHint")}>
-            <TextInputV2
-              appearance="base"
-              value={store.form.home}
-              placeholder="agents/<name>/"
-              onInput={(event) => {
-                setHomeChanged(true)
-                set("home", event.currentTarget.value)
-              }}
-            />
-          </Field>
-          <Field label={language.t("operator.agentForm.prompt")} hint={language.t("operator.agentForm.promptHint")}>
-            <TextareaV2
-              class="operator-editor"
-              rows={10}
-              value={store.form.prompt}
-              onInput={(event) => set("prompt", event.currentTarget.value)}
-            />
-          </Field>
-          <Field
-            group
-            label={language.t("operator.agent.tab.permissions")}
-            hint={language.t("operator.agent.rulesHint")}
-          >
-            <div data-slot="operator-permission-layout">
-              <LevelEditor
-                {...(directory() ? { directory: directory() } : {})}
-                level="agent"
-                inherited={editing() ? (permissions.data?.inherited ?? []) : []}
-                value={{ lines: store.rules, deleted: [], locks: [] }}
-                onChange={(value) => setStore("rules", value.lines)}
-                canDeleteOpenCode={false}
-                canDelete={false}
-                canLock={false}
-                forms={permissions.data?.forms ?? {}}
-                known={permissions.data?.known ?? []}
-              />
-              <Show when={editing() && existing()}>
-                {(agent) => (
-                  <PermissionImpact
-                    agent={agent().name}
-                    directory={directory() ?? ""}
-                    agentRules={store.rules}
-                    dirty={JSON.stringify(store.rules) !== savedRules()}
-                  />
-                )}
-              </Show>
-            </div>
-          </Field>
-        </div>
-        <Show when={store.error}>
-          <pre data-slot="operator-error" role="alert">
-            {store.error}
-          </pre>
-        </Show>
-        <div data-slot="operator-actions">
-          <ButtonV2 variant="neutral" onClick={() => history.back()}>
-            {language.t("common.cancel")}
-          </ButtonV2>
-          <ButtonV2
-            variant="contrast"
-            disabled={store.saving || (!editing() && !store.form.name.trim())}
-            onClick={() => void save()}
-          >
-            {editing() ? language.t("operator.config.save") : language.t("operator.agentForm.create")}
-          </ButtonV2>
-        </div>
-      </section>
+        </section>
+      </Show>
     </Show>
   )
 }

@@ -121,6 +121,21 @@ export function count(tokenizer: Tokenizer, text: string): number | undefined {
   }
 }
 
+export const Count = Schema.Struct({
+  tokens: Schema.Finite,
+  tokenizer: Schema.optional(Schema.String).annotate({
+    description: "The tokenizer that counted them; without one, an estimate (characters ÷ 4)",
+  }),
+}).annotate({ identifier: "OperatorTokenCount" })
+export type Count = typeof Count.Type
+
+// A text's tokens for a model: counted by its tokenizer, else estimated as the Transcript does (characters ÷ 4).
+export function countFor(model: string | undefined, text: string): Count {
+  const tokenizer = forModel(model)
+  const counted = tokenizer ? count(tokenizer, text) : undefined
+  return counted === undefined ? { tokens: Math.ceil(text.length / 4) } : { tokens: counted, tokenizer: tokenizer!.id }
+}
+
 export function list(): List {
   return {
     folder: folder(),

@@ -323,6 +323,12 @@ describe("token accounting", () => {
       expect(one!.input.items.find((item) => item.kind === "system")).toMatchObject({ tokens: 1620, method: "counted" })
       expect(sumOf(one!)).toBe(7104)
       expect(OperatorTokenizers.list().tokenizers.map((item) => item.id)).toContain("words")
+      // A form's counters: counted for its models, estimated for others.
+      expect(OperatorTokenizers.countFor("openrouter/moonshotai/kimi-k2", "one two three")).toEqual({
+        tokens: 3,
+        tokenizer: "words",
+      })
+      expect(OperatorTokenizers.countFor("openai/gpt-5", "one two three")).toEqual({ tokens: 4 })
     } finally {
       remove()
     }

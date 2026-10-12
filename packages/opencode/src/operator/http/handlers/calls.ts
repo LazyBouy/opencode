@@ -25,5 +25,6 @@ export const operatorCallHandlers = HttpApiBuilder.group(InstanceHttpApi, "opera
       )
       .handle("recount", (ctx) => calls.recount(ctx.params.sessionID).pipe(Effect.as({ ok: true })))
       .handle("tokenizers", () => calls.tokenizers())
+      .handle("count", (ctx) => calls.count(ctx.payload))
   }),
 )

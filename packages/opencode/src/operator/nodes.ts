@@ -9,6 +9,7 @@ import { OperatorModels } from "./models"
 import { OperatorOverview } from "./overview"
 import { OperatorGenerate } from "./generate"
 import { OperatorHelperTexts } from "./helper-texts"
+import { OperatorHelpers } from "./helpers"
 import { OperatorProfileStore } from "./profile-store"
 import { OperatorTrash } from "./trash"
 import { OperatorTrashItems } from "./trash-items"
@@ -71,6 +72,7 @@ export const operatorNodes = [
   OperatorProjectSessions.node,
   OperatorGenerate.node,
   OperatorHelperTexts.node,
+  OperatorHelpers.node,
   OperatorTrash.node,
   OperatorTrashItems.node,
   OperatorCapabilities.node,

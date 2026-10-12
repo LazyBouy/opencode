@@ -3531,6 +3531,296 @@
         ]
       }
     },
+    "/operator/helper": {
+      "get": {
+        "tags": ["operator helpers"],
+        "operationId": "operator.helper.list",
+        "parameters": [
+          {
+            "name": "ns",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Helpers, built-ins first in each namespace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorHelper"
+                  },
+                  "description": "Helpers, built-ins first in each namespace"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorHelperError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorHelperError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "A namespace's helpers: the built-in ones (OpenCode's title, summary, compaction and agent generator, the fork's purpose and Dynamic generators), read-only, each with its role, and the namespace's own, each with its text (its helper profile's layer), model and limits.",
+        "summary": "List helpers",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.helper.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/helper/{ns}": {
+      "post": {
+        "tags": ["operator helpers"],
+        "operationId": "operator.helper.create",
+        "parameters": [
+          {
+            "name": "ns",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The new helper",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorHelper"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorHelperError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorHelperError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "A new helper in a namespace, usable by every project of it. Its text becomes a helper profile holding one helper layer in the namespace's catalog. Model: small (the default), default or pick. Step limit 1–20 (default 5), time limit 10–600 seconds (default 120).",
+        "summary": "Create a helper",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$",
+                    "description": "Letters, digits, dots, dashes and underscores; used as the file name"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "model": {
+                    "$ref": "#/components/schemas/OperatorHelperModel"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "steps": {
+                    "type": "number"
+                  },
+                  "timeout": {
+                    "type": "number"
+                  }
+                },
+                "required": ["name", "model", "text"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.helper.create({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/helper/{ns}/{name}": {
+      "patch": {
+        "tags": ["operator helpers"],
+        "operationId": "operator.helper.update",
+        "parameters": [
+          {
+            "name": "ns",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The helper",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorHelper"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorHelperError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorHelperError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Change a helper's description, model, limits or text (written into its helper layer). Built-in helpers are read-only; their text is edited on the Prompts page.",
+        "summary": "Update a helper",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "description": {
+                    "type": "string"
+                  },
+                  "model": {
+                    "$ref": "#/components/schemas/OperatorHelperModel"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "steps": {
+                    "type": "number"
+                  },
+                  "timeout": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.helper.update({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "tags": ["operator helpers"],
+        "operationId": "operator.helper.remove",
+        "parameters": [
+          {
+            "name": "ns",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The Trash entry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTrashEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorHelperError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorHelperError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Move a helper, with its helper profile and layer, to Trash, from where it can be restored. Built-in helpers can't be deleted.",
+        "summary": "Move a helper to Trash",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.helper.remove({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/operator/layout": {
       "get": {
         "tags": ["operator layout"],
@@ -17366,6 +17656,79 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.call.tokenizers({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/tokenizers/count": {
+      "post": {
+        "tags": ["operator calls"],
+        "operationId": "operator.call.count",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The text's tokens",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTokenCount"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "A text's tokens for a model, as a form's counters show them: counted by the model's tokenizer when one is added, else estimated (characters ÷ 4).",
+        "summary": "Count a text's tokens",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": ["text"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.call.count({\n  ...\n})"
           }
         ]
       }
@@ -33379,6 +33742,7 @@
         "enum": [
           "project",
           "agent",
+          "helper",
           "session",
           "type",
           "layer",
@@ -33541,6 +33905,114 @@
           }
         },
         "required": ["purged"],
+        "additionalProperties": false
+      },
+      "OperatorHelperRole": {
+        "type": "string",
+        "enum": ["title", "compaction", "summary", "agent-generator", "purpose-generator", "dynamic-generator"]
+      },
+      "OperatorHelper": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "builtin": {
+            "type": "boolean"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorHelperRole"
+            },
+            "description": "A built-in's role"
+          },
+          "model": {
+            "type": "object",
+            "properties": {
+              "source": {
+                "type": "string",
+                "enum": ["small", "default", "pick", "chat"],
+                "description": "chat (built-ins only): the model of the chat it works for"
+              },
+              "model": {
+                "type": "string"
+              },
+              "variant": {
+                "type": "string"
+              }
+            },
+            "required": ["source"],
+            "additionalProperties": false
+          },
+          "profile": {
+            "type": "string",
+            "description": "Its helper profile"
+          },
+          "layer": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "number"
+          },
+          "timeout": {
+            "type": "number"
+          },
+          "file": {
+            "type": "string"
+          }
+        },
+        "required": ["name", "namespace", "builtin", "roles", "model", "profile", "text"],
+        "additionalProperties": false
+      },
+      "OperatorHelperError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorHelperError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorHelperModelSource": {
+        "type": "string",
+        "enum": ["small", "default", "pick"]
+      },
+      "OperatorHelperModel": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/OperatorHelperModelSource"
+          },
+          "model": {
+            "type": "string"
+          },
+          "variant": {
+            "type": "string"
+          }
+        },
+        "required": ["source"],
         "additionalProperties": false
       },
       "OperatorLayoutNamespace": {
@@ -39989,6 +40461,19 @@
           }
         },
         "required": ["folder", "tokenizers", "errors"],
+        "additionalProperties": false
+      },
+      "OperatorTokenCount": {
+        "type": "object",
+        "properties": {
+          "tokens": {
+            "type": "number"
+          },
+          "tokenizer": {
+            "type": "string"
+          }
+        },
+        "required": ["tokens"],
         "additionalProperties": false
       },
       "OperatorPermissionPatternForm": {
@@ -54638,6 +55123,10 @@
     {
       "name": "operator trash",
       "description": "Trash routes."
+    },
+    {
+      "name": "operator helpers",
+      "description": "Helper routes."
     },
     {
       "name": "operator layout",

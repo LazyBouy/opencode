@@ -2,7 +2,7 @@ import { useNavigate, useSearchParams } from "@solidjs/router"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
-import type { OperatorAgent } from "@opencode-ai/sdk/v2/client"
+import type { OperatorAgent, OperatorHelper } from "@opencode-ai/sdk/v2/client"
 import { useQueries, useQuery } from "@tanstack/solid-query"
 import { createMemo, Show } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -28,6 +28,7 @@ import { ModelWithSource } from "../ui/prompt-trace"
 import { closeTopOverlay, useOverlayParams } from "../ui/overlay-nav"
 import { SelectV2 } from "../ui/select"
 import { TYPE_KEYS, type TypeKey, typeOf } from "./agent-type"
+import { HELPER_TABS, HelperDetail, useHelperModel, useHelpers } from "./helper"
 
 export function useAgents() {
   const api = useOperatorClient()
@@ -43,8 +44,12 @@ export function useAgents() {
   }))
 }
 
-// An agent as the page lists it: with its project, since all projects can be shown at once.
-type Row = OperatorAgent & { project: string }
+// An agent as the page lists it: with its project, since all projects can be shown at once. Helpers are listed
+// with them (agent_types_spec.md §4.2, §5): namespace resources, with Type = Helper.
+type AgentRow = OperatorAgent & { kind: "agent"; project: string }
+type HelperRow = OperatorHelper & { kind: "helper" }
+type Row = AgentRow | HelperRow
+const rowType = (row: Row): TypeKey => (row.kind === "helper" ? "helper" : typeOf(row))
 
 // The agents of the project in `?dir=`, or of every project without one.
 function usePageAgents() {
@@ -68,8 +73,10 @@ function usePageAgents() {
   return {
     folders,
     pending: () => queries.some((query) => query.isPending),
-    rows: createMemo<Row[]>(() =>
-      folders().flatMap((project, index) => (queries[index]?.data ?? []).map((agent) => ({ ...agent, project }))),
+    rows: createMemo<AgentRow[]>(() =>
+      folders().flatMap((project, index) =>
+        (queries[index]?.data ?? []).map((agent) => ({ ...agent, kind: "agent" as const, project })),
+      ),
     ),
   }
 }
@@ -109,11 +116,19 @@ export default function AgentsPage() {
   const [store, setStore] = persisted(Persist.global("operator.agents"), createStore({ showHidden: false }))
   const [filter, setFilter] = createStore({ text: "", type: "" as TypeKey | "" })
 
-  const rows = createMemo(() =>
-    agents
-      .rows()
-      .filter((agent) => store.showHidden || !agent.hidden)
-      .filter((agent) => !filter.type || typeOf(agent) === filter.type),
+  const settings = useProjectSettings()
+  // The helpers of the project's namespace, or of every namespace.
+  const helperNamespace = () => {
+    const one = scope.directory()
+    return one ? (settings.data?.find((item) => item.key === one)?.namespace ?? OPENCODE) : undefined
+  }
+  const helpers = useHelpers(helperNamespace)
+  const helperRows = createMemo<HelperRow[]>(() =>
+    (helpers.data ?? []).map((helper) => ({ ...helper, kind: "helper" as const })),
+  )
+  const agentRows = createMemo(() => agents.rows().filter((agent) => store.showHidden || !agent.hidden))
+  const rows = createMemo<Row[]>(() =>
+    [...agentRows(), ...helperRows()].filter((row) => !filter.type || rowType(row) === filter.type),
   )
   // Shown on the toggle, so hidden agents can be told apart from missing ones.
   const hiddenCount = createMemo(() => agents.rows().filter((agent) => agent.hidden).length)
@@ -128,37 +143,79 @@ export default function AgentsPage() {
   }>()
   useRecordOverlay(
     () => !!params.agent,
-    () => <AgentOverlay rows={rows} />,
+    () => <AgentOverlay rows={agentRows} />,
     ["agent", "adir", "atab", "aedit", "aperm"],
   )
+  // A helper opens in its own overlay: `helper` and its namespace `hns`, and the section `htab`.
+  const [helperParams, setHelperParams] = useSearchParams<{ helper?: string; hns?: string; htab?: string }>()
+  useRecordOverlay(
+    () => !!helperParams.helper,
+    () => <HelperOverlay rows={helperRows} />,
+    ["helper", "hns", "htab"],
+  )
+  const helperModel = useHelperModel()
+  const namespaces = useNamespaces()
+  const namespaceName = (id: string) => namespaces.data?.find((item) => item.namespace.id === id)?.namespace.name ?? id
+  const namespaceOf = (row: Row) =>
+    row.kind === "helper"
+      ? row.namespace
+      : (settings.data?.find((item) => item.key === row.project)?.namespace ?? OPENCODE)
   const sourceLabel = (agent: OperatorAgent) => language.t(`operator.agents.source.${agent.source.kind}`)
+  const helperSource = (helper: OperatorHelper) =>
+    language.t(helper.builtin ? "operator.agents.source.builtin" : "operator.agents.source.helper")
   const projectName = (key: string) =>
     projects().find((item) => item.directory === key)?.label ?? key.split("/").filter(Boolean).at(-1) ?? key
   // The profile each agent uses: resolved from its project's namespace's catalog.
   const names = useProfileNames()
-  const settings = useProjectSettings()
   const catalogOf = useCatalogs()
-  const profileOf = (agent: Row) => {
-    const namespace = settings.data?.find((item) => item.key === agent.project)?.namespace ?? OPENCODE
-    const catalog = catalogOf(namespace)
-    const found = catalog ? profileFor(catalog, agent.project, agent.name) : undefined
+  const profileOf = (row: Row) => {
+    const catalog = catalogOf(namespaceOf(row))
+    if (row.kind === "helper") {
+      const found = catalog?.profiles.find((item) => item.id === row.profile)
+      return found ? { name: names.profile(found), source: "helper" as const } : undefined
+    }
+    const found = catalog ? profileFor(catalog, row.project, row.name) : undefined
     return found ? { name: names.profile(found.profile), source: found.source } : undefined
   }
+  const typeLabel = (row: Row) => language.t(`operator.agents.type.${rowType(row)}`)
+  const modelText = (row: Row) =>
+    row.kind === "helper" ? helperModel(row) : (row.modelSource?.model ?? agentModel(row))
+  const description = (row: Row) =>
+    row.kind === "helper" && row.builtin
+      ? language.t(`operator.helper.about.${row.name}` as "operator.helper.about.title")
+      : (row.description ?? "")
 
   const columns = (): Column<Row>[] => [
     {
       id: "name",
       header: language.t("operator.column.name"),
-      value: (agent) => agent.name,
-      cell: (agent) => (
+      value: (row) => row.name,
+      cell: (row) => (
         <span class="flex items-center gap-2">
-          <span data-slot="operator-color-dot" style={{ background: agent.color ?? "var(--v2-icon-icon-muted)" }} />
-          {agent.name}
-          <Show when={agent.hidden}>
-            <Tag>{language.t("operator.agents.hidden")}</Tag>
-          </Show>
-          <Show when={agent.disabled}>
-            <Tag>{language.t("operator.agent.off")}</Tag>
+          <Show
+            when={row.kind === "agent" && row}
+            fallback={
+              <>
+                <span data-slot="operator-color-dot" style={{ background: "var(--v2-icon-icon-muted)" }} />
+                {row.name}
+              </>
+            }
+          >
+            {(agent) => (
+              <>
+                <span
+                  data-slot="operator-color-dot"
+                  style={{ background: agent().color ?? "var(--v2-icon-icon-muted)" }}
+                />
+                {agent().name}
+                <Show when={agent().hidden}>
+                  <Tag>{language.t("operator.agents.hidden")}</Tag>
+                </Show>
+                <Show when={agent().disabled}>
+                  <Tag>{language.t("operator.agent.off")}</Tag>
+                </Show>
+              </>
+            )}
           </Show>
         </span>
       ),
@@ -169,46 +226,64 @@ export default function AgentsPage() {
           {
             id: "project",
             header: language.t("operator.column.project"),
-            value: (agent: Row) => projectName(agent.project),
-            cell: (agent: Row) => projectName(agent.project),
+            value: (row: Row) => (row.kind === "agent" ? projectName(row.project) : ""),
+            cell: (row: Row) => (row.kind === "agent" ? projectName(row.project) : "—"),
           },
         ]),
+    {
+      id: "namespace",
+      optional: true,
+      header: language.t("operator.helper.namespace"),
+      value: (row) => namespaceName(namespaceOf(row)),
+      cell: (row) => namespaceName(namespaceOf(row)),
+    },
     {
       id: "type",
       optional: true,
       header: language.t("operator.column.type"),
-      value: (agent) => language.t(`operator.agents.type.${typeOf(agent)}`),
-      cell: (agent) => language.t(`operator.agents.type.${typeOf(agent)}`),
+      value: typeLabel,
+      cell: typeLabel,
     },
     {
       id: "model",
       optional: true,
       header: language.t("operator.column.model"),
-      value: (agent) => agent.modelSource?.model ?? agentModel(agent),
-      cell: (agent) => <ModelWithSource source={agent.modelSource} compact />,
+      value: modelText,
+      cell: (row) => (row.kind === "agent" ? <ModelWithSource source={row.modelSource} compact /> : helperModel(row)),
     },
     {
       id: "source",
       optional: true,
       header: language.t("operator.column.source"),
-      value: sourceLabel,
-      cell: (agent) => (
-        <span title={agent.source.path}>
-          <Tag variant={agent.source.kind === "builtin" ? "neutral" : "accent"}>{sourceLabel(agent)}</Tag>
-          <Show when={agent.source.customized}>
-            {" "}
-            <Tag>{language.t("operator.agents.customized")}</Tag>
-          </Show>
-        </span>
+      value: (row) => (row.kind === "agent" ? sourceLabel(row) : helperSource(row)),
+      cell: (row) => (
+        <Show
+          when={row.kind === "agent" && row}
+          fallback={
+            <Tag variant={row.kind === "helper" && row.builtin ? "neutral" : "accent"}>
+              {row.kind === "helper" ? helperSource(row) : ""}
+            </Tag>
+          }
+        >
+          {(agent) => (
+            <span title={agent().source.path}>
+              <Tag variant={agent().source.kind === "builtin" ? "neutral" : "accent"}>{sourceLabel(agent())}</Tag>
+              <Show when={agent().source.customized}>
+                {" "}
+                <Tag>{language.t("operator.agents.customized")}</Tag>
+              </Show>
+            </span>
+          )}
+        </Show>
       ),
     },
     {
       id: "profile",
       optional: true,
       header: language.t("operator.prompts.profile"),
-      value: (agent) => profileOf(agent)?.name,
-      cell: (agent) => (
-        <Show when={profileOf(agent)}>
+      value: (row) => profileOf(row)?.name,
+      cell: (row) => (
+        <Show when={profileOf(row)}>
           {(found) => (
             <span title={language.t(`operator.prompts.source.${found().source}`)}>
               {found().name}
@@ -224,23 +299,23 @@ export default function AgentsPage() {
       id: "description",
       optional: true,
       header: language.t("operator.column.description"),
-      cell: (agent) => <span data-slot="operator-cell-clamp">{agent.description ?? ""}</span>,
+      cell: (row) => <span data-slot="operator-cell-clamp">{description(row)}</span>,
     },
     {
       id: "sessions",
       optional: true,
       header: language.t("operator.column.sessions"),
       align: "end",
-      value: (agent) => agent.sessions.total,
-      cell: (agent) => formatCount(agent.sessions.total, language.intl()),
+      value: (row) => (row.kind === "agent" ? row.sessions.total : undefined),
+      cell: (row) => (row.kind === "agent" ? formatCount(row.sessions.total, language.intl()) : ""),
     },
     {
       id: "lastUsed",
       optional: true,
       header: language.t("operator.column.lastUsed"),
       align: "end",
-      value: (agent) => agent.sessions.lastUsed,
-      cell: (agent) => formatAgo(agent.sessions.lastUsed, language.intl()),
+      value: (row) => (row.kind === "agent" ? row.sessions.lastUsed : undefined),
+      cell: (row) => (row.kind === "agent" ? formatAgo(row.sessions.lastUsed, language.intl()) : ""),
     },
   ]
 
@@ -304,10 +379,14 @@ export default function AgentsPage() {
           rows={rows()}
           columns={columns()}
           filter={filter.text}
-          search={(agent) => `${agent.name} ${agent.description ?? ""} ${agentModel(agent)}`}
+          search={(row) => `${row.name} ${description(row)} ${modelText(row)}`}
           loading={agents.pending()}
           initialSort={{ column: "name", direction: "asc" }}
-          onRowClick={(agent) => setParams({ agent: agent.name, adir: agent.project, atab: undefined })}
+          onRowClick={(row) =>
+            row.kind === "agent"
+              ? setParams({ agent: row.name, adir: row.project, atab: undefined })
+              : setHelperParams({ helper: row.name, hns: row.namespace, htab: undefined })
+          }
         />
       </Show>
     </>
@@ -316,7 +395,7 @@ export default function AgentsPage() {
 
 // The overlay an agent opens in: its sections (Overview, Sys Prompt, Tool Prompt, Permissions,
 // Sessions) on the left; ‹ › move through the agents the page lists.
-function AgentOverlay(props: { rows: () => ReadonlyArray<Row> }) {
+function AgentOverlay(props: { rows: () => ReadonlyArray<AgentRow> }) {
   const language = useLanguage()
   const scope = useOperatorScope()
   const projects = useOperatorProjects()
@@ -360,6 +439,40 @@ function AgentOverlay(props: { rows: () => ReadonlyArray<Row> }) {
         directory={directory()}
         tab={tab()}
         // Deleted: the overlay closes (and the page clears its URL state).
+        onGone={() => closeTopOverlay()}
+      />
+    </DetailOverlay>
+  )
+}
+
+// The overlay a helper opens in (agent_types_spec.md §5): Overview and Text; ‹ › move through the helpers listed.
+function HelperOverlay(props: { rows: () => ReadonlyArray<HelperRow> }) {
+  const language = useLanguage()
+  const [params, setParams] = useOverlayParams<{ helper?: string; hns?: string; htab?: string }>()
+  const tab = () => (HELPER_TABS.includes(params.htab as (typeof HELPER_TABS)[number]) ? params.htab! : "overview")
+  const keyOf = (ns: string, name: string) => `${ns}|${name}`
+  const sections = () =>
+    [
+      { id: "overview", icon: "eye" as const, label: language.t("operator.agent.tab.overview") },
+      { id: "text", icon: "prompt" as const, label: language.t("operator.helper.tab.text") },
+    ] as const
+  return (
+    <DetailOverlay
+      title={params.helper ?? ""}
+      sections={[...sections()]}
+      section={tab()}
+      records={props.rows().map((row) => keyOf(row.namespace, row.name))}
+      record={keyOf(params.hns ?? "", params.helper ?? "")}
+      onSection={(id) => setParams({ htab: id })}
+      onRecord={(key) => {
+        const at = key.indexOf("|")
+        setParams({ hns: key.slice(0, at), helper: key.slice(at + 1) })
+      }}
+    >
+      <HelperDetail
+        namespace={params.hns ?? ""}
+        name={params.helper ?? ""}
+        tab={tab()}
         onGone={() => closeTopOverlay()}
       />
     </DetailOverlay>
