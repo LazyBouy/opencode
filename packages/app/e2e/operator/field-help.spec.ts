@@ -18,7 +18,10 @@ test("every field has an (i) with its help, and Settings → Appearance → Fiel
   await mockOperator(page)
   await page.goto(`/operator/agents/new?dir=${encodeURIComponent(directory)}`)
 
-  // The (i) beside a field shows its help on hover; it does not change the field's name.
+  // The (i) beside a field shows its help on hover; it does not change the field's name. (Once the model is filled
+  // in and where it's saved is said: they appear above and would move the (i) away from the pointer.)
+  await expect(page.getByTestId("agent-model-now")).toBeVisible()
+  await expect(page.getByTestId("agent-target")).toBeVisible()
   const about = page.getByRole("button", { name: "About Home folder" })
   await about.hover()
   await expect(page.getByRole("tooltip")).toContainText(

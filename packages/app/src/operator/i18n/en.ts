@@ -1336,6 +1336,17 @@ export const dict = {
   "operator.agentForm.home": "Home folder",
   "operator.agentForm.homeHint":
     "Sessions started as this agent open in this folder, always inside the project: type the part after the project's folder, or Browse. Empty is the project folder itself. It is saved relative to the project (./agents/<name>), and a folder that isn't there yet is made when you save, after asking. Its memory is kept in its .memory folder. A namespace's or Global's agent has it inside each project it runs in.",
+  "operator.help.agentFormProfile":
+    "The prompt profile this agent's system prompt is built from: the default (the project's, else the namespace's), or one of the namespace's profiles. Choosing one lets Override change it for this agent only; nothing in the profile itself changes.",
+  "operator.agentForm.overrideNeedsProfile": "Choose a profile to override it for this agent.",
+  "operator.agentForm.overrideHelper": "A helper profile takes no override.",
+  "operator.agentForm.asSent": "System Prompt as sent",
+  "operator.agentForm.asSentHint":
+    "The whole system prompt this agent would send with these settings (not saved yet), block by block. Choose a block to count it.",
+  "operator.agentForm.wholePrompt": "Whole prompt:",
+  "operator.agentForm.thisBlock": "{{name}}:",
+  "operator.agentForm.noAgentSlot":
+    "This profile has no Agent prompt slot: the agent's own prompt text isn't sent with it.",
   "operator.agentForm.homeEachProject": "<each project>/",
   "operator.agentForm.homeBrowse": "Browse…",
   "operator.agentForm.homeMoveInside": "Move into the project",
@@ -2297,7 +2308,6 @@ export const dict = {
   "operator.help.profileProject":
     "The project Create agent\u2026 makes the agent in: the one chosen on the operator pages when it is in this namespace, else the namespace's first.",
   "operator.profile.createAgent": "Create agent…",
-  "operator.agentForm.profile": "The new agent will use the profile {{name}}.",
   "operator.profile.new.dynamic": "New Dynamic layer",
   "operator.profile.prompt": "Prompt",
   "operator.help.layerPrompt":

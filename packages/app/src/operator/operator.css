@@ -1554,3 +1554,35 @@ details[data-slot="operator-as-sent"] [data-component="operator-code"][data-mode
   color: var(--v2-text-text-muted);
   overflow-wrap: anywhere;
 }
+
+/* The agent form's "System Prompt as sent" (pages/agent-form-prompt.tsx). */
+[data-component="operator-sent"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+[data-component="operator-sent-blocks"] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+[data-slot="operator-sent-block"] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+[data-slot="operator-sent-block"][data-selected],
+[data-slot="operator-sent-block"]:focus-visible {
+  border-color: var(--v2-border-border-accent, var(--v2-border-border-muted));
+  outline: none;
+}

@@ -283,6 +283,47 @@ unix("an agent's override changes its own slots only", () =>
   ),
 )
 
+// The agent form's "System Prompt as sent" (agent_form_spec.md §6.2): its unsaved values, for an agent saved or not.
+unix("a draft previews the form's prompt and setting; with the saved values it is the saved preview", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      yield* configure()
+      const store = yield* OperatorProfileStore.Service
+      const prompts = yield* OperatorPrompts.Service
+      const key = (yield* prompts.preview({ agent: "build" })).project.key
+      const role = yield* store.saveLayer("opencode", undefined, {
+        name: "Reviewer",
+        type: "role",
+        section: "role",
+        text: "You review release notes.",
+      })
+      const setting = { override: { slots: { role: [role.id] } } }
+      yield* store.setAgent(key, "build", setting)
+
+      // The saved values: the same prompt as the saved preview.
+      const saved = yield* prompts.preview({ agent: "build" })
+      const same = yield* prompts.preview({ agent: "build", draft: { setting } })
+      expect([...same.system]).toEqual([...saved.system])
+      // Without the override (unsaved): the profile's own slots.
+      const plain = yield* prompts.preview({ agent: "build", draft: { setting: {} } })
+      expect(plain.override).toEqual([])
+      expect(plain.system[0]).not.toContain("You review release notes.")
+
+      // An agent not saved yet: its typed prompt where the profile puts the agent's own text, and its chosen profile.
+      const spec = `${OperatorProfile.PREFIX}profile.spec`
+      const draft = yield* prompts.preview({
+        agent: "scribe",
+        draft: { prompt: "Write things down clearly.", mode: "subagent", setting: { profile: spec } },
+      })
+      expect(draft.agent).toBe("scribe")
+      expect(draft.profile).toMatchObject({ id: spec, source: "agent" })
+      expect(draft.system.join("\n")).toContain("Write things down clearly.")
+      // Without a draft, an unknown agent is still refused.
+      expect((yield* prompts.preview({ agent: "scribe" }).pipe(Effect.flip)).message).toContain("No agent")
+    }),
+  ),
+)
+
 unix("the tool catalog lists this project's tools with their own descriptions", () =>
   Effect.gen(function* () {
     const catalog = yield* (yield* OperatorPrompts.Service).catalog()

@@ -73,6 +73,24 @@ export const OperatorPromptApi = HttpApi.make("operator-prompt")
               "The system prompt an agent of this project sends with a model: its namespace, the profile it uses and why, the slots its override changed, and each section's group type, layer and trace (how it was resolved, down to its file), with Purpose marked automatic. The model is the agent's, else the default model (the small model for title), with where it is set.",
           }),
         ),
+        HttpApiEndpoint.post("previewDraft", OperatorPromptPaths.preview, {
+          query: WorkspaceRoutingQuery,
+          payload: Schema.Struct({
+            agent: Schema.String.annotate({ description: "The agent's name (one not saved yet is previewed as new)" }),
+            provider: Schema.optional(Schema.String),
+            model: Schema.optional(Schema.String),
+            draft: OperatorPrompts.Draft,
+          }),
+          success: described(OperatorPrompts.Preview, "The system prompt the agent form's values would send"),
+          error: ApiPromptNotFoundError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.prompt.previewDraft",
+            summary: "Preview an agent form's system prompt",
+            description:
+              "The system prompt an agent would send with the agent form's unsaved values: its own prompt text, its prompt setting (a profile, none for the default, and an override) and a model. An agent not saved yet is previewed as a new one with OpenCode's default permissions. Nothing is saved.",
+          }),
+        ),
         HttpApiEndpoint.get("sample", OperatorPromptPaths.sample, {
           query: Schema.Struct({
             ...WorkspaceRoutingQueryFields,

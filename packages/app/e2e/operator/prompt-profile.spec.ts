@@ -467,7 +467,9 @@ test("a profile's slots change in its view, and Create agent… makes an agent t
 
   await overlay.getByRole("button", { name: "Create agent…" }).click()
   await expect(page).toHaveURL(/\/operator\/agents\/new\?dir=.*&profile=release/)
-  await expect(page.getByRole("status")).toContainText("The new agent will use the profile Release.")
+  await expect(
+    page.locator('[data-component="select-v2-root"][aria-label="Profile"] [data-component="select-v2"]'),
+  ).toContainText("Release")
   await page.getByLabel("Name", { exact: true }).fill("releaser")
   await page.getByRole("button", { name: "Create agent", exact: true }).click()
   await expect.poll(() => state.agentWrites.length).toBe(1)

@@ -94,7 +94,7 @@ export interface Interface {
   readonly status: (namespace: string, name: string) => Effect.Effect<Status[]>
   /** An agent finished a turn in this session. */
   readonly turn: (sessionID: string) => Effect.Effect<void>
-  /** Waits until the runs started so far have ended. */
+  /** Waits until the events received so far are handled and the runs started have ended. */
   readonly idle: () => Effect.Effect<void>
 }
 
@@ -445,9 +445,15 @@ const layer = Layer.effect(
         })
     })
 
+    // Events being handled (a turn, a new project): idle waits for them too.
+    let handling = 0
+    const handle = (effect: Effect.Effect<void>) => {
+      handling++
+      bridge.fork(effect.pipe(Effect.ignore, Effect.ensuring(Effect.sync(() => handling--))))
+    }
     const idle = () =>
       Effect.gen(function* () {
-        while (inFlight > 0) yield* Effect.sleep("20 millis")
+        while (inFlight > 0 || handling > 0) yield* Effect.sleep("20 millis")
       })
 
     const token = {}
@@ -460,10 +466,10 @@ const layer = Layer.effect(
         payload?.type === "session.idle" ||
         (payload?.type === "session.status" && payload.properties?.status?.type === "idle")
       const id = payload?.properties?.sessionID
-      if (finished && id) bridge.fork(turn(id).pipe(Effect.ignore))
+      if (finished && id) handle(turn(id))
     }
     const onCreated = (project: OperatorProfileStore.CreatedProject) => {
-      if (current === token) bridge.fork(created(project).pipe(Effect.ignore))
+      if (current === token) handle(created(project))
     }
     yield* Effect.acquireRelease(
       Effect.sync(() => {

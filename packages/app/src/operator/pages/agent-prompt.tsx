@@ -168,8 +168,9 @@ export function AgentPrompt(props: { agent: string; directory: string; modelSour
 }
 
 // The agent's changes to its profile: a group, and the slots it changed. Only changes are saved, so
-// the slots it did not change keep following the profile.
-function Override(props: {
+// the slots it did not change keep following the profile. `embedded` (the agent form, agent_form_spec.md §6.1) has no
+// Save of its own: `onChange` reports the override as edited (null: Override off), and the form saves it.
+export function Override(props: {
   ns: string
   catalog: Catalog
   profile: Profile | undefined
@@ -177,6 +178,10 @@ function Override(props: {
   onSave: (next: { profile?: string; override?: OperatorPromptOverride }) => Promise<unknown>
   // The override being edited and not saved yet, for the preview; undefined when there is none.
   onDraft: (override: OperatorPromptOverride | undefined) => void
+  embedded?: boolean
+  onChange?: (override: OperatorPromptOverride | null) => void
+  /** Why Override can't be turned on (no profile chosen, a helper profile). */
+  disabled?: string
 }) {
   const language = useLanguage()
   const confirm = useConfirm()
@@ -223,9 +228,15 @@ function Override(props: {
   const dirty = () => JSON.stringify(override()) !== JSON.stringify(props.setting.override ?? {})
   const problem = () => slotProblem(props.catalog, value().slots)
   createEffect(() => props.onDraft(store.open && props.profile && dirty() ? override() : undefined))
+  createEffect(() => props.onChange?.(store.open && props.profile ? override() : null))
 
   const toggle = async (checked: boolean) => {
     if (checked) return setStore("open", true)
+    // In the form, Override off takes effect when the form is saved.
+    if (props.embedded) {
+      setStore({ open: false, group: undefined })
+      return setStore("slots", reconcile({}))
+    }
     if (!props.setting.override) {
       setStore({ open: false, group: undefined })
       return setStore("slots", reconcile({}))
@@ -253,10 +264,16 @@ function Override(props: {
         <CheckboxV2
           label={language.t("operator.prompts.override")}
           checked={store.open}
+          disabled={!!props.disabled && !store.open}
           onChange={(checked: boolean) => void toggle(checked)}
         />
         <FieldHelp field={language.t("operator.prompts.override")} text={language.t("operator.help.override")} />
       </span>
+      <Show when={props.disabled && !store.open}>
+        <p data-slot="operator-note" data-testid="override-disabled">
+          {props.disabled}
+        </p>
+      </Show>
       <Show when={store.open && props.profile}>
         <SlotEditor
           ns={props.ns}
@@ -280,11 +297,13 @@ function Override(props: {
             setStore("group", next.group === props.profile?.group ? undefined : next.group)
           }}
         />
-        <div data-slot="operator-actions">
-          <ButtonV2 variant="contrast" disabled={store.busy || !dirty() || !!problem()} onClick={() => void save()}>
-            {language.t("operator.prompts.saveOverride")}
-          </ButtonV2>
-        </div>
+        <Show when={!props.embedded}>
+          <div data-slot="operator-actions">
+            <ButtonV2 variant="contrast" disabled={store.busy || !dirty() || !!problem()} onClick={() => void save()}>
+              {language.t("operator.prompts.saveOverride")}
+            </ButtonV2>
+          </div>
+        </Show>
       </Show>
     </section>
   )

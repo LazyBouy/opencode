@@ -188,6 +188,8 @@ export interface PromptMock {
   readonly writes: Array<{ method: string; path: string; body: unknown }>
   /** The samples asked for (Test resolve), by their query. */
   readonly samples: Array<Record<string, string>>
+  /** The agent form's previews (POST /operator/prompt/preview), as sent. */
+  readonly drafts: Array<{ agent: string; draft: Record<string, unknown> }>
   /** Blank (undefined): Global and OpenCode are one namespace. */
   workingDir: string | undefined
   /** Global's record, listed while the working directory is set. */
@@ -316,6 +318,7 @@ export function createPromptMock(
     agents: {},
     writes: [],
     samples: [],
+    drafts: [],
     workingDir: "/workspace",
     global: { id: "global", name: "Global", purpose: "", createdAt: 0, updatedAt: 0 },
     moves: [],
@@ -456,24 +459,31 @@ export function createPromptMock(
   }
 
   // A small stand-in for the assembler: Purpose, then the effective group's slots in order.
-  const preview = (url: URL) => {
+  // The agent form's unsaved values (POST): its prompt text and its whole prompt setting.
+  type Draft = {
+    prompt?: string
+    setting?: { profile?: string; override?: { group?: string; slots?: Record<string, string[]> } }
+  }
+  const preview = (url: URL, form?: { agent: string; draft: Draft }) => {
     const project = url.searchParams.get("directory") ?? ""
-    const name = url.searchParams.get("agent") ?? "build"
-    const chosen = agentPrompt(project, name)
+    const name = form?.agent ?? url.searchParams.get("agent") ?? "build"
+    const chosen = agentPrompt(project, form ? "\u0000draft" : name)
     const link = state.projects[project] ?? { namespace: "opencode" }
     const loaded = catalog(link.namespace)
-    const asked = url.searchParams.get("profile")
+    const asked = form ? form.draft.setting?.profile : url.searchParams.get("profile")
     const profile = loaded.profiles.find((item) => item.id === (asked ?? chosen.profile.id))!
     // Unsaved override edits are previewed in place of the saved override.
     const draft = url.searchParams.get("override")
-    const override = asked
-      ? undefined
-      : draft
-        ? ((JSON.parse(draft) as { group?: string; slots?: Record<string, string[]> } | null) ?? undefined)
-        : chosen.setting.override
+    const override = form
+      ? form.draft.setting?.override
+      : asked
+        ? undefined
+        : draft
+          ? ((JSON.parse(draft) as { group?: string; slots?: Record<string, string[]> } | null) ?? undefined)
+          : chosen.setting.override
     const group = loaded.groups.find((item) => item.id === (override?.group ?? profile.group))!
     const typeName = (id: string) => loaded.types.find((item) => item.id === id)?.name ?? id
-    const own = ownPrompt(name)
+    const own = form ? form.draft.prompt || undefined : ownPrompt(name)
     const base = builtinLayers.find((layer) => layer.id === `${PREFIX}base.default`)!
     const extra = generated(project)
     // How each section resolved, down to its file (as the server traces it).
@@ -591,9 +601,18 @@ export function createPromptMock(
       string,
       unknown
     > | null
-    if (method !== "GET") state.writes.push({ method, path: url.pathname, body })
+    // A preview (the agent form's POST) reads; it isn't a write.
+    if (method !== "GET" && url.pathname !== "/operator/prompt/preview")
+      state.writes.push({ method, path: url.pathname, body })
 
-    if (url.pathname === "/operator/prompt/preview") return json(route, preview(url))
+    if (url.pathname === "/operator/prompt/preview") {
+      if (method === "POST") {
+        const input = body as { agent: string; draft: Draft }
+        state.drafts.push(input)
+        return json(route, preview(url, input))
+      }
+      return json(route, preview(url))
+    }
     // The purpose generator's draft.
     if (url.pathname === "/operator/prompt/purpose") {
       const input = body as { kind: string; brief?: string }

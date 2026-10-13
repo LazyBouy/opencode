@@ -118,6 +118,8 @@ const setup = (name: string, triggers: OperatorHelperFiles.Trigger[]) =>
     // The helper settings are server-wide: not paused by an earlier test.
     yield* (yield* OperatorHelperRuns.Service).setSettings({ runDays: 30, triggersPaused: false })
     yield* (yield* OperatorProfileStore.Service).setProject(directory, {})
+    // The project's own "created" event is handled before the helper exists.
+    yield* (yield* OperatorHelperTriggers.Service).idle()
     yield* (yield* OperatorHelpers.Service).create("opencode", {
       name,
       model: { source: "default" },

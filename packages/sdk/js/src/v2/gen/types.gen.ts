@@ -4549,6 +4549,17 @@ export type OperatorPromptNotFoundError = {
   }
 }
 
+export type OperatorAgentPrompt = {
+  profile?: string
+  override?: OperatorPromptOverride
+}
+
+export type OperatorPromptDraft = {
+  prompt?: string
+  mode?: "primary" | "subagent" | "all"
+  setting?: OperatorAgentPrompt
+}
+
 export type OperatorPromptSample = {
   agent: string
   /**
@@ -4770,11 +4781,6 @@ export type OperatorMemoryDetail = {
   updated?: string
   by?: string
   content: string
-}
-
-export type OperatorAgentPrompt = {
-  profile?: string
-  override?: OperatorPromptOverride
 }
 
 export type OperatorAgentPromptView = {
@@ -17725,6 +17731,47 @@ export type OperatorPromptPreviewResponses = {
 }
 
 export type OperatorPromptPreviewResponse = OperatorPromptPreviewResponses[keyof OperatorPromptPreviewResponses]
+
+export type OperatorPromptPreviewDraftData = {
+  body?: {
+    /**
+     * The agent's name (one not saved yet is previewed as new)
+     */
+    agent: string
+    provider?: string
+    model?: string
+    draft: OperatorPromptDraft
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/prompt/preview"
+}
+
+export type OperatorPromptPreviewDraftErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * OperatorPromptNotFoundError
+   */
+  404: OperatorPromptNotFoundError
+}
+
+export type OperatorPromptPreviewDraftError = OperatorPromptPreviewDraftErrors[keyof OperatorPromptPreviewDraftErrors]
+
+export type OperatorPromptPreviewDraftResponses = {
+  /**
+   * The system prompt the agent form's values would send
+   */
+  200: OperatorPromptPreview
+}
+
+export type OperatorPromptPreviewDraftResponse =
+  OperatorPromptPreviewDraftResponses[keyof OperatorPromptPreviewDraftResponses]
 
 export type OperatorPromptSampleData = {
   body?: never

@@ -16210,6 +16210,94 @@
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.prompt.preview({\n  ...\n})"
           }
         ]
+      },
+      "post": {
+        "tags": ["operator prompts"],
+        "operationId": "operator.prompt.previewDraft",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The system prompt the agent form's values would send",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPromptPreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorPromptNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPromptNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The system prompt an agent would send with the agent form's unsaved values: its own prompt text, its prompt setting (a profile, none for the default, and an override) and a model. An agent not saved yet is previewed as a new one with OpenCode's default permissions. Nothing is saved.",
+        "summary": "Preview an agent form's system prompt",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "agent": {
+                    "type": "string",
+                    "description": "The agent's name (one not saved yet is previewed as new)"
+                  },
+                  "provider": {
+                    "type": "string"
+                  },
+                  "model": {
+                    "type": "string"
+                  },
+                  "draft": {
+                    "$ref": "#/components/schemas/OperatorPromptDraft"
+                  }
+                },
+                "required": ["agent", "draft"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.prompt.previewDraft({\n  ...\n})"
+          }
+        ]
       }
     },
     "/operator/prompt/sample": {
@@ -38903,6 +38991,34 @@
         "required": ["name", "data"],
         "additionalProperties": false
       },
+      "OperatorAgentPrompt": {
+        "type": "object",
+        "properties": {
+          "profile": {
+            "type": "string"
+          },
+          "override": {
+            "$ref": "#/components/schemas/OperatorPromptOverride"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OperatorPromptDraft": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["primary", "subagent", "all"]
+          },
+          "setting": {
+            "$ref": "#/components/schemas/OperatorAgentPrompt"
+          }
+        },
+        "additionalProperties": false
+      },
       "OperatorPromptSample": {
         "type": "object",
         "properties": {
@@ -39393,18 +39509,6 @@
           }
         },
         "required": ["level", "file", "path", "title", "description", "content"],
-        "additionalProperties": false
-      },
-      "OperatorAgentPrompt": {
-        "type": "object",
-        "properties": {
-          "profile": {
-            "type": "string"
-          },
-          "override": {
-            "$ref": "#/components/schemas/OperatorPromptOverride"
-          }
-        },
         "additionalProperties": false
       },
       "OperatorAgentPromptView": {

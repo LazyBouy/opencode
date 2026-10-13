@@ -87,6 +87,15 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Ope
   message: Schema.String,
 }) {}
 
+export const Draft = Schema.Struct({
+  prompt: Schema.optional(Schema.String).annotate({ description: "The agent's own prompt text, as typed" }),
+  mode: Schema.optional(Schema.Literals(["primary", "subagent", "all"])),
+  setting: Schema.optional(OperatorProfile.AgentSetting).annotate({
+    description: "Its prompt setting as chosen: a profile (none: the default) and an override",
+  }),
+}).annotate({ identifier: "OperatorPromptDraft" })
+export type Draft = typeof Draft.Type
+
 export interface Interface {
   readonly catalog: () => Effect.Effect<typeof Catalog.Type>
   readonly preview: (input: {
@@ -97,6 +106,11 @@ export interface Interface {
     profile?: string
     /** An override to preview instead of the agent's saved one (unsaved edits); null for none. */
     override?: OperatorProfile.Override | null
+    /**
+     * The agent form's unsaved values (agent_form_spec.md §6.2): its own prompt text, and its whole prompt setting
+     * (profile, override) in place of the saved one. An agent not saved yet is previewed as a new one.
+     */
+    draft?: Draft
   }) => Effect.Effect<Preview, NotFoundError>
   /** What one layer fills in for an agent of this project: a Dynamic layer's sample. */
   readonly sample: (input: {
@@ -154,9 +168,27 @@ const layer = Layer.effect(
         loaded: Awaited<ReturnType<typeof OperatorProfileStore.forProject>>,
       ) => ReadonlyArray<OperatorDynamicLayers.Custom>
       helper?: "write" | "placeholder"
+      /** An agent not saved yet: previewed as a new one (build's permissions, its own prompt and mode). */
+      draft?: Draft
     }) {
       const ctx = yield* InstanceState.context
-      const agent = yield* agents.get(input.agent)
+      const saved = yield* agents.get(input.agent)
+      const base = saved || !input.draft ? undefined : yield* agents.get("build")
+      const agent: Agent.Info | undefined =
+        saved ??
+        (base
+          ? {
+              ...base,
+              name: input.agent,
+              native: false,
+              hidden: false,
+              mode: input.draft?.mode ?? "all",
+              description: undefined,
+              model: undefined,
+              variant: undefined,
+              prompt: input.draft?.prompt,
+            }
+          : undefined)
       if (!agent) return yield* new NotFoundError({ message: `No agent named "${input.agent}"` })
       // The model chosen for the preview, else the one the agent's requests use (the agent's own, else
       // the default; the small model for title), with where it is set.
@@ -330,6 +362,7 @@ const layer = Layer.effect(
       modelID?: string
       profile?: string
       override?: OperatorProfile.Override | null
+      draft?: Draft
     }) {
       // The namespace's layers with rules of their own (the assembler takes the ones its slots hold); helper
       // sources show where their text goes.
@@ -340,6 +373,8 @@ const layer = Layer.effect(
         custom,
         helper: "placeholder",
       })
+      // The form's values: its prompt text and its whole prompt setting, in place of the saved ones.
+      const draft = input.draft
       if (input.profile && !OperatorProfile.profiles(loaded.catalog).some((item) => item.id === input.profile))
         return yield* new NotFoundError({
           message: `No profile "${input.profile}" in ${loaded.catalog.namespace.name}`,
@@ -347,13 +382,14 @@ const layer = Layer.effect(
       const result = OperatorProfile.assemble({
         catalog: loaded.catalog,
         project: loaded.project,
-        agent: { name: agent.name, prompt: agent.prompt },
+        agent: { name: agent.name, prompt: draft?.prompt !== undefined ? draft.prompt : agent.prompt },
         // Unsaved override edits are previewed in place of the saved override.
-        setting:
-          input.override === undefined
+        setting: draft
+          ? (draft.setting ?? {})
+          : input.override === undefined
             ? loaded.agents[agent.name]
             : { ...loaded.agents[agent.name], override: input.override ?? undefined },
-        profile: input.profile,
+        profile: draft ? undefined : input.profile,
         model,
         parts,
         dynamic: written(loaded.catalog),

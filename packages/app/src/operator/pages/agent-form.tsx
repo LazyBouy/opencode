@@ -9,7 +9,7 @@ import { createEffect, createMemo, createSignal, type JSX, on, Show } from "soli
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { showToast } from "@/utils/toast"
-import { useOperatorClient } from "../data"
+import { ready, useOperatorClient } from "../data"
 import { useOperatorProjects, useScopedProject } from "../project"
 import { ColorField } from "../ui/color-field"
 import { useConfirm } from "../ui/confirm"
@@ -37,7 +37,9 @@ import {
 import type { Flavor, Mode } from "./agent-type"
 import { HelperForm } from "./helper-form"
 import { requestError } from "./config-helpers"
-import { useNamespaces, usePromptCatalog, useProfileNames } from "./profile-data"
+import { AgentFormPrompt, DEFAULT_PROFILE, type PromptChoice } from "./agent-form-prompt"
+import { useAgentPromptSetting } from "./agent-prompt"
+import { useNamespaces } from "./profile-data"
 import { OPENCODE } from "./profile-model"
 import { useProjectSettings } from "./project-prompt"
 import { useAgentLocks } from "../ui/permission-locks"
@@ -57,7 +59,6 @@ export default function AgentFormPage() {
   const params = useParams<{ name?: string }>()
   // Create agent… on a profile: the new agent uses that profile.
   const [search, setSearch] = useSearchParams<{ profile?: string }>()
-  const names = useProfileNames()
   const settings = useProjectSettings()
   const navigate = useNavigate()
   const api = useOperatorClient()
@@ -73,16 +74,41 @@ export default function AgentFormPage() {
   const [chosen, setChosen] = createStore({ namespace: "", saveIn: "default" as SaveIn, project: "" })
   const contextNamespace = () => settings.data?.find((item) => item.key === directory())?.namespace ?? OPENCODE
   const namespace = () => chosen.namespace || contextNamespace()
-  const summary = () => namespaces.data?.find((item) => item.namespace.id === namespace())
+  const summary = () => ready(namespaces)?.find((item) => item.namespace.id === namespace())
   const isGlobal = () => !!summary()?.global
   const namespaceProjects = () => projects().filter((item) => item.namespace === namespace())
   const defaultProject = () => summary()?.defaultProject ?? namespaceProjects()[0]?.directory
   const projectLabel = (key: string | undefined) =>
     projects().find((item) => item.directory === key)?.label ?? key?.split("/").filter(Boolean).at(-1) ?? ""
-  const prompts = usePromptCatalog(namespace)
-  const profile = () =>
-    !editing() && search.profile ? prompts.query.data?.profiles.find((item) => item.id === search.profile) : undefined
   const existing = createMemo(() => agents.data?.find((agent) => agent.name === decodeURIComponent(params.name ?? "")))
+  // Its prompt (§6): the profile it uses and its override, saved with the form. A new agent from "Create agent…" on
+  // a profile starts on that profile; one being edited on its saved setting.
+  const promptSetting = useAgentPromptSetting(
+    () => existing()?.name ?? "",
+    () => (existing() ? directory() : undefined),
+  )
+  const [prompt, setPrompt] = createStore<PromptChoice>({
+    profile: search.profile ?? DEFAULT_PROFILE,
+    override: null,
+  })
+  createEffect(
+    on(
+      () => ready(promptSetting)?.setting,
+      (setting) => {
+        if (!setting) return
+        setPrompt({ profile: setting.profile ?? DEFAULT_PROFILE, override: setting.override ?? null })
+      },
+    ),
+  )
+  const promptChanged = () => {
+    const saved = ready(promptSetting)?.setting
+    const profile = prompt.profile === DEFAULT_PROFILE ? undefined : prompt.profile
+    const override = prompt.override && Object.keys(prompt.override).length ? prompt.override : null
+    return (
+      (saved?.profile ?? undefined) !== profile ||
+      JSON.stringify(saved?.override ?? null) !== JSON.stringify(profile ? override : null)
+    )
+  }
   // The full list the agent's own rules sit in (a new agent: build's, for the hints and the picker).
   const permissions = useAgentPermissions(() => existing()?.name ?? "build", directory)
   const savedRules = () => JSON.stringify(rulesFromConfig(existing()?.settings.permission))
@@ -176,7 +202,7 @@ export default function AgentFormPage() {
   // Another namespace clears Save in, the prompt profile and a home folder of its own, after asking if any was set.
   const chooseNamespace = async (id: string) => {
     if (id === namespace()) return
-    const set = homeChanged() || !!profile() || chosen.saveIn !== "default"
+    const set = homeChanged() || prompt.profile !== DEFAULT_PROFILE || chosen.saveIn !== "default"
     if (
       set &&
       !(await confirm({
@@ -190,6 +216,7 @@ export default function AgentFormPage() {
     setHomeChanged(false)
     named(store.form.name)
     if (search.profile) setSearch({ profile: undefined })
+    setPrompt({ profile: DEFAULT_PROFILE, override: null })
   }
   const chooseSaveIn = (value: SaveIn) => {
     setChosen({ saveIn: value, ...(value === "project" ? {} : { project: "" }) })
@@ -252,16 +279,22 @@ export default function AgentFormPage() {
             ...(confirmCopy ? { confirmCopy } : {}),
           }),
     )
-    const chosen = profile()
     await request
       .then((written) => (written ? written : Promise.reject(CANCELLED)))
+      // Its prompt setting, when it changed (nothing is written into the namespace's profiles: §6.4).
       .then(() =>
-        chosen
-          ? client.operator.agentPrompt.update({
-              name: store.form.name.trim(),
-              directory: folder,
-              profile: chosen.id,
-            })
+        promptChanged()
+          ? client.operator.agentPrompt.update(
+              {
+                name: existing()?.name ?? store.form.name.trim(),
+                directory: folder,
+                ...(prompt.profile !== DEFAULT_PROFILE ? { profile: prompt.profile } : {}),
+                ...(prompt.profile !== DEFAULT_PROFILE && prompt.override && Object.keys(prompt.override).length
+                  ? { override: prompt.override }
+                  : {}),
+              },
+              { throwOnError: true },
+            )
           : undefined,
       )
       .then(() =>
@@ -333,7 +366,7 @@ export default function AgentFormPage() {
     if (level.kind === "namespace")
       return language.t("operator.agentForm.savedIn.namespace", {
         name:
-          namespaces.data?.find((item) => item.namespace.id === level.namespace)?.namespace.name ??
+          ready(namespaces)?.find((item) => item.namespace.id === level.namespace)?.namespace.name ??
           level.namespace ??
           "",
       })
@@ -423,13 +456,6 @@ export default function AgentFormPage() {
         <section data-component="operator-panel">
           <div data-component="operator-form">
             {typeField()}
-            <Show when={profile()}>
-              {(found) => (
-                <p data-slot="operator-note" role="status">
-                  {language.t("operator.agentForm.profile", { name: names.profile(found()) })}
-                </p>
-              )}
-            </Show>
             <Show when={!editing()}>
               <Field label={language.t("operator.agentForm.name")} hint={language.t("operator.agentForm.nameHint")}>
                 <TextInputV2
@@ -493,14 +519,14 @@ export default function AgentFormPage() {
                 <SelectV2<string>
                   appearance="base"
                   aria-label={language.t("operator.agentForm.namespace")}
-                  options={(namespaces.data ?? []).map((item) => item.namespace.id)}
+                  options={(ready(namespaces) ?? []).map((item) => item.namespace.id)}
                   current={namespace()}
                   label={(id) => {
-                    const found = namespaces.data?.find((item) => item.namespace.id === id)
+                    const found = ready(namespaces)?.find((item) => item.namespace.id === id)
                     return found ? `${found.namespace.name} · ${id}` : id
                   }}
                   optionTitle={(id) =>
-                    namespaces.data?.find((item) => item.namespace.id === id)?.namespace.folder ?? id
+                    ready(namespaces)?.find((item) => item.namespace.id === id)?.namespace.folder ?? id
                   }
                   onSelect={(id) => id && void chooseNamespace(id)}
                 />
@@ -709,6 +735,17 @@ export default function AgentFormPage() {
                 onInput={(event) => set("prompt", event.currentTarget.value)}
               />
             </Field>
+            <AgentFormPrompt
+              directory={targetDirectory()}
+              namespace={namespace()}
+              agent={existing()?.name ?? store.form.name}
+              prompt={store.form.prompt}
+              mode={store.form.mode}
+              model={model()}
+              value={prompt}
+              saved={ready(promptSetting)?.setting}
+              onChange={(next) => setPrompt(next)}
+            />
             <Field
               group
               label={language.t("operator.agent.tab.permissions")}

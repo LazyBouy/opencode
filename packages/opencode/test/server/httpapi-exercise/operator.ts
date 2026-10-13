@@ -217,6 +217,22 @@ export const operatorScenarios: Scenario[] = [
     .get("/operator/prompt/preview", "operator.prompt.preview")
     .at((ctx) => ({ path: "/operator/prompt/preview?agent=no-such-agent", headers: ctx.headers() }))
     .status(404),
+  // The agent form's preview (agent_form_spec.md §6.2): an agent not saved yet, with its typed prompt.
+  http.protected
+    .post("/operator/prompt/preview", "operator.prompt.previewDraft")
+    .at((ctx) => ({
+      path: "/operator/prompt/preview",
+      headers: ctx.headers(),
+      body: { agent: "httpapi-draft", draft: { prompt: "Draft prompt text.", mode: "subagent" } },
+    }))
+    .json(200, (body) => {
+      object(body)
+      check(body.agent === "httpapi-draft", "the draft agent is previewed")
+      check(
+        Array.isArray(body.system) && (body.system as string[]).join("\n").includes("Draft prompt text."),
+        "its typed prompt is in the system prompt",
+      )
+    }),
   http.protected
     .post("/operator/prompt/purpose", "operator.prompt.purpose")
     .at((ctx) => ({ path: "/operator/prompt/purpose", headers: ctx.headers(), body: { kind: "nothing" } }))

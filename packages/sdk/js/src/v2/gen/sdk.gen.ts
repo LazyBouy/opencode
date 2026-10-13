@@ -377,10 +377,13 @@ import type {
   OperatorProjectStatus,
   OperatorPromptCatalogErrors,
   OperatorPromptCatalogResponses,
+  OperatorPromptDraft,
   OperatorPromptItemKind,
   OperatorPromptOverride,
   OperatorPromptPluginsErrors,
   OperatorPromptPluginsResponses,
+  OperatorPromptPreviewDraftErrors,
+  OperatorPromptPreviewDraftResponses,
   OperatorPromptPreviewErrors,
   OperatorPromptPreviewResponses,
   OperatorPromptPurposeErrors,
@@ -4733,6 +4736,53 @@ export class Prompt extends HeyApiClient {
       url: "/operator/prompt/preview",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Preview an agent form's system prompt
+   *
+   * The system prompt an agent would send with the agent form's unsaved values: its own prompt text, its prompt setting (a profile, none for the default, and an override) and a model. An agent not saved yet is previewed as a new one with OpenCode's default permissions. Nothing is saved.
+   */
+  public previewDraft<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      agent?: string
+      provider?: string
+      model?: string
+      draft?: OperatorPromptDraft
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "agent" },
+            { in: "body", key: "provider" },
+            { in: "body", key: "model" },
+            { in: "body", key: "draft" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorPromptPreviewDraftResponses,
+      OperatorPromptPreviewDraftErrors,
+      ThrowOnError
+    >({
+      url: "/operator/prompt/preview",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 

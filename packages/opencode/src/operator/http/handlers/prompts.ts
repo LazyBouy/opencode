@@ -75,5 +75,20 @@ export const operatorPromptHandlers = HttpApiBuilder.group(InstanceHttpApi, "ope
           ),
         ),
       )
+      .handle("previewDraft", (ctx) =>
+        prompts
+          .preview({
+            agent: ctx.payload.agent,
+            providerID: ctx.payload.provider,
+            modelID: ctx.payload.model,
+            draft: ctx.payload.draft,
+          })
+          .pipe(
+            Effect.mapError(
+              (error) =>
+                new ApiPromptNotFoundError({ name: "OperatorPromptNotFoundError", data: { message: error.message } }),
+            ),
+          ),
+      )
   }),
 )

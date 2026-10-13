@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/solid-query"
 import { createEffect, createSignal, on, onCleanup } from "solid-js"
 import { useLanguage } from "@/context/language"
-import { useOperatorClient } from "../data"
+import { ready, useOperatorClient } from "../data"
 import { formatCount } from "../format"
 
 // A prompt text's counters (agent_form_spec.md §6.2): characters · words · tokens. Tokens are counted by the
@@ -37,7 +37,8 @@ export function TextCounters(props: { text: string; model?: string; directory?: 
   }))
   const words = () => props.text.trim().split(/\s+/).filter(Boolean).length
   const tokens = () => {
-    const found = settled() === props.text ? counted.data : undefined
+    // Read without suspending: a count on its way leaves the page (and what is typed) as it is.
+    const found = settled() === props.text ? ready(counted) : undefined
     return found ?? { tokens: Math.ceil(props.text.length / 4) }
   }
   const count = (value: number) => formatCount(value, language.intl())
