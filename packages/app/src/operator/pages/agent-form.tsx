@@ -5,13 +5,15 @@ import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
 import { useQuery, useQueryClient } from "@tanstack/solid-query"
-import { createEffect, createMemo, createSignal, on, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, type JSX, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { showToast } from "@/utils/toast"
 import { useOperatorClient } from "../data"
 import { useOperatorProjects, useScopedProject } from "../project"
+import { ColorField } from "../ui/color-field"
 import { useConfirm } from "../ui/confirm"
+import { useFolderBrowser } from "../ui/folder-browser"
 import { SelectV2 } from "../ui/select"
 import { EmptyState } from "../ui/empty-state"
 import { Field } from "../ui/field"
@@ -23,6 +25,15 @@ import { useAgentPermissions, useRefreshAgent } from "./agent-permissions"
 import { AgentModelFields } from "./agent-model-fields"
 import { useAgents } from "./agents"
 import { agentPatch, type AgentForm, formFromSettings } from "./agent-form-state"
+import {
+  type Check,
+  checkSteps,
+  checkTemperature,
+  checkTopP,
+  homeFolder,
+  homeOf,
+  isAnthropic,
+} from "./agent-form-checks"
 import type { Flavor, Mode } from "./agent-type"
 import { HelperForm } from "./helper-form"
 import { requestError } from "./config-helpers"
@@ -96,8 +107,9 @@ export default function AgentFormPage() {
   createEffect(
     on(existing, (agent) => {
       if (!agent) return
+      const form = formFromSettings(agent.name, agent.settings)
       setStore({
-        form: formFromSettings(agent.name, agent.settings),
+        form: { ...form, home: homeText(form.home) },
         rules: rulesFromConfig(agent.settings.permission),
       })
     }),
@@ -147,12 +159,12 @@ export default function AgentFormPage() {
         : projectLabel(targetDirectory())
 
   const set = <K extends keyof AgentForm>(key: K, value: AgentForm[K]) => setStore("form", key, value)
-  // A new agent works in agents/<name>/ of its project (its memory is kept there) unless its home is
+  // A new agent works in agents/<name> of its project (its memory is kept there) unless its home is
   // changed or cleared (memory_spec.md §2.3).
   const [homeChanged, setHomeChanged] = createSignal(false)
   const named = (name: string) => {
     set("name", name)
-    if (!editing() && !homeChanged()) set("home", name.trim() ? `agents/${name.trim()}/` : "")
+    if (!editing() && !homeChanged()) set("home", name.trim() ? `agents/${name.trim()}` : "")
   }
   const done = (name: string) => {
     const folder = targetDirectory() ?? directory() ?? ""
@@ -197,9 +209,30 @@ export default function AgentFormPage() {
     if (orderCheck(store.rules).duplicates.length)
       return setStore("error", language.t("operator.agentPermissions.duplicatesBlock"))
     if (!targetDirectory()) return setStore("error", language.t("operator.agentForm.noTarget"))
+    if (blocked()) return setStore("error", language.t("operator.agentForm.fixFields"))
     const folder = targetDirectory()!
     setStore({ saving: true, error: "" })
-    const patch = agentPatch(store.form, existing()?.settings ?? {}, rulesToConfig(store.rules))
+    // A home folder that isn't there yet is made when the agent is saved: one you typed or chose, after asking (§5);
+    // a new agent's own agents/<name> as it is.
+    const home = checks().home.home
+    if (home && homeProject() && homeChanged()) {
+      const path = homeFolder(home, homeProject()!)
+      const there = await api
+        .client()
+        .operator.folder.list({ path }, { throwOnError: true })
+        .then(() => true)
+        .catch(() => false)
+      if (
+        !there &&
+        !(await confirm({
+          title: language.t("operator.agentForm.homeCreateTitle"),
+          description: language.t("operator.agentForm.homeCreateBody", { folder: path }),
+          confirm: language.t("operator.agentForm.homeCreateConfirm"),
+        }))
+      )
+        return setStore("saving", false)
+    }
+    const patch = agentPatch({ ...store.form, home }, existing()?.settings ?? {}, rulesToConfig(store.rules))
     const client = api.client()
     const request = write((confirmCopy) =>
       editing()
@@ -249,6 +282,48 @@ export default function AgentFormPage() {
       })
       .catch((error: unknown) => (error === CANCELLED ? undefined : setStore("error", requestError(error))))
       .finally(() => setStore("saving", false))
+  }
+
+  // Temperature, Top P and Step limit as typed (§3), and the home folder inside the project (§5): an error blocks Save.
+  const [model, setModel] = createSignal<string>()
+  // A project's agent has its home in that project; a namespace's or Global's, inside each project it runs in.
+  const homeProject = () => (scope() === "project" ? targetDirectory() : undefined)
+  const homeText = (stored: string) => {
+    const found = homeOf(stored, homeProject() ?? directory())
+    return found.error ? stored : found.home.replace(/^\.\//, "")
+  }
+  const checks = createMemo(() => ({
+    temperature: checkTemperature(store.form.temperature, isAnthropic(model())),
+    top_p: checkTopP(store.form.top_p),
+    steps: checkSteps(store.form.steps),
+    home: homeOf(store.form.home, homeProject()),
+  }))
+  const blocked = () => {
+    const found = checks()
+    return !!(found.temperature.error || found.top_p.error || found.steps.error || found.home.error)
+  }
+  const checkNote = (check: Check, testid: string): JSX.Element => (
+    <Show when={check.error ?? check.warning}>
+      {(key) => (
+        <p
+          data-slot={check.error ? "operator-field-error" : "operator-note"}
+          data-warning={check.error ? undefined : ""}
+          role={check.error ? "alert" : "status"}
+          data-testid={testid}
+        >
+          {language.t(`operator.agentForm.check.${key()}`)}
+        </p>
+      )}
+    </Show>
+  )
+  const browseFolders = useFolderBrowser()
+  const browseHome = async () => {
+    const project = homeProject()
+    if (!project) return
+    const picked = await browseFolders({ within: project, start: homeFolder(checks().home.home, project) })
+    if (!picked) return
+    setHomeChanged(true)
+    set("home", homeOf(picked, project).home.replace(/^\.\//, ""))
   }
 
   // Saved in, for an agent being edited: where it is defined. Move to another project (§7).
@@ -539,6 +614,7 @@ export default function AgentFormPage() {
               namespace={namespace()}
               editing={editing()}
               where={where()}
+              onModel={setModel}
             />
             <div data-slot="operator-form-row">
               <Field label={language.t("operator.agent.temperature")} hint={language.t("operator.help.temperature")}>
@@ -546,34 +622,39 @@ export default function AgentFormPage() {
                   appearance="base"
                   inputMode="decimal"
                   value={store.form.temperature}
+                  invalid={!!checks().temperature.error}
                   onInput={(event) => set("temperature", event.currentTarget.value)}
                 />
+                {checkNote(checks().temperature, "check-temperature")}
               </Field>
               <Field label={language.t("operator.agent.topP")} hint={language.t("operator.help.topP")}>
                 <TextInputV2
                   appearance="base"
                   inputMode="decimal"
                   value={store.form.top_p}
+                  invalid={!!checks().top_p.error}
                   onInput={(event) => set("top_p", event.currentTarget.value)}
                 />
+                {checkNote(checks().top_p, "check-top-p")}
               </Field>
               <Field label={language.t("operator.agent.steps")} hint={language.t("operator.help.steps")}>
                 <TextInputV2
                   appearance="base"
                   inputMode="numeric"
                   value={store.form.steps}
+                  invalid={!!checks().steps.error}
                   onInput={(event) => set("steps", event.currentTarget.value)}
                 />
+                {checkNote(checks().steps, "check-steps")}
               </Field>
             </div>
             <div data-slot="operator-form-row">
-              <Field label={language.t("operator.agentForm.color")} hint={language.t("operator.agentForm.colorHint")}>
-                <TextInputV2
-                  appearance="base"
-                  value={store.form.color}
-                  placeholder="#FF6600"
-                  onInput={(event) => set("color", event.currentTarget.value)}
-                />
+              <Field
+                group
+                label={language.t("operator.agentForm.color")}
+                hint={language.t("operator.agentForm.colorHint")}
+              >
+                <ColorField value={store.form.color} onChange={(value) => set("color", value)} />
               </Field>
               <Field group label={language.t("operator.agents.hidden")} hint={language.t("operator.help.hidden")}>
                 <Switch checked={store.form.hidden} onChange={(checked) => set("hidden", checked)}>
@@ -582,15 +663,43 @@ export default function AgentFormPage() {
               </Field>
             </div>
             <Field label={language.t("operator.agentForm.home")} hint={language.t("operator.agentForm.homeHint")}>
-              <TextInputV2
-                appearance="base"
-                value={store.form.home}
-                placeholder="agents/<name>/"
-                onInput={(event) => {
-                  setHomeChanged(true)
-                  set("home", event.currentTarget.value)
-                }}
-              />
+              <div class="flex flex-wrap items-center gap-1" data-testid="agent-home">
+                <code data-slot="operator-home-prefix">
+                  {homeProject() ? `${homeProject()}/` : language.t("operator.agentForm.homeEachProject")}
+                </code>
+                <TextInputV2
+                  appearance="base"
+                  value={store.form.home}
+                  placeholder="agents/<name>"
+                  invalid={!!checks().home.error}
+                  onInput={(event) => {
+                    setHomeChanged(true)
+                    set("home", event.currentTarget.value)
+                  }}
+                />
+                <ButtonV2 size="small" variant="neutral" disabled={!homeProject()} onClick={() => void browseHome()}>
+                  {language.t("operator.agentForm.homeBrowse")}
+                </ButtonV2>
+              </div>
+              <Show when={checks().home.error}>
+                {(key) => (
+                  <p data-slot="operator-field-error" role="alert" data-testid="check-home">
+                    {language.t(`operator.agentForm.check.${key()}`)}{" "}
+                    <Show when={key() === "homeOutside" && store.form.name.trim()}>
+                      <button
+                        type="button"
+                        data-slot="operator-link"
+                        onClick={() => {
+                          setHomeChanged(true)
+                          set("home", `agents/${store.form.name.trim()}`)
+                        }}
+                      >
+                        {language.t("operator.agentForm.homeMoveInside")}
+                      </button>
+                    </Show>
+                  </p>
+                )}
+              </Show>
             </Field>
             <Field label={language.t("operator.agentForm.prompt")} hint={language.t("operator.agentForm.promptHint")}>
               <TextareaV2
@@ -642,7 +751,7 @@ export default function AgentFormPage() {
             </ButtonV2>
             <ButtonV2
               variant="contrast"
-              disabled={store.saving || (!editing() && !store.form.name.trim())}
+              disabled={store.saving || blocked() || (!editing() && !store.form.name.trim())}
               onClick={() => void save()}
             >
               {editing() ? language.t("operator.config.save") : language.t("operator.agentForm.create")}

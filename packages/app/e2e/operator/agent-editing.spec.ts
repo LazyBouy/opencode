@@ -26,11 +26,15 @@ test("creating an agent sends its settings and rules, then opens it", async ({ p
   await page.getByLabel("Description", { exact: true }).fill("Writes docs")
   await page.getByRole("button", { name: "Subagent", exact: true }).click()
   await page.getByLabel("Temperature", { exact: true }).fill("0.3")
-  await page.getByLabel("Home folder", { exact: true }).fill("/work/docs")
+  await page.getByLabel("Home folder", { exact: true }).fill("work/docs")
   await page.getByLabel("Prompt", { exact: true }).fill("Write clear docs.")
   await page.getByRole("combobox", { name: "New rule's permission" }).fill("edit")
   await page.getByRole("button", { name: "Add rule" }).click()
   await page.getByRole("button", { name: "Create agent" }).click()
+  // The home folder isn't there yet: made when saving, after asking.
+  const question = page.getByRole("dialog").filter({ hasText: "Make the home folder?" })
+  await expect(question).toContainText(`${directory}/work/docs`)
+  await question.getByRole("button", { name: "Make it and save" }).click()
 
   await expect.poll(() => state.agentWrites.length).toBe(1)
   const write = state.agentWrites[0]
@@ -44,7 +48,8 @@ test("creating an agent sends its settings and rules, then opens it", async ({ p
     // The default model in effect, copied in (default_models_spec.md §8).
     model: "opencode/claude-opus-4-6",
     temperature: 0.3,
-    home: "/work/docs",
+    // Saved relative to the project (agent_form_spec.md §5).
+    home: "./work/docs",
     prompt: "Write clear docs.",
     permission: { edit: "ask" },
   })
@@ -79,9 +84,9 @@ test("a new agent works in agents/<name>/ unless its home is changed or cleared"
   await page.goto(`/operator/agents/new${dir}`)
   const home = page.getByLabel("Home folder", { exact: true })
   await page.getByLabel("Name", { exact: true }).fill("docs")
-  await expect(home).toHaveValue("agents/docs/")
+  await expect(home).toHaveValue("agents/docs")
   await page.getByLabel("Name", { exact: true }).fill("writer")
-  await expect(home).toHaveValue("agents/writer/")
+  await expect(home).toHaveValue("agents/writer")
   // Cleared: it works at the project root, and the name no longer changes it.
   await home.fill("")
   await page.getByLabel("Name", { exact: true }).fill("editor")

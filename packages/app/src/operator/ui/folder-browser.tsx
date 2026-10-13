@@ -17,13 +17,14 @@ import { FieldHelp } from "./field-help"
 
 // Opens a dialog to browse the server's workspace roots, create folders in them and pick one (a
 // project, a namespace's folder). It starts in `start` when that folder can be listed, else in the
-// first root. `over` opens it over the dialog it is called from (which stays open). Resolves with the
-// chosen folder, or undefined when dismissed.
+// first root. `over` opens it over the dialog it is called from (which stays open). `within` keeps it inside one
+// folder (an agent's home inside its project): it starts there, can't go above it, and makes no git repositories.
+// Resolves with the chosen folder, or undefined when dismissed.
 export function useFolderBrowser() {
   const dialog = useDialog()
   const language = useLanguage()
   const api = useOperatorClient()
-  return (options?: { start?: string; over?: boolean }) =>
+  return (options?: { start?: string; over?: boolean; within?: string }) =>
     new Promise<string | undefined>((resolve) => {
       const finish = (path: string | undefined) => {
         resolve(path)
@@ -31,7 +32,15 @@ export function useFolderBrowser() {
       }
       const open = options?.over ? dialog.push : dialog.show
       void open(
-        () => <FolderBrowser language={language} client={api.client} start={options?.start} onDone={finish} />,
+        () => (
+          <FolderBrowser
+            language={language}
+            client={api.client}
+            start={options?.start ?? options?.within}
+            within={options?.within}
+            onDone={finish}
+          />
+        ),
         () => resolve(undefined),
       )
     })
@@ -41,6 +50,7 @@ function FolderBrowser(props: {
   language: ReturnType<typeof useLanguage>
   client: ReturnType<typeof useOperatorClient>["client"]
   start?: string
+  within?: string
   onDone: (path: string | undefined) => void
 }) {
   const t = props.language.t
@@ -50,9 +60,10 @@ function FolderBrowser(props: {
     loading: true,
     error: "",
     name: "",
-    git: true,
+    git: !props.within,
     busy: false,
   })
+  const inside = (path: string) => !props.within || path === props.within || path.startsWith(`${props.within}/`)
 
   const open = async (path?: string, fallback = false) => {
     setStore({ loading: true, error: "" })
@@ -100,7 +111,9 @@ function FolderBrowser(props: {
       .finally(() => setStore("busy", false))
   }
 
-  const trail = createMemo(() => (store.listing ? crumbs(store.listing.root, store.listing.path) : []))
+  const trail = createMemo(() =>
+    (store.listing ? crumbs(store.listing.root, store.listing.path) : []).filter((crumb) => inside(crumb.path)),
+  )
 
   return (
     <Dialog size="large">
@@ -111,7 +124,7 @@ function FolderBrowser(props: {
         <div data-component="operator-folders">
           <p data-slot="operator-note">{t("operator.folders.hint")}</p>
           <div data-slot="operator-folders-path">
-            <Show when={store.roots.length > 1}>
+            <Show when={store.roots.length > 1 && !props.within}>
               <SelectV2<string>
                 appearance="inline"
                 aria-label={t("operator.folders.root")}
@@ -142,7 +155,9 @@ function FolderBrowser(props: {
           </div>
 
           <ul data-component="operator-layers" aria-label={t("operator.folders.list")} aria-busy={store.loading}>
-            <Show when={store.listing?.parent}>
+            <Show
+              when={store.listing?.parent && store.listing.path !== props.within ? store.listing.parent : undefined}
+            >
               {(parent) => (
                 <li data-slot="operator-layer">
                   <button type="button" data-slot="operator-layer-open" onClick={() => void open(parent())}>
@@ -191,7 +206,7 @@ function FolderBrowser(props: {
               />
               <FieldHelp field={t("operator.folders.new")} text={t("operator.help.newFolder")} />
             </span>
-            <span class="inline-flex items-center">
+            <span class="inline-flex items-center" hidden={!!props.within}>
               <CheckboxV2
                 label={t("operator.folders.gitOption")}
                 checked={store.git}
@@ -204,7 +219,7 @@ function FolderBrowser(props: {
             </ButtonV2>
           </form>
 
-          <Show when={store.listing && !store.listing.project}>
+          <Show when={store.listing && !store.listing.project && !props.within}>
             <div data-slot="operator-folders-notice">
               <span>{t("operator.folders.notGit")}</span>
               <ButtonV2 size="small" variant="outline" disabled={store.busy} onClick={() => void init()}>

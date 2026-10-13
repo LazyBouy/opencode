@@ -67,7 +67,7 @@ test("choosing another namespace asks first when Save in or the home folder was 
   await page.getByRole("dialog").getByRole("button", { name: "Change namespace" }).click()
   await expect(page.getByTestId("agent-save-in-global")).toBeVisible()
   // The home folder went back to the agent's own.
-  await expect(page.getByLabel("Home folder", { exact: true })).toHaveValue("agents/docs/")
+  await expect(page.getByLabel("Home folder", { exact: true })).toHaveValue("agents/docs")
 })
 
 test("editing an agent says where it is saved, and it can move to another project", async ({ page }) => {

@@ -22,7 +22,7 @@ test("every field has an (i) with its help, and Settings → Appearance → Fiel
   const about = page.getByRole("button", { name: "About Home folder" })
   await about.hover()
   await expect(page.getByRole("tooltip")).toContainText(
-    "Sessions started as this agent open in this folder, relative to the project",
+    "Sessions started as this agent open in this folder, always inside the project",
   )
   await expect(page.getByLabel("Home folder", { exact: true })).toBeVisible()
   await expect(page.getByRole("button", { name: "About Temperature" })).toBeVisible()

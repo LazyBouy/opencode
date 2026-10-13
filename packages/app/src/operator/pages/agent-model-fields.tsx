@@ -61,6 +61,8 @@ export function AgentModelFields(props: {
   prefill?: boolean
   /** Where the agent is saved, in words (the project's name, or Settings), for the "copied in" note. */
   where: string
+  /** The model the agent will use (picked, or the default or small model in effect), as provider/model. */
+  onModel?: (model: string | undefined) => void
 }) {
   const language = useLanguage()
   const api = useOperatorClient()
@@ -121,6 +123,16 @@ export function AgentModelFields(props: {
       },
     ),
   )
+
+  createEffect(() => {
+    const found = chains()
+    props.onModel?.(
+      props.form.modelSource === "pick"
+        ? props.form.model || undefined
+        : (props.form.modelSource === "small" ? found?.small.effective.model : found?.model.effective.model) ||
+            undefined,
+    )
+  })
 
   // The variants on offer: the picked model's, or for Small model the small model's.
   const smallModel = () => {
