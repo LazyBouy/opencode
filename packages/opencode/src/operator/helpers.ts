@@ -255,14 +255,18 @@ const layer = Layer.effect(
     const reloads = yield* OperatorReloadWhenIdle.Service
     const storeError = (error: { message: string }) => fail(error.message)
 
-    // A helper that writes Dynamic layers (their `writer`) may declare reading only, and isn't deleted while it does.
+    // A helper that writes or judges Dynamic layers (their `writer`, their rules' judge) may declare reading only,
+    // and isn't deleted while it does.
     const layersWritten = (catalog: OperatorProfile.Catalog, name: string) =>
-      catalog.layers.filter((item) => item.writer === name)
+      catalog.layers.filter((item) => item.writer === name || item.resolver?.judge?.helper === name)
+    const verbOf = (layer: OperatorProfile.Layer, name: string) => (layer.writer === name ? "writes" : "judges")
     const checkWriter = (catalog: OperatorProfile.Catalog, name: string, actions: ReadonlyArray<string>) => {
       const written = layersWritten(catalog, name)[0]
       const other = actions.find((item) => !LAYER_ACTIONS.includes(item))
       return written && other
-        ? fail(`${name} writes the Dynamic layer "${written.name}": it may only declare read actions, not ${other}`)
+        ? fail(
+            `${name} ${verbOf(written, name)} the Dynamic layer "${written.name}": it may only declare read actions, not ${other}`,
+          )
         : undefined
     }
 
@@ -431,7 +435,10 @@ const layer = Layer.effect(
     const remove = Effect.fn("OperatorHelpers.remove")(function* (ns: string, name: string) {
       const found = yield* storedOf(ns, name)
       const written = layersWritten(yield* catalogOf(ns), name)[0]
-      if (written) return yield* fail(`${name} writes the Dynamic layer "${written.name}": choose another writer first`)
+      if (written)
+        return yield* fail(
+          `${name} ${verbOf(written, name)} the Dynamic layer "${written.name}": choose another ${verbOf(written, name) === "writes" ? "writer" : "judge"} first`,
+        )
       yield* reloadFor(ns, found.roles ?? [])
       return yield* Effect.promise(() =>
         OperatorTrashFiles.put({

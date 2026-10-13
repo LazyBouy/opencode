@@ -17,8 +17,8 @@ import { useLanguage } from "@/context/language"
 import { Field } from "../ui/field"
 import { move } from "./profile-model"
 
-// A Dynamic layer's rules (dynamic_layer_resolution_spec.md §6): its sources, filters, scoring rules,
-// selection and template. `RulesView` shows them; `RulesForm` edits them, every line in place.
+// A Dynamic layer's rules (dynamic_layer_resolution_spec.md §6): its sources, filters, scoring rules (and a helper
+// judge, §2.3), selection and template. `RulesView` shows them; `RulesForm` edits them, every line in place.
 
 type Kind = OperatorResolverSource["kind"]
 type FilterKind = OperatorResolverFilter["kind"]
@@ -164,6 +164,17 @@ export function RulesView(props: { rules: OperatorResolver; note: string; action
             {props.rules.score.map((rule) => `${words.rule(rule)} × ${rule.weight}`).join(" · ")}
           </Show>
         </dd>
+        <Show when={props.rules.judge}>
+          {(judge) => (
+            <>
+              <dt>{words.t("operator.layerRules.judge")}</dt>
+              <dd data-testid="rules-judge">
+                {words.t("operator.layerRules.judgeIs", { helper: judge().helper, weight: judge().weight })}
+                <Show when={judge().instructions}>{(text) => <pre data-component="operator-code">{text()}</pre>}</Show>
+              </dd>
+            </>
+          )}
+        </Show>
         <dt>{words.t("operator.layerRules.selection")}</dt>
         <dd data-testid="rules-selection">
           {[
@@ -204,6 +215,8 @@ export function RulesForm(props: {
   value: OperatorResolver
   // Your Dynamic layers can have a helper source (it writes from the layer's prompt).
   helper: boolean
+  /** The helpers that may judge (the namespace's own that only read). */
+  judges?: ReadonlyArray<string>
   onChange: (rules: OperatorResolver) => void
 }) {
   const words = useWords()
@@ -691,6 +704,67 @@ export function RulesForm(props: {
             {t("operator.layerRules.addRule")}
           </ButtonV2>
         </span>
+      </Field>
+
+      <Field group label={t("operator.layerRules.judge")} hint={t("operator.help.rulesJudge")}>
+        <div class="flex flex-col gap-2" data-testid="rules-judge-form">
+          <CheckboxV2
+            label={t("operator.layerRules.judgeOn")}
+            checked={!!draft.judge}
+            disabled={!draft.judge && !props.judges?.length}
+            onChange={(on: boolean) =>
+              update((rules) => {
+                const { judge: _, ...rest } = rules
+                return on ? { ...rest, judge: { helper: props.judges?.[0] ?? "", weight: 1 } } : rest
+              })
+            }
+          />
+          <Show when={!draft.judge && !props.judges?.length}>
+            <p data-slot="operator-note">{t("operator.layerRules.noJudges")}</p>
+          </Show>
+          <Show when={draft.judge}>
+            {(judge) => (
+              <>
+                <div data-slot="operator-rules-settings">
+                  <SelectV2<string>
+                    appearance="base"
+                    aria-label={t("operator.layerRules.judgeHelper")}
+                    options={[...new Set([...(props.judges ?? []), judge().helper].filter(Boolean))]}
+                    current={judge().helper || undefined}
+                    placeholder={t("operator.layerRules.judgeHelper")}
+                    label={(name) => name}
+                    onSelect={(name) =>
+                      name && update((rules) => ({ ...rules, judge: { ...rules.judge!, helper: name } }))
+                    }
+                  />
+                  <TextInputV2
+                    appearance="base"
+                    aria-label={t("operator.layerRules.judgeWeight")}
+                    placeholder={t("operator.layerRules.weight")}
+                    value={String(judge().weight)}
+                    onInput={(event) => {
+                      const weight = optionalNumber(event.currentTarget.value) ?? 0
+                      update((rules) => ({ ...rules, judge: { ...rules.judge!, weight } }))
+                    }}
+                  />
+                </div>
+                <TextareaV2
+                  rows={3}
+                  aria-label={t("operator.layerRules.judgeInstructions")}
+                  placeholder={t("operator.layerRules.judgeInstructionsHint")}
+                  value={judge().instructions ?? ""}
+                  onInput={(event) => {
+                    const instructions = event.currentTarget.value
+                    update((rules) => {
+                      const { instructions: _, ...rest } = rules.judge!
+                      return { ...rules, judge: instructions.trim() ? { ...rest, instructions } : rest }
+                    })
+                  }}
+                />
+              </>
+            )}
+          </Show>
+        </div>
       </Field>
 
       <Field group label={t("operator.layerRules.selection")} hint={t("operator.help.rulesSelection")}>

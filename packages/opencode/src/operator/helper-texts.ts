@@ -12,10 +12,12 @@ import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { OperatorGenerate } from "./generate"
 import { OperatorHelperAgents } from "./helper-agents"
+import { OperatorHelperFiles } from "./helper-files"
 import { OperatorProfile } from "./profile"
 import { OperatorProfileStore } from "./profile-store"
 import { OperatorProjects } from "./projects"
 import { OperatorRegistry } from "./registry"
+import type { OperatorResolver } from "./resolver"
 
 // Texts the fork's helper agents write:
 // - Your Dynamic layers: the dynamic generator writes each one's text from its prompt, the project
@@ -25,6 +27,9 @@ import { OperatorRegistry } from "./registry"
 //   (or the namespace's projects) and an optional brief, for the user to edit before saving.
 // A namespace's helper can take over either generator's role, and a Dynamic layer can name the helper that writes it
 // (agent_types_spec.md §4.4, §4.6): then that helper runs (helper-runs.ts) with the same input, and its run is recorded.
+// - A helper judge (dynamic_layer_resolution_spec.md §2.3): a Dynamic layer's judge scores the candidates its filter
+//   kept, 0 to 1 each. Asked at the session's first resolution and again only when the candidates (or the judge's
+//   settings) change, never per turn: its scores are kept with the session's root, as the texts are.
 
 export interface Interface {
   /** The texts of your Dynamic layers (by id) for a request of a session of this project. */
@@ -34,6 +39,13 @@ export interface Interface {
   }) => Effect.Effect<Record<string, string>>
   /** What one of your Dynamic layers would write for this project now, without a session. */
   readonly sample: (layer: OperatorProfile.Layer) => Effect.Effect<string, OperatorGenerate.GenerateError>
+  /** A layer's judge's scores (0–1) for its candidates, by position: kept per session until they change. */
+  readonly judge: (input: {
+    sessionID?: string
+    layer: OperatorProfile.Layer
+    judge: OperatorResolver.Judge
+    candidates: ReadonlyArray<JudgeCandidate>
+  }) => Effect.Effect<{ scores: ReadonlyMap<number, number>; trace: OperatorResolver.JudgeTrace }>
   /** A draft org purpose (of `ns`, else the project's namespace) or project purpose. */
   readonly purpose: (input: {
     kind: "org" | "project"
@@ -50,6 +62,62 @@ const FILE_LIMIT = 3000
 
 const cacheFile = (session: string) => path.join(Global.Path.data, "operator", "dynamic", `${session}.json`)
 const hashOf = (text: string) => Bun.hash(text).toString(36)
+
+export type JudgeCandidate = { index: number; name?: string; location: string; text: string }
+/** How much of each candidate a judge reads. */
+const JUDGE_EXCERPT = 1500
+const JUDGE_DEFAULT = "Score how useful each candidate is for the agent this layer is written for."
+
+/** The judge's prompt: its instructions, then the candidates numbered from 1. */
+export function judgePrompt(
+  layer: { name: string },
+  judge: OperatorResolver.Judge,
+  candidates: ReadonlyArray<JudgeCandidate>,
+) {
+  return [
+    `<instructions>\n${judge.instructions?.trim() || JUDGE_DEFAULT}\n</instructions>`,
+    `<layer name="${layer.name}">`,
+    ...candidates.map((item, at) => {
+      const text = item.text.length > JUDGE_EXCERPT ? `${item.text.slice(0, JUDGE_EXCERPT)}\n(cut)` : item.text
+      return `<candidate id="${at + 1}"${item.name ? ` name="${item.name}"` : ""} location="${item.location}">\n${text}\n</candidate>`
+    }),
+    "</layer>",
+    "Reply with one line per candidate, `id: score`, the score a number from 0 (no use) to 1 (essential). Nothing else.",
+  ].join("\n")
+}
+
+/**
+ * A judge's reply as scores by candidate id (1-based): `id: score` lines, or JSON (an object of id to score, a list
+ * of scores, or a list of {id, score}). Scores are kept within 0–1; ids out of range are ignored.
+ */
+export function parseScores(reply: string, count: number): Map<number, number> {
+  const scores = new Map<number, number>()
+  const put = (id: unknown, score: unknown) => {
+    const at = Number(id)
+    const value = Number(score)
+    if (!Number.isInteger(at) || at < 1 || at > count || !Number.isFinite(value)) return
+    scores.set(at, Math.min(1, Math.max(0, value)))
+  }
+  const json = reply.match(/[[{][\s\S]*[\]}]/)?.[0]
+  if (json) {
+    try {
+      const data = JSON.parse(json) as unknown
+      if (Array.isArray(data))
+        data.forEach((item, at) =>
+          item && typeof item === "object" ? put((item as any).id, (item as any).score) : put(at + 1, item),
+        )
+      else if (data && typeof data === "object") for (const [id, score] of Object.entries(data)) put(id, score)
+      if (scores.size) return scores
+    } catch {
+      // Not JSON: read it as lines.
+    }
+  }
+  for (const line of reply.split("\n")) {
+    const found = line.match(/^\D*?(\d+)\s*[:=)\-–]\s*(\d*\.?\d+)/)
+    if (found) put(found[1], found[2])
+  }
+  return scores
+}
 
 const layer = Layer.effect(
   Service,
@@ -211,6 +279,86 @@ const layer = Layer.effect(
       return yield* write(found.loaded.catalog.namespace.id, layer, describe(found), undefined)
     })
 
+    // A judge's scores, without a session: kept in memory for the same candidates (a preview, Test resolve).
+    const judgedNow = new Map<string, { scores: Array<[number, number]>; error?: string }>()
+    const judge = Effect.fn("OperatorHelperTexts.judge")(function* (input: {
+      sessionID?: string
+      layer: OperatorProfile.Layer
+      judge: OperatorResolver.Judge
+      candidates: ReadonlyArray<JudgeCandidate>
+    }) {
+      const helper = input.judge.helper
+      const ctx = yield* InstanceState.context
+      const key = yield* Effect.promise(() => OperatorProjects.keyOf(ctx))
+      const namespace = (yield* Effect.promise(() => OperatorProfileStore.forProject(key))).catalog.namespace.id
+      const toScores = (pairs: ReadonlyArray<[number, number]>) =>
+        new Map(
+          pairs.flatMap(([id, score]) => (input.candidates[id - 1] ? [[input.candidates[id - 1]!.index, score]] : [])),
+        )
+      if (!(yield* Effect.promise(() => OperatorHelperFiles.readOne(namespace, helper))))
+        return { scores: new Map<number, number>(), trace: { helper, status: "missing" as const } }
+      const hash = hashOf(
+        JSON.stringify([input.judge, input.candidates.map((item) => [item.location, item.name, hashOf(item.text)])]),
+      )
+      const root = input.sessionID ? yield* rootOf(input.sessionID) : undefined
+      const slot = `judge:${input.layer.id}`
+      const known = root
+        ? (
+            (yield* Effect.promise(() =>
+              Bun.file(cacheFile(root))
+                .json()
+                .catch(() => ({})),
+            )) as Record<string, { hash: string; text: string }>
+          )[slot]
+        : undefined
+      const kept = root
+        ? known?.hash === hash
+          ? (JSON.parse(known.text) as { scores: Array<[number, number]>; error?: string })
+          : undefined
+        : judgedNow.get(hash)
+      if (kept)
+        return {
+          scores: toScores(kept.scores),
+          trace: kept.error
+            ? { helper, status: "failed" as const, error: kept.error }
+            : { helper, status: "reused" as const },
+        }
+      const asked = yield* runHelper(
+        {
+          namespace,
+          name: helper,
+          input: judgePrompt(input.layer, input.judge, input.candidates),
+          startedBy: { kind: "layer", layer: input.layer.name, ...(root ? { sessionID: root } : {}) },
+          ...(root ? { parentSessionID: root } : {}),
+        },
+        Effect.fail(new OperatorGenerate.GenerateError({ message: "Helper runs are not available" })),
+      ).pipe(Effect.result)
+      // A failure is kept too: the judge is asked again only when the candidates change.
+      const result =
+        asked._tag === "Success"
+          ? { scores: [...parseScores(asked.success, input.candidates.length)] }
+          : { scores: [] as Array<[number, number]>, error: asked.failure.message }
+      if (root)
+        yield* Effect.promise(async () => {
+          const latest = (await Bun.file(cacheFile(root))
+            .json()
+            .catch(() => ({}))) as Record<string, { hash: string; text: string }>
+          latest[slot] = { hash, text: JSON.stringify(result) }
+          await fs.mkdir(path.dirname(cacheFile(root)), { recursive: true })
+          await Bun.write(cacheFile(root), JSON.stringify(latest, null, 2))
+        })
+      else {
+        if (judgedNow.size > 200) judgedNow.clear()
+        judgedNow.set(hash, result)
+      }
+      return {
+        scores: toScores(result.scores),
+        trace: result.error
+          ? { helper, status: "failed" as const, error: result.error }
+          : { helper, status: "ran" as const },
+      }
+    })
+
     const purpose = Effect.fn("OperatorHelperTexts.purpose")(function* (input: {
       kind: "org" | "project"
       ns?: string
@@ -272,7 +420,7 @@ const layer = Layer.effect(
       }),
     )
 
-    return Service.of({ dynamic, sample, purpose })
+    return Service.of({ dynamic, sample, judge, purpose })
   }),
 )
 

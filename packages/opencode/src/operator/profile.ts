@@ -1025,6 +1025,8 @@ export function checkResolver(layer: { type: string; replaces?: string }, resolv
   if (!written && resolver.sources.some((source) => source.kind === "helper"))
     return "Only your Dynamic layers have a helper prompt to write from"
   if (resolver.select.policy === "top" && !(resolver.select.n && resolver.select.n >= 1)) return "Top N needs N"
+  if (resolver.judge && !resolver.judge.helper.trim()) return "Name the helper that judges"
+  if (resolver.judge && !(resolver.judge.weight > 0)) return "The judge's weight is above 0"
   if (!resolver.template.item.trim()) return "The template needs an item"
   return undefined
 }

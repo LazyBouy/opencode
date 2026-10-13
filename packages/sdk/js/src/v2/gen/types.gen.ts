@@ -2521,6 +2521,18 @@ export type OperatorResolverRule =
       weight: number
     }
 
+export type OperatorResolverJudge = {
+  /**
+   * A helper of the namespace that only reads
+   */
+  helper: string
+  instructions?: string
+  /**
+   * Its score (0–1) times this is added to a candidate's
+   */
+  weight: number
+}
+
 export type OperatorResolverSelect = {
   policy: "one" | "top" | "all"
   n?: number
@@ -2553,6 +2565,7 @@ export type OperatorResolver = {
   sources: Array<OperatorResolverSource>
   filter: Array<OperatorResolverFilter>
   score: Array<OperatorResolverRule>
+  judge?: OperatorResolverJudge
   select: OperatorResolverSelect
   template: OperatorResolverTemplate
 }
@@ -4415,12 +4428,22 @@ export type OperatorResolverCandidateTrace = {
   cut?: boolean
 }
 
+export type OperatorResolverJudgeTrace = {
+  helper: string
+  /**
+   * ran: asked now; reused: this session's scores for the same candidates; failed; missing: no such helper; preview: not asked (the preview calls no model)
+   */
+  status: "ran" | "reused" | "failed" | "missing" | "preview"
+  error?: string
+}
+
 export type OperatorResolverInnerTrace = {
   policy: "one" | "top" | "all"
   candidates: Array<OperatorResolverCandidateTrace>
   chars: number
   overBudget: number
   off?: string
+  judge?: OperatorResolverJudgeTrace
   layer: string
 }
 
@@ -4430,6 +4453,7 @@ export type OperatorResolverTrace = {
   chars: number
   overBudget: number
   off?: string
+  judge?: OperatorResolverJudgeTrace
   inner?: OperatorResolverInnerTrace
 }
 

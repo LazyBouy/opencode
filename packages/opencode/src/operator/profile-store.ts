@@ -1100,6 +1100,14 @@ const layer = Layer.effect(
       const shape = { type: before?.type ?? input.type, replaces: before?.replaces }
       const given = input.resolver === undefined ? before?.resolver : (input.resolver ?? undefined)
       if (input.resolver) yield* refuse(OperatorProfile.checkResolver(shape, input.resolver))
+      // Its judge: a helper of the namespace that only reads, as a writer is (dynamic_layer_resolution_spec.md §2.3).
+      const judge = input.resolver?.judge?.helper
+      if (judge) {
+        const helper = yield* Effect.promise(() => OperatorHelperFiles.readOne(ns, judge))
+        yield* refuse(!helper ? `No helper "${judge}" in this namespace to judge` : undefined)
+        const other = helper?.actions?.find((item) => !OperatorHelperFiles.LAYER_ACTIONS.includes(item))
+        yield* refuse(other ? `${judge} declares ${other}: a helper that judges a layer may only read` : undefined)
+      }
       const rules =
         given && !OperatorProfile.sameRules(given, OperatorProfile.defaultResolver(shape)) ? given : undefined
       // The prompt is what a helper source writes from.

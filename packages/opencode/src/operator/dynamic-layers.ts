@@ -480,15 +480,40 @@ const layer = Layer.effect(
       const rules = custom.resolver.filter.some((filter) => filter.kind === "permission")
         ? yield* effective(input.agent, input.sessionID)
         : []
-      return OperatorResolver.run(
-        custom.resolver,
-        reads.flatMap((read) => read.candidates),
-        {
-          values: { agent: input.agent.name, model: input.model.api.id, provider: input.model.providerID },
-          ...(offs.length === reads.length && offs.length ? { off: offs[0] } : {}),
-          decide: (permission: string, value: string) => Permission.evaluate(permission, value, rules).action,
-        },
-      )
+      const candidates = reads.flatMap((read) => read.candidates)
+      const context: OperatorResolver.Context = {
+        values: { agent: input.agent.name, model: input.model.api.id, provider: input.model.providerID },
+        ...(offs.length === reads.length && offs.length ? { off: offs[0] } : {}),
+        decide: (permission: string, value: string) => Permission.evaluate(permission, value, rules).action,
+      }
+      // A helper judge scores what the filter kept (once per session and change; the preview asks no model).
+      const judge = custom.resolver.judge
+      if (!judge || context.off !== undefined) return OperatorResolver.run(custom.resolver, candidates, context)
+      if (input.helper === "placeholder")
+        return OperatorResolver.run(custom.resolver, candidates, {
+          ...context,
+          judge: { helper: judge.helper, status: "preview" },
+        })
+      const judged = OperatorResolver.toJudge(custom.resolver, candidates, context).map((index) => ({
+        index,
+        location: candidates[index]!.location,
+        text: candidates[index]!.text ?? "",
+        ...(candidates[index]!.attributes?.name !== undefined
+          ? { name: String(candidates[index]!.attributes!.name) }
+          : {}),
+      }))
+      if (!judged.length) return OperatorResolver.run(custom.resolver, candidates, context)
+      const scored = yield* helpers.judge({
+        ...(input.sessionID ? { sessionID: input.sessionID } : {}),
+        layer: custom.layer,
+        judge,
+        candidates: judged,
+      })
+      return OperatorResolver.run(custom.resolver, candidates, {
+        ...context,
+        judged: scored.scores,
+        judge: scored.trace,
+      })
     })
 
     const resolve = Effect.fn("OperatorDynamicLayers.resolve")(function* (input: Input) {

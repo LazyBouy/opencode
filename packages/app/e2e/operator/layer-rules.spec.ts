@@ -125,3 +125,42 @@ test("a Dynamic layer of yours: its rules edited in place, then Test resolve wit
   expect(JSON.parse(asked.resolver!).select).toEqual({ policy: "top", n: 1 })
   expect(state.prompt.writes).toHaveLength(1)
 })
+
+test("a helper judge on a Dynamic layer of yours: chosen with its weight and instructions, shown, and in the trace", async ({
+  page,
+}) => {
+  const state = await mockOperator(page)
+  await page.goto("/operator/profile?ns=opencode&tab=layers")
+  await page.locator('[data-section="dynamic"]').getByRole("button", { name: "New Dynamic layer" }).click()
+  const overlay = page.getByRole("dialog")
+  const form = overlay.getByTestId("rules-form")
+  await overlay.getByLabel("Name", { exact: true }).fill("Picked notes")
+  await pick(page, "Kind", "File")
+  await form.getByRole("textbox", { name: "Location" }).fill("notes/*.md")
+
+  // Off by default; on, it takes a helper of the namespace that only reads.
+  const judge = form.getByTestId("rules-judge-form")
+  await expect(judge.getByRole("combobox")).toHaveCount(0)
+  await judge.getByText("Let a helper judge").click()
+  await expect(
+    judge.locator('[data-component="select-v2-root"][aria-label="Judge"] [data-component="select-v2"]'),
+  ).toContainText("sorter")
+  await judge.getByRole("textbox", { name: "Judge's weight" }).fill("2")
+  await judge.getByRole("textbox", { name: "How to judge" }).fill("Prefer short notes.")
+  await overlay.getByRole("button", { name: "Save", exact: true }).click()
+  await expect.poll(() => state.prompt.writes.length).toBe(1)
+  expect((state.prompt.writes[0]!.body as { resolver: { judge?: unknown } }).resolver.judge).toEqual({
+    helper: "sorter",
+    weight: 2,
+    instructions: "Prefer short notes.",
+  })
+  await expect(overlay.getByTestId("layer-rules").getByTestId("rules-judge")).toContainText("sorter × 2")
+
+  // Test resolve: what the judge did, and its points beside each score.
+  await overlay.getByRole("button", { name: "Edit", exact: true }).click()
+  await overlay.getByRole("button", { name: "Test resolve" }).click()
+  const status = overlay.getByRole("status")
+  await status.getByTestId("prompt-resolution").locator("summary").click()
+  await expect(status.getByTestId("resolution-judge")).toHaveText("Judged by sorter: asked now.")
+  await expect(status.getByTestId("resolution-candidate").first()).toContainText("(judge 1.80)")
+})

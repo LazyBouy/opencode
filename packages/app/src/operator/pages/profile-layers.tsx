@@ -350,15 +350,18 @@ function LayerRecord(props: {
     // Your Dynamic layer's writer: a helper of the namespace that only reads ("": the default).
     writer: "",
   })
-  // The helpers that may write a Dynamic layer (agent_types_spec.md §4.6): the namespace's own, reading only. Asked
-  // for only for your Dynamic layers in one namespace, and read without holding the form back.
+  // The helpers that may write or judge a Dynamic layer (agent_types_spec.md §4.6): the namespace's own, reading only.
+  // Asked for only for layers whose rules are edited in one namespace, and read without holding the form back.
   const DEFAULT_WRITER = "@default"
   const helpers = useHelpers(
     () => props.ns,
     () =>
       !!props.ns &&
       props.ns !== ALL &&
-      (isWrittenDynamic(layer()) || SECTIONS.find((item) => item.id === creating())?.type === DYNAMIC),
+      (isWrittenDynamic(layer()) ||
+        SECTIONS.find((item) => item.id === creating())?.type === DYNAMIC ||
+        // A copy of one of OpenCode's per-request layers with editable rules (rulesEditable, below): its judge.
+        (!!layer()?.replaces && props.catalog.editableRules.includes(layer()!.replaces!))),
   )
   const writers = () =>
     (ready(helpers) ?? [])
@@ -625,7 +628,12 @@ function LayerRecord(props: {
       <Show when={rulesEditable() && store.rules}>
         {(rules) => (
           <>
-            <RulesForm value={rules()} helper={prompted()} onChange={(next) => setStore("rules", next)} />
+            <RulesForm
+              value={rules()}
+              helper={prompted()}
+              judges={writers()}
+              onChange={(next) => setStore("rules", next)}
+            />
             <Show when={layer()}>
               {(found) => (
                 <LayerSample

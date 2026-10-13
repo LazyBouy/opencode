@@ -33781,6 +33781,24 @@
           }
         ]
       },
+      "OperatorResolverJudge": {
+        "type": "object",
+        "properties": {
+          "helper": {
+            "type": "string",
+            "description": "A helper of the namespace that only reads"
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "weight": {
+            "type": "number",
+            "description": "Its score (0–1) times this is added to a candidate's"
+          }
+        },
+        "required": ["helper", "weight"],
+        "additionalProperties": false
+      },
       "OperatorResolverSelect": {
         "type": "object",
         "properties": {
@@ -33867,6 +33885,9 @@
             "items": {
               "$ref": "#/components/schemas/OperatorResolverRule"
             }
+          },
+          "judge": {
+            "$ref": "#/components/schemas/OperatorResolverJudge"
           },
           "select": {
             "$ref": "#/components/schemas/OperatorResolverSelect"
@@ -38463,6 +38484,24 @@
         "required": ["source", "kind", "location", "read", "score", "parts", "selected", "why", "chars"],
         "additionalProperties": false
       },
+      "OperatorResolverJudgeTrace": {
+        "type": "object",
+        "properties": {
+          "helper": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["ran", "reused", "failed", "missing", "preview"],
+            "description": "ran: asked now; reused: this session's scores for the same candidates; failed; missing: no such helper; preview: not asked (the preview calls no model)"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": ["helper", "status"],
+        "additionalProperties": false
+      },
       "OperatorResolverInnerTrace": {
         "type": "object",
         "properties": {
@@ -38484,6 +38523,9 @@
           },
           "off": {
             "type": "string"
+          },
+          "judge": {
+            "$ref": "#/components/schemas/OperatorResolverJudgeTrace"
           },
           "layer": {
             "type": "string"
@@ -38513,6 +38555,9 @@
           },
           "off": {
             "type": "string"
+          },
+          "judge": {
+            "$ref": "#/components/schemas/OperatorResolverJudgeTrace"
           },
           "inner": {
             "$ref": "#/components/schemas/OperatorResolverInnerTrace"

@@ -8,8 +8,9 @@ import { For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 
 // A Dynamic layer's resolution (dynamic_layer_resolution_spec.md §2.6): every candidate its sources gave,
-// what reading it gave, the filter that left it out, its score and the rules' parts, and whether it was
-// selected or why not. Shown under a Dynamic section on the agent page and in the Transcript.
+// what reading it gave, the filter that left it out, its score and the rules' parts (a helper judge's too, with
+// what the judge did), and whether it was selected or why not. Shown under a Dynamic section on the agent page and
+// in the Transcript.
 
 type Trace = OperatorResolverTrace | OperatorResolverInnerTrace
 
@@ -37,6 +38,20 @@ function Candidates(props: { trace: Trace; title: string }) {
       <Show when={props.trace.off}>
         {(off) => <p data-slot="operator-note">{language.t("operator.resolution.off", { reason: off() })}</p>}
       </Show>
+      <Show when={props.trace.judge}>
+        {(judge) => (
+          <p
+            data-slot="operator-note"
+            data-warning={judge().status === "failed" || judge().status === "missing" ? "" : undefined}
+            data-testid="resolution-judge"
+          >
+            {language.t(`operator.resolution.judge.${judge().status}`, {
+              helper: judge().helper,
+              error: judge().error ?? "",
+            })}
+          </p>
+        )}
+      </Show>
       <Show when={props.trace.candidates.length}>
         <table data-component="operator-table">
           <thead>
@@ -62,6 +77,14 @@ function Candidates(props: { trace: Trace; title: string }) {
                   <td>{language.t(`operator.resolution.readAs.${item.read}`)}</td>
                   <td title={item.parts.map((part) => `${part.rule}: ${points(part.points)}`).join("\n") || undefined}>
                     {item.filtered ? "—" : points(item.score)}
+                    <Show when={!item.filtered && item.parts.find((part) => part.rule.startsWith("judge ("))}>
+                      {(part) => (
+                        <span data-slot="operator-note">
+                          {" "}
+                          {language.t("operator.resolution.judgePoints", { points: points(part().points) })}
+                        </span>
+                      )}
+                    </Show>
                   </td>
                   <td>
                     <Show when={item.selected} fallback={<span data-slot="operator-note">{item.why}</span>}>

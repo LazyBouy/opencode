@@ -611,8 +611,25 @@ export function createPromptMock(
       // Rules without a helper source (draft ones too: Test resolve): each source a candidate, the first chosen.
       const draft = url.searchParams.get("resolver")
       const rules = (draft ? JSON.parse(draft) : (own as { resolver?: typeof helperRules } | undefined)?.resolver) as
-        | { sources: Array<{ kind: string; location: string; group?: string }>; select: { policy: string; n?: number } }
+        | {
+            sources: Array<{ kind: string; location: string; group?: string }>
+            select: { policy: string; n?: number }
+            judge?: { helper: string; weight: number }
+          }
         | undefined
+      // A helper judge scores the first candidate 0.9 (dynamic_layer_resolution_spec.md §2.3).
+      const judged = (resolved: ReturnType<typeof resolution>) =>
+        rules?.judge
+          ? {
+              ...resolved,
+              judge: { helper: rules.judge.helper, status: "ran" },
+              candidates: resolved.candidates.map((item, index) =>
+                index === 0
+                  ? { ...item, parts: [{ rule: `judge (${rules.judge!.helper})`, points: rules.judge!.weight * 0.9 }] }
+                  : item,
+              ),
+            }
+          : resolved
       const provider = url.searchParams.get("provider")
       const model = provider ? `${provider}/${url.searchParams.get("model")}` : "opencode/claude-opus-4-6"
       if (rules && !rules.sources.some((source) => source.kind === "helper"))
@@ -626,15 +643,17 @@ export function createPromptMock(
             ? { model, source: "chosen" }
             : { model: "opencode/claude-opus-4-6", source: "ranking" },
           trace: [{ kind: "rules", name: own?.name ?? layer }],
-          resolution: resolution(
-            rules.sources.map((source, index) => ({
-              ...candidate(source.location, source.group, {
-                selected: index === 0,
-                why: index === 0 ? "selected" : `not in the top ${rules.select.n ?? 1}`,
-              }),
-              source: index,
-              kind: source.kind,
-            })),
+          resolution: judged(
+            resolution(
+              rules.sources.map((source, index) => ({
+                ...candidate(source.location, source.group, {
+                  selected: index === 0,
+                  why: index === 0 ? "selected" : `not in the top ${rules.select.n ?? 1}`,
+                }),
+                source: index,
+                kind: source.kind,
+              })),
+            ),
           ),
         })
       if (own)

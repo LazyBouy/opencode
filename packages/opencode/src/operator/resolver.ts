@@ -9,7 +9,9 @@ import { Schema } from "effect"
 // This module is the pure part: a layer's resolver (what it reads and how it chooses), and `run`, which
 // takes the candidates its sources gave (read elsewhere: dynamic-layers.ts) and
 // returns the layer's text with a trace of every candidate. Nothing here reads files or depends on the
-// current message, so the same candidates always give the same text (the prompt stays cacheable).
+// current message, so the same candidates always give the same text (the prompt stays cacheable). A helper
+// judge (spec §2.3, off by default) adds its 0–1 score per candidate, times its weight; it is asked elsewhere
+// (helper-texts.ts) once per session and source change, and its scores come in the context.
 
 export const SourceKind = Schema.Literals([
   "text",
@@ -129,10 +131,19 @@ export const Template = Schema.Struct({
 }).annotate({ identifier: "OperatorResolverTemplate" })
 export type Template = typeof Template.Type
 
+// A helper of the layer's namespace that scores the candidates the filter kept, from 0 to 1 each.
+export const Judge = Schema.Struct({
+  helper: Schema.String.annotate({ description: "A helper of the namespace that only reads" }),
+  instructions: Schema.optional(Schema.String).annotate({ description: "How to judge, given to the helper" }),
+  weight: Schema.Finite.annotate({ description: "Its score (0–1) times this is added to a candidate's" }),
+}).annotate({ identifier: "OperatorResolverJudge" })
+export type Judge = typeof Judge.Type
+
 export const Resolver = Schema.Struct({
   sources: Schema.Array(Source),
   filter: Schema.Array(Filter),
   score: Schema.Array(Rule),
+  judge: Schema.optional(Judge).annotate({ description: "Let a helper judge (off without it)" }),
   select: Select,
   template: Template,
 }).annotate({ identifier: "OperatorResolver" })
@@ -171,12 +182,24 @@ export const CandidateTrace = Schema.Struct({
 }).annotate({ identifier: "OperatorResolverCandidateTrace" })
 export type CandidateTrace = typeof CandidateTrace.Type
 
+// What the judge did for this resolution.
+export const JudgeTrace = Schema.Struct({
+  helper: Schema.String,
+  status: Schema.Literals(["ran", "reused", "failed", "missing", "preview"]).annotate({
+    description:
+      "ran: asked now; reused: this session's scores for the same candidates; failed; missing: no such helper; preview: not asked (the preview calls no model)",
+  }),
+  error: Schema.optional(Schema.String),
+}).annotate({ identifier: "OperatorResolverJudgeTrace" })
+export type JudgeTrace = typeof JudgeTrace.Type
+
 const traceFields = {
   policy: Select.fields.policy,
   candidates: Schema.Array(CandidateTrace),
   chars: Schema.Finite,
   overBudget: Schema.Finite,
   off: Schema.optional(Schema.String).annotate({ description: "Why the whole layer adds nothing" }),
+  judge: Schema.optional(JudgeTrace),
 }
 
 // The resolution of a selected candidate that is a layer itself (Agent prompt, else base prompt: the base
@@ -198,6 +221,9 @@ export type Context = {
   readonly off?: string
   /** The permission decision for a candidate's name (the permission filter). */
   readonly decide?: (permission: string, input: string) => "allow" | "ask" | "deny"
+  /** The judge's scores (0–1), by the candidate's position in the list `run` gets, and what it did. */
+  readonly judged?: ReadonlyMap<number, number>
+  readonly judge?: JudgeTrace
 }
 
 // The `{name}` placeholders a template fills in, from a candidate's text, location and attributes;
@@ -328,6 +354,36 @@ function ruleName(rule: Rule) {
   return rule.kind
 }
 
+// The judge's points: its score for each candidate times its weight (none it didn't score: 0).
+function judgeAll(judge: Judge | undefined, items: Scored[], context: Context) {
+  if (!judge || !context.judged) return
+  for (const item of items) add(item, `judge (${judge.helper})`, judge.weight * (context.judged.get(item.index) ?? 0))
+}
+
+/** The candidates the filter keeps (their positions in the list): what a judge is asked about. */
+export function toJudge(resolver: Resolver, candidates: ReadonlyArray<Candidate>, context: Context = {}) {
+  return scoredOf(resolver, candidates)
+    .filter((item) => !filterOf(resolver.filter, item, context))
+    .map((item) => item.index)
+}
+
+function scoredOf(resolver: Resolver, candidates: ReadonlyArray<Candidate>): Scored[] {
+  return candidates.map((candidate, index) => {
+    const spec = resolver.sources[candidate.source] ?? { kind: "text" as const, location: candidate.location }
+    return {
+      index,
+      source: candidate.source,
+      candidate,
+      spec,
+      group: spec.group ?? "",
+      text: candidate.text ?? "",
+      read: readOf(candidate),
+      score: 0,
+      parts: [],
+    }
+  })
+}
+
 // Higher score first; ties by the source list's order, then the order a source gave its candidates.
 const byScore = (a: Scored, b: Scored) => b.score - a.score || a.source - b.source || a.index - b.index
 
@@ -342,23 +398,11 @@ export function run(resolver: Resolver, candidates: ReadonlyArray<Candidate>, co
       text: "",
       trace: { policy: resolver.select.policy, candidates: [], chars: 0, overBudget: 0, off: context.off } as Trace,
     }
-  const items: Scored[] = candidates.map((candidate, index) => {
-    const spec = resolver.sources[candidate.source] ?? { kind: "text" as const, location: candidate.location }
-    return {
-      index,
-      source: candidate.source,
-      candidate,
-      spec,
-      group: spec.group ?? "",
-      text: candidate.text ?? "",
-      read: readOf(candidate),
-      score: 0,
-      parts: [],
-    }
-  })
+  const items = scoredOf(resolver, candidates)
   for (const item of items) item.filtered = filterOf(resolver.filter, item, context)
   const kept = items.filter((item) => !item.filtered)
   scoreAll(resolver.score, kept, context)
+  judgeAll(resolver.judge, kept, context)
 
   // Select per group, groups in their order (listed, else as the sources first name them).
   const order = [
@@ -446,6 +490,7 @@ export function run(resolver: Resolver, candidates: ReadonlyArray<Candidate>, co
     policy: resolver.select.policy,
     chars: text.length,
     overBudget: over,
+    ...(context.judge ? { judge: context.judge } : {}),
     candidates: items.map((item) => ({
       source: item.source,
       kind: item.spec.kind,
