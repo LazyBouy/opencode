@@ -3682,6 +3682,12 @@
                     "items": {
                       "$ref": "#/components/schemas/OperatorHelperRole"
                     }
+                  },
+                  "triggers": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/OperatorHelperTrigger"
+                    }
                   }
                 },
                 "required": ["name", "model", "text"],
@@ -3788,6 +3794,12 @@
                     "type": "array",
                     "items": {
                       "$ref": "#/components/schemas/OperatorHelperRole"
+                    }
+                  },
+                  "triggers": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/OperatorHelperTrigger"
                     }
                   }
                 },
@@ -3921,6 +3933,141 @@
         ]
       }
     },
+    "/operator/helper/{ns}/{name}/triggers": {
+      "get": {
+        "tags": ["operator helpers"],
+        "operationId": "operator.helper.triggers",
+        "parameters": [
+          {
+            "name": "ns",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Each trigger's state, in the helper's order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorHelperTriggerStatus"
+                  },
+                  "description": "Each trigger's state, in the helper's order"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "For each of a helper's triggers: a schedule's next start, its last start, whether a run it started is running, the starts skipped in the last hour (it had reached its runs an hour) and why its last start or run failed.",
+        "summary": "A helper's trigger states",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.helper.triggers({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/helper/{ns}/{name}/triggers/{id}/run": {
+      "post": {
+        "tags": ["operator helpers"],
+        "operationId": "operator.helper.runTrigger",
+        "parameters": [
+          {
+            "name": "ns",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Whether a run started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "started": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["started"],
+                  "additionalProperties": false,
+                  "description": "Whether a run started"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorHelperError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorHelperError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Starts a schedule's run, or the untouched sessions' check, now: in the namespace's default project, even while triggers are paused or the trigger is off, one run at a time. Its run shows in the helper's Runs. Event triggers wait for their event.",
+        "summary": "Run a trigger now",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.helper.runTrigger({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/operator/helper-settings": {
       "get": {
         "tags": ["operator helpers"],
@@ -3948,7 +4095,7 @@
             }
           }
         },
-        "description": "How long helper runs are kept.",
+        "description": "How long helper runs are kept, and whether triggers are paused.",
         "summary": "Get the helper settings",
         "x-codeSamples": [
           {
@@ -3990,7 +4137,7 @@
             }
           }
         },
-        "description": "How many days helper runs are kept (1–3650, default 30); older runs are deleted with their sessions.",
+        "description": "How many days helper runs are kept (1–3650, default 30; older runs are deleted with their sessions), and whether triggers are paused (kept when not given).",
         "summary": "Save the helper settings",
         "requestBody": {
           "content": {
@@ -4001,6 +4148,9 @@
                   "runDays": {
                     "type": "number",
                     "description": "Runs older than this many days are deleted, with their sessions"
+                  },
+                  "triggersPaused": {
+                    "type": "boolean"
                   }
                 },
                 "required": ["runDays"],
@@ -34285,6 +34435,51 @@
         "type": "string",
         "enum": ["title", "compaction", "summary", "agent-generator", "purpose-generator", "dynamic-generator"]
       },
+      "OperatorHelperTriggerOn": {
+        "type": "string",
+        "enum": ["hourly", "daily", "weekly", "cron", "session.untouched", "session.turn", "project.created"]
+      },
+      "OperatorHelperTrigger": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique within the helper; made when it is first saved"
+          },
+          "on": {
+            "$ref": "#/components/schemas/OperatorHelperTriggerOn"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "at": {
+            "type": "string"
+          },
+          "minute": {
+            "type": "number"
+          },
+          "day": {
+            "type": "number"
+          },
+          "cron": {
+            "type": "string"
+          },
+          "tz": {
+            "type": "string"
+          },
+          "days": {
+            "type": "number"
+          },
+          "input": {
+            "type": "string"
+          },
+          "maxPerHour": {
+            "type": "number"
+          }
+        },
+        "required": ["id", "on", "enabled"],
+        "additionalProperties": false
+      },
       "OperatorHelper": {
         "type": "object",
         "properties": {
@@ -34358,11 +34553,29 @@
             },
             "description": "Its declared tools and system actions: allowed in its runs; everything else is denied"
           },
+          "triggers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorHelperTrigger"
+            },
+            "description": "What starts it on its own: schedules and events (none for built-ins)"
+          },
           "file": {
             "type": "string"
           }
         },
-        "required": ["name", "namespace", "builtin", "roles", "model", "profile", "text", "callable", "actions"],
+        "required": [
+          "name",
+          "namespace",
+          "builtin",
+          "roles",
+          "model",
+          "profile",
+          "text",
+          "callable",
+          "actions",
+          "triggers"
+        ],
         "additionalProperties": false
       },
       "OperatorHelperError": {
@@ -34424,6 +34637,12 @@
           },
           "layer": {
             "type": "string"
+          },
+          "trigger": {
+            "type": "string"
+          },
+          "event": {
+            "type": "string"
           }
         },
         "required": ["kind"],
@@ -34477,12 +34696,41 @@
         "required": ["id", "helper", "namespace", "project", "startedBy", "status", "startedAt", "input"],
         "additionalProperties": false
       },
+      "OperatorHelperTriggerStatus": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "next": {
+            "type": "number"
+          },
+          "lastFired": {
+            "type": "number"
+          },
+          "running": {
+            "type": "boolean",
+            "description": "A run it started is running or waiting for the previous one"
+          },
+          "skipped": {
+            "type": "number"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "running"],
+        "additionalProperties": false
+      },
       "OperatorHelperSettings": {
         "type": "object",
         "properties": {
           "runDays": {
             "type": "number",
             "description": "Runs older than this many days are deleted, with their sessions"
+          },
+          "triggersPaused": {
+            "type": "boolean"
           }
         },
         "required": ["runDays"],

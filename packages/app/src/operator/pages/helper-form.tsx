@@ -20,13 +20,15 @@ import { useInventory } from "./capability-scope"
 import { requestError } from "./config-helpers"
 import { useNamespaces } from "./profile-data"
 import { useHelpers } from "./helper-data"
+import { browserZone, formsOf, type TriggerForm, triggersOf } from "./helper-trigger-model"
+import { TriggersEditor } from "./helper-triggers"
 
 // A helper's form (agent_types_spec.md §4.3): its namespace (instead of Save in), name, description, model (Small
 // model by default: the small model of the project it serves, the namespace's default project here), its text
 // (a helper profile holding one helper layer, edited in place) with counters, and its step and time limits.
 // Callable by agents (the `helper` tool, with a one-line usage), and its Actions (§4.6): the tools and system
 // actions its runs may use; any tool but a read-only one is added only after "This helper will run … unattended".
-// Triggers come with automations (§4.9); roles in a later phase.
+// Its roles (§4.4), and its triggers (§4.9): schedules and events that start it on its own.
 
 export const STEPS = { default: 5, max: 20 }
 export const TIMEOUT = { default: 120, min: 10, max: 600 }
@@ -50,6 +52,7 @@ type Form = ModelForm & {
   usage: string
   actions: string[]
   roles: string[]
+  triggers: TriggerForm[]
 }
 
 function formOf(namespace: string, helper: OperatorHelper | undefined): Form {
@@ -68,6 +71,7 @@ function formOf(namespace: string, helper: OperatorHelper | undefined): Form {
     usage: helper?.usage ?? "",
     actions: [...(helper?.actions ?? [])],
     roles: [...(helper?.roles ?? [])],
+    triggers: formsOf(helper?.triggers ?? [], browserZone()),
   }
 }
 
@@ -163,6 +167,7 @@ export function HelperForm(props: {
       usage: store.form.usage.trim(),
       actions: [...store.form.actions],
       roles: [...store.form.roles] as OperatorHelperRole[],
+      triggers: triggersOf(store.form.triggers),
     }
     const request = props.helper
       ? client.operator.helper.update(
@@ -388,10 +393,7 @@ export function HelperForm(props: {
           </Show>
         </Field>
         <Field group label={language.t("operator.helper.triggers")} hint={language.t("operator.help.helperTriggers")}>
-          <ButtonV2 size="small" variant="neutral" disabled>
-            {language.t("operator.helper.addTrigger")}
-          </ButtonV2>
-          <p data-slot="operator-note">{language.t("operator.helper.triggersLater")}</p>
+          <TriggersEditor triggers={store.form.triggers} onChange={(next) => set("triggers", next)} />
         </Field>
       </div>
       <Show when={store.error}>

@@ -60,6 +60,20 @@ export const ProjectInfo = Schema.Struct({
 }).annotate({ identifier: "OperatorPromptProject" })
 export type ProjectInfo = typeof ProjectInfo.Type
 
+// The console recording a new project (setProject, copyProject; not the one-time adoption): helper triggers listen
+// (helper-triggers.ts).
+export type CreatedProject = Pick<ProjectInfo, "key" | "id" | "name" | "namespace">
+export const projectCreated = new Set<(project: CreatedProject) => void>()
+function announceCreated(project: CreatedProject) {
+  for (const listener of projectCreated) {
+    try {
+      listener(project)
+    } catch {
+      // A listener's failure is its own.
+    }
+  }
+}
+
 export const AgentInfo = Schema.Struct({
   project: Schema.String,
   name: Schema.String,
@@ -1301,8 +1315,10 @@ const layer = Layer.effect(
       if (next.defaultProfile && !OperatorProfile.profiles(after).some((item) => item.id === next.defaultProfile))
         yield* refuse(`No profile "${next.defaultProfile}" in ${after.namespace.name}`)
       yield* refuse(helperDefault(after, next.defaultProfile))
+      const created = !all[key]
       yield* Effect.promise(async () => {
         await writeJson(path.join(root(), "projects.json"), { ...(await readProjects()), [key]: next })
+        if (created) announceCreated({ key, id: next.id!, name: current.name, namespace: target })
         if (!moving || !agents[key]) return
         const remapped = remapAgents(agents[key]!, map)
         await writeJson(path.join(root(), "agents.json"), { ...agents, [key]: remapped })
@@ -1400,6 +1416,7 @@ const layer = Layer.effect(
       }
       yield* Effect.promise(async () => {
         await writeJson(path.join(root(), "projects.json"), { ...(await readProjects()), [target]: next })
+        announceCreated({ key: target, id: next.id!, name: path.basename(target), namespace })
         if (Object.keys(own).length)
           await writeJson(path.join(root(), "agents.json"), { ...agents, [target]: remapAgents(own, map) })
       })

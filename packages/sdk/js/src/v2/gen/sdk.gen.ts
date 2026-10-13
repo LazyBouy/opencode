@@ -227,10 +227,15 @@ import type {
   OperatorHelperRole,
   OperatorHelperRunsErrors,
   OperatorHelperRunsResponses,
+  OperatorHelperRunTriggerErrors,
+  OperatorHelperRunTriggerResponses,
   OperatorHelperSaveSettingsErrors,
   OperatorHelperSaveSettingsResponses,
   OperatorHelperSettingsErrors,
   OperatorHelperSettingsResponses,
+  OperatorHelperTrigger,
+  OperatorHelperTriggersErrors,
+  OperatorHelperTriggersResponses,
   OperatorHelperUpdateErrors,
   OperatorHelperUpdateResponses,
   OperatorLayoutGetErrors,
@@ -3209,6 +3214,7 @@ export class Helper extends HeyApiClient {
       usage?: string
       actions?: Array<string>
       roles?: Array<OperatorHelperRole>
+      triggers?: Array<OperatorHelperTrigger>
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3228,6 +3234,7 @@ export class Helper extends HeyApiClient {
             { in: "body", key: "usage" },
             { in: "body", key: "actions" },
             { in: "body", key: "roles" },
+            { in: "body", key: "triggers" },
           ],
         },
       ],
@@ -3300,6 +3307,7 @@ export class Helper extends HeyApiClient {
       usage?: string
       actions?: Array<string>
       roles?: Array<OperatorHelperRole>
+      triggers?: Array<OperatorHelperTrigger>
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3319,6 +3327,7 @@ export class Helper extends HeyApiClient {
             { in: "body", key: "usage" },
             { in: "body", key: "actions" },
             { in: "body", key: "roles" },
+            { in: "body", key: "triggers" },
           ],
         },
       ],
@@ -3370,9 +3379,79 @@ export class Helper extends HeyApiClient {
   }
 
   /**
+   * A helper's trigger states
+   *
+   * For each of a helper's triggers: a schedule's next start, its last start, whether a run it started is running, the starts skipped in the last hour (it had reached its runs an hour) and why its last start or run failed.
+   */
+  public triggers<ThrowOnError extends boolean = false>(
+    parameters: {
+      ns: string
+      name: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "ns" },
+            { in: "path", key: "name" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorHelperTriggersResponses,
+      OperatorHelperTriggersErrors,
+      ThrowOnError
+    >({
+      url: "/operator/helper/{ns}/{name}/triggers",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Run a trigger now
+   *
+   * Starts a schedule's run, or the untouched sessions' check, now: in the namespace's default project, even while triggers are paused or the trigger is off, one run at a time. Its run shows in the helper's Runs. Event triggers wait for their event.
+   */
+  public runTrigger<ThrowOnError extends boolean = false>(
+    parameters: {
+      ns: string
+      name: string
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "ns" },
+            { in: "path", key: "name" },
+            { in: "path", key: "id" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorHelperRunTriggerResponses,
+      OperatorHelperRunTriggerErrors,
+      ThrowOnError
+    >({
+      url: "/operator/helper/{ns}/{name}/triggers/{id}/run",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * Get the helper settings
    *
-   * How long helper runs are kept.
+   * How long helper runs are kept, and whether triggers are paused.
    */
   public settings<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).get<
@@ -3385,15 +3464,26 @@ export class Helper extends HeyApiClient {
   /**
    * Save the helper settings
    *
-   * How many days helper runs are kept (1–3650, default 30); older runs are deleted with their sessions.
+   * How many days helper runs are kept (1–3650, default 30; older runs are deleted with their sessions), and whether triggers are paused (kept when not given).
    */
   public saveSettings<ThrowOnError extends boolean = false>(
     parameters?: {
       runDays?: number
+      triggersPaused?: boolean
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "runDays" }] }])
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "runDays" },
+            { in: "body", key: "triggersPaused" },
+          ],
+        },
+      ],
+    )
     return (options?.client ?? this.client).put<
       OperatorHelperSaveSettingsResponses,
       OperatorHelperSaveSettingsErrors,

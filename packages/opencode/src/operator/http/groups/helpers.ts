@@ -1,5 +1,6 @@
 import { OperatorHelpers } from "@/operator/helpers"
 import { OperatorHelperRuns } from "@/operator/helper-runs"
+import { OperatorHelperTriggers } from "@/operator/helper-triggers"
 import { OperatorNotifications } from "@/operator/notifications"
 import { OperatorTrash } from "@/operator/trash"
 import { Schema } from "effect"
@@ -12,6 +13,8 @@ export const OperatorHelperPaths = {
   namespace: "/operator/helper/:ns",
   helper: "/operator/helper/:ns/:name",
   runs: "/operator/helper/:ns/:name/runs",
+  triggers: "/operator/helper/:ns/:name/triggers",
+  runTrigger: "/operator/helper/:ns/:name/triggers/:id/run",
   settings: "/operator/helper-settings",
   notifications: "/operator/notifications",
   notification: "/operator/notifications/:id",
@@ -88,9 +91,36 @@ export const OperatorHelperGroup = HttpApiGroup.make("operatorHelpers")
         "A helper's runs, newest first: who started it, its status, duration, cost, input and result, and for a run with actions its session (its transcript). Runs older than the helper settings' days are deleted.",
       ),
     ),
+    HttpApiEndpoint.get("triggers", OperatorHelperPaths.triggers, {
+      params: { ns: Schema.String, name: Schema.String },
+      success: described(Schema.Array(OperatorHelperTriggers.Status), "Each trigger's state, in the helper's order"),
+    }).annotateMerge(
+      doc(
+        "operator.helper.triggers",
+        "A helper's trigger states",
+        "For each of a helper's triggers: a schedule's next start, its last start, whether a run it started is running, the starts skipped in the last hour (it had reached its runs an hour) and why its last start or run failed.",
+      ),
+    ),
+    HttpApiEndpoint.post("runTrigger", OperatorHelperPaths.runTrigger, {
+      params: { ns: Schema.String, name: Schema.String, id: Schema.String },
+      success: described(Schema.Struct({ started: Schema.Boolean }), "Whether a run started"),
+      error: ApiHelperError,
+    }).annotateMerge(
+      doc(
+        "operator.helper.runTrigger",
+        "Run a trigger now",
+        "Starts a schedule's run, or the untouched sessions' check, now: in the namespace's default project, even while triggers are paused or the trigger is off, one run at a time. Its run shows in the helper's Runs. Event triggers wait for their event.",
+      ),
+    ),
     HttpApiEndpoint.get("settings", OperatorHelperPaths.settings, {
       success: described(OperatorHelperRuns.Settings, "The helper settings"),
-    }).annotateMerge(doc("operator.helper.settings", "Get the helper settings", "How long helper runs are kept.")),
+    }).annotateMerge(
+      doc(
+        "operator.helper.settings",
+        "Get the helper settings",
+        "How long helper runs are kept, and whether triggers are paused.",
+      ),
+    ),
     HttpApiEndpoint.put("saveSettings", OperatorHelperPaths.settings, {
       payload: Schema.Struct(OperatorHelperRuns.Settings.fields),
       success: described(OperatorHelperRuns.Settings, "The helper settings"),
@@ -99,7 +129,7 @@ export const OperatorHelperGroup = HttpApiGroup.make("operatorHelpers")
       doc(
         "operator.helper.saveSettings",
         "Save the helper settings",
-        "How many days helper runs are kept (1–3650, default 30); older runs are deleted with their sessions.",
+        "How many days helper runs are kept (1–3650, default 30; older runs are deleted with their sessions), and whether triggers are paused (kept when not given).",
       ),
     ),
     HttpApiEndpoint.get("notifications", OperatorHelperPaths.notifications, {

@@ -492,7 +492,7 @@ function HelperOverlay(props: { rows: () => ReadonlyArray<HelperRow> }) {
   )
 }
 
-// The helper settings (agent_types_spec.md §4.7): how many days helper runs are kept.
+// The helper settings (agent_types_spec.md §4.7, §4.9): how many days helper runs are kept, and Pause all triggers.
 function HelperSettingsDialog() {
   const language = useLanguage()
   const api = useOperatorClient()
@@ -506,15 +506,17 @@ function HelperSettingsDialog() {
         .operator.helper.settings()
         .then((result) => result.data!),
   }))
-  const [form, setForm] = createStore({ days: "", error: "", saving: false })
+  const [form, setForm] = createStore({ days: "", paused: undefined as boolean | undefined, error: "", saving: false })
   const days = () => form.days || String(settings.data?.runDays ?? "")
+  const paused = () => form.paused ?? settings.data?.triggersPaused === true
   const save = async () => {
     setForm({ saving: true, error: "" })
     await api
       .client()
-      .operator.helper.saveSettings({ runDays: Number(days()) }, { throwOnError: true })
+      .operator.helper.saveSettings({ runDays: Number(days()), triggersPaused: paused() }, { throwOnError: true })
       .then(() => {
         void queryClient.invalidateQueries({ queryKey: api.key("helper-settings") })
+        void queryClient.invalidateQueries({ queryKey: api.key("helper-triggers") })
         dialog.close()
       })
       .catch((error: unknown) => setForm("error", requestError(error)))
@@ -533,6 +535,11 @@ function HelperSettingsDialog() {
             value={days()}
             onInput={(event) => setForm("days", event.currentTarget.value)}
           />
+        </Field>
+        <Field group label={language.t("operator.trigger.pause")} hint={language.t("operator.help.triggersPaused")}>
+          <Switch checked={paused()} onChange={(checked) => setForm("paused", checked)}>
+            {language.t("operator.trigger.pauseSwitch")}
+          </Switch>
         </Field>
         <Show when={form.error}>
           <p data-slot="operator-error" role="alert">

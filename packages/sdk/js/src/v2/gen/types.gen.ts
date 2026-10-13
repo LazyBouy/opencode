@@ -2786,6 +2786,32 @@ export type OperatorHelperRole =
   | "purpose-generator"
   | "dynamic-generator"
 
+export type OperatorHelperTriggerOn =
+  | "hourly"
+  | "daily"
+  | "weekly"
+  | "cron"
+  | "session.untouched"
+  | "session.turn"
+  | "project.created"
+
+export type OperatorHelperTrigger = {
+  /**
+   * Unique within the helper; made when it is first saved
+   */
+  id: string
+  on: OperatorHelperTriggerOn
+  enabled: boolean
+  at?: string
+  minute?: number
+  day?: number
+  cron?: string
+  tz?: string
+  days?: number
+  input?: string
+  maxPerHour?: number
+}
+
 export type OperatorHelper = {
   name: string
   namespace: string
@@ -2821,6 +2847,10 @@ export type OperatorHelper = {
    * Its declared tools and system actions: allowed in its runs; everything else is denied
    */
   actions: Array<string>
+  /**
+   * What starts it on its own: schedules and events (none for built-ins)
+   */
+  triggers: Array<OperatorHelperTrigger>
   file?: string
 }
 
@@ -2845,6 +2875,8 @@ export type OperatorHelperRunStartedBy = {
   sessionID?: string
   role?: string
   layer?: string
+  trigger?: string
+  event?: string
 }
 
 export type OperatorHelperRun = {
@@ -2866,11 +2898,24 @@ export type OperatorHelperRun = {
   sessionID?: string
 }
 
+export type OperatorHelperTriggerStatus = {
+  id: string
+  next?: number
+  lastFired?: number
+  /**
+   * A run it started is running or waiting for the previous one
+   */
+  running: boolean
+  skipped?: number
+  error?: string
+}
+
 export type OperatorHelperSettings = {
   /**
    * Runs older than this many days are deleted, with their sessions
    */
   runDays: number
+  triggersPaused?: boolean
 }
 
 export type OperatorNotification = {
@@ -12241,6 +12286,7 @@ export type OperatorHelperCreateData = {
     usage?: string
     actions?: Array<string>
     roles?: Array<OperatorHelperRole>
+    triggers?: Array<OperatorHelperTrigger>
   }
   path: {
     ns: string
@@ -12306,6 +12352,7 @@ export type OperatorHelperUpdateData = {
     usage?: string
     actions?: Array<string>
     roles?: Array<OperatorHelperRole>
+    triggers?: Array<OperatorHelperTrigger>
   }
   path: {
     ns: string
@@ -12361,6 +12408,66 @@ export type OperatorHelperRunsResponses = {
 
 export type OperatorHelperRunsResponse = OperatorHelperRunsResponses[keyof OperatorHelperRunsResponses]
 
+export type OperatorHelperTriggersData = {
+  body?: never
+  path: {
+    ns: string
+    name: string
+  }
+  query?: never
+  url: "/operator/helper/{ns}/{name}/triggers"
+}
+
+export type OperatorHelperTriggersErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorHelperTriggersError = OperatorHelperTriggersErrors[keyof OperatorHelperTriggersErrors]
+
+export type OperatorHelperTriggersResponses = {
+  /**
+   * Each trigger's state, in the helper's order
+   */
+  200: Array<OperatorHelperTriggerStatus>
+}
+
+export type OperatorHelperTriggersResponse = OperatorHelperTriggersResponses[keyof OperatorHelperTriggersResponses]
+
+export type OperatorHelperRunTriggerData = {
+  body?: never
+  path: {
+    ns: string
+    name: string
+    id: string
+  }
+  query?: never
+  url: "/operator/helper/{ns}/{name}/triggers/{id}/run"
+}
+
+export type OperatorHelperRunTriggerErrors = {
+  /**
+   * OperatorHelperError | InvalidRequestError
+   */
+  400: OperatorHelperError | InvalidRequestError
+}
+
+export type OperatorHelperRunTriggerError = OperatorHelperRunTriggerErrors[keyof OperatorHelperRunTriggerErrors]
+
+export type OperatorHelperRunTriggerResponses = {
+  /**
+   * Whether a run started
+   */
+  200: {
+    started: boolean
+  }
+}
+
+export type OperatorHelperRunTriggerResponse =
+  OperatorHelperRunTriggerResponses[keyof OperatorHelperRunTriggerResponses]
+
 export type OperatorHelperSettingsData = {
   body?: never
   path?: never
@@ -12392,6 +12499,7 @@ export type OperatorHelperSaveSettingsData = {
      * Runs older than this many days are deleted, with their sessions
      */
     runDays: number
+    triggersPaused?: boolean
   }
   path?: never
   query?: never

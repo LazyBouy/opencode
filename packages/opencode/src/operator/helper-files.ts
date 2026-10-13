@@ -22,6 +22,36 @@ export const Model = Schema.Struct({
 }).annotate({ identifier: "OperatorHelperModel" })
 export type Model = typeof Model.Type
 
+// What starts a helper on its own (agent_types_spec.md §4.9): a schedule (in the time zone saved with it) or an event.
+export const TriggerOn = Schema.Literals([
+  "hourly",
+  "daily",
+  "weekly",
+  "cron",
+  "session.untouched",
+  "session.turn",
+  "project.created",
+]).annotate({
+  identifier: "OperatorHelperTriggerOn",
+  description:
+    "hourly, daily, weekly, cron: a schedule; session.untouched: sessions not used for `days`; session.turn: an agent finished a turn; project.created: the console recorded a new project",
+})
+
+export const Trigger = Schema.Struct({
+  id: Schema.String.annotate({ description: "Unique within the helper; made when it is first saved" }),
+  on: TriggerOn,
+  enabled: Schema.Boolean,
+  at: Schema.optional(Schema.String).annotate({ description: "daily, weekly: the time, HH:MM" }),
+  minute: Schema.optional(Schema.Finite).annotate({ description: "hourly: the minute past the hour, 0–59" }),
+  day: Schema.optional(Schema.Finite).annotate({ description: "weekly: the day, 0 (Sunday) to 6" }),
+  cron: Schema.optional(Schema.String).annotate({ description: "cron: minute hour day month weekday" }),
+  tz: Schema.optional(Schema.String).annotate({ description: "Schedules: the time zone, such as Europe/Berlin" }),
+  days: Schema.optional(Schema.Finite).annotate({ description: "session.untouched: days without use" }),
+  input: Schema.optional(Schema.String).annotate({ description: "What to tell it, after what started it" }),
+  maxPerHour: Schema.optional(Schema.Finite).annotate({ description: "At most this many runs an hour (default 20)" }),
+}).annotate({ identifier: "OperatorHelperTrigger" })
+export type Trigger = typeof Trigger.Type
+
 export const Stored = Schema.Struct({
   name: Schema.String,
   description: Schema.optional(Schema.String),
@@ -39,6 +69,9 @@ export const Stored = Schema.Struct({
   }),
   roles: Schema.optional(Schema.Array(Schema.String)).annotate({
     description: "The built-in roles it takes over in its namespace (helpers.ts Role)",
+  }),
+  triggers: Schema.optional(Schema.Array(Trigger)).annotate({
+    description: "What starts it on its own: schedules and events (helper-triggers.ts)",
   }),
 }).annotate({ identifier: "OperatorHelperStored" })
 export type Stored = typeof Stored.Type

@@ -95,7 +95,6 @@ test("New agent → Type: Helper creates a namespace helper, on the small model 
   await expect(page.locator('[data-component="select-v2-root"][aria-label="Namespace"]')).toContainText("OpenCode")
   await expect(page.getByRole("group", { name: "Save in", exact: true })).toHaveCount(0)
   await expect(page.getByRole("button", { name: "Small model" })).toHaveAttribute("aria-pressed", "true")
-  await expect(page.getByRole("button", { name: "Add trigger" })).toBeDisabled()
 
   await page.getByLabel("Name", { exact: true }).fill("labeler")
   await page.getByLabel("Description", { exact: true }).fill("Labels issues")
@@ -115,6 +114,7 @@ test("New agent → Type: Helper creates a namespace helper, on the small model 
     usage: "",
     actions: [],
     roles: [],
+    triggers: [],
   })
   await expect(page).toHaveURL(/\/operator\/agents\?.*helper=labeler&hns=opencode/)
 })
@@ -251,7 +251,10 @@ test("a Dynamic layer of yours names the helper that writes it", async ({ page }
   )
   await expect(writer).toContainText("Default: OpenCode's Dynamic generator")
   await writer.click()
-  await page.locator('[data-component="menu-v2-item"]').filter({ hasText: /^sorter$/ }).click()
+  await page
+    .locator('[data-component="menu-v2-item"]')
+    .filter({ hasText: /^sorter$/ })
+    .click()
   await overlay.getByRole("button", { name: "Save", exact: true }).click()
   await expect.poll(() => state.prompt.writes.length).toBe(1)
   expect(state.prompt.writes[0]!.body).toMatchObject({ prompt: "Say what to focus on today.", writer: "sorter" })

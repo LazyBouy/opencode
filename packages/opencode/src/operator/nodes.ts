@@ -11,6 +11,7 @@ import { OperatorGenerate } from "./generate"
 import { OperatorHelperTexts } from "./helper-texts"
 import { OperatorHelpers } from "./helpers"
 import { OperatorHelperRuns } from "./helper-runs"
+import { OperatorHelperTriggers } from "./helper-triggers"
 import { OperatorProfileStore } from "./profile-store"
 import { OperatorTrash } from "./trash"
 import { OperatorTrashItems } from "./trash-items"
@@ -77,6 +78,7 @@ export const operatorNodes = [
   OperatorHelperTexts.node,
   OperatorHelpers.node,
   OperatorHelperRuns.node,
+  OperatorHelperTriggers.node,
   OperatorTrash.node,
   OperatorTrashItems.node,
   OperatorCapabilities.node,

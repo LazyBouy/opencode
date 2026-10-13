@@ -45,6 +45,10 @@ export const StartedBy = Schema.Struct({
   sessionID: Schema.optional(Schema.String),
   role: Schema.optional(Schema.String),
   layer: Schema.optional(Schema.String),
+  trigger: Schema.optional(Schema.String).annotate({ description: "The trigger's id" }),
+  event: Schema.optional(Schema.String).annotate({
+    description: "The trigger in words: daily at 03:00 (Europe/Berlin), an agent finished a turn, …",
+  }),
 }).annotate({ identifier: "OperatorHelperRunStartedBy" })
 export type StartedBy = typeof StartedBy.Type
 
@@ -69,6 +73,9 @@ export type Run = typeof Run.Type
 
 export const Settings = Schema.Struct({
   runDays: Schema.Finite.annotate({ description: "Runs older than this many days are deleted, with their sessions" }),
+  triggersPaused: Schema.optional(Schema.Boolean).annotate({
+    description: "No trigger starts a helper while this is on (Run now still does); kept when not given",
+  }),
 }).annotate({ identifier: "OperatorHelperSettings" })
 export type Settings = typeof Settings.Type
 export const RUN_DAYS = { default: 30, min: 1, max: 3650 } as const
@@ -111,7 +118,10 @@ export async function readSettings(): Promise<Settings> {
     .json()
     .catch(() => undefined)) as Partial<Settings> | undefined
   const days = data?.runDays
-  return { runDays: typeof days === "number" && days >= RUN_DAYS.min ? days : RUN_DAYS.default }
+  return {
+    runDays: typeof days === "number" && days >= RUN_DAYS.min ? days : RUN_DAYS.default,
+    triggersPaused: data?.triggersPaused === true,
+  }
 }
 
 export interface Interface {
@@ -326,12 +336,14 @@ const layer = Layer.effect(
       const days = input.runDays
       if (!Number.isInteger(days) || days < RUN_DAYS.min || days > RUN_DAYS.max)
         return yield* fail(`Keep runs for ${RUN_DAYS.min} to ${RUN_DAYS.max} days`)
+      // Pausing is kept unless it is given.
+      const triggersPaused = input.triggersPaused ?? (yield* Effect.promise(readSettings)).triggersPaused === true
       yield* Effect.promise(async () => {
         await fs.mkdir(root(), { recursive: true })
-        await Bun.write(settingsFile(), JSON.stringify({ runDays: days }, null, 2))
+        await Bun.write(settingsFile(), JSON.stringify({ runDays: days, triggersPaused }, null, 2))
       })
       yield* cleanup().pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }))
-      return { runDays: days }
+      return { runDays: days, triggersPaused }
     })
 
     // The namespace of this instance's project.

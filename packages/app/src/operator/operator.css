@@ -1479,3 +1479,13 @@ details[data-slot="operator-as-sent"] [data-component="operator-code"][data-mode
   font-weight: 500;
   overflow-wrap: anywhere;
 }
+
+/* A helper's trigger in its form (pages/helper-triggers.tsx). */
+[data-component="operator-trigger"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--v2-border-border-muted);
+  border-radius: 8px;
+}

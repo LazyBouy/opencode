@@ -1343,9 +1343,25 @@ export const operatorScenarios: Scenario[] = [
       headers: ctx.headers(),
     }))
     .json(200, array),
+  // Triggers (agent_types_spec.md §4.9): a missing helper has none, and none to run now.
+  http.protected
+    .get("/operator/helper/{ns}/{name}/triggers", "operator.helper.triggers")
+    .at((ctx) => ({
+      path: route("/operator/helper/{ns}/{name}/triggers", { ns: "opencode", name: "missing" }),
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => check(Array.isArray(body) && body.length === 0, "a missing helper has no triggers")),
+  http.protected
+    .post("/operator/helper/{ns}/{name}/triggers/{id}/run", "operator.helper.runTrigger")
+    .at((ctx) => ({
+      path: route("/operator/helper/{ns}/{name}/triggers/{id}/run", { ns: "opencode", name: "missing", id: "t1" }),
+      headers: ctx.headers(),
+    }))
+    .status(400),
   http.protected.get("/operator/helper-settings", "operator.helper.settings").json(200, (body) => {
     object(body)
     check(typeof body.runDays === "number", "runs are kept for some days")
+    check(typeof body.triggersPaused === "boolean", "triggers are paused or not")
   }),
   http.protected
     .put("/operator/helper-settings", "operator.helper.saveSettings")

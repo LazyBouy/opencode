@@ -3,6 +3,7 @@ export * as OperatorHelpers from "./helpers"
 import { Context, Effect, Layer, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { OperatorHelperFiles } from "./helper-files"
+import { OperatorHelperTriggerRules } from "./helper-trigger-rules"
 import { OperatorProfile } from "./profile"
 import { OperatorProfileStore } from "./profile-store"
 import { OperatorTrashFiles } from "./trash-files"
@@ -15,8 +16,8 @@ import { OperatorReloadWhenIdle } from "./reload-when-idle"
 // both to Trash with it. Every namespace also lists the built-in helpers (§4.8): OpenCode's title, summary,
 // compaction and agent generator, and the fork's purpose and Dynamic generators, each with its role. Their
 // definitions are read-only; their text is the namespace's version of their helper profile, edited on the
-// Prompts page as before. What a helper does comes later: its actions, the `helper` tool and runs (§4.5–4.7),
-// and roles (§4.4).
+// Prompts page as before. What a helper does: its actions, the `helper` tool and runs (§4.5–4.7), roles (§4.4),
+// and triggers (§4.9: schedules and events that start it on its own, helper-triggers.ts).
 
 export const Role = Schema.Literals([
   "title",
@@ -83,6 +84,9 @@ export const Info = Schema.Struct({
   actions: Schema.Array(Schema.String).annotate({
     description: "Its declared tools and system actions: allowed in its runs; everything else is denied",
   }),
+  triggers: Schema.Array(OperatorHelperFiles.Trigger).annotate({
+    description: "What starts it on its own: schedules and events (none for built-ins)",
+  }),
   file: Schema.optional(Schema.String),
 }).annotate({ identifier: "OperatorHelper" })
 export type Info = typeof Info.Type
@@ -104,6 +108,9 @@ export const Create = Schema.Struct({
   roles: Schema.optional(Schema.Array(Role)).annotate({
     description: "The built-in roles it takes over in its namespace (another helper holding one gives it up)",
   }),
+  triggers: Schema.optional(Schema.Array(OperatorHelperFiles.Trigger)).annotate({
+    description: "Its triggers; an empty id: a new one (its id is made)",
+  }),
 }).annotate({ identifier: "OperatorHelperCreate" })
 export type Create = typeof Create.Type
 
@@ -117,6 +124,9 @@ export const Patch = Schema.Struct({
   usage: Schema.optional(Schema.String).annotate({ description: "Empty: none" }),
   actions: Schema.optional(Schema.Array(Schema.String)),
   roles: Schema.optional(Schema.Array(Role)),
+  triggers: Schema.optional(Schema.Array(OperatorHelperFiles.Trigger)).annotate({
+    description: "All its triggers (replacing them); an empty id: a new one",
+  }),
 }).annotate({ identifier: "OperatorHelperPatch" })
 export type Patch = typeof Patch.Type
 
@@ -167,6 +177,15 @@ const checkRoles = (roles: ReadonlyArray<string>, actions: ReadonlyArray<string>
   return roles
 }
 
+const triggerId = () => Math.random().toString(36).slice(2, 8).padEnd(6, "0")
+const checkTriggers = (triggers: ReadonlyArray<OperatorHelperFiles.Trigger>) => {
+  try {
+    return OperatorHelperTriggerRules.check(triggers, triggerId)
+  } catch (error) {
+    throw fail(error instanceof Error ? error.message : String(error))
+  }
+}
+
 const checkActions = (actions: ReadonlyArray<string> | undefined) => {
   const list = [...new Set((actions ?? []).map((item) => item.trim()).filter(Boolean))]
   const refused = list.find((item) => (NOT_DECLARABLE as ReadonlyArray<string>).includes(item))
@@ -200,6 +219,7 @@ function builtins(catalog: OperatorProfile.Catalog, helpers: ReadonlyArray<Opera
       ...(holder ? { replacedBy: holder.name } : {}),
       callable: false,
       actions: [],
+      triggers: [],
       profile: profile?.id ?? builtin,
       ...textOf(catalog, profile),
     }
@@ -223,6 +243,7 @@ function infoOf(catalog: OperatorProfile.Catalog, stored: OperatorHelperFiles.St
     callable: stored.callable === true,
     ...(stored.usage ? { usage: stored.usage } : {}),
     actions: stored.actions ?? [],
+    triggers: stored.triggers ?? [],
     file: OperatorHelperFiles.file(catalog.namespace.id, stored.name),
   }
 }
@@ -314,6 +335,7 @@ const layer = Layer.effect(
           timeout: limit("The time limit", input.timeout, TIMEOUT),
           actions: checkActions(input.actions),
           roles: checkRoles(input.roles ?? [], input.actions ?? []),
+          triggers: checkTriggers(input.triggers ?? []),
         }),
         catch: (error) => (error instanceof HelperError ? error : fail(String(error))),
       })
@@ -340,6 +362,7 @@ const layer = Layer.effect(
         ...(input.usage?.trim() ? { usage: input.usage.trim() } : {}),
         ...(checked.actions.length ? { actions: checked.actions } : {}),
         ...(checked.roles.length ? { roles: [...checked.roles] } : {}),
+        ...(checked.triggers.length ? { triggers: checked.triggers } : {}),
       }
       yield* takeRoles(ns, input.name, checked.roles)
       yield* Effect.promise(() => OperatorHelperFiles.write(ns, stored))
@@ -355,6 +378,7 @@ const layer = Layer.effect(
           ...(patch.steps !== undefined ? { steps: limit("The step limit", patch.steps, STEPS) } : {}),
           ...(patch.timeout !== undefined ? { timeout: limit("The time limit", patch.timeout, TIMEOUT) } : {}),
           ...(patch.actions !== undefined ? { actions: checkActions(patch.actions) } : {}),
+          ...(patch.triggers !== undefined ? { triggers: checkTriggers(patch.triggers) } : {}),
         }),
         catch: (error) => (error instanceof HelperError ? error : fail(String(error))),
       })
@@ -366,7 +390,15 @@ const layer = Layer.effect(
           .saveLayer(ns, text.id, { name: text.name, type: text.type, text: patch.text })
           .pipe(Effect.mapError(storeError))
       }
-      const { description: _, usage: __, callable: ___, actions: ____, roles: _____, ...rest } = before
+      const {
+        description: _,
+        usage: __,
+        callable: ___,
+        actions: ____,
+        roles: _____,
+        triggers: ______,
+        ...rest
+      } = before
       const description = patch.description === undefined ? before.description : patch.description.trim()
       const usage = patch.usage === undefined ? before.usage : patch.usage.trim()
       const callable = patch.callable ?? before.callable
@@ -377,7 +409,8 @@ const layer = Layer.effect(
       })
       const writer = checkWriter(yield* catalogOf(ns), name, actions)
       if (writer) return yield* writer
-      const { actions: _checked, ...limits } = checked
+      const { actions: _checked, triggers: _triggers, ...limits } = checked
+      const triggers = checked.triggers ?? before.triggers ?? []
       const next: OperatorHelperFiles.Stored = {
         ...rest,
         ...(description ? { description } : {}),
@@ -386,6 +419,7 @@ const layer = Layer.effect(
         ...(usage ? { usage } : {}),
         ...(actions.length ? { actions } : {}),
         ...(roles.length ? { roles: [...roles] } : {}),
+        ...(triggers.length ? { triggers: [...triggers] } : {}),
       }
       yield* takeRoles(ns, name, roles)
       yield* Effect.promise(() => OperatorHelperFiles.write(ns, next))

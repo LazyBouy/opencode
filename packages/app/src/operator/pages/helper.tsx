@@ -18,12 +18,14 @@ import { Fact } from "./agent"
 import { requestError } from "./config-helpers"
 import { HelperForm, SYSTEM_ACTIONS } from "./helper-form"
 import { useHelpers } from "./helper-data"
+import { TriggersView } from "./helper-triggers"
 import { useSessionOverlay } from "./session-overlay"
 import { useNamespaces } from "./profile-data"
 
 // A helper's record (agent_types_spec.md §4): Overview (its namespace, role, model, limits, whether agents may call
 // it, its actions; edited in place), Text (its helper layer: yours edited here; a built-in's on the Prompts page, as
-// before) and Runs (§4.7: each run, its session's transcript in the session overlay). Roles come in a later phase.
+// before) and Runs (§4.7: each run, its session's transcript in the session overlay). Overview also shows its
+// triggers (§4.9) with their state and Run now.
 
 export const HELPER_TABS = ["overview", "text", "runs"] as const
 
@@ -190,7 +192,7 @@ export function HelperDetail(props: { namespace: string; name: string; tab: stri
                   </Show>
                 </Fact>
                 <Fact label={language.t("operator.helper.triggers")} help={language.t("operator.help.helperTriggers")}>
-                  {language.t("operator.helper.triggersLater")}
+                  <TriggersView helper={helper()} />
                 </Fact>
               </dl>
             </Match>
@@ -300,6 +302,7 @@ function HelperRuns(props: { helper: OperatorHelper }) {
   const startedBy = (run: OperatorHelperRun) => {
     const by = run.startedBy
     if (by.kind === "agent") return language.t("operator.helper.byAgent", { agent: by.agent ?? "" })
+    if (by.kind === "trigger" && by.event) return language.t("operator.helper.byTrigger", { event: by.event })
     return language.t(`operator.helper.by.${by.kind}` as "operator.helper.by.role")
   }
   const duration = (run: OperatorHelperRun) =>

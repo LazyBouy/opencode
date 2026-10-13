@@ -564,7 +564,9 @@ export interface OperatorMock {
   helpers: Array<Record<string, unknown> & { name: string; namespace: string }>
   helperWrites: Array<{ method: string; url: string; body: unknown }>
   helperRuns: Array<Record<string, unknown>>
-  helperSettings: { runDays: number }
+  helperSettings: { runDays: number; triggersPaused?: boolean }
+  /** Each helper trigger's state, by trigger id (GET …/triggers); a schedule without one is due in an hour. */
+  triggerStates: Record<string, Record<string, unknown>>
   /** Projects whose provider list waits for their sessions to end (issue 001). */
   providersWaiting: string[]
   notes: Array<Record<string, unknown> & { id: string }>
@@ -746,6 +748,7 @@ export async function mockOperator(page: Page) {
           text: `The ${name} prompt.`,
           callable: false,
           actions: [],
+          triggers: [],
         }),
       ),
       {
@@ -763,6 +766,7 @@ export async function mockOperator(page: Page) {
         callable: true,
         usage: "an issue → bug, feature or question",
         actions: [],
+        triggers: [],
       },
     ],
     helperWrites: [],
@@ -782,7 +786,8 @@ export async function mockOperator(page: Page) {
         sessionID: "ses_helper_run",
       },
     ],
-    helperSettings: { runDays: 30 },
+    helperSettings: { runDays: 30, triggersPaused: false },
+    triggerStates: {},
     providersWaiting: [],
     notes: [
       {
@@ -1105,11 +1110,49 @@ export async function mockOperator(page: Page) {
       )
     if (url.pathname === "/operator/helper-settings") {
       if (method === "PUT") {
-        const body = route.request().postDataJSON() as { runDays: number }
+        const body = route.request().postDataJSON() as { runDays: number; triggersPaused?: boolean }
         state.helperWrites.push({ method, url: url.toString(), body })
-        state.helperSettings = { runDays: body.runDays }
+        state.helperSettings = {
+          runDays: body.runDays,
+          triggersPaused: body.triggersPaused ?? state.helperSettings.triggersPaused,
+        }
       }
       return json(route, state.helperSettings)
+    }
+    // A helper's triggers (agent_types_spec.md §4.9): their states, and Run now (a run, started by the trigger).
+    const triggersPath = url.pathname.match(/^\/operator\/helper\/([^/]+)\/([^/]+)\/triggers(?:\/([^/]+)\/run)?$/)
+    if (triggersPath) {
+      const ns = decodeURIComponent(triggersPath[1]!)
+      const name = decodeURIComponent(triggersPath[2]!)
+      const helper = state.helpers.find((item) => item.namespace === ns && item.name === name)
+      const triggers = (helper?.triggers ?? []) as Array<{ id: string; on: string }>
+      if (triggersPath[3]) {
+        const id = decodeURIComponent(triggersPath[3])
+        state.helperWrites.push({ method, url: url.toString(), body: undefined })
+        const trigger = triggers.find((item) => item.id === id)
+        if (!trigger) return json(route, { name: "OperatorHelperError", data: { message: "No trigger" } }, 400)
+        state.helperRuns.unshift({
+          id: `r${state.helperRuns.length + 1}`,
+          helper: name,
+          namespace: ns,
+          project: directory,
+          startedBy: { kind: "trigger", trigger: id, event: `${trigger.on} (by hand)` },
+          status: "running",
+          startedAt: Date.now(),
+          input: "Started by hand (Run now)",
+        })
+        return json(route, { started: true })
+      }
+      const schedule = ["hourly", "daily", "weekly", "cron"]
+      return json(
+        route,
+        triggers.map((trigger) => ({
+          id: trigger.id,
+          running: false,
+          ...(schedule.includes(trigger.on) ? { next: Date.now() + 60 * 60 * 1000 } : {}),
+          ...state.triggerStates[trigger.id],
+        })),
+      )
     }
     if (url.pathname === "/operator/notifications") return json(route, state.notes)
     const notePath = url.pathname.match(/^\/operator\/notifications\/([^/]+)$/)
@@ -1128,9 +1171,15 @@ export async function mockOperator(page: Page) {
       const name = helperPath[2] ? decodeURIComponent(helperPath[2]) : undefined
       const body = method === "DELETE" ? undefined : (route.request().postDataJSON() as Record<string, unknown>)
       state.helperWrites.push({ method, url: url.toString(), body })
+      // New triggers get their ids, as the server makes them.
+      const withIds = (triggers: unknown) =>
+        Array.isArray(triggers)
+          ? triggers.map((item: { id: string }, index) => ({ ...item, id: item.id || `t${index + 1}` }))
+          : triggers
       if (method === "POST") {
         const helper = {
           ...body,
+          triggers: withIds(body!.triggers) ?? [],
           name: String(body!.name),
           namespace: ns,
           builtin: false,
@@ -1146,7 +1195,11 @@ export async function mockOperator(page: Page) {
       const at = state.helpers.findIndex((item) => item.namespace === ns && item.name === name)
       if (at < 0) return json(route, { name: "OperatorHelperError", data: { message: "No helper" } }, 400)
       if (method === "PATCH") {
-        state.helpers[at] = { ...state.helpers[at]!, ...body }
+        state.helpers[at] = {
+          ...state.helpers[at]!,
+          ...body,
+          ...(body!.triggers ? { triggers: withIds(body!.triggers) } : {}),
+        }
         return json(route, state.helpers[at])
       }
       const [gone] = state.helpers.splice(at, 1)
