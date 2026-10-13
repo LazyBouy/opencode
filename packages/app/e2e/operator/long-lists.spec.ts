@@ -2,6 +2,10 @@ import { expect, type Page, test } from "@playwright/test"
 import { fixture, pageMessages } from "../smoke/session-timeline.fixture"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { directory, mockOperator } from "./mock-operator"
+import { idFor } from "./mock-namespaces"
+
+// Projects are labelled "name · id" (specs/docs/issues/002).
+const smoke = `smoke-project · ${idFor(directory)}`
 
 // Long lists (the user's rule, 2026-10-11): a list of more than 10 items can be searched, sorted A→Z or Z→A
 // (alphanumerically) and is shown a page at a time: pickers, tables, and Settings → Models' provider groups.
@@ -68,8 +72,8 @@ test("a picker of more than 10 models searches, sorts and pages them", async ({ 
   const state = await mockOperator(page)
   await catalog(page)
   await page.goto("/operator/models?ns=opencode")
-  await choose(page, "Default model for smoke-project: provider", "OpenRouter")
-  const label = "Default model for smoke-project: model"
+  await choose(page, `Default model for ${smoke}: provider`, "OpenRouter")
+  const label = `Default model for ${smoke}: model`
   await page
     .locator(`[data-component="operator-list-picker"][aria-label="${label}"] [data-slot="list-picker-trigger"]`)
     .click()

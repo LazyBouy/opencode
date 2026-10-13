@@ -7,13 +7,32 @@ import { isLong } from "./paged"
 // A→Z / Z→A, pages of 10) once it has more than 10 options (the user's rule, 2026-10-11). Same props, plus
 // `pinned` for options kept first (an "Inherit" choice), which don't count towards the length.
 
-export type SelectProps<T> = SelectV2Props<T> & { "aria-label"?: string; pinned?: (option: T) => boolean }
+export type SelectProps<T> = SelectV2Props<T> & {
+  "aria-label"?: string
+  pinned?: (option: T) => boolean
+  /** Shown when hovering an option (a project's or namespace's folder). */
+  optionTitle?: (option: T) => string | undefined
+}
 
 export function SelectV2<T>(props: SelectProps<T>) {
-  const [local, rest] = splitProps(props, ["pinned"])
+  const [local, rest] = splitProps(props, ["pinned", "optionTitle"])
   const long = () => isLong(props.options.filter((option) => !local.pinned?.(option)).length)
   return (
-    <Show when={long()} fallback={<Select<T> {...rest} />}>
+    <Show
+      when={long()}
+      fallback={
+        <Select<T>
+          {...rest}
+          {...(local.optionTitle
+            ? {
+                children: (option: T) => (
+                  <span title={local.optionTitle!(option)}>{props.label ? props.label(option) : String(option)}</span>
+                ),
+              }
+            : {})}
+        />
+      }
+    >
       <ListPicker<T>
         options={props.options}
         current={props.current}
@@ -26,6 +45,7 @@ export function SelectV2<T>(props: SelectProps<T>) {
         appearance={props.appearance}
         aria-label={props["aria-label"]}
         pinned={local.pinned}
+        optionTitle={local.optionTitle}
       />
     </Show>
   )

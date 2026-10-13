@@ -469,15 +469,22 @@ const layer = Layer.effect(
       return { lines: built.lines, rules: Model.compile(built.lines), ...(offered.length ? { offered } : {}) }
     })
 
+    // Released, the hooks are cleared only while they are still this service's (another runtime's may have
+    // replaced them since).
+    const rulesHook: typeof OperatorPermissionHook.handlers.rules = (input) =>
+      hookRules(input).pipe(Effect.orElseSucceed(() => []))
+    const effectiveHook: typeof OperatorPermissionEffective.handlers.effective = (input) =>
+      effective(input).pipe(Effect.orDie)
     yield* Effect.acquireRelease(
       Effect.sync(() => {
-        OperatorPermissionHook.handlers.rules = (input) => hookRules(input).pipe(Effect.orElseSucceed(() => []))
-        OperatorPermissionEffective.handlers.effective = (input) => effective(input).pipe(Effect.orDie)
+        OperatorPermissionHook.handlers.rules = rulesHook
+        OperatorPermissionEffective.handlers.effective = effectiveHook
       }),
       () =>
         Effect.sync(() => {
-          OperatorPermissionHook.handlers.rules = undefined
-          OperatorPermissionEffective.handlers.effective = undefined
+          if (OperatorPermissionHook.handlers.rules === rulesHook) OperatorPermissionHook.handlers.rules = undefined
+          if (OperatorPermissionEffective.handlers.effective === effectiveHook)
+            OperatorPermissionEffective.handlers.effective = undefined
         }),
     )
 

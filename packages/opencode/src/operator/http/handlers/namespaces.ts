@@ -137,6 +137,8 @@ export const operatorNamespaceHandlers = HttpApiBuilder.group(OperatorRootApi, "
           // A new project is made at <namespace folder>/<name> (§10.2); an existing folder is registered
           // where it is, and joins the namespace whose folder holds it (else OpenCode's, flagged).
           const made = ctx.payload.directory === undefined
+          if (ctx.payload.namespace && !OperatorLayout.placeOf(ctx.payload.namespace, layout))
+            return yield* invalid(`No namespace ${ctx.payload.namespace}`)
           let git = ctx.payload.git === true
           let directory: string
           if (made) {
@@ -162,8 +164,11 @@ export const operatorNamespaceHandlers = HttpApiBuilder.group(OperatorRootApi, "
             )
               return yield* invalid(`${directory} already exists`)
           } else directory = path.resolve(ctx.payload.directory!)
+          // A folder inside a git repository: the repository is the project.
+          const repository = yield* Effect.promise(() => OperatorProjects.gitRoot(directory))
+          if (repository && repository !== directory)
+            return yield* invalid(`${directory} is inside the git repository ${repository}: make that the project`)
           const current = yield* Effect.promise(() => OperatorProjects.projectOf(directory))
-          if (current?.git) return yield* invalid(`${directory} is already in the git repository ${current.key}`)
           if (current) return yield* invalid(`${directory} is already part of the project ${current.key}`)
           const source = ctx.payload.from ? path.resolve(ctx.payload.from) : undefined
           if (source && (yield* Effect.promise(() => OperatorProjects.projectOf(source)))?.key !== source)
@@ -181,8 +186,7 @@ export const operatorNamespaceHandlers = HttpApiBuilder.group(OperatorRootApi, "
             catch: () => invalid(`${directory} cannot be created`),
           })
           if (git) yield* folders.init(directory).pipe(Effect.mapError((error) => invalid(error.message)))
-          // Outside git, the project is its entry in projects.json; a git project gets one for a
-          // namespace other than OpenCode, or for the prompt settings of the project it copies.
+          // Every project is its record in projects.json, with its id (a copy gets one from copyProject).
           const copied = source
             ? yield* Effect.gen(function* () {
                 const settings = yield* store
@@ -194,16 +198,13 @@ export const operatorNamespaceHandlers = HttpApiBuilder.group(OperatorRootApi, "
                 return { files: files.copied, kept: files.kept, items: settings.copied, sessions: 0 }
               })
             : undefined
-          if (!source && (!git || namespace !== OperatorProfile.OPENCODE))
-            yield* store.setProject(directory, { namespace }).pipe(Effect.mapError(apiError))
+          if (!source) yield* store.setProject(directory, { namespace }).pipe(Effect.mapError(apiError))
           // An instance loaded before is reloaded with the folder's new project, agents and config.
           yield* instances.disposeDirectory(directory)
           if (copied && ctx.payload.sessions) copied.sessions = yield* sessions.copy(source!, directory)
           const listed = (yield* store.projects()).find((item) => item.key === directory)
-          return {
-            project: listed ?? { key: directory, name: path.basename(directory), namespace, registered: true },
-            ...(copied ? { copied } : {}),
-          }
+          if (!listed) return yield* invalid(`${directory} could not be recorded as a project`)
+          return { project: listed, ...(copied ? { copied } : {}) }
         }),
       )
       .handle("folderMove", (ctx) =>

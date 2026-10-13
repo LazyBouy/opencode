@@ -64,7 +64,7 @@ export function ProjectGate() {
   return null
 }
 
-function NotAProjectDialog(props: { directory: string; draftID?: string; onDone: () => void }) {
+export function NotAProjectDialog(props: { directory: string; draftID?: string; onDone: () => void }) {
   const language = useLanguage()
   const tabs = useTabs()
   const server = useServer()

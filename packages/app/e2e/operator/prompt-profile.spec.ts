@@ -263,7 +263,7 @@ test("built-in groups and profiles are read-only and can be duplicated; the name
   await expect(overlay.locator('[data-slot="operator-slot"][data-type="helper"]')).toContainText("title")
   await overlay.getByRole("button", { name: "Close" }).click()
 
-  await pick(page, "Namespace", "Acme")
+  await pick(page, "Namespace", "Acme · acme")
   await expect(page).toHaveURL(/ns=acme/)
   await expect(page).toHaveURL(/tab=profiles/)
   await page.getByRole("tab", { name: "Layer Definition" }).click()
@@ -321,7 +321,7 @@ test("All namespaces: each item's namespace, built-ins in OpenCode and each name
   await page.goto("/operator/projects")
   await expect(picker).toContainText("All namespaces")
   await expect(page.getByRole("row", { name: /smoke-project/ })).toBeVisible()
-  await pick(page, "Namespace", "Acme")
+  await pick(page, "Namespace", "Acme · acme")
   await expect(page.getByRole("row", { name: /smoke-project/ })).toHaveCount(0)
   await page.goto("/operator/profile")
   await expect(picker).toContainText("Acme")

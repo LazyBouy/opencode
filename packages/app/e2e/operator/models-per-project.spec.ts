@@ -1,5 +1,9 @@
 import { expect, type Page, test } from "@playwright/test"
 import { directory, mockOperator } from "./mock-operator"
+import { idFor } from "./mock-namespaces"
+
+// Projects are labelled "name · id" (specs/docs/issues/002).
+const smoke = `smoke-project · ${idFor(directory)}`
 
 // Providers & Models (default_models_spec.md §5): the defaults in effect for the namespace in scope, then
 // Models per project, its namespace's row (its config) and one row per project (the project's config), each
@@ -62,8 +66,8 @@ test("the namespace's row writes its config; a project's row writes its own, aft
   await expect(row.getByTestId("model-from").last()).toHaveText("From OpenCode's config")
 
   // The project's default model: its own config, which it doesn't have yet.
-  await choose(page, "Default model for smoke-project: provider", "OpenCode")
-  await choose(page, "Default model for smoke-project: model", "Claude Opus 4.6")
+  await choose(page, `Default model for ${smoke}: provider`, "OpenCode")
+  await choose(page, `Default model for ${smoke}: model`, "Claude Opus 4.6")
   await page.getByRole("dialog").getByRole("button", { name: "Save" }).click()
   await expect(page.getByRole("dialog").filter({ hasText: "Save as this project's own config?" })).toBeVisible()
   await page.getByRole("button", { name: "Save as project config" }).click()

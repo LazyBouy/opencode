@@ -16,7 +16,7 @@ test("an agent without a model of its own shows the project's default and where 
   await expect(model).toContainText("from Settings (Global's config)")
   // An agent with its own model shows it as before.
   await page.goto(`/operator/agents/reviewer${dir}`)
-  await expect(page.getByTestId("model-source")).toContainText(OPUS)
+  await expect(page.getByTestId("overlay-frame").getByTestId("model-source")).toContainText(OPUS)
   await expect(page.getByTestId("agent-model")).toHaveCount(0)
 })
 

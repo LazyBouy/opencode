@@ -41,7 +41,7 @@ const catalog: Catalog = {
     { id: "p1", name: "One", group: "g", slots: { role: ["role"], identity: ["voice"] }, builtin: false },
     { id: "p2", name: "Two", group: "g", slots: { identity: [] }, builtin: false },
   ],
-  projects: [{ key: "/repo", name: "repo", namespace: "acme", defaultProfile: "p2" }],
+  projects: [{ key: "/repo", id: "r1234", name: "repo", namespace: "acme", defaultProfile: "p2" }],
   agents: [{ project: "/repo", name: "build", profile: "p1" }],
   resolvers: {},
   editableRules: [],

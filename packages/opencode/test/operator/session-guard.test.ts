@@ -65,11 +65,16 @@ describe("session guard", () => {
     expect(body.data.message).toContain("is not part of a project")
   })
 
-  test("allows a git repository and its subfolders", async () => {
+  test("a git repository is a project once the console records it; then it and its subfolders are allowed", async () => {
     await using tmp = await tmpdir({ git: true })
     await fs.mkdir(path.join(tmp.path, "src"))
+    // OpenCode knowing the repository (a client opened it) doesn't make it a project (specs/docs/issues/002).
+    expect((await create(tmp.path)).status).toBe(409)
+    expect((await register({ directory: tmp.path })).status).toBe(200)
     expect((await create(tmp.path)).status).toBe(200)
     expect((await create(path.join(tmp.path, "src"))).status).toBe(200)
+    // A folder inside the repository can't be a project of its own.
+    expect((await register({ directory: path.join(tmp.path, "src") })).status).toBe(400)
   })
 
   test("a registered folder outside git, and its subfolders, are projects", async () => {
@@ -101,6 +106,8 @@ describe("session guard", () => {
         body: JSON.stringify({ location: { directory } }),
       })
     expect((await start(outside.path)).status).toBe(409)
+    expect((await start(repository.path)).status).toBe(409)
+    expect((await register({ directory: repository.path })).status).toBe(200)
     expect((await start(repository.path)).status).toBe(200)
   })
 
@@ -162,6 +169,7 @@ describe("sessions of a folder that is not a project", () => {
   test("move into a project, with their subagent sessions", async () => {
     await using folder = await tmpdir()
     await using repository = await tmpdir({ git: true })
+    expect((await register({ directory: repository.path })).status).toBe(200)
     const parent = await unguarded(folder.path, { title: "Old work" })
     const child = await unguarded(folder.path, { parentID: parent.id, title: "Helper" })
 
@@ -208,6 +216,7 @@ describe("project of a folder", () => {
     await using tmp = await tmpdir({ git: true })
     const records = (body: object) =>
       app().request("/operator/project-records", { method: "PUT", headers: json, body: JSON.stringify(body) })
+    expect((await register({ directory: tmp.path })).status).toBe(200)
     expect((await create(tmp.path, { agent: "plan" })).status).toBe(200)
 
     const saved = await records({ key: tmp.path, members: ["build"], description: "Ship it", status: "active" })

@@ -75,8 +75,8 @@ describe("Trash", () => {
   test("a git project goes to Trash and back with its folder and repository untouched", async () => {
     await using tmp = await tmpdir({ git: true })
     await fs.writeFile(path.join(tmp.path, "main.ts"), "export {}\n")
-    // OpenCode records the repository once it has seen it.
-    expect((await app().request(`/project/current?directory=${encodeURIComponent(tmp.path)}`)).status).toBe(200)
+    // The console records the repository as a project.
+    expect((await call("POST", "/operator/project-settings/register", { directory: tmp.path })).status).toBe(200)
     const entry = await read<Entry>(await call("POST", "/operator/trash/project", { key: tmp.path }))
     expect(entry.files).toEqual([])
     expect(await exists(path.join(tmp.path, ".git"))).toBe(true)

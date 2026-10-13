@@ -93,6 +93,7 @@ function useProjectRows() {
   const settingOf = (key: string): OperatorPromptProject =>
     settings.data?.find((item) => item.key === key) ?? {
       key,
+      id: "",
       name: key.split("/").filter(Boolean).at(-1) ?? key,
       namespace: OPENCODE,
     }
@@ -143,7 +144,10 @@ function useProjectRows() {
         registered: true,
         ...(item.flag ? { flag: item.flag } : {}),
       }))
-    return [...listed, ...idle]
+    // The console's projects (specs/docs/issues/002): a repository OpenCode only knows from its database isn't one.
+    // A folder outside git where sessions ran stays, as "Not a project", so its sessions can be moved or archived.
+    const records = new Set((settings.data ?? []).map((item) => item.key))
+    return [...listed, ...idle].filter((row) => records.has(row.key) || (row.folder && !row.registered))
   })
   return {
     projects,
@@ -342,11 +346,22 @@ export default function ProjectsPage() {
             ),
           },
           {
+            id: "projectId",
+            optional: true,
+            header: language.t("operator.ids.project"),
+            value: (row) => data.settingOf(row.key).id,
+            cell: (row) => <code data-testid="project-row-id">{data.settingOf(row.key).id}</code>,
+          },
+          {
             id: "namespace",
             optional: true,
             header: language.t("operator.column.namespace"),
             value: (row) => data.nsName(row.ns),
-            cell: (row) => data.nsName(row.ns),
+            cell: (row) => (
+              <span title={data.nsFolder(row.ns)}>
+                {data.nsName(row.ns)} · {row.ns}
+              </span>
+            ),
           },
           {
             id: "purpose",

@@ -18,6 +18,8 @@ export type ListPickerProps<T> = Pick<
   "aria-label"?: string
   /** Options kept first and always shown. */
   pinned?: (option: T) => boolean
+  /** Shown when hovering an option (a project's or namespace's folder). */
+  optionTitle?: (option: T) => string | undefined
 }
 
 export function ListPicker<T>(props: ListPickerProps<T>) {
@@ -62,6 +64,7 @@ export function ListPicker<T>(props: ListPickerProps<T>) {
       role="option"
       aria-selected={current() === keyOf(item)}
       data-value={keyOf(item)}
+      title={props.optionTitle?.(item)}
       onClick={() => choose(item)}
     >
       <span>{textOf(item)}</span>

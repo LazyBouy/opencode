@@ -188,6 +188,9 @@ export type Namespace = typeof Namespace.Type
 
 export const ProjectSetting = Schema.Struct({
   namespace: Schema.String,
+  id: Schema.optional(Schema.String).annotate({
+    description: "The project's short unique id on this server (project-ids.ts), kept through moves and renames",
+  }),
   purpose: Schema.optional(Schema.String).annotate({ description: "The linked Project Purpose layer" }),
   defaultProfile: Schema.optional(Schema.String),
 }).annotate({ identifier: "OperatorProjectSetting" })

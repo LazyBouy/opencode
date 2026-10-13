@@ -763,6 +763,18 @@ export const dict = {
   "operator.help.helperRunDays":
     "Helper runs older than this are deleted, with their sessions: 1 to 3650 days, 30 by default.",
   "operator.notes.tab": "Notes ({{count}})",
+  "operator.ids.namespace": "Namespace id",
+  "operator.ids.project": "Project id",
+  "operator.ids.copy": "Copy the {{label}}",
+  "operator.ids.copyShort": "Copy",
+  "operator.ids.copied": "{{id}} copied",
+  "operator.help.namespaceId":
+    "The chosen namespace's unique id: namespaces with the same name are told apart by it. Hover it for the namespace's folder.",
+  "operator.help.projectId":
+    "The chosen project's unique id on this server (5 characters), kept when the project moves or is renamed: projects with the same name are told apart by it. Hover it for the project's folder.",
+  "operator.scope.notProject": "This folder isn't a project:",
+  "operator.scope.makeProject": "Make this folder a project",
+  "operator.scope.chooseProject": "Choose a project",
   "operator.models.providersWaiting":
     "A provider was connected or disconnected. This project's list updates when none of its sessions is running.",
   "operator.notes.title": "Notes from helpers",

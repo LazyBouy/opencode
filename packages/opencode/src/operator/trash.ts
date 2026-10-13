@@ -91,6 +91,9 @@ const layer = Layer.effect(
 
     const project = Effect.fn("OperatorTrash.project")(function* (key: string) {
       const folder = path.resolve(key)
+      // Only the console's projects (its records, specs/docs/issues/002) go to Trash.
+      if (!(folder in (yield* Effect.promise(() => OperatorProfileStore.readProjects()))))
+        return yield* fail(`${folder} is not a project`)
       const found = yield* sessionsUnder(folder)
       const open = found.filter((row) => row.archived === null).map((row) => row.id)
       yield* archive(open)

@@ -131,10 +131,10 @@ export const operatorOnboardingHandlers = HttpApiBuilder.group(OperatorRootApi, 
           const current = yield* Effect.promise(() => OperatorProjects.projectOf(checked.projectFolder))
           if (!current) {
             if (git) yield* folders.init(checked.projectFolder).pipe(Effect.mapError((error) => fail(error.message)))
-            else
-              yield* store
-                .setProject(checked.projectFolder, { namespace: OperatorProfile.OPENCODE })
-                .pipe(Effect.mapError((error) => fail(error.message)))
+            // The console's record of it, with its id (a git repository too).
+            yield* store
+              .setProject(checked.projectFolder, { namespace: OperatorProfile.OPENCODE })
+              .pipe(Effect.mapError((error) => fail(error.message)))
           }
           const repository = current ? current.git : git
           // A git project is known once OpenCode has seen it.

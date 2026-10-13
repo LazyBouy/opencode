@@ -5,10 +5,10 @@ import path from "path"
 import { Global } from "@opencode-ai/core/global"
 import { OperatorFileCache } from "./file-cache"
 
-// Which project a folder belongs to. Every session and its agents belong to exactly one project:
-// - a git repository (any folder inside one belongs to the repository);
-// - a folder outside git that was registered as a project (its subfolders belong to it too).
-// A folder outside git that is not inside a registered one is not a project.
+// Which project a folder belongs to. Every session and its agents belong to exactly one project: a folder the
+// console recorded as a project (projects.json), a git repository or a folder outside git, and the folders in it.
+// Any other folder is not a project, a git repository included (specs/docs/issues/002, the user's decision): a
+// repository OpenCode only knows from its database becomes a project when the console makes it one.
 
 export type Project = { key: string; git: boolean }
 
@@ -35,8 +35,8 @@ export function registeredRoot(folder: string, registered: ReadonlyArray<string>
     .toSorted((a, b) => b.length - a.length)[0]
 }
 
-// The folders registered as projects (projects.json, written by profile-store.ts), read on every
-// permission ask: through the file cache.
+// The console's projects (projects.json, written by profile-store.ts), read on every permission ask: through the
+// file cache.
 async function registered() {
   const data = await OperatorFileCache.json(path.join(Global.Path.config, "namespaces", "projects.json"))
   // As OperatorProfileStore.readProjects counts them: entries that name a namespace.
@@ -49,10 +49,9 @@ async function registered() {
 
 // The project a folder belongs to, or undefined when it is not part of one.
 export async function projectOf(folder: string): Promise<Project | undefined> {
-  const repository = await gitRoot(folder)
-  if (repository) return { key: repository, git: true }
   const key = registeredRoot(folder, await registered())
-  return key ? { key, git: false } : undefined
+  if (!key) return undefined
+  return { key, git: (await gitRoot(key)) === key }
 }
 
 // The project key of a request's instance: its worktree, or for a folder outside git the

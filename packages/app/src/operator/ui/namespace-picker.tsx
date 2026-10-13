@@ -8,6 +8,7 @@ import { useLanguage } from "@/context/language"
 import { useNamespaces } from "../pages/profile-data"
 import { ALL } from "../pages/profile-model"
 import { FieldHelp } from "./field-help"
+import { IdChip } from "./id-chip"
 
 // The namespace scope pages share (Projects, Prompt Profile): all namespaces, or one. It is the
 // viewer's choice, kept in this browser and in the URL (?ns=), until they change it.
@@ -62,26 +63,46 @@ export function useNamespaceScope() {
 }
 
 // The namespace selector at the top right of a page. `all: false` for a page that shows one namespace
-// (it then shows `current`, the page's choice when all namespaces are in scope).
+// (it then shows `current`, the page's choice when all namespaces are in scope). Each namespace is labelled
+// "name · id" with its folder on hover, and the chosen one's id is shown beside it (specs/docs/issues/002).
 export function NamespacePicker(props: { onChange?: (ns: string) => void; all?: boolean; current?: string }) {
   const language = useLanguage()
   const scope = useNamespaceScope()
   const options = () => [...(props.all === false ? [] : [ALL]), ...scope.namespaces().map((item) => item.namespace.id)]
+  const folderOf = (id: string) => scope.namespaces().find((item) => item.namespace.id === id)?.namespace.folder
+  const chosen = () => props.current ?? scope.ns()
   return (
-    <span class="inline-flex items-center">
-      <SelectV2<string>
-        appearance="base"
-        aria-label={language.t("operator.profile.namespace")}
-        options={options()}
-        current={props.current ?? scope.ns()}
-        label={(id) => (id === ALL ? language.t("operator.namespace.all") : scope.name(id))}
-        onSelect={(id) => {
-          if (!id) return
-          scope.set(id)
-          props.onChange?.(id)
-        }}
-      />
-      <FieldHelp field={language.t("operator.profile.namespace")} text={language.t("operator.help.namespacePicker")} />
+    <span class="inline-flex flex-wrap items-center gap-2">
+      <span class="inline-flex items-center">
+        <SelectV2<string>
+          appearance="base"
+          aria-label={language.t("operator.profile.namespace")}
+          options={options()}
+          current={chosen()}
+          label={(id) => (id === ALL ? language.t("operator.namespace.all") : `${scope.name(id)} · ${id}`)}
+          optionTitle={(id) => (id === ALL ? undefined : folderOf(id))}
+          onSelect={(id) => {
+            if (!id) return
+            scope.set(id)
+            props.onChange?.(id)
+          }}
+        />
+        <FieldHelp
+          field={language.t("operator.profile.namespace")}
+          text={language.t("operator.help.namespacePicker")}
+        />
+      </span>
+      <Show when={chosen() !== ALL && chosen()}>
+        {(id) => (
+          <IdChip
+            label={language.t("operator.ids.namespace")}
+            id={id()}
+            path={folderOf(id())}
+            help={language.t("operator.help.namespaceId")}
+            testid="namespace-id"
+          />
+        )}
+      </Show>
     </span>
   )
 }

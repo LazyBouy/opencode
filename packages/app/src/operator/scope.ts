@@ -45,6 +45,8 @@ export function useOperatorScope() {
   })
   return {
     directory: () => params.dir || rememberedProject(),
+    /** The folder a link names (`?dir=`), if one does. */
+    linked: () => params.dir || undefined,
     setDirectory: (directory: string | undefined) => {
       remember(directory ?? ALL)
       setParams({ dir: directory })

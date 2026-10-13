@@ -1069,7 +1069,12 @@ export const operatorScenarios: Scenario[] = [
       body: { kind: "profile", id: "missing", target: "opencode" },
     }))
     .status(400),
-  http.protected.get("/operator/project-settings", "operator.projectSettings.list").json(200, array),
+  http.protected.get("/operator/project-settings", "operator.projectSettings.list").json(200, (body) => {
+    array(body)
+    // Each project has its short id (specs/docs/issues/002).
+    for (const item of body as Array<{ id?: unknown }>)
+      check(typeof item.id === "string", "a project should have its id")
+  }),
   http.protected.get("/operator/trash", "operator.trash.list").json(200, array),
   http.protected
     .post("/operator/trash/project", "operator.trash.project")
@@ -1242,14 +1247,19 @@ export const operatorScenarios: Scenario[] = [
       body: { directory: ctx.directory ?? "/tmp/x", project: ctx.directory ?? "/tmp/x" },
     }))
     .status(400),
+  // A folder the console hasn't made a project (specs/docs/issues/002): its sessions can be archived.
   http.protected
     .post("/operator/project-settings/folder/archive", "operator.folderSessions.archive")
+    .mutating()
     .at((ctx) => ({
       path: "/operator/project-settings/folder/archive",
       headers: ctx.headers(),
       body: { directory: ctx.directory ?? "/tmp/x" },
     }))
-    .status(400),
+    .json(200, (body) => {
+      object(body)
+      check(typeof body.archived === "number", "the archived sessions should be counted")
+    }),
   http.protected
     .get("/operator/agent-prompt/{name}", "operator.agentPrompt.get")
     .at((ctx) => ({ path: route("/operator/agent-prompt/{name}", { name: "build" }), headers: ctx.headers() }))
@@ -1269,4 +1279,68 @@ export const operatorScenarios: Scenario[] = [
       body: { profile: "missing" },
     }))
     .status(400),
+  // Providers connected or disconnected (specs/docs/issues/001): the projects still waiting to reload.
+  http.protected.get("/operator/model/providers-waiting", "operator.model.providersWaiting").json(200, array),
+  // A form's counters.
+  http.protected
+    .post("/operator/tokenizers/count", "operator.call.count")
+    .at((ctx) => ({ path: "/operator/tokenizers/count", headers: ctx.headers(), body: { text: "one two three" } }))
+    .json(200, (body) => {
+      object(body)
+      check(typeof body.tokens === "number" && body.tokens > 0, "the text should have tokens")
+    }),
+  // Helpers (agent_types_spec.md §4): every namespace lists the built-in ones, read-only.
+  http.protected
+    .get("/operator/helper", "operator.helper.list")
+    .at((ctx) => ({ path: "/operator/helper?ns=opencode", headers: ctx.headers() }))
+    .json(200, (body) => {
+      array(body)
+      check(
+        (body as Array<{ name?: string; builtin?: boolean }>).some((item) => item.name === "title" && item.builtin),
+        "the built-in title helper should be listed",
+      )
+    }),
+  http.protected
+    .post("/operator/helper/{ns}", "operator.helper.create")
+    .at((ctx) => ({
+      path: route("/operator/helper/{ns}", { ns: "opencode" }),
+      headers: ctx.headers(),
+      body: { name: "title", model: { source: "small" }, text: "x" },
+    }))
+    .status(400),
+  http.protected
+    .patch("/operator/helper/{ns}/{name}", "operator.helper.update")
+    .at((ctx) => ({
+      path: route("/operator/helper/{ns}/{name}", { ns: "opencode", name: "title" }),
+      headers: ctx.headers(),
+      body: { text: "x" },
+    }))
+    .status(400),
+  http.protected
+    .delete("/operator/helper/{ns}/{name}", "operator.helper.remove")
+    .at((ctx) => ({
+      path: route("/operator/helper/{ns}/{name}", { ns: "opencode", name: "title" }),
+      headers: ctx.headers(),
+    }))
+    .status(400),
+  http.protected
+    .get("/operator/helper/{ns}/{name}/runs", "operator.helper.runs")
+    .at((ctx) => ({
+      path: route("/operator/helper/{ns}/{name}/runs", { ns: "opencode", name: "missing" }),
+      headers: ctx.headers(),
+    }))
+    .json(200, array),
+  http.protected.get("/operator/helper-settings", "operator.helper.settings").json(200, (body) => {
+    object(body)
+    check(typeof body.runDays === "number", "runs are kept for some days")
+  }),
+  http.protected
+    .put("/operator/helper-settings", "operator.helper.saveSettings")
+    .at((ctx) => ({ path: "/operator/helper-settings", headers: ctx.headers(), body: { runDays: 0 } }))
+    .status(400),
+  http.protected.get("/operator/notifications", "operator.notification.list").json(200, array),
+  http.protected
+    .delete("/operator/notifications/{id}", "operator.notification.dismiss")
+    .at((ctx) => ({ path: route("/operator/notifications/{id}", { id: "missing" }), headers: ctx.headers() }))
+    .json(200, (body) => check(body === false, "nothing to dismiss")),
 ]

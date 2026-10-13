@@ -35,6 +35,7 @@ type Override = { group?: string; slots?: Record<string, string[]> }
 export type AgentSetting = { profile?: string; override?: Override }
 export type ProjectSetting = {
   namespace: string
+  id?: string
   purpose?: string
   defaultProfile?: string
   flag?: "outside-opencode" | "not-in-place"
@@ -288,6 +289,14 @@ export const resolution = (candidates: ReturnType<typeof candidate>[]) => ({
   overBudget: 0,
 })
 
+// A project's short id (specs/docs/issues/002), stable for a folder in the mock: 5 base-32 characters from its path.
+export function idFor(key: string) {
+  const alphabet = "0123456789abcdefghjkmnpqrstvwxyz"
+  let hash = 2166136261
+  for (const char of key) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619) >>> 0
+  return Array.from({ length: 5 }, (_, at) => alphabet[(hash >>> (at * 5)) & 31]).join("")
+}
+
 export function createPromptMock(
   projects: Array<{ key: string; name: string }>,
   // An agent's own prompt, if it has one.
@@ -301,7 +310,9 @@ export function createPromptMock(
       opencode: { types: [], layers: [], groups: [], profiles: [] },
       global: { types: [], layers: [], groups: [], profiles: [] },
     },
-    projects: Object.fromEntries(projects.map((project) => [project.key, { namespace: "opencode" }])),
+    projects: Object.fromEntries(
+      projects.map((project) => [project.key, { namespace: "opencode", id: idFor(project.key) }]),
+    ),
     agents: {},
     writes: [],
     samples: [],
@@ -704,9 +715,9 @@ export function createPromptMock(
         .toSorted((a, b) => b.folder.length - a.folder.length)[0]?.id
       const namespace =
         input.namespace ?? (input.from ? state.projects[input.from]?.namespace : undefined) ?? byLocation ?? "opencode"
-      state.projects[directory] = { namespace }
+      state.projects[directory] = { namespace, id: idFor(directory) }
       return json(route, {
-        project: { key: directory, name: nameOf(directory), namespace, registered: true },
+        project: { key: directory, id: idFor(directory), name: nameOf(directory), namespace, registered: true },
         // A copy brings the source's agents and tools, and its sessions when asked.
         ...(input.from
           ? {
@@ -728,6 +739,7 @@ export function createPromptMock(
           route,
           Object.entries(state.projects).map(([key, setting]) => ({
             key,
+            id: setting.id ?? idFor(key),
             name: nameOf(key),
             ...setting,
             ...(!setting.flag && notInPlace(key, setting.namespace) ? { flag: "not-in-place" } : {}),

@@ -17,6 +17,7 @@ import { OperatorResolver } from "./resolver"
 import { OperatorResolverBuiltins } from "./resolver-builtins"
 import { OperatorTrashFiles } from "./trash-files"
 import { OperatorHelperFiles } from "./helper-files"
+import { OperatorProjectIds } from "./project-ids"
 
 // Prompt profile data is server-wide, in the global config folder; nothing goes into a project:
 //
@@ -42,6 +43,9 @@ export type Copied = typeof Copied.Type
 
 export const ProjectInfo = Schema.Struct({
   key: Schema.String.annotate({ description: "The project's folder (its worktree, or the folder outside git)" }),
+  id: Schema.String.annotate({
+    description: "Its short unique id on this server (5 characters), kept through moves and renames",
+  }),
   name: Schema.String,
   namespace: Schema.String,
   purpose: Schema.optional(Schema.String),
@@ -288,11 +292,17 @@ export async function readProjects(): Promise<Record<string, OperatorProfile.Pro
         pair[0],
         {
           namespace: String(pair[1].namespace),
+          ...(OperatorProjectIds.valid(pair[1].id) ? { id: pair[1].id } : {}),
           ...(typeof pair[1].purpose === "string" ? { purpose: pair[1].purpose } : {}),
           ...(typeof pair[1].defaultProfile === "string" ? { defaultProfile: pair[1].defaultProfile } : {}),
         },
       ]),
   )
+}
+
+// The ids the console's projects use.
+function takenIds(projects: Record<string, OperatorProfile.ProjectSetting>) {
+  return new Set(Object.values(projects).flatMap((item) => (item.id ? [item.id] : [])))
 }
 
 export async function readAgents(): Promise<Record<string, Record<string, OperatorProfile.AgentSetting>>> {
@@ -657,13 +667,72 @@ const layer = Layer.effect(
 
     // The projects, and the order they were added in: git projects by when OpenCode first saw them,
     // then folders outside git in the order they were registered.
+    // The console's projects are its records in projects.json (specs/docs/issues/002): a folder OpenCode only knows
+    // from its database (a repository a client opened, the server's own folder) is not a project. Each record has
+    // its id; one without gets one here.
+    const records = Effect.fnUntraced(function* () {
+      return yield* Effect.promise(async () => {
+        const all = await readProjects()
+        const missing = Object.keys(all).filter((key) => !all[key]!.id)
+        if (!missing.length) return all
+        const taken = takenIds(all)
+        for (const key of missing) {
+          const id = OperatorProjectIds.make(taken)
+          taken.add(id)
+          all[key] = { ...all[key]!, id }
+        }
+        await writeJson(path.join(root(), "projects.json"), { ...(await readProjects()), ...all })
+        return all
+      })
+    })
+
+    // Once, at the first start with records: the projects the console listed until then (the git projects in its
+    // database that aren't in Trash, and every project with settings) become records, so none is lost.
+    const adopt = Effect.fnUntraced(function* () {
+      const file = path.join(root(), "settings.json")
+      const raw = (yield* Effect.promise(() =>
+        Bun.file(file)
+          .json()
+          .catch(() => ({})),
+      )) as Record<string, unknown>
+      if (raw.projectRecords === true) return
+      const rows = yield* db.select({ worktree: ProjectTable.worktree }).from(ProjectTable).all().pipe(Effect.orDie)
+      const trashed = yield* Effect.promise(OperatorTrashFiles.trashedProjects)
+      const agents = yield* Effect.promise(readAgents)
+      const all = yield* Effect.promise(readProjects)
+      const layout = yield* Effect.promise(() => OperatorLayout.snapshot())
+      const candidates = [...rows.map((row) => String(row.worktree)), ...Object.keys(agents)].filter(
+        (key, index, list) => key !== "/" && list.indexOf(key) === index && !(key in all) && !trashed.has(key),
+      )
+      const taken = takenIds(all)
+      for (const key of candidates) {
+        if (
+          !(yield* Effect.promise(() =>
+            fs.stat(key).then(
+              (stat) => stat.isDirectory(),
+              () => false,
+            ),
+          ))
+        )
+          continue
+        const id = OperatorProjectIds.make(taken)
+        taken.add(id)
+        all[key] = { namespace: OperatorLayout.membership(key, layout).namespace, id }
+      }
+      yield* Effect.promise(async () => {
+        await writeJson(path.join(root(), "projects.json"), all)
+        await writeJson(file, { ...raw, projectRecords: true })
+      })
+    })
+    yield* adopt().pipe(Effect.ignore)
+
     const inventory = Effect.fnUntraced(function* () {
       const rows = yield* db
         .select({ worktree: ProjectTable.worktree, name: ProjectTable.name, created: ProjectTable.time_created })
         .from(ProjectTable)
         .all()
         .pipe(Effect.orDie)
-      const settings = yield* Effect.promise(readProjects)
+      const settings = yield* records()
       const agents = yield* Effect.promise(readAgents)
       const names = new Map<string, string>(
         rows
@@ -672,9 +741,7 @@ const layer = Layer.effect(
       )
       // Projects in Trash are not listed.
       const trashed = yield* Effect.promise(OperatorTrashFiles.trashedProjects)
-      const keys = [...new Set([...names.keys(), ...Object.keys(settings), ...Object.keys(agents)])].filter(
-        (key) => !trashed.has(key),
-      )
+      const keys = Object.keys(settings).filter((key) => !trashed.has(key))
       // Each project is in the namespace whose folder holds it (layout.ts).
       const layout = yield* Effect.promise(() => OperatorLayout.snapshot())
       const projects: ProjectInfo[] = keys
@@ -684,9 +751,10 @@ const layer = Layer.effect(
             key,
             name: names.get(key) ?? path.basename(key),
             ...settings[key],
+            id: settings[key]!.id!,
             namespace: member.namespace,
             ...(member.flag ? { flag: member.flag } : {}),
-            registered: names.has(key) || key in settings,
+            registered: true,
           }
         })
         .toSorted((a, b) => a.name.localeCompare(b.name))
@@ -1189,8 +1257,10 @@ const layer = Layer.effect(
       key: string,
       input: { namespace?: string; purpose?: string; defaultProfile?: string; dryRun?: boolean },
     ) {
+      // Not a project yet: recorded here (its id is made below).
       const current: ProjectInfo = (yield* known()).find((item) => item.key === key) ?? {
         key,
+        id: "",
         name: path.basename(key),
         namespace: OperatorProfile.OPENCODE,
       }
@@ -1210,12 +1280,15 @@ const layer = Layer.effect(
       const purpose = input.purpose === undefined ? map("layer", current.purpose) : input.purpose || undefined
       const defaultProfile =
         input.defaultProfile === undefined ? map("profile", current.defaultProfile) : input.defaultProfile || undefined
+      const all = yield* Effect.promise(readProjects)
       const next: OperatorProfile.ProjectSetting = {
         namespace: target,
+        // Its id stays; a project the console records now gets one.
+        id: all[key]?.id ?? OperatorProjectIds.make(takenIds(all)),
         ...(purpose ? { purpose } : {}),
         ...(defaultProfile ? { defaultProfile } : {}),
       }
-      if (input.dryRun) return { project: { ...current, ...next }, copied: moved.copied }
+      if (input.dryRun) return { project: { ...current, ...next, id: next.id! }, copied: moved.copied }
       const after = (yield* Effect.promise(() => readNamespace(target)))!
       if (next.purpose) {
         const linked = after.layers.find((item) => item.id === next.purpose)
@@ -1229,13 +1302,12 @@ const layer = Layer.effect(
         yield* refuse(`No profile "${next.defaultProfile}" in ${after.namespace.name}`)
       yield* refuse(helperDefault(after, next.defaultProfile))
       yield* Effect.promise(async () => {
-        const all = await readProjects()
-        await writeJson(path.join(root(), "projects.json"), { ...all, [key]: next })
+        await writeJson(path.join(root(), "projects.json"), { ...(await readProjects()), [key]: next })
         if (!moving || !agents[key]) return
         const remapped = remapAgents(agents[key]!, map)
         await writeJson(path.join(root(), "agents.json"), { ...agents, [key]: remapped })
       })
-      return { project: { ...current, ...next }, copied: moved.copied }
+      return { project: { ...current, ...next, id: next.id! }, copied: moved.copied }
     })
 
     const agent = Effect.fn("OperatorProfileStore.agent")(function* (project: string, name: string) {
@@ -1300,6 +1372,7 @@ const layer = Layer.effect(
     ) {
       const from: ProjectInfo = (yield* known()).find((item) => item.key === source) ?? {
         key: source,
+        id: "",
         name: path.basename(source),
         namespace: OperatorProfile.OPENCODE,
       }
@@ -1317,8 +1390,11 @@ const layer = Layer.effect(
       const map = (kind: Kind, id: string | undefined) => (id ? (moved.ids.get(`${kind}:${id}`) ?? id) : undefined)
       const purpose = map("layer", from.purpose)
       const defaultProfile = map("profile", from.defaultProfile)
+      const records = yield* Effect.promise(readProjects)
       const next: OperatorProfile.ProjectSetting = {
         namespace,
+        // A copy is a project of its own: its own id.
+        id: OperatorProjectIds.make(takenIds(records)),
         ...(purpose ? { purpose } : {}),
         ...(defaultProfile ? { defaultProfile } : {}),
       }
@@ -1328,7 +1404,7 @@ const layer = Layer.effect(
           await writeJson(path.join(root(), "agents.json"), { ...agents, [target]: remapAgents(own, map) })
       })
       return {
-        project: { key: target, name: path.basename(target), ...next, registered: true },
+        project: { key: target, name: path.basename(target), ...next, id: next.id!, registered: true },
         copied: moved.copied,
       }
     })

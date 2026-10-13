@@ -275,6 +275,8 @@ it.instance("items in use cannot be deleted, and the error says by what", () =>
     Effect.gen(function* () {
       const items = yield* seed()
       const key = "/work/app"
+      // A project the console records, with an agent setting.
+      yield* items.store.setProject(key, { namespace: "opencode" })
       yield* items.store.setAgent(key, "build", { profile: items.profile.id })
       expect(yield* refused(items.store.remove("opencode", "type", items.rules.id))).toContain('layer "Be kind"')
       expect(yield* refused(items.store.remove("opencode", "layer", items.role.id))).toContain('profile "Reviewing"')

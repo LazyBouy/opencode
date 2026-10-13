@@ -2601,6 +2601,10 @@ export type OperatorPromptProject = {
    * The project's folder (its worktree, or the folder outside git)
    */
   key: string
+  /**
+   * Its short unique id on this server (5 characters), kept through moves and renames
+   */
+  id: string
   name: string
   namespace: string
   purpose?: string
