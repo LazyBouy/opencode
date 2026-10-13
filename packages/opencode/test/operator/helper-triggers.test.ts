@@ -133,10 +133,11 @@ const runsOf = (name: string) =>
     return yield* (yield* OperatorHelperRuns.Service).runs("opencode", name)
   })
 
-// Runs started from a listener (a new project) begin a moment later.
+// Runs started from a listener (a new project) begin a moment later; a new project's instance can take seconds to
+// start when the machine is busy.
 const waitForRuns = (name: string, count: number) =>
   Effect.gen(function* () {
-    for (let tries = 0; tries < 100; tries++) {
+    for (let tries = 0; tries < 300; tries++) {
       const found = yield* runsOf(name)
       if (found.length >= count && found.every((run) => run.status !== "running")) return found
       yield* Effect.sleep("50 millis")

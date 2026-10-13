@@ -53,7 +53,9 @@ export function AgentModelFields(props: {
   /** Model source values come from the control (ModelSource); model and variant are text. */
   set: (key: keyof ModelForm, value: string) => void
   directory: string | undefined
-  scope: "project" | "global"
+  /** Where the agent is saved: a project, a whole namespace (`namespace`), or Global. */
+  scope: "project" | "global" | "namespace"
+  namespace?: string
   editing: boolean
   /** A new agent starts on the default model in effect, copied in; a helper keeps the source it was given. */
   prefill?: boolean
@@ -92,9 +94,10 @@ export function AgentModelFields(props: {
     ),
   )
   const words = useModelWords(connected)
-  // The default and small model in effect where the agent is saved: the project's, or Settings' for Global.
+  // The default and small model in effect where the agent is saved: the project's, the namespace's, or Settings' for
+  // Global.
   const project = useProjectModels(() => (props.scope === "project" ? props.directory : undefined))
-  const settings = useNamespaceModels(() => undefined)
+  const settings = useNamespaceModels(() => (props.scope === "namespace" ? props.namespace : undefined))
   const chains = () => (props.scope === "project" ? ready(project)?.chain : ready(settings)?.chain)
   const split = (value: string) => {
     const at = value.indexOf("/")
@@ -180,7 +183,14 @@ export function AgentModelFields(props: {
           <SegmentedControlItemV2 value="default">
             {language.t("operator.agentModel.sourceDefault")}
           </SegmentedControlItemV2>
-          <SegmentedControlItemV2 value="small">{language.t("operator.agentModel.sourceSmall")}</SegmentedControlItemV2>
+          {/* A namespace's agent serves projects with different small models: it can't follow one. */}
+          <SegmentedControlItemV2
+            value="small"
+            disabled={props.scope === "namespace"}
+            title={props.scope === "namespace" ? language.t("operator.agentModel.smallNamespace") : undefined}
+          >
+            {language.t("operator.agentModel.sourceSmall")}
+          </SegmentedControlItemV2>
           <SegmentedControlItemV2 value="pick">{language.t("operator.agentModel.sourcePick")}</SegmentedControlItemV2>
         </SegmentedControlV2>
       </Field>

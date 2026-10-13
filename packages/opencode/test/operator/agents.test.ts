@@ -13,7 +13,9 @@ import { Agent } from "@/agent/agent"
 import { ConfigAgent } from "@/config/agent"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { Global } from "@opencode-ai/core/global"
 import { OperatorAgents } from "@/operator/agents"
+import { OperatorProfileStore } from "@/operator/profile-store"
 import { OperatorProjectConfig } from "@/operator/project-config"
 import { Session } from "@/session/session"
 import { NpmTest } from "../fake/npm"
@@ -26,6 +28,7 @@ const it = testEffect(
     AppNodeBuilder.build(
       LayerNode.group([
         OperatorAgents.node,
+        OperatorProfileStore.node,
         Agent.node,
         Session.node,
         SessionProjector.node,
@@ -257,4 +260,148 @@ it.instance(
       expect(listed).toMatchObject({ name: "explore", disabled: true })
     }),
   { config: { agent: { explore: { disable: true } } } },
+)
+
+// Save in (agent_form_spec.md §1, capability_scopes_spec.md §11): an agent of a whole namespace is a file in the
+// namespace folder's `.opencode`, and can't use the Small model; Global has no namespace folder of its own.
+const withConfig = <A, E, R>(body: (dir: string) => Effect.Effect<A, E, R>) =>
+  Effect.gen(function* () {
+    const dir = path.join((yield* TestInstance).directory, "global-config")
+    return yield* Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const previous = { config: Global.Path.config, roots: process.env.OPENCODE_WORKSPACE_ROOTS }
+        ;(Global.Path as { config: string }).config = dir
+        process.env.OPENCODE_WORKSPACE_ROOTS = path.dirname(dir)
+        return previous
+      }),
+      () => body(dir),
+      (previous) =>
+        Effect.sync(() => {
+          ;(Global.Path as { config: string }).config = previous.config
+          if (previous.roots === undefined) delete process.env.OPENCODE_WORKSPACE_ROOTS
+          else process.env.OPENCODE_WORKSPACE_ROOTS = previous.roots
+        }),
+    )
+  })
+
+it.instance("an agent saved in a namespace goes in its folder's .opencode; it can't use the Small model", () =>
+  withConfig(() =>
+    Effect.gen(function* () {
+      const { directory } = yield* TestInstance
+      const agents = yield* OperatorAgents.Service
+      const store = yield* OperatorProfileStore.Service
+      const folder = path.join(directory, "namespaces", "acme")
+      const acme = yield* store.createNamespace({ name: "Acme", folder })
+      yield* store.setProject(directory, { namespace: acme.id })
+
+      const file = yield* agents.create("namespace", "scout", { description: "Scouts", prompt: "Scout ahead." })
+      expect(file).toBe(path.join(folder, ".opencode", "agents", "scout.md"))
+      const written = yield* read(file)
+      expect(written.data).toEqual({ description: "Scouts" })
+      expect(written.content.trim()).toBe("Scout ahead.")
+      // No home made in this project for it: each project has its own.
+      expect(
+        yield* Effect.promise(() =>
+          fs.stat(path.join(directory, "agents")).then(
+            () => true,
+            () => false,
+          ),
+        ),
+      ).toBe(false)
+      const small = failure(yield* agents.create("namespace", "cheap", { modelSource: "small" }).pipe(Effect.exit))
+      expect(small).toBeInstanceOf(OperatorAgents.InvalidError)
+      expect((small as Error).message).toContain("Small model")
+    }),
+  ),
+)
+
+it.instance(
+  "each agent says where it is defined: built in, this project's file or config",
+  () =>
+    Effect.gen(function* () {
+      const listed = yield* (yield* OperatorAgents.Service).list()
+      const level = (name: string) => listed.find((agent) => agent.name === name)?.level
+      expect(level("build")).toEqual({ kind: "builtin" })
+      expect(level("reviewer")).toEqual({ kind: "project" })
+      expect(level("helper")).toEqual({ kind: "project" })
+    }),
+  {
+    init: (directory) =>
+      Effect.promise(async () => {
+        await fs.mkdir(path.join(directory, ".opencode", "agents"), { recursive: true })
+        await fs.writeFile(
+          path.join(directory, ".opencode", "agents", "reviewer.md"),
+          "---\nmode: subagent\n---\nReview.\n",
+        )
+        await fs.writeFile(
+          path.join(directory, ".opencode", "opencode.jsonc"),
+          JSON.stringify({ agent: { helper: { mode: "subagent", prompt: "Help out." } } }),
+        )
+      }),
+  },
+)
+
+it.instance(
+  "an agent moves to another project: its file goes there with its prompt setting, and leaves here",
+  () =>
+    withConfig(() =>
+      Effect.gen(function* () {
+        const { directory } = yield* TestInstance
+        const agents = yield* OperatorAgents.Service
+        const store = yield* OperatorProfileStore.Service
+        const other = path.join(directory, "other")
+        yield* Effect.promise(() => fs.mkdir(other, { recursive: true }))
+        yield* store.setProject(directory, {})
+        yield* store.setProject(other, {})
+        yield* store.setAgent(directory, "reviewer", { profile: "opencode:profile.opencode" })
+
+        // Not to a folder that isn't a project, nor over an agent of the same name.
+        const refused = failure(yield* agents.move("reviewer", path.join(directory, "nowhere")).pipe(Effect.exit))
+        expect(refused).toBeInstanceOf(OperatorAgents.InvalidError)
+        expect(failure(yield* agents.move("build", other).pipe(Effect.exit))).toBeInstanceOf(
+          OperatorAgents.InvalidError,
+        )
+
+        const moved = yield* agents.move("reviewer", other)
+        expect(moved).toEqual({
+          path: path.join(other, ".opencode", "agents", "reviewer.md"),
+          from: { kind: "project" },
+        })
+        const written = yield* read(moved.path)
+        expect(written.data).toEqual({ description: "Reviews diffs", mode: "subagent" })
+        expect(written.content.trim()).toBe("Review the diff.")
+        const source = path.join(directory, ".opencode", "agents", "reviewer.md")
+        expect(
+          yield* Effect.promise(() =>
+            fs.stat(source).then(
+              () => true,
+              () => false,
+            ),
+          ),
+        ).toBe(false)
+        expect(yield* store.agent(other, "reviewer")).toEqual({ profile: "opencode:profile.opencode" })
+
+        // A config agent becomes a file there, and its entry goes.
+        const entry = yield* agents.move("helper", other)
+        expect((yield* read(entry.path)).content.trim()).toBe("Help out.")
+        const config = yield* Effect.promise(() =>
+          fs.readFile(path.join(directory, ".opencode", "opencode.jsonc"), "utf8"),
+        )
+        expect(config).not.toContain("Help out.")
+      }),
+    ),
+  {
+    init: (directory) =>
+      Effect.promise(async () => {
+        await fs.mkdir(path.join(directory, ".opencode", "agents"), { recursive: true })
+        await fs.writeFile(
+          path.join(directory, ".opencode", "agents", "reviewer.md"),
+          "---\ndescription: Reviews diffs\nmode: subagent\n---\nReview the diff.\n",
+        )
+        await fs.writeFile(
+          path.join(directory, ".opencode", "opencode.jsonc"),
+          JSON.stringify({ agent: { helper: { mode: "subagent", prompt: "Help out." } } }),
+        )
+      }),
+  },
 )

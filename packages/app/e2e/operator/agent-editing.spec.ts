@@ -58,7 +58,12 @@ test("a new agent is saved as an agent file or a config entry, and the form says
   await page.getByLabel("Name", { exact: true }).fill("docs")
   const target = page.getByTestId("agent-target")
   await expect(target).toHaveText(/^Saved to .*\/\.opencode\/agents\/docs\.md$/)
-  await page.getByRole("button", { name: "Global", exact: true }).click()
+  await page.locator('[data-component="select-v2-root"][aria-label="Namespace"] [data-component="select-v2"]').click()
+  await page
+    .locator('[data-component="menu-v2-item"]')
+    .filter({ hasText: /^Global · global$/ })
+    .click()
+  await expect(page.getByTestId("agent-save-in-global")).toHaveText("Global (every namespace that inherits it)")
   await expect(target).toHaveText("Saved to /home/me/.config/opencode/agents/docs.md")
   await page.getByRole("button", { name: "Config entry", exact: true }).click()
   await expect(target).toHaveText("Saved to /home/me/.config/opencode/opencode.jsonc → agent.docs")

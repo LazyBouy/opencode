@@ -120,6 +120,8 @@ import type {
   OperatorAgentFormat,
   OperatorAgentListErrors,
   OperatorAgentListResponses,
+  OperatorAgentMoveErrors,
+  OperatorAgentMoveResponses,
   OperatorAgentPermissionsGetErrors,
   OperatorAgentPermissionsGetResponses,
   OperatorAgentPermissionsLocksErrors,
@@ -4360,13 +4362,13 @@ export class Agent extends HeyApiClient {
   /**
    * Create an agent
    *
-   * Write a new agent at the global or project scope: a markdown file in the `agents` folder, or `agent.<name>` in the config file. The project reloads so the agent can be used.
+   * Write a new agent at Global, this project's namespace (every project in it: its folder's `.opencode`) or this project: a markdown file in the `agents` folder, or `agent.<name>` in the config file. The projects that read it reload so the agent can be used. A namespace's agent can't use the Small model.
    */
   public create<ThrowOnError extends boolean = false>(
     parameters: {
       directory?: string
       workspace?: string
-      scope: OperatorConfigScope
+      scope: OperatorConfigWriteScope
       confirmCopy?: "true" | "false"
       name?: string
       format?: OperatorAgentFormat
@@ -4460,7 +4462,7 @@ export class Agent extends HeyApiClient {
       name: string
       directory?: string
       workspace?: string
-      scope: OperatorConfigScope
+      scope: OperatorConfigWriteScope
       confirmCopy?: "true" | "false"
     },
     options?: Options<never, ThrowOnError>,
@@ -4500,7 +4502,7 @@ export class Agent extends HeyApiClient {
       name: string
       directory?: string
       workspace?: string
-      scope: OperatorConfigScope
+      scope: OperatorConfigWriteScope
       confirmCopy?: "true" | "false"
       description?: string
       mode?: "subagent" | "primary" | "all"
@@ -4573,6 +4575,45 @@ export class Agent extends HeyApiClient {
       ThrowOnError
     >({
       url: "/operator/agent/{name}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Move an agent to another project
+   *
+   * The agent's definition becomes an agent file in the project (`.opencode/agents/<name>.md`), with its prompt setting when that project's namespace has its profile, and leaves where it was (its file, or its entry in this project's, the namespace's or Global's config). Its sessions stay. Built-in agents and agents set by the environment can't move.
+   */
+  public move<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+      project?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "project" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<OperatorAgentMoveResponses, OperatorAgentMoveErrors, ThrowOnError>({
+      url: "/operator/agent/{name}/move",
       ...options,
       ...params,
       headers: {

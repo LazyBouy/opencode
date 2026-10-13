@@ -17,11 +17,17 @@ import { ApiProjectConfigCopyError, ConfirmCopyField } from "./project-config"
 export const OperatorProjectPaths = {
   agents: "/operator/agent",
   agent: "/operator/agent/:name",
+  agentMove: "/operator/agent/:name/move",
   tools: "/operator/tool",
   models: "/operator/model",
 } as const
 
-const ScopeQuery = Schema.Struct({ ...WorkspaceRoutingQueryFields, scope: OperatorConfig.Scope, ...ConfirmCopyField })
+// An agent is written at Global, this project's namespace (every project in it) or this project.
+const ScopeQuery = Schema.Struct({
+  ...WorkspaceRoutingQueryFields,
+  scope: OperatorConfig.WriteScope,
+  ...ConfirmCopyField,
+})
 const AgentWritten = Schema.Struct({ path: Schema.String }).annotate({ identifier: "OperatorAgentWritten" })
 
 const agentError = <Name extends string, Status extends number>(name: Name, status: Status) =>
@@ -65,7 +71,7 @@ export const OperatorProjectApi = HttpApi.make("operator-project")
             identifier: "operator.agent.create",
             summary: "Create an agent",
             description:
-              "Write a new agent at the global or project scope: a markdown file in the `agents` folder, or `agent.<name>` in the config file. The project reloads so the agent can be used.",
+              "Write a new agent at Global, this project's namespace (every project in it: its folder's `.opencode`) or this project: a markdown file in the `agents` folder, or `agent.<name>` in the config file. The projects that read it reload so the agent can be used. A namespace's agent can't use the Small model.",
           }),
         ),
         HttpApiEndpoint.patch("agentUpdate", OperatorProjectPaths.agent, {
@@ -80,6 +86,25 @@ export const OperatorProjectApi = HttpApi.make("operator-project")
             summary: "Edit an agent",
             description:
               "Change an agent's settings. A markdown agent's own file is edited; built-in and config agents get `agent.<name>` settings in the global or project config. null resets a setting.",
+          }),
+        ),
+        HttpApiEndpoint.post("agentMove", OperatorProjectPaths.agentMove, {
+          params: { name: Schema.String },
+          query: WorkspaceRoutingQuery,
+          payload: Schema.Struct({ project: Schema.String.annotate({ description: "The project it moves to" }) }),
+          success: described(
+            Schema.Struct({ path: Schema.String, from: OperatorAgents.Level }).annotate({
+              identifier: "OperatorAgentMoved",
+            }),
+            "The agent file written in the project, and where the agent was",
+          ),
+          error: [ApiAgentNotFoundError, ApiAgentConflictError, ApiAgentInvalidError, ApiProjectConfigCopyError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.agent.move",
+            summary: "Move an agent to another project",
+            description:
+              "The agent's definition becomes an agent file in the project (`.opencode/agents/<name>.md`), with its prompt setting when that project's namespace has its profile, and leaves where it was (its file, or its entry in this project's, the namespace's or Global's config). Its sessions stay. Built-in agents and agents set by the environment can't move.",
           }),
         ),
         HttpApiEndpoint.delete("agentRemove", OperatorProjectPaths.agent, {

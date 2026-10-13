@@ -4237,6 +4237,11 @@ export type OperatorAgentSource = {
   customized: boolean
 }
 
+export type OperatorAgentLevel = {
+  kind: "builtin" | "global" | "namespace" | "project" | "environment"
+  namespace?: string
+}
+
 export type OperatorAgentModel = {
   model: string
   path?: string
@@ -4284,6 +4289,7 @@ export type OperatorAgent = {
   }
   steps?: number
   source: OperatorAgentSource
+  level: OperatorAgentLevel
   home?: string
   /**
    * Turned off with `disable: true`; such agents cannot be used
@@ -4308,8 +4314,6 @@ export type OperatorAgent = {
 
 export type OperatorAgentFormat = "file" | "config"
 
-export type OperatorConfigScope = "global" | "project"
-
 export type OperatorAgentWritten = {
   path: string
 }
@@ -4333,6 +4337,11 @@ export type OperatorAgentInvalidError = {
   data: {
     message: string
   }
+}
+
+export type OperatorAgentMoved = {
+  path: string
+  from: OperatorAgentLevel
 }
 
 export type OperatorTool = {
@@ -5681,6 +5690,8 @@ export type OperatorAgentPermissionsNotFoundError = {
     message: string
   }
 }
+
+export type OperatorConfigScope = "global" | "project"
 
 export type OperatorAgentPermissionsWritten = {
   path: string
@@ -17406,7 +17417,7 @@ export type OperatorAgentCreateData = {
   query: {
     directory?: string
     workspace?: string
-    scope: OperatorConfigScope
+    scope: OperatorConfigWriteScope
     confirmCopy?: "true" | "false"
   }
   url: "/operator/agent"
@@ -17446,7 +17457,7 @@ export type OperatorAgentRemoveData = {
   query: {
     directory?: string
     workspace?: string
-    scope: OperatorConfigScope
+    scope: OperatorConfigWriteScope
     confirmCopy?: "true" | "false"
   }
   url: "/operator/agent/{name}"
@@ -17519,7 +17530,7 @@ export type OperatorAgentUpdateData = {
   query: {
     directory?: string
     workspace?: string
-    scope: OperatorConfigScope
+    scope: OperatorConfigWriteScope
     confirmCopy?: "true" | "false"
   }
   url: "/operator/agent/{name}"
@@ -17550,6 +17561,49 @@ export type OperatorAgentUpdateResponses = {
 }
 
 export type OperatorAgentUpdateResponse = OperatorAgentUpdateResponses[keyof OperatorAgentUpdateResponses]
+
+export type OperatorAgentMoveData = {
+  body?: {
+    /**
+     * The project it moves to
+     */
+    project: string
+  }
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/agent/{name}/move"
+}
+
+export type OperatorAgentMoveErrors = {
+  /**
+   * OperatorAgentInvalidError | InvalidRequestError
+   */
+  400: OperatorAgentInvalidError | InvalidRequestError
+  /**
+   * OperatorAgentNotFoundError
+   */
+  404: OperatorAgentNotFoundError
+  /**
+   * OperatorAgentConflictError | OperatorProjectConfigCopyNeededError
+   */
+  409: OperatorAgentConflictError | OperatorProjectConfigCopyNeededError
+}
+
+export type OperatorAgentMoveError = OperatorAgentMoveErrors[keyof OperatorAgentMoveErrors]
+
+export type OperatorAgentMoveResponses = {
+  /**
+   * The agent file written in the project, and where the agent was
+   */
+  200: OperatorAgentMoved
+}
+
+export type OperatorAgentMoveResponse = OperatorAgentMoveResponses[keyof OperatorAgentMoveResponses]
 
 export type OperatorToolListData = {
   body?: never

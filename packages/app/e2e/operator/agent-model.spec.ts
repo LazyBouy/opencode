@@ -87,7 +87,7 @@ test("a new agent starts on the default model where it's saved, copied in; Save 
   await expect(select("Model")).toContainText("GPT-5")
   await expect(page.getByTestId("agent-model-now")).toContainText("default model, copied in")
   // Saved in Global: Settings' default (here OpenCode decides it).
-  await page.getByRole("button", { name: "Global", exact: true }).click()
+  await choose(page, "Namespace", "Global · global")
   await expect(select("Provider")).toContainText("OpenCode")
   await expect(select("Model")).toContainText("Claude Opus 4.6")
   await expect(page.getByTestId("agent-model-now")).toHaveText(
@@ -95,7 +95,7 @@ test("a new agent starts on the default model where it's saved, copied in; Save 
   )
   // Once a model is picked, Save in no longer changes it.
   await choose(page, "Provider", "OpenAI")
-  await page.getByRole("button", { name: "This project", exact: true }).click()
+  await choose(page, "Namespace", "OpenCode · opencode")
   await expect(select("Model")).toContainText("GPT-5")
   await choose(page, "Variant", "Reasoning effort: high")
   await page.getByRole("button", { name: "Create agent" }).click()

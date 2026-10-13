@@ -10,7 +10,9 @@ import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { showToast } from "@/utils/toast"
 import { useOperatorClient } from "../data"
-import { useScopedProject } from "../project"
+import { useOperatorProjects, useScopedProject } from "../project"
+import { useConfirm } from "../ui/confirm"
+import { SelectV2 } from "../ui/select"
 import { EmptyState } from "../ui/empty-state"
 import { Field } from "../ui/field"
 import { PageHeader } from "../ui/page-header"
@@ -19,13 +21,12 @@ import { PermissionImpact } from "../ui/permission-impact"
 import { orderCheck, type Rule, rulesFromConfig, rulesToConfig } from "../ui/rules"
 import { useAgentPermissions, useRefreshAgent } from "./agent-permissions"
 import { AgentModelFields } from "./agent-model-fields"
-import { type Scope, ScopeSwitch } from "../ui/scope-switch"
 import { useAgents } from "./agents"
 import { agentPatch, type AgentForm, formFromSettings } from "./agent-form-state"
 import type { Flavor, Mode } from "./agent-type"
 import { HelperForm } from "./helper-form"
 import { requestError } from "./config-helpers"
-import { usePromptCatalog, useProfileNames } from "./profile-data"
+import { useNamespaces, usePromptCatalog, useProfileNames } from "./profile-data"
 import { OPENCODE } from "./profile-model"
 import { useProjectSettings } from "./project-prompt"
 import { useAgentLocks } from "../ui/permission-locks"
@@ -34,12 +35,17 @@ import { useProjectConfigWrite } from "../ui/project-config-copy"
 // The user kept the namespace's config: nothing was written.
 const CANCELLED = Symbol("cancelled")
 
+// Where a new agent is saved (agent_form_spec.md §1; capability_scopes_spec.md §11; global_and_opencode_namespaces_spec
+// §3): its namespace's default project, another project of it, the whole namespace (its folder's `.opencode`), or,
+// for the Global namespace, Global (every namespace that inherits it).
+type SaveIn = "default" | "project" | "namespace"
+
 // Create a new agent (an agent file or a config entry) or edit an existing one.
 export default function AgentFormPage() {
   const language = useLanguage()
   const params = useParams<{ name?: string }>()
   // Create agent… on a profile: the new agent uses that profile.
-  const [search] = useSearchParams<{ profile?: string }>()
+  const [search, setSearch] = useSearchParams<{ profile?: string }>()
   const names = useProfileNames()
   const settings = useProjectSettings()
   const navigate = useNavigate()
@@ -49,7 +55,19 @@ export default function AgentFormPage() {
   const directory = useScopedProject()
   const agents = useAgents()
   const editing = () => params.name !== undefined
-  const namespace = () => settings.data?.find((item) => item.key === directory())?.namespace ?? OPENCODE
+  const confirm = useConfirm()
+  const namespaces = useNamespaces()
+  const projects = useOperatorProjects()
+  // The namespace: the one chosen here, else the project in context's, else OpenCode.
+  const [chosen, setChosen] = createStore({ namespace: "", saveIn: "default" as SaveIn, project: "" })
+  const contextNamespace = () => settings.data?.find((item) => item.key === directory())?.namespace ?? OPENCODE
+  const namespace = () => chosen.namespace || contextNamespace()
+  const summary = () => namespaces.data?.find((item) => item.namespace.id === namespace())
+  const isGlobal = () => !!summary()?.global
+  const namespaceProjects = () => projects().filter((item) => item.namespace === namespace())
+  const defaultProject = () => summary()?.defaultProject ?? namespaceProjects()[0]?.directory
+  const projectLabel = (key: string | undefined) =>
+    projects().find((item) => item.directory === key)?.label ?? key?.split("/").filter(Boolean).at(-1) ?? ""
   const prompts = usePromptCatalog(namespace)
   const profile = () =>
     !editing() && search.profile ? prompts.query.data?.profiles.find((item) => item.id === search.profile) : undefined
@@ -59,7 +77,6 @@ export default function AgentFormPage() {
   const savedRules = () => JSON.stringify(rulesFromConfig(existing()?.settings.permission))
   const refresh = useRefreshAgent()
   const [store, setStore] = createStore({
-    scope: "project" as Scope,
     format: "file" as "file" | "config",
     form: formFromSettings("", {}),
     rules: [] as Rule[],
@@ -86,14 +103,31 @@ export default function AgentFormPage() {
     }),
   )
 
+  // Where it's written: the scope, and a folder of that namespace or project to write it from. An agent being edited
+  // stays where it is defined (its level); built-in agents' settings are this project's.
+  const scope = (): "global" | "namespace" | "project" => {
+    if (editing()) {
+      const level = existing()?.level.kind
+      return level === "global" ? "global" : level === "namespace" ? "namespace" : "project"
+    }
+    if (isGlobal()) return "global"
+    return chosen.saveIn === "namespace" ? "namespace" : "project"
+  }
+  const targetDirectory = () => {
+    if (editing()) return directory()
+    if (isGlobal()) return directory() ?? defaultProject()
+    if (chosen.saveIn === "project") return chosen.project || undefined
+    if (chosen.saveIn === "namespace") return defaultProject() ?? summary()?.namespace.folder
+    return defaultProject()
+  }
   // The config file and the agents folder at each scope, to say where the agent is saved.
   const layers = useQuery(() => ({
-    queryKey: api.key("config-layers", directory()),
-    enabled: !!directory(),
+    queryKey: api.key("config-layers", targetDirectory()),
+    enabled: !!targetDirectory(),
     queryFn: () =>
       api
         .client()
-        .operator.config.layers({ directory: directory() })
+        .operator.config.layers({ directory: targetDirectory() })
         .then((result) => result.data),
   }))
   const target = () => {
@@ -101,9 +135,16 @@ export default function AgentFormPage() {
     if (existing()?.source.kind === "file") return existing()?.source.path
     const found = layers.data
     if (!found) return undefined
-    if (!editing() && store.format === "file") return `${found.folders[store.scope]}/agents/${name}.md`
-    return language.t("operator.agentForm.configEntry", { file: found.targets[store.scope], name })
+    if (!editing() && store.format === "file") return `${found.folders[scope()]}/agents/${name}.md`
+    return language.t("operator.agentForm.configEntry", { file: found.targets[scope()] ?? "", name })
   }
+  // Where the agent is saved, in words (for the model's "copied in" note).
+  const where = () =>
+    scope() === "global"
+      ? language.t("operator.modelChain.settingsName")
+      : scope() === "namespace"
+        ? (summary()?.namespace.name ?? namespace())
+        : projectLabel(targetDirectory())
 
   const set = <K extends keyof AgentForm>(key: K, value: AgentForm[K]) => setStore("form", key, value)
   // A new agent works in agents/<name>/ of its project (its memory is kept there) unless its home is
@@ -114,14 +155,49 @@ export default function AgentFormPage() {
     if (!editing() && !homeChanged()) set("home", name.trim() ? `agents/${name.trim()}/` : "")
   }
   const done = (name: string) => {
-    void queryClient.invalidateQueries({ queryKey: api.key("agents", directory()) })
-    void refresh(directory() ?? "")
-    navigate(`/operator/agents/${encodeURIComponent(name)}?dir=${encodeURIComponent(directory() ?? "")}`)
+    const folder = targetDirectory() ?? directory() ?? ""
+    void queryClient.invalidateQueries({ queryKey: api.key("agents", folder) })
+    void refresh(folder)
+    navigate(`/operator/agents/${encodeURIComponent(name)}?dir=${encodeURIComponent(folder)}`)
   }
+
+  // Another namespace clears Save in, the prompt profile and a home folder of its own, after asking if any was set.
+  const chooseNamespace = async (id: string) => {
+    if (id === namespace()) return
+    const set = homeChanged() || !!profile() || chosen.saveIn !== "default"
+    if (
+      set &&
+      !(await confirm({
+        title: language.t("operator.agentForm.namespaceChangeTitle"),
+        description: language.t("operator.agentForm.namespaceChangeBody"),
+        confirm: language.t("operator.agentForm.namespaceChangeConfirm"),
+      }))
+    )
+      return
+    setChosen({ namespace: id, saveIn: "default", project: "" })
+    setHomeChanged(false)
+    named(store.form.name)
+    if (search.profile) setSearch({ profile: undefined })
+  }
+  const chooseSaveIn = (value: SaveIn) => {
+    setChosen({ saveIn: value, ...(value === "project" ? {} : { project: "" }) })
+    // A namespace's agent can't follow one project's small model.
+    if (value === "namespace" && store.form.modelSource === "small") set("modelSource", "default")
+  }
+  const saveInLabel = (value: SaveIn) =>
+    value === "default"
+      ? language.t("operator.agentForm.saveIn.default", {
+          project: defaultProject() ? projectLabel(defaultProject()) : language.t("operator.agentForm.noProject"),
+        })
+      : value === "project"
+        ? language.t("operator.agentForm.saveIn.project")
+        : language.t("operator.agentForm.saveIn.namespace")
 
   const save = async () => {
     if (orderCheck(store.rules).duplicates.length)
       return setStore("error", language.t("operator.agentPermissions.duplicatesBlock"))
+    if (!targetDirectory()) return setStore("error", language.t("operator.agentForm.noTarget"))
+    const folder = targetDirectory()!
     setStore({ saving: true, error: "" })
     const patch = agentPatch(store.form, existing()?.settings ?? {}, rulesToConfig(store.rules))
     const client = api.client()
@@ -129,15 +205,15 @@ export default function AgentFormPage() {
       editing()
         ? client.operator.agent.update({
             name: existing()!.name,
-            directory: directory(),
-            scope: store.scope,
+            directory: folder,
+            scope: scope(),
             ...patch,
             ...(confirmCopy ? { confirmCopy } : {}),
           })
         : client.operator.agent.create({
             name: store.form.name.trim(),
-            directory: directory(),
-            scope: store.scope,
+            directory: folder,
+            scope: scope(),
             format: store.format,
             ...patch,
             ...(confirmCopy ? { confirmCopy } : {}),
@@ -150,7 +226,7 @@ export default function AgentFormPage() {
         chosen
           ? client.operator.agentPrompt.update({
               name: store.form.name.trim(),
-              directory: directory(),
+              directory: folder,
               profile: chosen.id,
             })
           : undefined,
@@ -160,7 +236,7 @@ export default function AgentFormPage() {
           ? client.operator.agentPermissions.saveLocks(
               {
                 name: store.form.name.trim(),
-                directory: directory(),
+                directory: folder,
                 operatorPermissionLocks: { locks: locks.current().locks, inherit: inherit() },
               },
               { throwOnError: true },
@@ -175,7 +251,42 @@ export default function AgentFormPage() {
       .finally(() => setStore("saving", false))
   }
 
-  const fileAgent = () => existing()?.source.kind === "file"
+  // Saved in, for an agent being edited: where it is defined. Move to another project (§7).
+  const savedIn = () => {
+    const level = existing()?.level
+    if (!level) return ""
+    if (level.kind === "namespace")
+      return language.t("operator.agentForm.savedIn.namespace", {
+        name:
+          namespaces.data?.find((item) => item.namespace.id === level.namespace)?.namespace.name ??
+          level.namespace ??
+          "",
+      })
+    if (level.kind === "project")
+      return language.t("operator.agentForm.savedIn.project", { name: projectLabel(directory()) })
+    return language.t(`operator.agentForm.savedIn.${level.kind}`)
+  }
+  const movable = () => !!existing()?.level && !["builtin", "environment"].includes(existing()!.level.kind)
+  const [move, setMove] = createStore({ open: false, project: "", busy: false })
+  const moveTargets = () =>
+    projects().filter((item) => existing()?.level.kind !== "project" || item.directory !== directory())
+  const moveAgent = async () => {
+    const agent = existing()
+    if (!agent || !move.project) return
+    setMove("busy", true)
+    await api
+      .client()
+      .operator.agent.move({ name: agent.name, directory: directory(), project: move.project }, { throwOnError: true })
+      .then(() => {
+        showToast({
+          title: language.t("operator.agentForm.moved", { name: agent.name, project: projectLabel(move.project) }),
+        })
+        void queryClient.invalidateQueries({ queryKey: api.key("agents") })
+        navigate(`/operator/agents/${encodeURIComponent(agent.name)}?dir=${encodeURIComponent(move.project)}`)
+      })
+      .catch((error: unknown) => setStore("error", requestError(error)))
+      .finally(() => setMove({ busy: false, open: false }))
+  }
 
   // The Type (agent_types_spec.md §2): Helper (new agents only) switches to the helper's form (helper-form.tsx).
   const [helper, setHelper] = createSignal(false)
@@ -254,23 +365,105 @@ export default function AgentFormPage() {
               </Field>
             </Show>
             <Show
-              when={!fileAgent()}
+              when={!editing()}
               fallback={
-                <p data-slot="operator-note">
-                  {language.t("operator.agentForm.fileNote", { path: existing()?.source.path ?? "" })}
-                </p>
+                <Field
+                  group
+                  label={language.t("operator.agentForm.savedIn")}
+                  hint={language.t("operator.help.agentSavedIn")}
+                >
+                  <div class="flex flex-wrap items-center gap-2" data-testid="agent-saved-in">
+                    <span>{savedIn()}</span>
+                    <Show when={movable()}>
+                      <ButtonV2
+                        size="small"
+                        variant="neutral"
+                        onClick={() => setMove({ open: !move.open, project: "" })}
+                      >
+                        {language.t("operator.agentForm.move")}
+                      </ButtonV2>
+                    </Show>
+                  </div>
+                  <Show when={move.open}>
+                    <div class="flex flex-wrap items-center gap-2" data-testid="agent-move">
+                      <SelectV2<string>
+                        appearance="base"
+                        aria-label={language.t("operator.agentForm.moveTo")}
+                        placeholder={language.t("operator.agentForm.moveTo")}
+                        options={moveTargets().map((item) => item.directory)}
+                        current={move.project || undefined}
+                        label={(key) => projectLabel(key)}
+                        optionTitle={(key) => key}
+                        onSelect={(key) => key && setMove("project", key)}
+                      />
+                      <ButtonV2
+                        size="small"
+                        variant="contrast"
+                        disabled={!move.project || move.busy}
+                        onClick={() => void moveAgent()}
+                      >
+                        {language.t("operator.agentForm.moveConfirm")}
+                      </ButtonV2>
+                      <span data-slot="operator-note">{language.t("operator.agentForm.moveNote")}</span>
+                    </div>
+                  </Show>
+                </Field>
               }
             >
               <Field
                 group
-                label={language.t("operator.agentForm.scope")}
-                hint={
-                  editing()
-                    ? language.t("operator.agentForm.scopeEditHint")
-                    : language.t("operator.agentForm.scopeNewHint")
-                }
+                label={language.t("operator.agentForm.namespace")}
+                hint={language.t("operator.help.agentNamespace")}
               >
-                <ScopeSwitch value={store.scope} onChange={(scope) => setStore("scope", scope)} />
+                <SelectV2<string>
+                  appearance="base"
+                  aria-label={language.t("operator.agentForm.namespace")}
+                  options={(namespaces.data ?? []).map((item) => item.namespace.id)}
+                  current={namespace()}
+                  label={(id) => {
+                    const found = namespaces.data?.find((item) => item.namespace.id === id)
+                    return found ? `${found.namespace.name} · ${id}` : id
+                  }}
+                  optionTitle={(id) =>
+                    namespaces.data?.find((item) => item.namespace.id === id)?.namespace.folder ?? id
+                  }
+                  onSelect={(id) => id && void chooseNamespace(id)}
+                />
+              </Field>
+              <Field
+                group
+                label={language.t("operator.agentForm.saveIn")}
+                hint={language.t("operator.help.agentSaveIn")}
+              >
+                <Show
+                  when={!isGlobal()}
+                  fallback={
+                    <span data-testid="agent-save-in-global">{language.t("operator.agentForm.saveIn.global")}</span>
+                  }
+                >
+                  <div class="flex flex-wrap items-center gap-2">
+                    <SelectV2<SaveIn>
+                      appearance="base"
+                      aria-label={language.t("operator.agentForm.saveIn")}
+                      options={["default", "project", "namespace"]}
+                      current={chosen.saveIn}
+                      label={saveInLabel}
+                      onSelect={(value) => value && chooseSaveIn(value)}
+                    />
+                    <Show when={chosen.saveIn === "project"}>
+                      <SelectV2<string>
+                        appearance="base"
+                        aria-label={language.t("operator.agentForm.chooseProject")}
+                        placeholder={language.t("operator.agentForm.chooseProject")}
+                        options={namespaceProjects().map((item) => item.directory)}
+                        current={chosen.project || undefined}
+                        label={(key) => projectLabel(key)}
+                        optionTitle={(key) => key}
+                        onSelect={(key) => key && setChosen("project", key)}
+                      />
+                    </Show>
+                  </div>
+                </Show>
               </Field>
             </Show>
             <Show when={!editing()}>
@@ -292,7 +485,7 @@ export default function AgentFormPage() {
                 </SegmentedControlV2>
               </Field>
             </Show>
-            <Show when={!fileAgent() && target()}>
+            <Show when={(!editing() || existing()?.source.kind !== "file") && target()}>
               {(path) => (
                 <p data-slot="operator-note" data-testid="agent-target">
                   {language.t("operator.agentForm.writesTo", { path: path() })}
@@ -341,14 +534,11 @@ export default function AgentFormPage() {
             <AgentModelFields
               form={store.form}
               set={(key, value) => set(key, value)}
-              directory={directory()}
-              scope={store.scope}
+              directory={targetDirectory()}
+              scope={scope()}
+              namespace={namespace()}
               editing={editing()}
-              where={
-                store.scope === "global"
-                  ? language.t("operator.modelChain.settingsName")
-                  : (settings.data?.find((item) => item.key === directory())?.name ?? directory() ?? "")
-              }
+              where={where()}
             />
             <div data-slot="operator-form-row">
               <Field label={language.t("operator.agent.temperature")} hint={language.t("operator.help.temperature")}>

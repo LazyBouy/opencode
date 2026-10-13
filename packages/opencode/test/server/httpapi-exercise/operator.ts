@@ -189,6 +189,15 @@ export const operatorScenarios: Scenario[] = [
       body: { temperature: 0.4 },
     }))
     .status(404),
+  // Moving an agent (agent_form_spec.md §7): a built-in agent is part of every project.
+  http.protected
+    .post("/operator/agent/{name}/move", "operator.agent.move")
+    .at((ctx) => ({
+      path: route("/operator/agent/{name}/move", { name: "build" }),
+      headers: ctx.headers(),
+      body: { project: "/tmp/elsewhere" },
+    }))
+    .status(400),
   http.protected
     .delete("/operator/agent/{name}", "operator.agent.remove")
     .at((ctx) => ({

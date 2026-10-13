@@ -17,6 +17,9 @@ import { configEntryNameFromPath } from "@/config/entry-name"
 import { InstanceState } from "@/effect/instance-state"
 import { OperatorProjects } from "./projects"
 import { OperatorConfig } from "./config"
+import { OperatorNamespaceScope } from "./namespace-scope"
+import { OperatorProfileStore } from "./profile-store"
+import { OperatorScopes } from "./scopes"
 import { OperatorProjectConfig } from "./project-config"
 import { OperatorModels } from "./models"
 import { OperatorSmallAgentNotes } from "./small-agent-notes"
@@ -28,9 +31,19 @@ export const Source = Schema.Struct({
   customized: Schema.Boolean.annotate({ description: "A built-in agent that config or a file changes" }),
 }).annotate({ identifier: "OperatorAgentSource" })
 
+// Where an agent is defined (agent_form_spec.md §1, the form's "Saved in"): OpenCode's own, Global's folder or
+// config (every namespace that inherits Global), a namespace's (every project in it), this project, or the
+// environment (OPENCODE_CONFIG and its kind).
+export const Level = Schema.Struct({
+  kind: Schema.Literals(["builtin", "global", "namespace", "project", "environment"]),
+  namespace: Schema.optional(Schema.String).annotate({ description: "A namespace's agent: the namespace's id" }),
+}).annotate({ identifier: "OperatorAgentLevel" })
+export type Level = typeof Level.Type
+
 export const Info = Schema.Struct({
   ...Agent.Info.fields,
   source: Source,
+  level: Level,
   home: Schema.optional(Schema.String).annotate({ description: "Folder new sessions as this agent open in" }),
   disabled: Schema.Boolean.annotate({ description: "Turned off with `disable: true`; such agents cannot be used" }),
   settings: Schema.Record(Schema.String, Schema.Unknown).annotate({
@@ -129,7 +142,7 @@ export interface Interface {
   readonly fileOf: (name: string) => Effect.Effect<string | undefined>
   /** Writes a new agent at the scope, as an agent file or a config entry; returns the file written. */
   readonly create: (
-    scope: OperatorConfig.Scope,
+    scope: OperatorConfig.WriteScope,
     name: string,
     patch: Fields,
     format?: Format,
@@ -141,7 +154,7 @@ export interface Interface {
   readonly promptOrigin: (name: string) => Effect.Effect<PromptOrigin>
   /** Edits the agent's file, or for built-in and config agents, its `agent.<name>` config at the scope. */
   readonly update: (
-    scope: OperatorConfig.Scope,
+    scope: OperatorConfig.WriteScope,
     name: string,
     patch: Fields,
   ) => Effect.Effect<
@@ -150,11 +163,23 @@ export interface Interface {
   >
   /** Deletes the agent's file or config entry. Built-in agents can only be turned off. */
   readonly remove: (
-    scope: OperatorConfig.Scope,
+    scope: OperatorConfig.WriteScope,
     name: string,
   ) => Effect.Effect<
     string,
     NotFoundError | InvalidError | OperatorConfig.InvalidError | OperatorProjectConfig.CopyNeededError
+  >
+  /**
+   * Moves an agent to another project (agent_form_spec.md §1, §7): its definition becomes an agent file there, with
+   * its prompt setting (profile, override), and leaves where it was. Its sessions stay. Returns the new file and the
+   * level it left.
+   */
+  readonly move: (
+    name: string,
+    project: string,
+  ) => Effect.Effect<
+    { path: string; from: Level },
+    NotFoundError | ConflictError | InvalidError | OperatorConfig.InvalidError | OperatorProjectConfig.CopyNeededError
   >
 }
 
@@ -167,7 +192,42 @@ const layer = Layer.effect(
     const config = yield* Config.Service
     const operatorConfig = yield* OperatorConfig.Service
     const models = yield* OperatorModels.Service
+    const store = yield* OperatorProfileStore.Service
     const db = (yield* Database.Service).db
+
+    // The level a definition file belongs to, and a config agent's: the last config source defining it.
+    const levelOfScope = (scope: OperatorScopes.Scope): Level =>
+      scope.kind === "namespace"
+        ? { kind: "namespace", namespace: scope.namespace }
+        : scope.kind === "global"
+          ? { kind: "global" }
+          : scope.kind === "environment"
+            ? { kind: "environment" }
+            : { kind: "project" }
+    const configLevels = Effect.fnUntraced(function* (names: ReadonlyArray<string>) {
+      const found = new Map<string, Level>()
+      if (!names.length) return found
+      const layers = yield* operatorConfig.layers()
+      for (const source of layers.sources) {
+        const data = parse(source.text) as
+          | { agent?: Record<string, unknown>; mode?: Record<string, unknown> }
+          | undefined
+        for (const name of names) {
+          if (!data?.agent?.[name] && !data?.mode?.[name]) continue
+          found.set(
+            name,
+            source.kind === "global"
+              ? { kind: "global" }
+              : source.kind === "namespace"
+                ? { kind: "namespace", namespace: layers.namespace }
+                : source.kind === "env"
+                  ? { kind: "environment" }
+                  : { kind: "project" },
+          )
+        }
+      }
+      return found
+    })
 
     // Same discovery as ConfigAgent.load/loadMode; later directories win, as they do when config merges.
     const files = Effect.fnUntraced(function* () {
@@ -216,7 +276,19 @@ const layer = Layer.effect(
       const notes = yield* Effect.promise(() => OperatorSmallAgentNotes.forProject(OperatorConfig.projectRoot(ctx)))
       const cleared = (name: string) =>
         configured[name]?.modelSource === "small" && notes[name] ? { variantCleared: notes[name] } : {}
-      const active = yield* Effect.forEach(yield* agents.list(), (agent) => {
+      const layout = yield* Effect.promise(() => OperatorScopes.layout([OperatorConfig.projectRoot(ctx)]))
+      const all = yield* agents.list()
+      const inConfig = yield* configLevels([
+        ...all.filter((agent) => !agent.native && !paths.has(agent.name)).map((agent) => agent.name),
+        ...Object.keys(configured).filter((name) => configured[name]?.disable && !paths.has(name)),
+      ])
+      const levelOf = (name: string, native: boolean): Level => {
+        if (native) return { kind: "builtin" }
+        const file = paths.get(name)
+        if (file) return levelOfScope(OperatorScopes.classify(file, layout))
+        return inConfig.get(name) ?? { kind: "project" }
+      }
+      const active = yield* Effect.forEach(all, (agent) => {
         const file = paths.get(agent.name)
         return models.resolve(agent, file).pipe(
           Effect.map((modelSource) => ({
@@ -227,6 +299,7 @@ const layer = Layer.effect(
               path: file,
               customized: !!agent.native && (!!file || agent.name in configured),
             },
+            level: levelOf(agent.name, !!agent.native),
             home: configured[agent.name]?.home,
             disabled: false,
             settings: configured[agent.name] ?? {},
@@ -248,6 +321,7 @@ const layer = Layer.effect(
             path: paths.get(name),
             customized: false,
           },
+          level: levelOf(name, false),
           home: value?.home,
           disabled: true,
           settings: value ?? {},
@@ -276,8 +350,29 @@ const layer = Layer.effect(
         yield* Effect.promise(() => fs.mkdir(folder, { recursive: true }))
       })
 
+    // The folder an agent file goes in: Global's, the namespace folder's `.opencode` (this project's namespace; Global
+    // has none: its agents are Global's), or the project's `.opencode`.
+    const folderOf = Effect.fnUntraced(function* (scope: OperatorConfig.WriteScope) {
+      const ctx = yield* InstanceState.context
+      if (scope !== "namespace") return OperatorConfig.scopeDirectory(scope, ctx)
+      const layer = yield* Effect.promise(() => OperatorNamespaceScope.layerOf(ctx.directory, ctx.worktree))
+      const found = yield* Effect.promise(() => OperatorNamespaceScope.namespaceLayer(layer.namespace))
+      if (found.global || !found.target)
+        return yield* new InvalidError({
+          message: "Global has no namespace folder of its own: save the agent in Global",
+        })
+      return found.target
+    })
+    // A namespace's agent serves every project in it, each with its own small model: it can't follow one.
+    const checkScope = (scope: OperatorConfig.WriteScope, patch: Fields) =>
+      scope === "namespace" && patch.modelSource === "small"
+        ? new InvalidError({
+            message: "An agent of a whole namespace can't use the Small model (each project has its own): pick a model",
+          })
+        : undefined
+
     const create = Effect.fn("OperatorAgents.create")(function* (
-      scope: OperatorConfig.Scope,
+      scope: OperatorConfig.WriteScope,
       name: string,
       patch: Fields,
       format: Format = "file",
@@ -285,14 +380,18 @@ const layer = Layer.effect(
       if (!Schema.is(Name)(name)) return yield* new InvalidError({ message: `"${name}" is not a valid agent name` })
       if ((yield* list()).some((agent) => agent.name === name))
         return yield* new ConflictError({ message: `An agent named "${name}" already exists` })
+      const refused = checkScope(scope, patch)
+      if (refused) return yield* refused
       const values = present(settings(patch))
+      // Its home is inside each project it runs in: made here for a project's agent (and Global's, as before).
+      const home = scope === "namespace" ? Effect.void : ensureHome(patch.home)
       if (format === "config") {
-        yield* ensureHome(patch.home)
+        yield* home
         return (yield* operatorConfig.update(scope, { agent: { [name]: values } })).path
       }
-      const file = path.join(OperatorConfig.scopeDirectory(scope, yield* InstanceState.context), "agents", `${name}.md`)
+      const file = path.join(yield* folderOf(scope), "agents", `${name}.md`)
       yield* write(file, omitPrompt(values), String(values.prompt ?? ""))
-      yield* ensureHome(patch.home)
+      yield* home
       return file
     })
 
@@ -326,13 +425,15 @@ const layer = Layer.effect(
     })
 
     const update = Effect.fn("OperatorAgents.update")(function* (
-      scope: OperatorConfig.Scope,
+      scope: OperatorConfig.WriteScope,
       name: string,
       patch: Fields,
     ) {
       const agent = (yield* list()).find((item) => item.name === name)
       if (!agent) return yield* new NotFoundError({ message: `No agent named "${name}"` })
-      yield* ensureHome(patch.home)
+      const refused = checkScope(agent.level.kind === "namespace" ? "namespace" : scope, patch)
+      if (refused) return yield* refused
+      if (agent.level.kind !== "namespace") yield* ensureHome(patch.home)
       if (agent.source.kind === "file" && agent.source.path) {
         const file = agent.source.path
         const current = matter(yield* Effect.promise(() => fs.readFile(file, "utf8")))
@@ -350,7 +451,7 @@ const layer = Layer.effect(
       return (yield* operatorConfig.update(scope, { agent: { [name]: values } })).path
     })
 
-    const remove = Effect.fn("OperatorAgents.remove")(function* (scope: OperatorConfig.Scope, name: string) {
+    const remove = Effect.fn("OperatorAgents.remove")(function* (scope: OperatorConfig.WriteScope, name: string) {
       const agent = (yield* list()).find((item) => item.name === name)
       if (!agent) return yield* new NotFoundError({ message: `No agent named "${name}"` })
       if (agent.source.kind === "builtin")
@@ -380,14 +481,60 @@ const layer = Layer.effect(
       return (yield* files()).get(name)
     })
 
-    return Service.of({ list, fileOf, create, promptOrigin, update, remove })
+    const move = Effect.fn("OperatorAgents.move")(function* (name: string, project: string) {
+      const agent = (yield* list()).find((item) => item.name === name)
+      if (!agent) return yield* new NotFoundError({ message: `No agent named "${name}"` })
+      if (agent.level.kind === "builtin")
+        return yield* new InvalidError({ message: `"${name}" is built in: it is part of every project` })
+      if (agent.level.kind === "environment")
+        return yield* new InvalidError({ message: `"${name}" is set by the environment: it can't be moved` })
+      const ctx = yield* InstanceState.context
+      const here = OperatorConfig.projectRoot(ctx)
+      const target = path.resolve(project)
+      const found = yield* Effect.promise(() => OperatorProjects.projectOf(target))
+      if (!found || found.key !== target) return yield* new InvalidError({ message: `${target} is not a project` })
+      if (target === here && agent.level.kind === "project")
+        return yield* new InvalidError({ message: `"${name}" is already this project's agent` })
+      const file = path.join(target, ".opencode", "agents", `${name}.md`)
+      if (
+        yield* Effect.promise(() =>
+          fs.stat(file).then(
+            () => true,
+            () => false,
+          ),
+        )
+      )
+        return yield* new ConflictError({ message: `${target} has an agent "${name}" already` })
+      // Its definition as it is: its file's, else its config entry's (the prompt becomes the file's body).
+      const definition =
+        agent.source.kind === "file" && agent.source.path
+          ? matter(yield* Effect.promise(() => fs.readFile(agent.source.path!, "utf8")))
+          : undefined
+      const data = definition ? { ...definition.data } : present({ ...agent.settings })
+      const prompt = definition ? definition.content : String(data.prompt ?? "")
+      yield* write(file, omitPrompt(data), prompt)
+      // It leaves where it was: its file goes, or its config entry.
+      if (agent.source.kind === "file" && agent.source.path)
+        yield* Effect.promise(() => fs.rm(agent.source.path!, { force: true }))
+      else {
+        const scope =
+          agent.level.kind === "global" ? "global" : agent.level.kind === "namespace" ? "namespace" : "project"
+        yield* operatorConfig.update(scope, { agent: { [name]: null } })
+      }
+      // Its prompt setting goes with it, when the target's namespace has its profile.
+      const setting = yield* store.agent(here, name)
+      if (Object.keys(setting).length) yield* store.setAgent(target, name, setting).pipe(Effect.ignore)
+      return { path: file, from: agent.level }
+    })
+
+    return Service.of({ list, fileOf, create, promptOrigin, update, remove, move })
   }),
 )
 
 export const node = LayerNode.make({
   service: Service,
   layer,
-  deps: [Agent.node, Config.node, OperatorConfig.node, OperatorModels.node, Database.node],
+  deps: [Agent.node, Config.node, OperatorConfig.node, OperatorModels.node, OperatorProfileStore.node, Database.node],
 })
 
 // The patch as config/frontmatter values: reset settings become null, which removes them.

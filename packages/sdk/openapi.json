@@ -15350,7 +15350,7 @@
             "name": "scope",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/OperatorConfigScope"
+              "$ref": "#/components/schemas/OperatorConfigWriteScope"
             },
             "required": true
           },
@@ -15420,7 +15420,7 @@
             }
           }
         },
-        "description": "Write a new agent at the global or project scope: a markdown file in the `agents` folder, or `agent.<name>` in the config file. The project reloads so the agent can be used.",
+        "description": "Write a new agent at Global, this project's namespace (every project in it: its folder's `.opencode`) or this project: a markdown file in the `agents` folder, or `agent.<name>` in the config file. The projects that read it reload so the agent can be used. A namespace's agent can't use the Small model.",
         "summary": "Create an agent",
         "requestBody": {
           "content": {
@@ -15554,7 +15554,7 @@
             "name": "scope",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/OperatorConfigScope"
+              "$ref": "#/components/schemas/OperatorConfigWriteScope"
             },
             "required": true
           },
@@ -15749,7 +15749,7 @@
             "name": "scope",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/OperatorConfigScope"
+              "$ref": "#/components/schemas/OperatorConfigWriteScope"
             },
             "required": true
           },
@@ -15825,6 +15825,119 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.agent.remove({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/agent/{name}/move": {
+      "post": {
+        "tags": ["operator project"],
+        "operationId": "operator.agent.move",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The agent file written in the project, and where the agent was",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAgentMoved"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorAgentInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorAgentInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorAgentNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAgentNotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "OperatorAgentConflictError | OperatorProjectConfigCopyNeededError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorAgentConflictError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/OperatorProjectConfigCopyNeededError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "The agent's definition becomes an agent file in the project (`.opencode/agents/<name>.md`), with its prompt setting when that project's namespace has its profile, and leaves where it was (its file, or its entry in this project's, the namespace's or Global's config). Its sessions stay. Built-in agents and agents set by the environment can't move.",
+        "summary": "Move an agent to another project",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "project": {
+                    "type": "string",
+                    "description": "The project it moves to"
+                  }
+                },
+                "required": ["project"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.agent.move({\n  ...\n})"
           }
         ]
       }
@@ -38060,6 +38173,20 @@
         "required": ["kind", "customized"],
         "additionalProperties": false
       },
+      "OperatorAgentLevel": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["builtin", "global", "namespace", "project", "environment"]
+          },
+          "namespace": {
+            "type": "string"
+          }
+        },
+        "required": ["kind"],
+        "additionalProperties": false
+      },
       "OperatorAgentModel": {
         "type": "object",
         "properties": {
@@ -38177,6 +38304,9 @@
           "source": {
             "$ref": "#/components/schemas/OperatorAgentSource"
           },
+          "level": {
+            "$ref": "#/components/schemas/OperatorAgentLevel"
+          },
           "home": {
             "type": "string"
           },
@@ -38209,16 +38339,12 @@
             "$ref": "#/components/schemas/OperatorAgentVariantCleared"
           }
         },
-        "required": ["name", "mode", "permission", "options", "source", "disabled", "settings", "sessions"],
+        "required": ["name", "mode", "permission", "options", "source", "level", "disabled", "settings", "sessions"],
         "additionalProperties": false
       },
       "OperatorAgentFormat": {
         "type": "string",
         "enum": ["file", "config"]
-      },
-      "OperatorConfigScope": {
-        "type": "string",
-        "enum": ["global", "project"]
       },
       "OperatorAgentWritten": {
         "type": "object",
@@ -38291,6 +38417,19 @@
           }
         },
         "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorAgentMoved": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "from": {
+            "$ref": "#/components/schemas/OperatorAgentLevel"
+          }
+        },
+        "required": ["path", "from"],
         "additionalProperties": false
       },
       "OperatorTool": {
@@ -41459,6 +41598,10 @@
         },
         "required": ["name", "data"],
         "additionalProperties": false
+      },
+      "OperatorConfigScope": {
+        "type": "string",
+        "enum": ["global", "project"]
       },
       "OperatorAgentPermissionsWritten": {
         "type": "object",
