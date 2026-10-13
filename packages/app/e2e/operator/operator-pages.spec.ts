@@ -240,10 +240,10 @@ test("the config page has no scope switch, and says where each setting comes fro
   await expect(page.locator('[data-component="operator-scope-switch"]')).toHaveCount(0)
   const sources = page.locator('[data-component="operator-sources"]')
   await expect(sources).toContainText("Global base")
-  await expect(sources).toContainText("OpenCode's config")
+  await expect(sources).toContainText("Namespace config")
   await expect(sources).toContainText("This project")
   await expect(page.getByTestId("config-origins")).toContainText("model")
-  await expect(page.getByTestId("config-origins")).toContainText("OpenCode's config")
+  await expect(page.getByTestId("config-origins")).toContainText("Namespace config")
 })
 
 test("capabilities list tools by origin and connect an MCP server", async ({ page }) => {

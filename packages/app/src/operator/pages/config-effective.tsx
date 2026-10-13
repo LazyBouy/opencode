@@ -33,6 +33,8 @@ export function ConfigEffective(props: {
   variables?: Record<string, string>
   sources: ReadonlyArray<ConfigSource>
   label: (source: Pick<ConfigSource, "kind" | "path" | "variable">) => string
+  /** The namespace's name, id and file, on a "Namespace config" source. */
+  namespaceTitle?: string
   effectiveHint: string
   sourcesHint: string
   /** Inside Settings, under the section's own heading. */
@@ -61,7 +63,7 @@ export function ConfigEffective(props: {
                 <dt>
                   <code>{key}</code>
                 </dt>
-                <dd>
+                <dd title={kind === "namespace" ? props.namespaceTitle : undefined}>
                   <Tag variant={local(kind) ? "accent" : "neutral"}>
                     {props.label({ kind, path: "", variable: props.variables?.[key] })}
                   </Tag>
@@ -82,7 +84,7 @@ export function ConfigEffective(props: {
             {(source) => (
               <li>
                 <details>
-                  <summary>
+                  <summary title={source.kind === "namespace" ? props.namespaceTitle : undefined}>
                     <Tag variant={local(source.kind) || source.kind === "namespace" ? "accent" : "neutral"}>
                       {props.label(source)}
                     </Tag>

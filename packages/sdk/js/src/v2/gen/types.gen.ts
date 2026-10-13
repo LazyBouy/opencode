@@ -3343,6 +3343,31 @@ export type OperatorNamespaceEffectiveConfig = {
   }
 }
 
+export type OperatorConfigOption = {
+  /**
+   * The option's full path; <…> is a key of your choosing
+   */
+  path: string
+  /**
+   * Its top-level key
+   */
+  group: string
+  /**
+   * Its type in words: string, number, boolean, object, list of …
+   */
+  type: string
+  values?: Array<string>
+  default?: string
+  description: string
+  /**
+   * A short JSONC snippet
+   */
+  example: string
+  deprecated?: string
+  fork?: boolean
+  docs?: string
+}
+
 export type OperatorProjectStatus = "draft" | "active" | "paused" | "completed" | "archived"
 
 export type OperatorProjectGroup = {
@@ -12907,6 +12932,31 @@ export type OperatorNamespaceConfigEffectiveResponses = {
 
 export type OperatorNamespaceConfigEffectiveResponse =
   OperatorNamespaceConfigEffectiveResponses[keyof OperatorNamespaceConfigEffectiveResponses]
+
+export type OperatorConfigReferenceData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/operator/config/reference"
+}
+
+export type OperatorConfigReferenceErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorConfigReferenceError = OperatorConfigReferenceErrors[keyof OperatorConfigReferenceErrors]
+
+export type OperatorConfigReferenceResponses = {
+  /**
+   * Every config option, by path
+   */
+  200: Array<OperatorConfigOption>
+}
+
+export type OperatorConfigReferenceResponse = OperatorConfigReferenceResponses[keyof OperatorConfigReferenceResponses]
 
 export type OperatorProjectRecordListData = {
   body?: never

@@ -667,6 +667,32 @@ function levelFor(state: OperatorMock, name: "namespace" | "project", namespace 
   }
 }
 
+const option = (path: string, description: string, extra: Record<string, unknown> = {}) => ({
+  path,
+  group: path.split(".")[0]!,
+  type: "string",
+  description,
+  example: `{ ${JSON.stringify(path)}: "…" }`,
+  ...extra,
+})
+
+function configReference() {
+  return [
+    option("model", "The model to use, as provider/model", { docs: "https://opencode.ai/docs/models" }),
+    option("small_model", "A cheaper model for titles", { docs: "https://opencode.ai/docs/models" }),
+    option("provider", "Providers' settings", { type: "object" }),
+    option("provider.<id>.options.baseURL", "The URL its requests go to"),
+    option("mode", "Use `agent` instead.", { type: "object", deprecated: "Use `agent` instead." }),
+    option("operatorRecordCalls", "Record each model call", { type: "boolean", fork: true }),
+    option("experimental", "Experimental features", { type: "object" }),
+    ...Array.from({ length: 10 }, (_, index) =>
+      option(`experimental.flag_${String(index + 1).padStart(2, "0")}`, `Experimental flag ${index + 1}`, {
+        type: "boolean",
+      }),
+    ),
+  ]
+}
+
 export async function mockOperator(page: Page) {
   const prompt = createPromptMock(
     [{ key: directory, name: "smoke-project" }],
@@ -1424,7 +1450,7 @@ export async function mockOperator(page: Page) {
           namespace: `${workspace}/.opencode`,
         },
         namespace: "opencode",
-        origins: { theme: "global", model: "namespace", username: "directory" },
+        origins: { theme: "global", model: "namespace", small_model: "namespace", username: "directory" },
       })
     const own = `${directory}/.opencode/opencode.jsonc`
     const namespaceFile = `${workspace}/opencode/.opencode/opencode.jsonc`
@@ -1484,6 +1510,8 @@ export async function mockOperator(page: Page) {
       state.projectConfig = { mode: "namespace", text: "", tracked: false }
       return json(route, { trash: "trash-config", reload: "now" })
     }
+    // The config reference (specs/docs/issues/003): a few options of the schema, and 11 in one group (paged).
+    if (url.pathname === "/operator/config/reference") return json(route, configReference())
     if (url.pathname === "/operator/config/compare")
       return json(route, {
         project: { file: own, text: state.projectConfig.text },

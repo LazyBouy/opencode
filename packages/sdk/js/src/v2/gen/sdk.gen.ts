@@ -193,6 +193,8 @@ import type {
   OperatorConfigLayersResponses,
   OperatorConfigProjectErrors,
   OperatorConfigProjectResponses,
+  OperatorConfigReferenceErrors,
+  OperatorConfigReferenceResponses,
   OperatorConfigResolvedErrors,
   OperatorConfigResolvedResponses,
   OperatorConfigRevertErrors,
@@ -3893,69 +3895,20 @@ export class NamespaceConfig extends HeyApiClient {
   }
 }
 
-export class ProjectRecord extends HeyApiClient {
-  /**
-   * List projects' records
-   *
-   * Each project's description, status, manager, members (the agents that may participate) and groups. A project without a record is active, with no members (every agent may participate).
-   */
-  public list<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).get<
-      OperatorProjectRecordListResponses,
-      OperatorProjectRecordListErrors,
-      ThrowOnError
-    >({ url: "/operator/project-records", ...options })
-  }
-
-  /**
-   * Change a project's record
-   *
-   * Change a project's description, status, manager, members or groups. The manager and every group member must be members when the project names members.
-   */
-  public update<ThrowOnError extends boolean = false>(
-    parameters?: {
-      key?: string
-      description?: string
-      status?: OperatorProjectStatus
-      manager?: string
-      members?: Array<string>
-      groups?: Array<OperatorProjectGroup>
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "body", key: "key" },
-            { in: "body", key: "description" },
-            { in: "body", key: "status" },
-            { in: "body", key: "manager" },
-            { in: "body", key: "members" },
-            { in: "body", key: "groups" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).put<
-      OperatorProjectRecordUpdateResponses,
-      OperatorProjectRecordUpdateErrors,
-      ThrowOnError
-    >({
-      url: "/operator/project-records",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
 export class Config2 extends HeyApiClient {
+  /**
+   * The config reference
+   *
+   * Every option OpenCode's config accepts, built from the config schema (the console's own keys included): its path, type and allowed values, default, description, a JSONC example, whether it is deprecated or the console's own, and OpenCode's documentation for its section.
+   */
+  public reference<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<
+      OperatorConfigReferenceResponses,
+      OperatorConfigReferenceErrors,
+      ThrowOnError
+    >({ url: "/operator/config/reference", ...options })
+  }
+
   /**
    * List config layers
    *
@@ -4217,6 +4170,68 @@ export class Config2 extends HeyApiClient {
       url: "/operator/config/schema",
       ...options,
       ...params,
+    })
+  }
+}
+
+export class ProjectRecord extends HeyApiClient {
+  /**
+   * List projects' records
+   *
+   * Each project's description, status, manager, members (the agents that may participate) and groups. A project without a record is active, with no members (every agent may participate).
+   */
+  public list<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<
+      OperatorProjectRecordListResponses,
+      OperatorProjectRecordListErrors,
+      ThrowOnError
+    >({ url: "/operator/project-records", ...options })
+  }
+
+  /**
+   * Change a project's record
+   *
+   * Change a project's description, status, manager, members or groups. The manager and every group member must be members when the project names members.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters?: {
+      key?: string
+      description?: string
+      status?: OperatorProjectStatus
+      manager?: string
+      members?: Array<string>
+      groups?: Array<OperatorProjectGroup>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "key" },
+            { in: "body", key: "description" },
+            { in: "body", key: "status" },
+            { in: "body", key: "manager" },
+            { in: "body", key: "members" },
+            { in: "body", key: "groups" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorProjectRecordUpdateResponses,
+      OperatorProjectRecordUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/operator/project-records",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 }
@@ -6949,14 +6964,14 @@ export class Operator extends HeyApiClient {
     return (this._namespaceConfig ??= new NamespaceConfig({ client: this.client }))
   }
 
-  private _projectRecord?: ProjectRecord
-  get projectRecord(): ProjectRecord {
-    return (this._projectRecord ??= new ProjectRecord({ client: this.client }))
-  }
-
   private _config?: Config2
   get config(): Config2 {
     return (this._config ??= new Config2({ client: this.client }))
+  }
+
+  private _projectRecord?: ProjectRecord
+  get projectRecord(): ProjectRecord {
+    return (this._projectRecord ??= new ProjectRecord({ client: this.client }))
   }
 
   private _agent?: Agent

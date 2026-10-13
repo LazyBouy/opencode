@@ -1281,6 +1281,19 @@ export const operatorScenarios: Scenario[] = [
     .status(400),
   // Providers connected or disconnected (specs/docs/issues/001): the projects still waiting to reload.
   http.protected.get("/operator/model/providers-waiting", "operator.model.providersWaiting").json(200, array),
+  // The Config page's reference (specs/docs/issues/003): every option of the config schema, each described.
+  http.protected.get("/operator/config/reference", "operator.config.reference").json(200, (body) => {
+    array(body)
+    const paths = new Set((body as Array<{ path: string; description: string }>).map((item) => item.path))
+    check(
+      paths.has("provider.<id>.options") && paths.has("operatorRecordCalls"),
+      "nested and fork keys should be listed",
+    )
+    check(
+      (body as Array<{ description: string }>).every((item) => item.description.length > 0),
+      "every option should have a description",
+    )
+  }),
   // A form's counters.
   http.protected
     .post("/operator/tokenizers/count", "operator.call.count")

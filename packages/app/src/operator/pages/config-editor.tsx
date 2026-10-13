@@ -15,6 +15,7 @@ import { useProjectConfigWrite } from "../ui/project-config-copy"
 import { useOpenNamespaceConfig } from "../settings/namespace-config"
 import { ConfigEffective, useSourceLabel } from "./config-effective"
 import { requestError } from "./config-helpers"
+import { ConfigReference } from "./config-reference"
 
 // One project's config (the Config page, and the project record's Config section), §7: the config it
 // uses (its own, else its namespace's), raw JSONC to edit, and the effective settings with secrets masked
@@ -68,6 +69,17 @@ export function ConfigEditor(props: { directory: string; onDirty?: (dirty: boole
   const found = () => ready(resolved)
   const namespaceName = () => found()?.namespace.name ?? ""
   const label = useSourceLabel(namespaceName)
+  // "the Namespace config" names no namespace: its tooltip does (specs/docs/issues/003).
+  const namespaceTitle = () => {
+    const namespace = found()?.namespace
+    return namespace
+      ? language.t("operator.projectConfig.namespaceTitle", {
+          name: namespace.name,
+          id: namespace.id,
+          file: namespace.file,
+        })
+      : undefined
+  }
   const saved = createMemo(() => found()?.text ?? "")
   // Load the file into the editor whenever the project or its file changes.
   createEffect(on([() => found()?.file, saved], () => setStore({ text: saved(), error: "", written: undefined })))
@@ -107,16 +119,15 @@ export function ConfigEditor(props: { directory: string; onDirty?: (dirty: boole
       .finally(() => setStore("saving", false))
   }
 
-  // "Use Acme's config again": the project's own files go to Trash.
+  // "Use the Namespace config again": the project's own files go to Trash.
   const useNamespace = async () => {
-    const name = namespaceName()
     const ok = await confirm({
-      title: language.t("operator.projectConfig.revertTitle", { name }),
+      title: language.t("operator.projectConfig.revertTitle"),
       description: language.t("operator.projectConfig.revertBody", {
-        name,
+        name: namespaceName(),
         files: (found()?.ownFiles ?? []).map(shortPath).join(", "),
       }),
-      confirm: language.t("operator.projectConfig.revertConfirm", { name }),
+      confirm: language.t("operator.projectConfig.revertConfirm"),
       danger: true,
     })
     if (!ok) return
@@ -124,7 +135,7 @@ export function ConfigEditor(props: { directory: string; onDirty?: (dirty: boole
       .client()
       .operator.config.revert({ directory: directory() }, { throwOnError: true })
       .then(async () => {
-        showToast({ title: language.t("operator.projectConfig.reverted", { name }) })
+        showToast({ title: language.t("operator.projectConfig.reverted") })
         await refresh()
       })
       .catch((error: unknown) =>
@@ -146,7 +157,7 @@ export function ConfigEditor(props: { directory: string; onDirty?: (dirty: boole
     void open(() => (
       <Dialog size="large">
         <DialogHeader>
-          <DialogTitle>{language.t("operator.projectConfig.compareTitle", { name: texts.namespace.name })}</DialogTitle>
+          <DialogTitle>{language.t("operator.projectConfig.compareTitle")}</DialogTitle>
         </DialogHeader>
         <DialogBody>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3" data-testid="config-compare">
@@ -156,8 +167,8 @@ export function ConfigEditor(props: { directory: string; onDirty?: (dirty: boole
               <pre data-component="operator-code">{texts.project.text}</pre>
             </section>
             <section class="flex flex-col gap-1 min-w-0">
-              <h3 class="text-12-medium">
-                {language.t("operator.projectConfig.compareNamespace", { name: texts.namespace.name })}
+              <h3 class="text-12-medium" title={namespaceTitle()}>
+                {language.t("operator.projectConfig.compareNamespace")}
               </h3>
               <code class="text-11-regular">{shortPath(texts.namespace.file)}</code>
               <pre data-component="operator-code">
@@ -180,9 +191,7 @@ export function ConfigEditor(props: { directory: string; onDirty?: (dirty: boole
                 when={config().mode === "own"}
                 fallback={
                   <>
-                    <strong>
-                      {language.t("operator.projectConfig.usingNamespace", { name: config().namespace.name })}
-                    </strong>
+                    <strong title={namespaceTitle()}>{language.t("operator.projectConfig.usingNamespace")}</strong>
                     {" · "}
                     <code>{shortPath(config().file)}</code>
                     {". "}
@@ -207,8 +216,8 @@ export function ConfigEditor(props: { directory: string; onDirty?: (dirty: boole
                       })}
                       <Show when={copy().changedSince}>
                         {" "}
-                        <span data-testid="config-changed-since">
-                          {language.t("operator.projectConfig.changedSince", { name: copy().name })}
+                        <span data-testid="config-changed-since" title={namespaceTitle()}>
+                          {language.t("operator.projectConfig.changedSince")}
                         </span>
                       </Show>
                     </>
@@ -231,17 +240,22 @@ export function ConfigEditor(props: { directory: string; onDirty?: (dirty: boole
             </Show>
             <div data-slot="operator-actions">
               <Show when={config().mode === "own"}>
-                <ButtonV2 size="small" variant="neutral" onClick={() => void compare()}>
-                  {language.t("operator.projectConfig.compare", { name: config().namespace.name })}
+                <ButtonV2 size="small" variant="neutral" title={namespaceTitle()} onClick={() => void compare()}>
+                  {language.t("operator.projectConfig.compare")}
                 </ButtonV2>
                 <Show when={!config().tracked}>
-                  <ButtonV2 size="small" variant="neutral" onClick={() => void useNamespace()}>
-                    {language.t("operator.projectConfig.revert", { name: config().namespace.name })}
+                  <ButtonV2 size="small" variant="neutral" title={namespaceTitle()} onClick={() => void useNamespace()}>
+                    {language.t("operator.projectConfig.revert")}
                   </ButtonV2>
                 </Show>
               </Show>
-              <ButtonV2 size="small" variant="neutral" onClick={() => openNamespace(config().namespace.id)}>
-                {language.t("operator.projectConfig.openNamespace", { name: config().namespace.name })}
+              <ButtonV2
+                size="small"
+                variant="neutral"
+                title={namespaceTitle()}
+                onClick={() => openNamespace(config().namespace.id)}
+              >
+                {language.t("operator.projectConfig.openNamespace")}
               </ButtonV2>
             </div>
             <Show when={config().subfolderFiles.length}>
@@ -310,8 +324,16 @@ export function ConfigEditor(props: { directory: string; onDirty?: (dirty: boole
         variables={ready(layers)?.variables}
         sources={ready(layers)?.sources ?? []}
         label={label}
+        namespaceTitle={namespaceTitle()}
         effectiveHint={language.t("operator.config.effectiveHint")}
         sourcesHint={language.t("operator.config.sourcesHint")}
+      />
+
+      <ConfigReference
+        config={ready(effective)}
+        origins={ready(layers)?.origins ?? {}}
+        variables={ready(layers)?.variables}
+        label={label}
       />
     </div>
   )

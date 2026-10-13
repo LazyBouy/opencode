@@ -1416,3 +1416,66 @@ details[data-slot="operator-as-sent"] [data-component="operator-code"][data-mode
   min-width: 0;
   width: 100%;
 }
+
+/* The Config reference (pages/config-reference.tsx): a disclosure per group, an option per card. */
+[data-slot="operator-disclosure"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-inline-start: -4px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+[data-slot="operator-disclosure"]:hover {
+  background: var(--v2-background-bg-layer-02);
+}
+
+:is([data-component="operator-config-groups"], [data-component="operator-config-options"]) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+[data-component="operator-config-groups"] > li {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+[data-component="operator-config-options"] {
+  padding-inline-start: 20px;
+}
+
+[data-component="operator-config-option"] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--v2-border-border-muted);
+  border-radius: 8px;
+}
+
+[data-slot="operator-config-option-head"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+[data-slot="operator-config-option-path"] {
+  font-size: 13px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}

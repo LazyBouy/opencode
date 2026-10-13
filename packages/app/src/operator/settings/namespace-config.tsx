@@ -10,6 +10,7 @@ import { ready, useOperatorClient } from "../data"
 import { shortPath } from "../format"
 import { ConfigEffective, useSourceLabel } from "../pages/config-effective"
 import { requestError } from "../pages/config-helpers"
+import { ConfigReference } from "../pages/config-reference"
 
 // A namespace's config, and Global's (global_and_opencode_namespaces_spec.md §8): the Config section of
 // each namespace in Settings → Namespaces, the only place they are edited. The notice says who a change
@@ -179,20 +180,29 @@ export function NamespaceConfigEditor(props: {
       </div>
       <Show when={ready(effective)}>
         {(item) => (
-          <ConfigEffective
-            nested
-            config={item().config}
-            origins={item().origins}
-            variables={item().variables}
-            sources={item().sources}
-            label={label}
-            effectiveHint={
-              found()?.global
-                ? language.t("operator.config.effectiveHintGlobal")
-                : language.t("operator.config.effectiveHintNamespace", { name: found()?.name ?? "" })
-            }
-            sourcesHint={language.t("operator.config.sourcesHintNamespace", { name: found()?.name ?? "" })}
-          />
+          <>
+            <ConfigEffective
+              nested
+              config={item().config}
+              origins={item().origins}
+              variables={item().variables}
+              sources={item().sources}
+              label={label}
+              effectiveHint={
+                found()?.global
+                  ? language.t("operator.config.effectiveHintGlobal")
+                  : language.t("operator.config.effectiveHintNamespace", { name: found()?.name ?? "" })
+              }
+              sourcesHint={language.t("operator.config.sourcesHintNamespace", { name: found()?.name ?? "" })}
+            />
+            <ConfigReference
+              nested
+              config={item().config}
+              origins={item().origins}
+              variables={item().variables}
+              label={label}
+            />
+          </>
         )}
       </Show>
     </div>

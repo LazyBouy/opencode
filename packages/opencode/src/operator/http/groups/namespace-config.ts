@@ -2,14 +2,16 @@ import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { OperatorConfig } from "@/operator/config"
+import { OperatorConfigReference } from "@/operator/config-reference"
 import { described } from "@/server/routes/instance/httpapi/groups/metadata"
 
 // A namespace's config, and Global's (global_and_opencode_namespaces_spec.md §8): edited only here
-// (Settings → Namespaces → a namespace → Config), never from a project page. Server-wide, part of
-// OperatorRootApi.
+// (Settings → Namespaces → a namespace → Config), never from a project page. And the config reference
+// every Config page shows (specs/docs/issues/003). Server-wide, part of OperatorRootApi.
 export const OperatorNamespaceConfigPaths = {
   config: "/operator/namespace/:id/config",
   effective: "/operator/namespace/:id/config/effective",
+  reference: "/operator/config/reference",
 } as const
 
 export class ApiNamespaceConfigError extends Schema.ErrorClass<{
@@ -94,7 +96,19 @@ export const OperatorNamespaceConfigGroup = HttpApiGroup.make("operatorNamespace
         "Replaces a namespace's config file (created when missing) with the given JSONC text, checked first. The projects that use it reload when idle; for Global, every project.",
       ),
     ),
+    HttpApiEndpoint.get("reference", OperatorNamespaceConfigPaths.reference, {
+      success: described(Schema.Array(OperatorConfigReference.Entry), "Every config option, by path"),
+    }).annotateMerge(
+      doc(
+        "operator.config.reference",
+        "The config reference",
+        "Every option OpenCode's config accepts, built from the config schema (the console's own keys included): its path, type and allowed values, default, description, a JSONC example, whether it is deprecated or the console's own, and OpenCode's documentation for its section.",
+      ),
+    ),
   )
   .annotateMerge(
-    OpenApi.annotations({ title: "operator namespace config", description: "A namespace's and Global's config." }),
+    OpenApi.annotations({
+      title: "operator namespace config",
+      description: "A namespace's and Global's config, and the config reference.",
+    }),
   )

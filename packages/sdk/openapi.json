@@ -4966,6 +4966,47 @@
         ]
       }
     },
+    "/operator/config/reference": {
+      "get": {
+        "tags": ["operator namespace config"],
+        "operationId": "operator.config.reference",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Every config option, by path",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorConfigOption"
+                  },
+                  "description": "Every config option, by path"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Every option OpenCode's config accepts, built from the config schema (the console's own keys included): its path, type and allowed values, default, description, a JSONC example, whether it is deprecated or the console's own, and OpenCode's documentation for its section.",
+        "summary": "The config reference",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.config.reference({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/operator/project-records": {
       "get": {
         "tags": ["operator project records"],
@@ -35485,6 +35526,50 @@
         "required": ["id", "folder", "config", "sources", "origins"],
         "additionalProperties": false
       },
+      "OperatorConfigOption": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "The option's full path; <…> is a key of your choosing"
+          },
+          "group": {
+            "type": "string",
+            "description": "Its top-level key"
+          },
+          "type": {
+            "type": "string",
+            "description": "Its type in words: string, number, boolean, object, list of …"
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "default": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "example": {
+            "type": "string",
+            "description": "A short JSONC snippet"
+          },
+          "deprecated": {
+            "type": "string"
+          },
+          "fork": {
+            "type": "boolean"
+          },
+          "docs": {
+            "type": "string"
+          }
+        },
+        "required": ["path", "group", "type", "description", "example"],
+        "additionalProperties": false
+      },
       "OperatorProjectStatus": {
         "type": "string",
         "enum": ["draft", "active", "paused", "completed", "archived"]
@@ -55602,7 +55687,7 @@
     },
     {
       "name": "operator namespace config",
-      "description": "A namespace's and Global's config."
+      "description": "A namespace's and Global's config, and the config reference."
     },
     {
       "name": "operator project records",

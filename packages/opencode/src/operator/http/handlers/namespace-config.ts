@@ -2,6 +2,7 @@ import fs from "fs/promises"
 import path from "path"
 import { Config } from "@/config/config"
 import { OperatorConfig } from "@/operator/config"
+import { OperatorConfigReference } from "@/operator/config-reference"
 import { OperatorLayout } from "@/operator/layout"
 import { OperatorNamespaceScope } from "@/operator/namespace-scope"
 import { OperatorProfileStore } from "@/operator/profile-store"
@@ -136,5 +137,6 @@ export const operatorNamespaceConfigHandlers = HttpApiBuilder.group(
         .handle("get", (ctx) => view(ctx.params.id))
         .handle("effective", (ctx) => effective(ctx.params.id))
         .handle("save", (ctx) => save(ctx.params.id, ctx.payload.text))
+        .handle("reference", () => Effect.sync(() => OperatorConfigReference.all()))
     }),
 )
