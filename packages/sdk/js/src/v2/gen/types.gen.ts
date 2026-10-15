@@ -2626,9 +2626,21 @@ export type OperatorPromptProject = {
   flag?: "outside-opencode" | "not-in-place"
 }
 
+export type OperatorPromptLocalLayer = {
+  /**
+   * The group type id: the slot it is in
+   */
+  type: string
+  text: string
+  basedOn?: string
+}
+
 export type OperatorPromptOverride = {
   group?: string
   slots?: OperatorPromptSlots
+  layers?: {
+    [key: string]: OperatorPromptLocalLayer
+  }
 }
 
 export type OperatorPromptAgentSetting = {
@@ -4379,7 +4391,7 @@ export type OperatorPromptCatalog1 = {
 
 export type OperatorPromptTraceStep = {
   /**
-   * agent-own / agent-none: the agent has its own prompt, or none; agent-file / agent-config / agent-builtin: where it is defined (its agent file, a config file, OpenCode's own definition); model-rule: the base prompt's model and the rule that chose it; builtin-layer / copy-layer / own-layer / layer: the layer the text is in; file: the file it is in; org-purpose: the namespace's purpose; dynamic-written: written for each session by the dynamic generator; rules: resolved by the layer's own rules; written: written by OpenCode for each request; references / config: the references in config files; instruction-file / instruction-url, mcp, skill: what a per-request text was made from; memory-index: a memory level's index (MEMORY.md)
+   * agent-own / agent-none: the agent has its own prompt, or none; agent-local: a text of the agent's own, in its prompt setting; agent-file / agent-config / agent-builtin: where it is defined (its agent file, a config file, OpenCode's own definition); model-rule: the base prompt's model and the rule that chose it; builtin-layer / copy-layer / own-layer / layer: the layer the text is in; file: the file it is in; org-purpose: the namespace's purpose; dynamic-written: written for each session by the dynamic generator; rules: resolved by the layer's own rules; written: written by OpenCode for each request; references / config: the references in config files; instruction-file / instruction-url, mcp, skill: what a per-request text was made from; memory-index: a memory level's index (MEMORY.md)
    */
   kind:
     | "agent-own"
@@ -4387,6 +4399,7 @@ export type OperatorPromptTraceStep = {
     | "agent-file"
     | "agent-config"
     | "agent-builtin"
+    | "agent-local"
     | "model-rule"
     | "builtin-layer"
     | "copy-layer"
@@ -4497,6 +4510,7 @@ export type OperatorPromptAssembledSection = {
   resolution?: OperatorResolverTrace
   parity?: "same" | "differs"
   memory?: boolean
+  agentPrompt?: boolean
   text: string
 }
 

@@ -1586,3 +1586,15 @@ details[data-slot="operator-as-sent"] [data-component="operator-code"][data-mode
   border-color: var(--v2-border-border-accent, var(--v2-border-border-muted));
   outline: none;
 }
+
+/* Blocks the form can't write (Purpose, Dynamic, output notices), and the gaps text is added in. */
+[data-slot="operator-sent-block"][data-locked] {
+  opacity: 0.7;
+  background: var(--v2-background-bg-subtle, transparent);
+}
+
+[data-slot="operator-sent-gap"] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

@@ -460,9 +460,13 @@ export function createPromptMock(
 
   // A small stand-in for the assembler: Purpose, then the effective group's slots in order.
   // The agent form's unsaved values (POST): its prompt text and its whole prompt setting.
+  type Local = { type: string; text: string; basedOn?: string }
   type Draft = {
     prompt?: string
-    setting?: { profile?: string; override?: { group?: string; slots?: Record<string, string[]> } }
+    setting?: {
+      profile?: string
+      override?: { group?: string; slots?: Record<string, string[]>; layers?: Record<string, Local> }
+    }
   }
   const preview = (url: URL, form?: { agent: string; draft: Draft }) => {
     const project = url.searchParams.get("directory") ?? ""
@@ -479,8 +483,12 @@ export function createPromptMock(
       : asked
         ? undefined
         : draft
-          ? ((JSON.parse(draft) as { group?: string; slots?: Record<string, string[]> } | null) ?? undefined)
-          : chosen.setting.override
+          ? ((JSON.parse(draft) as {
+              group?: string
+              slots?: Record<string, string[]>
+              layers?: Record<string, Local>
+            } | null) ?? undefined)
+          : (chosen.setting.override as { layers?: Record<string, Local> } | undefined)
     const group = loaded.groups.find((item) => item.id === (override?.group ?? profile.group))!
     const typeName = (id: string) => loaded.types.find((item) => item.id === id)?.name ?? id
     const own = form ? form.draft.prompt || undefined : ownPrompt(name)
@@ -503,6 +511,11 @@ export function createPromptMock(
       if (entry === `${PREFIX}generated.environment`) return [{ kind: "written" }]
       if (entry === `${PREFIX}generated.instructions`) return [{ kind: "instruction-file", path: source }]
       if (entry === `${PREFIX}purpose.org`) return [{ kind: "org-purpose", name: source }]
+      if (entry.startsWith("agent:"))
+        return [
+          { kind: "agent-local", name, detail: entry.slice("agent:".length) },
+          { kind: "file", path: "/home/me/.config/opencode/namespaces/agents.json" },
+        ]
       if (layer.origin !== "user") return [{ kind: "builtin-layer", name: layer.name, detail: layer.id }]
       return [
         { kind: "layer", name: layer.name, detail: layer.id },
@@ -538,6 +551,8 @@ export function createPromptMock(
     }
     const section = (type: string, entry: string, layer: Layer, text: string, source: string, automatic = false) => ({
       ...resolutionOf(entry),
+      // The Agent prompt slot: the agent form writes the agent's prompt there.
+      ...(entry === `${PREFIX}slot.agent` || entry === `${PREFIX}slot.agent-or-base` ? { agentPrompt: true } : {}),
       type,
       typeName: typeName(type),
       layer: layer.id,
@@ -560,12 +575,33 @@ export function createPromptMock(
         .filter((type) => type !== "purpose")
         .flatMap((type) =>
           (override?.slots?.[type] ?? profile.slots[type] ?? []).flatMap((listed) => {
+            // A text of the agent's own: kept while empty in the form's previews.
+            if (listed.startsWith("agent:")) {
+              const local = override?.layers?.[listed.slice("agent:".length)]
+              if (!local || (!local.text && !form)) return []
+              const based = loaded.layers.find((item) => item.id === local.basedOn)
+              const layer: Layer = {
+                id: listed,
+                name: `${based?.name ?? "Text"} (this agent)`,
+                type: local.type,
+                section: "custom",
+                origin: "user",
+                text: local.text,
+              }
+              return [section(type, listed, layer, local.text, name)]
+            }
             const layer = loaded.layers.find((item) => item.id === listed)
             if (!layer) return []
             // A namespace's copy of a built-in works as the built-in.
             const entry = layer.replaces && own(layer.replaces) === layer.id ? layer.replaces : listed
             if (entry === `${PREFIX}slot.base`) return [section(type, entry, layer, base.text, "base.default")]
-            if (entry === `${PREFIX}slot.agent`) return own ? [section(type, entry, layer, own, name)] : []
+            // The form keeps the Agent prompt slot of an agent without a prompt, empty.
+            if (entry === `${PREFIX}slot.agent`)
+              return own
+                ? [section(type, entry, layer, own, name)]
+                : form
+                  ? [section(type, entry, layer, "", name)]
+                  : []
             if (entry === `${PREFIX}slot.agent-or-base`)
               return [
                 own ? section(type, entry, layer, own, name) : section(type, entry, layer, base.text, "base.default"),
@@ -592,7 +628,12 @@ export function createPromptMock(
         ? { model: `${url.searchParams.get("provider")}/${url.searchParams.get("model")}`, source: "chosen" }
         : { model: "opencode/claude-opus-4-6", source: "ranking" },
       sections,
-      system: [sections.map((item) => item.text).join("\n")],
+      system: [
+        sections
+          .map((item) => item.text)
+          .filter((text) => text)
+          .join("\n"),
+      ],
     }
   }
 

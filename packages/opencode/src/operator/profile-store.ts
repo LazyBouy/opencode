@@ -28,6 +28,7 @@ import { OperatorProjectIds } from "./project-ids"
 //   namespaces/<ns>/profiles/<id>.json  { id, name, group, slots }
 //   namespaces/projects.json            { <projectKey>: { namespace, purpose?, defaultProfile? } }
 //   namespaces/agents.json              { <projectKey>: { <agentName>: { profile?, override? } } }
+//                                       override: { group?, slots?, layers?: { <localId>: { type, text, basedOn? } } }
 //
 // A project missing from projects.json is in OpenCode, with no Project Purpose and no default.
 
@@ -446,8 +447,22 @@ const ownOverride = (override: OperatorProfile.Override | undefined) =>
     ? {
         ...(override.group ? { group: OperatorProfile.own(override.group) } : {}),
         ...(override.slots ? { slots: ownSlots(override.slots) } : {}),
+        ...(override.layers ? { layers: remapLocal(override.layers, (id) => OperatorProfile.own(id)) } : {}),
       }
     : undefined
+
+// An agent's own texts, with the layers they copy pointed elsewhere (a copy dropped where there is none).
+function remapLocal(
+  layers: Readonly<Record<string, OperatorProfile.LocalLayer>>,
+  map: (id: string) => string | undefined,
+): Record<string, OperatorProfile.LocalLayer> {
+  return Object.fromEntries(
+    Object.entries(layers).map(([id, item]) => {
+      const basedOn = item.basedOn ? map(item.basedOn) : undefined
+      return [id, { type: item.type, text: item.text, ...(basedOn ? { basedOn } : {}) }]
+    }),
+  )
+}
 
 // A namespace's profiles, default profile, and its projects' and agents' settings, pointed at its own
 // copies of OpenCode's built-ins.
@@ -1366,18 +1381,24 @@ const layer = Layer.effect(
         if (OperatorProfile.isHelper(found, chosen.profile))
           yield* refuse(`${name} uses the helper profile ${chosen.profile.name}: a helper agent has no override`)
         const shape = OperatorProfile.effective(found, chosen.profile, setting.override)
-        yield* refuse(OperatorProfile.checkSlots(found, { group: shape.group.id, slots: shape.slots }))
+        yield* refuse(
+          OperatorProfile.checkSlots(
+            found,
+            { group: shape.group.id, slots: shape.slots },
+            setting.override.layers ?? {},
+          ),
+        )
         if (
           setting.override.group &&
           !OperatorProfile.groups(found).some((item) => item.id === setting.override!.group)
         )
           yield* refuse(`No group "${setting.override.group}"`)
       }
+      // The agent's own texts are kept while its slots name them.
+      const override = setting.override ? OperatorProfile.tidyOverride(setting.override) : undefined
       const next = {
         ...(setting.profile ? { profile: setting.profile } : {}),
-        ...(setting.override && (setting.override.group || Object.keys(setting.override.slots ?? {}).length)
-          ? { override: setting.override }
-          : {}),
+        ...(override ? { override } : {}),
       }
       yield* Effect.promise(async () => {
         const all = await readAgents()
@@ -1593,7 +1614,12 @@ function rootsOf(project: ProjectInfo, agents: Record<string, OperatorProfile.Ag
       ...(setting.override?.group ? [{ kind: "group" as const, id: setting.override.group }] : []),
       ...Object.values(setting.override?.slots ?? {})
         .flat()
+        .filter((layer) => !OperatorProfile.isLocal(layer))
         .map((layer) => ({ kind: "layer" as const, id: layer })),
+      // The layers the agent's own texts copy, for Reset.
+      ...Object.values(setting.override?.layers ?? {}).flatMap((item) =>
+        item.basedOn ? [{ kind: "layer" as const, id: item.basedOn }] : [],
+      ),
     ]),
   ]
 }
@@ -1617,10 +1643,13 @@ function remapAgents(
                       slots: Object.fromEntries(
                         Object.entries(agent[1].override.slots).map((slot) => [
                           slot[0],
-                          slot[1].map((id) => map("layer", id)!),
+                          slot[1].map((id) => (OperatorProfile.isLocal(id) ? id : map("layer", id)!)),
                         ]),
                       ),
                     }
+                  : {}),
+                ...(agent[1].override.layers
+                  ? { layers: remapLocal(agent[1].override.layers, (id) => map("layer", id)) }
                   : {}),
               },
             }
@@ -1644,6 +1673,11 @@ export function itemFile(ns: string, kind: Kind, id: string) {
 }
 export function namespaceFile(ns: string) {
   return path.join(root(), ns, "namespace.json")
+}
+
+// Where the agents' prompt settings are, their own texts included.
+export function agentsFile() {
+  return path.join(root(), "agents.json")
 }
 
 async function writeItem(
@@ -1816,6 +1850,26 @@ function slotsOf(value: unknown): OperatorProfile.Slots {
   return Object.fromEntries(Object.entries(value as Record<string, unknown>).map((pair) => [pair[0], strings(pair[1])]))
 }
 
+function localOf(value: unknown): Record<string, OperatorProfile.LocalLayer> {
+  if (!value || typeof value !== "object") return {}
+  return Object.fromEntries(
+    Object.entries(value as Record<string, Record<string, unknown> | undefined>).flatMap(([id, item]) =>
+      typeof item?.type === "string" && typeof item.text === "string"
+        ? [
+            [
+              id,
+              {
+                type: item.type,
+                text: item.text,
+                ...(typeof item.basedOn === "string" ? { basedOn: item.basedOn } : {}),
+              },
+            ] as const,
+          ]
+        : [],
+    ),
+  )
+}
+
 function agentSetting(value: Record<string, unknown> | undefined): OperatorProfile.AgentSetting {
   const override = value?.override as Record<string, unknown> | undefined
   return {
@@ -1825,6 +1879,7 @@ function agentSetting(value: Record<string, unknown> | undefined): OperatorProfi
           override: {
             ...(typeof override.group === "string" ? { group: override.group } : {}),
             ...(override.slots ? { slots: slotsOf(override.slots) } : {}),
+            ...(override.layers ? { layers: localOf(override.layers) } : {}),
           },
         }
       : {}),

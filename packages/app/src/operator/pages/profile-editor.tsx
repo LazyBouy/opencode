@@ -11,6 +11,7 @@ import { useConfirm } from "../ui/confirm"
 import { Field } from "../ui/field"
 import { OrderedList } from "../ui/ordered-list"
 import { usePromptCatalog, useProfileNames } from "./profile-data"
+import { isLocal } from "./agent-form-text"
 import {
   type Catalog,
   DYNAMIC,
@@ -38,6 +39,8 @@ export function SlotEditor(props: {
   hideGroup?: boolean
   /** Leave helper groups out of the group select (an agent's override cannot make it a helper). */
   noHelper?: boolean
+  /** No "Create layer" (the agent form writes nothing into the namespace). */
+  noCreate?: boolean
   changed?: (type: string) => boolean
   groupChanged?: boolean
   onReset?: (type: string) => void
@@ -158,8 +161,9 @@ export function SlotEditor(props: {
                   catalog={props.catalog}
                   type={type}
                   options={layersOfType(props.layers, type).filter(
-                    (layer) => !(props.value.slots[type] ?? []).includes(layer.id),
+                    (layer) => !(props.value.slots[type] ?? []).includes(layer.id) && !isLocal(layer.id),
                   )}
+                  noCreate={props.noCreate}
                   // A helper profile holds one helper layer: a new one replaces it.
                   onAdd={(id) => setSlot(type, type === HELPER ? [id] : [...(props.value.slots[type] ?? []), id])}
                 />
@@ -195,6 +199,7 @@ function AddLayer(props: {
   catalog: Catalog
   type: string
   options: ReadonlyArray<Layer>
+  noCreate?: boolean
   onAdd: (id: string) => void
 }) {
   const language = useLanguage()
@@ -242,9 +247,11 @@ function AddLayer(props: {
             }}
             onSelect={(id) => id && props.onAdd(id)}
           />
-          <ButtonV2 size="small" variant="ghost" onClick={() => setCreating(true)}>
-            {language.t("operator.profile.createLayer")}
-          </ButtonV2>
+          <Show when={!props.noCreate}>
+            <ButtonV2 size="small" variant="ghost" onClick={() => setCreating(true)}>
+              {language.t("operator.profile.createLayer")}
+            </ButtonV2>
+          </Show>
         </div>
       }
     >

@@ -274,6 +274,7 @@ const layer = Layer.effect(
         if ((step.kind === "copy-layer" || step.kind === "own-layer" || step.kind === "layer") && step.detail)
           steps.push({ kind: "file", path: OperatorProfileStore.itemFile(ns, "layer", step.detail) })
         if (step.kind === "org-purpose") steps.push({ kind: "file", path: OperatorProfileStore.namespaceFile(ns) })
+        if (step.kind === "agent-local") steps.push({ kind: "file", path: OperatorProfileStore.agentsFile() })
       }
       return steps
     })
@@ -394,6 +395,8 @@ const layer = Layer.effect(
         parts,
         dynamic: written(loaded.catalog),
         ...(resolved ? { resolved } : {}),
+        // The agent form writes the agent's prompt, and its own texts, in their blocks.
+        ...(draft ? { editing: true } : {}),
       })
       const ns = loaded.catalog.namespace.id
       const sections = yield* Effect.forEach(result.sections, (section) =>

@@ -29,6 +29,7 @@ import {
   textSize,
 } from "./profile-model"
 import { exceptionsFor } from "./prompt-exceptions"
+import { AGENT_LOCAL, tidy } from "./agent-form-text"
 
 // The model option that means "whatever the agent uses".
 const AGENT_MODEL = "agent"
@@ -186,7 +187,25 @@ export function Override(props: {
   const language = useLanguage()
   const confirm = useConfirm()
   const data = usePromptCatalog(() => props.ns)
-  const layers = useAllLayers(() => props.catalog)
+  const all = useAllLayers(() => props.catalog)
+  const names = useProfileNames()
+  // The agent's own texts (agent:<localId>, from the agent form) are named in its slots like layers.
+  const layers = createMemo(() => [
+    ...all(),
+    ...Object.entries(props.setting.override?.layers ?? {}).map(([id, item]) => {
+      const based = all().find((layer) => layer.id === item.basedOn)
+      return {
+        id: `${AGENT_LOCAL}${id}`,
+        name: based
+          ? language.t("operator.agentForm.thisAgent", { name: names.layer(based) })
+          : language.t("operator.agentForm.localText"),
+        type: item.type,
+        section: "custom" as const,
+        origin: "user" as const,
+        text: item.text,
+      }
+    }),
+  ])
   const [store, setStore] = createStore({
     open: false,
     group: undefined as string | undefined,
@@ -216,19 +235,28 @@ export function Override(props: {
       ),
     }
   })
-  // What a save stores: the group if it differs, and the changed slots of the group's types.
+  // What a save stores: the group if it differs, the changed slots of the group's types, and the agent's own texts
+  // they name.
   const override = (): OperatorPromptOverride => {
     const types = props.catalog.groups.find((item) => item.id === value().group)?.types ?? []
     const slots = Object.fromEntries(Object.entries(store.slots).filter(([type]) => types.includes(type)))
-    return {
+    return tidy({
       ...(store.group && store.group !== props.profile?.group ? { group: store.group } : {}),
-      ...(Object.keys(slots).length ? { slots } : {}),
-    }
+      slots,
+      ...(props.setting.override?.layers ? { layers: props.setting.override.layers } : {}),
+    })
   }
   const dirty = () => JSON.stringify(override()) !== JSON.stringify(props.setting.override ?? {})
   const problem = () => slotProblem(props.catalog, value().slots)
   createEffect(() => props.onDraft(store.open && props.profile && dirty() ? override() : undefined))
-  createEffect(() => props.onChange?.(store.open && props.profile ? override() : null))
+  // The form's override follows this editor's own edits (the store and the profile in effect), read with the form's
+  // latest texts. A change from the form re-syncs the store first, so a stale override is never sent back.
+  createEffect(
+    on(
+      () => [store.open, store.group, JSON.stringify(store.slots), props.profile?.id],
+      () => props.onChange?.(store.open && props.profile ? override() : null),
+    ),
+  )
 
   const toggle = async (checked: boolean) => {
     if (checked) return setStore("open", true)
@@ -281,6 +309,8 @@ export function Override(props: {
           layers={layers()}
           value={value()}
           noHelper
+          // The agent form writes nothing into the namespace (agent_form_spec.md §6.4): new text is the agent's own.
+          noCreate={props.embedded}
           changed={(type) => type in store.slots}
           groupChanged={!!store.group}
           onReset={(type) =>

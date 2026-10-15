@@ -34238,6 +34238,23 @@
         "required": ["key", "id", "name", "namespace"],
         "additionalProperties": false
       },
+      "OperatorPromptLocalLayer": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "The group type id: the slot it is in"
+          },
+          "text": {
+            "type": "string"
+          },
+          "basedOn": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "text"],
+        "additionalProperties": false
+      },
       "OperatorPromptOverride": {
         "type": "object",
         "properties": {
@@ -34246,6 +34263,12 @@
           },
           "slots": {
             "$ref": "#/components/schemas/OperatorPromptSlots"
+          },
+          "layers": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/OperatorPromptLocalLayer"
+            }
           }
         },
         "additionalProperties": false
@@ -38610,6 +38633,7 @@
               "agent-file",
               "agent-config",
               "agent-builtin",
+              "agent-local",
               "model-rule",
               "builtin-layer",
               "copy-layer",
@@ -38628,7 +38652,7 @@
               "mcp",
               "skill"
             ],
-            "description": "agent-own / agent-none: the agent has its own prompt, or none; agent-file / agent-config / agent-builtin: where it is defined (its agent file, a config file, OpenCode's own definition); model-rule: the base prompt's model and the rule that chose it; builtin-layer / copy-layer / own-layer / layer: the layer the text is in; file: the file it is in; org-purpose: the namespace's purpose; dynamic-written: written for each session by the dynamic generator; rules: resolved by the layer's own rules; written: written by OpenCode for each request; references / config: the references in config files; instruction-file / instruction-url, mcp, skill: what a per-request text was made from; memory-index: a memory level's index (MEMORY.md)"
+            "description": "agent-own / agent-none: the agent has its own prompt, or none; agent-local: a text of the agent's own, in its prompt setting; agent-file / agent-config / agent-builtin: where it is defined (its agent file, a config file, OpenCode's own definition); model-rule: the base prompt's model and the rule that chose it; builtin-layer / copy-layer / own-layer / layer: the layer the text is in; file: the file it is in; org-purpose: the namespace's purpose; dynamic-written: written for each session by the dynamic generator; rules: resolved by the layer's own rules; written: written by OpenCode for each request; references / config: the references in config files; instruction-file / instruction-url, mcp, skill: what a per-request text was made from; memory-index: a memory level's index (MEMORY.md)"
           },
           "name": {
             "type": "string"
@@ -38840,6 +38864,9 @@
             "enum": ["same", "differs"]
           },
           "memory": {
+            "type": "boolean"
+          },
+          "agentPrompt": {
             "type": "boolean"
           },
           "text": {

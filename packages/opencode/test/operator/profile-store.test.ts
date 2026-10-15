@@ -502,3 +502,108 @@ it.instance(
       }),
     ),
 )
+
+// Every file of a namespace (its record, types, layers, groups, profiles), by path, with its bytes.
+const filesOf = (dir: string) =>
+  Effect.promise(async () => {
+    const names = (await fs.readdir(dir, { recursive: true, withFileTypes: true }))
+      .filter((item) => item.isFile())
+      .map((item) => path.join(item.parentPath, item.name))
+      .toSorted()
+    return Object.fromEntries(
+      await Promise.all(names.map(async (file) => [file, await fs.readFile(file, "utf8")] as const)),
+    )
+  })
+
+// agent_form_spec.md §6.4: the form's text edits are the agent's own, never the namespace's.
+it.instance("an agent's own texts are kept in its setting, checked, sent in its slot, and moved with the project", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      const items = yield* seed()
+      const key = "/work/app"
+      yield* items.store.setProject(key, { defaultProfile: items.profile.id })
+      const namespaceDir = path.join(OperatorProfileStore.root(), "opencode")
+      const before = yield* filesOf(namespaceDir)
+      const prompt = (loaded: Awaited<ReturnType<typeof OperatorProfileStore.forProject>>) =>
+        OperatorProfile.assemble({
+          catalog: loaded.catalog,
+          project: loaded.project,
+          agent: { name: "build" },
+          setting: loaded.agents.build,
+          model,
+          parts,
+        })
+
+      // A copy of Reviewer edited for build, then text added after it; a text no slot names is not kept.
+      const saved = yield* items.store.setAgent(key, "build", {
+        override: {
+          slots: { role: ["agent:1", "agent:2"] },
+          layers: {
+            "1": { type: "role", text: "You review, briefly.", basedOn: items.role.id },
+            "2": { type: "role", text: "Cite the PR." },
+            "3": { type: "role", text: "Unused." },
+          },
+        },
+      })
+      expect(saved.override?.layers).toEqual({
+        "1": { type: "role", text: "You review, briefly.", basedOn: items.role.id },
+        "2": { type: "role", text: "Cite the PR." },
+      })
+      const loaded = yield* Effect.promise(() => OperatorProfileStore.forProject(key))
+      const sent = prompt(loaded)
+      expect(sent.sections.filter((item) => item.type === "role")).toMatchObject([
+        { layer: "agent:1", entry: "agent:1", layerName: "Reviewer (this agent)", changed: true, source: "build" },
+        { layer: "agent:2", entry: "agent:2", layerName: "Text (this agent)", trace: [{ kind: "agent-local" }] },
+      ])
+      expect(sent.system[0]).toContain("You review, briefly.\nCite the PR.")
+      expect(sent.system[0]).not.toContain("You review.\n")
+      // Other agents keep the profile's Reviewer.
+      const plan = OperatorProfile.assemble({
+        catalog: loaded.catalog,
+        project: loaded.project,
+        agent: { name: "plan" },
+        setting: loaded.agents.plan,
+        model,
+        parts,
+      })
+      expect(plan.system[0]).toContain("You review.")
+
+      // The checks: a text in its own type's slot, never in a locked type, not empty, and named texts exist.
+      const save = (slots: OperatorProfile.Slots, layers: Record<string, OperatorProfile.LocalLayer>) =>
+        refused(items.store.setAgent(key, "build", { override: { slots, layers } }))
+      expect(yield* save({ dynamic: ["agent:1"] }, { "1": { type: "dynamic", text: "Now." } })).toBe(
+        "Dynamic holds no text of an agent's own",
+      )
+      expect(yield* save({ role: ["agent:1"] }, { "1": { type: "identity", text: "Hi." } })).toBe(
+        "A text of this agent's is Agent identity, not Agent role",
+      )
+      expect(yield* save({ role: ["agent:9"] }, {})).toBe('No text "agent:9" of this agent\'s')
+      expect(yield* save({ role: ["agent:1"] }, { "1": { type: "role", text: "  " } })).toBe(
+        "A text of this agent's is empty",
+      )
+      // A profile never holds an agent's text.
+      expect(
+        yield* refused(
+          items.store.saveProfile("opencode", items.profile.id, {
+            name: "Reviewing",
+            group: items.group.id,
+            slots: { role: ["agent:1"] },
+          }),
+        ),
+      ).toBe("Only an agent's override holds texts of the agent's own")
+
+      // The namespace's files are unchanged, byte for byte.
+      expect(yield* filesOf(namespaceDir)).toEqual(before)
+
+      // Moved to another namespace: the texts go along, and the layer a copy was made from is copied for Reset.
+      const target = yield* items.store.createNamespace({ name: "Moved", folder: yield* folderFor("Moved") })
+      yield* items.store.remove(target.id, "profile", items.profile.id)
+      yield* items.store.remove(target.id, "layer", items.role.id)
+      yield* items.store.setProject(key, { namespace: target.id })
+      const after = yield* Effect.promise(() => OperatorProfileStore.forProject(key))
+      expect(prompt(after).system).toEqual(sent.system)
+      const basedOn = after.agents.build?.override?.layers?.["1"]?.basedOn
+      expect(after.catalog.layers.find((item) => item.id === basedOn)?.text).toBe("You review.")
+    }),
+  ),
+)

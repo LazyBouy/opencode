@@ -30,7 +30,10 @@ test("a new agent's System Prompt as sent follows the form; Override waits for a
   // Built from the form, not saved: its own prompt text where the profile puts it.
   const sent = page.getByTestId("prompt-as-sent")
   await expect(sent).toHaveAttribute("open", "")
-  await page.getByLabel("Prompt", { exact: true }).fill("Write things down clearly.")
+  // The agent's own prompt is written in its block, once the text is unlocked.
+  await expect(sent.locator("textarea")).toHaveCount(0)
+  await page.getByTestId("prompt-as-sent").getByText("Locked", { exact: true }).click()
+  await sent.locator("[data-agent-prompt] textarea").fill("Write things down clearly.")
   await expect.poll(() => state.prompt.drafts.at(-1)?.draft.prompt).toBe("Write things down clearly.")
   expect(state.prompt.drafts.at(-1)!.agent).toBe("scribe")
   await expect(sent.getByTestId("prompt-block").first()).toBeVisible()

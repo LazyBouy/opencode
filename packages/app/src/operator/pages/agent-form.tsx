@@ -1,9 +1,8 @@
-import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
+import { useBeforeLeave, useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SegmentedControlItemV2, SegmentedControlV2 } from "@opencode-ai/ui/v2/segmented-control-v2"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
-import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
 import { useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createEffect, createMemo, createSignal, type JSX, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -38,6 +37,7 @@ import type { Flavor, Mode } from "./agent-type"
 import { HelperForm } from "./helper-form"
 import { requestError } from "./config-helpers"
 import { AgentFormPrompt, DEFAULT_PROFILE, type PromptChoice } from "./agent-form-prompt"
+import { forSave } from "./agent-form-text"
 import { useAgentPromptSetting } from "./agent-prompt"
 import { useNamespaces } from "./profile-data"
 import { OPENCODE } from "./profile-model"
@@ -100,10 +100,15 @@ export default function AgentFormPage() {
       },
     ),
   )
+  // The override a save sends: a text of the agent's own emptied while editing is that block removed.
+  const savedOverride = () => {
+    const override = prompt.override ? forSave(prompt.override) : null
+    return override && Object.keys(override).length ? override : null
+  }
   const promptChanged = () => {
     const saved = ready(promptSetting)?.setting
     const profile = prompt.profile === DEFAULT_PROFILE ? undefined : prompt.profile
-    const override = prompt.override && Object.keys(prompt.override).length ? prompt.override : null
+    const override = savedOverride()
     return (
       (saved?.profile ?? undefined) !== profile ||
       JSON.stringify(saved?.override ?? null) !== JSON.stringify(profile ? override : null)
@@ -192,7 +197,25 @@ export default function AgentFormPage() {
     set("name", name)
     if (!editing() && !homeChanged()) set("home", name.trim() ? `agents/${name.trim()}` : "")
   }
+  // Leaving with unsaved changes asks first (agent_form_spec.md §6.3): anything typed in the form (its fields, the
+  // prompt's blocks, the rules) or a prompt choice made. A save clears it.
+  const [edited, setEdited] = createSignal(false)
+  useBeforeLeave((event) => {
+    if (!edited() || event.defaultPrevented) return
+    event.preventDefault()
+    void confirm({
+      title: language.t("operator.overlay.discardTitle"),
+      description: language.t("operator.overlay.discardBody"),
+      confirm: language.t("operator.overlay.discard"),
+      danger: true,
+    }).then((ok) => {
+      if (!ok) return
+      setEdited(false)
+      event.retry(true)
+    })
+  })
   const done = (name: string) => {
+    setEdited(false)
     const folder = targetDirectory() ?? directory() ?? ""
     void queryClient.invalidateQueries({ queryKey: api.key("agents", folder) })
     void refresh(folder)
@@ -289,9 +312,7 @@ export default function AgentFormPage() {
                 name: existing()?.name ?? store.form.name.trim(),
                 directory: folder,
                 ...(prompt.profile !== DEFAULT_PROFILE ? { profile: prompt.profile } : {}),
-                ...(prompt.profile !== DEFAULT_PROFILE && prompt.override && Object.keys(prompt.override).length
-                  ? { override: prompt.override }
-                  : {}),
+                ...(prompt.profile !== DEFAULT_PROFILE && savedOverride() ? { override: savedOverride()! } : {}),
               },
               { throwOnError: true },
             )
@@ -444,16 +465,17 @@ export default function AgentFormPage() {
           <HelperForm
             namespace={namespace()}
             before={typeField()}
-            onSaved={(found) =>
+            onSaved={(found) => {
+              setEdited(false)
               navigate(
                 `/operator/agents?dir=${encodeURIComponent(directory() ?? "")}&helper=${encodeURIComponent(found.name)}&hns=${encodeURIComponent(found.namespace)}`,
               )
-            }
+            }}
             onCancel={() => history.back()}
           />
         }
       >
-        <section data-component="operator-panel">
+        <section data-component="operator-panel" onInput={() => setEdited(true)}>
           <div data-component="operator-form">
             {typeField()}
             <Show when={!editing()}>
@@ -727,14 +749,6 @@ export default function AgentFormPage() {
                 )}
               </Show>
             </Field>
-            <Field label={language.t("operator.agentForm.prompt")} hint={language.t("operator.agentForm.promptHint")}>
-              <TextareaV2
-                class="operator-editor"
-                rows={10}
-                value={store.form.prompt}
-                onInput={(event) => set("prompt", event.currentTarget.value)}
-              />
-            </Field>
             <AgentFormPrompt
               directory={targetDirectory()}
               namespace={namespace()}
@@ -743,8 +757,11 @@ export default function AgentFormPage() {
               mode={store.form.mode}
               model={model()}
               value={prompt}
-              saved={ready(promptSetting)?.setting}
-              onChange={(next) => setPrompt(next)}
+              onChange={(next) => {
+                setPrompt(next)
+                setEdited(true)
+              }}
+              onPrompt={(text) => set("prompt", text)}
             />
             <Field
               group

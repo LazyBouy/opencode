@@ -1342,7 +1342,30 @@ export const dict = {
   "operator.agentForm.overrideHelper": "A helper profile takes no override.",
   "operator.agentForm.asSent": "System Prompt as sent",
   "operator.agentForm.asSentHint":
-    "The whole system prompt this agent would send with these settings (not saved yet), block by block. Choose a block to count it.",
+    "The whole system prompt this agent would send with these settings (not saved yet), block by block. Choose a block to count it. Unlock it to edit it.",
+  "operator.agentForm.locked": "Locked",
+  "operator.help.agentFormLock":
+    "While locked, nothing here can be typed in. Unlocked, the agent's own prompt is written in its block, and with Override on any block that isn't locked can be changed, removed, or have text added beside it. Those become texts of this agent's own: the profile and its layers never change. Lock it again when done; your edits are kept and saved with the form. Reordering in Override works either way.",
+  "operator.agentForm.resetAll": "Reset all overrides",
+  "operator.agentForm.resetAllTitle": "Reset all overrides?",
+  "operator.agentForm.resetAllBody":
+    "This agent goes back to the profile as it is: its group, its slots and its own texts. Nothing is saved until you save the form.",
+  "operator.agentForm.addText": "Add text here",
+  "operator.agentForm.newText": "New text",
+  "operator.agentForm.addTo": "Add to",
+  "operator.agentForm.addToType": "Added to {{type}}",
+  "operator.agentForm.add": "Add",
+  "operator.agentForm.automaticLocked": "Locked: automatic",
+  "operator.agentForm.perRequestLocked": "Locked: filled in per request",
+  "operator.agentForm.changedHere": "Changed (this agent only)",
+  "operator.agentForm.resetBlock": "Reset block",
+  "operator.agentForm.removeBlock": "Remove block",
+  "operator.agentForm.thisAgent": "{{name}} (this agent)",
+  "operator.agentForm.localText": "Text (this agent)",
+  "operator.agentForm.blockText": "Text of {{name}}",
+  "operator.agentForm.agentPromptBase":
+    "The agent has no prompt of its own, so the base prompt for the model is sent here. Text typed here becomes the agent's prompt.",
+  "operator.agentForm.agentPromptNone": "The agent has no prompt of its own yet. Unlock the text to write it here.",
   "operator.agentForm.wholePrompt": "Whole prompt:",
   "operator.agentForm.thisBlock": "{{name}}:",
   "operator.agentForm.noAgentSlot":
@@ -1361,9 +1384,6 @@ export const dict = {
   "operator.agentForm.check.stepsRange": "The step limit is a whole number, 1 or more.",
   "operator.agentForm.check.homeOutside": "The home folder is inside the project.",
   "operator.agentForm.check.homeUp": "The home folder can't lead out of the project (..).",
-  "operator.agentForm.prompt": "Prompt",
-  "operator.agentForm.promptHint":
-    "The agent's own prompt. A profile sends it through its Agent prompt slots; OpenCode's profile sends it instead of the base prompt. The Prompt tab chooses the profile.",
   "operator.agentForm.create": "Create agent",
   "operator.agentForm.saved": "{{name}} saved",
 
@@ -2900,6 +2920,7 @@ export const dict = {
   "operator.trace.agent-file": "Its agent file: {{path}}",
   "operator.trace.agent-config": "agent.{{name}}.prompt in {{path}}",
   "operator.trace.agent-builtin": "OpenCode's own definition of the {{name}} agent: {{path}}",
+  "operator.trace.agent-local": "A text of {{name}}'s own, in its prompt setting (not in any profile or layer)",
   "operator.trace.model-rule": "The base prompt for {{name}} (rule: {{detail}})",
   "operator.trace.builtin-layer": "OpenCode's built-in layer {{name}}",
   "operator.trace.copy-layer": 'The copy "{{name}}"',

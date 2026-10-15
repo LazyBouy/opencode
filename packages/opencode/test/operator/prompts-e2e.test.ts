@@ -283,6 +283,64 @@ unix("an agent's override changes its own slots only", () =>
   ),
 )
 
+// The agent form's text edits (agent_form_spec.md §6.3–§6.4): the preview of the unsaved texts is what a request
+// sends once they are saved, and only this agent sends them.
+unix("an agent's own texts: previewed unsaved, sent once saved, by that agent only", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      const { llm } = yield* configure()
+      const store = yield* OperatorProfileStore.Service
+      const prompts = yield* OperatorPrompts.Service
+      const key = (yield* prompts.preview({ agent: "build" })).project.key
+      const role = yield* store.saveLayer("opencode", undefined, {
+        name: "Reviewer",
+        type: "role",
+        section: "role",
+        text: "You review release notes.",
+      })
+      const setting = {
+        override: {
+          slots: { role: ["agent:1", "agent:2"] },
+          layers: {
+            "1": { type: "role", text: "You review release notes, briefly.", basedOn: role.id },
+            "2": { type: "role", text: "Always cite the pull request." },
+          },
+        },
+      }
+      const draft = yield* prompts.preview({ agent: "build", draft: { setting } })
+      expect(draft.sections.filter((item) => item.type === "role").map((item) => item.layerName)).toEqual([
+        "Reviewer (this agent)",
+        "Text (this agent)",
+      ])
+      expect(draft.sections.find((item) => item.layer === "agent:2")?.trace).toEqual([
+        { kind: "agent-local", name: "build", detail: "2" },
+        { kind: "file", path: OperatorProfileStore.agentsFile() },
+      ])
+      // A text cleared while typing stays in the form's preview, empty, and adds nothing to the prompt.
+      const cleared = yield* prompts.preview({
+        agent: "build",
+        draft: {
+          setting: {
+            override: { ...setting.override, layers: { ...setting.override.layers, "2": { type: "role", text: "" } } },
+          },
+        },
+      })
+      expect(cleared.sections.find((item) => item.entry === "agent:2")).toMatchObject({ text: "" })
+      expect(cleared.system.join("\n")).not.toContain("Always cite the pull request.")
+      yield* store.setAgent(key, "build", setting)
+      for (let index = 0; index < 2; index++) yield* llm.text("ok")
+      yield* send((yield* session()).id, "hello", "build")
+      yield* send((yield* session()).id, "hello", "plan")
+      const inputs = yield* llm.inputs
+      expect(systemMessages(inputs[0])).toEqual([...draft.system])
+      expect(String(systemMessages(inputs[0])[0])).toStartWith(
+        "You review release notes, briefly.\nAlways cite the pull request.\n",
+      )
+      expect(String(systemMessages(inputs[1])[0])).not.toContain("Always cite the pull request.")
+    }),
+  ),
+)
+
 // The agent form's "System Prompt as sent" (agent_form_spec.md §6.2): its unsaved values, for an agent saved or not.
 unix("a draft previews the form's prompt and setting; with the saved values it is the saved preview", () =>
   withGlobal(() =>
@@ -318,6 +376,14 @@ unix("a draft previews the form's prompt and setting; with the saved values it i
       expect(draft.agent).toBe("scribe")
       expect(draft.profile).toMatchObject({ id: spec, source: "agent" })
       expect(draft.system.join("\n")).toContain("Write things down clearly.")
+      expect(draft.sections.filter((item) => item.agentPrompt).map((item) => item.text)).toEqual([
+        "Write things down clearly.",
+      ])
+      // Without a prompt yet, the form gets the Agent prompt slot empty, to write the prompt there; it is not sent.
+      const empty = yield* prompts.preview({ agent: "scribe", draft: { prompt: "", setting: { profile: spec } } })
+      expect(empty.sections.filter((item) => item.agentPrompt)).toMatchObject([{ text: "" }])
+      expect(empty.system.join("\n")).not.toContain("\n\n\n")
+      expect((yield* prompts.preview({ agent: "build" })).sections.filter((item) => item.text === "")).toEqual([])
       // Without a draft, an unknown agent is still refused.
       expect((yield* prompts.preview({ agent: "scribe" }).pipe(Effect.flip)).message).toContain("No agent")
     }),

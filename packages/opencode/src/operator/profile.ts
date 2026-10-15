@@ -115,6 +115,7 @@ export const TraceStep = Schema.Struct({
     "agent-file",
     "agent-config",
     "agent-builtin",
+    "agent-local",
     "model-rule",
     "builtin-layer",
     "copy-layer",
@@ -134,7 +135,7 @@ export const TraceStep = Schema.Struct({
     "skill",
   ]).annotate({
     description:
-      "agent-own / agent-none: the agent has its own prompt, or none; agent-file / agent-config / agent-builtin: where it is defined (its agent file, a config file, OpenCode's own definition); model-rule: the base prompt's model and the rule that chose it; builtin-layer / copy-layer / own-layer / layer: the layer the text is in; file: the file it is in; org-purpose: the namespace's purpose; dynamic-written: written for each session by the dynamic generator; rules: resolved by the layer's own rules; written: written by OpenCode for each request; references / config: the references in config files; instruction-file / instruction-url, mcp, skill: what a per-request text was made from; memory-index: a memory level's index (MEMORY.md)",
+      "agent-own / agent-none: the agent has its own prompt, or none; agent-local: a text of the agent's own, in its prompt setting; agent-file / agent-config / agent-builtin: where it is defined (its agent file, a config file, OpenCode's own definition); model-rule: the base prompt's model and the rule that chose it; builtin-layer / copy-layer / own-layer / layer: the layer the text is in; file: the file it is in; org-purpose: the namespace's purpose; dynamic-written: written for each session by the dynamic generator; rules: resolved by the layer's own rules; written: written by OpenCode for each request; references / config: the references in config files; instruction-file / instruction-url, mcp, skill: what a per-request text was made from; memory-index: a memory level's index (MEMORY.md)",
   }),
   name: Schema.optional(Schema.String).annotate({ description: "An agent, layer, model, namespace or server" }),
   path: Schema.optional(Schema.String).annotate({ description: "A file or URL" }),
@@ -196,11 +197,50 @@ export const ProjectSetting = Schema.Struct({
 }).annotate({ identifier: "OperatorProjectSetting" })
 export type ProjectSetting = typeof ProjectSetting.Type
 
+// Texts of one agent's own (agent_form_spec.md §6.4): a layer's text edited for the agent (a copy, `basedOn`
+// the layer it was made from), or text added between its blocks. They live in the agent's override, never in
+// the namespace, and a slot names one as "agent:<localId>".
+export const AGENT_LOCAL = "agent:"
+export const LocalLayer = Schema.Struct({
+  type: Schema.String.annotate({ description: "The group type id: the slot it is in" }),
+  text: Schema.String,
+  basedOn: Schema.optional(Schema.String).annotate({
+    description: "A copy edited for this agent: the layer it was made from (Reset puts it back)",
+  }),
+}).annotate({ identifier: "OperatorPromptLocalLayer" })
+export type LocalLayer = typeof LocalLayer.Type
+// Types whose blocks the agent cannot write: Purpose is automatic, Dynamic texts are filled in per request,
+// output notices are OpenCode's, and a helper agent has no override.
+export const LOCKED_TYPES = ["purpose", DYNAMIC, "output", HELPER]
+
 export const Override = Schema.Struct({
   group: Schema.optional(Schema.String),
   slots: Schema.optional(Slots),
+  layers: Schema.optional(Schema.Record(Schema.String, LocalLayer)).annotate({
+    description: "The agent's own texts, by local id; its slots name them as agent:<localId>",
+  }),
 }).annotate({ identifier: "OperatorPromptOverride" })
 export type Override = typeof Override.Type
+
+export const isLocal = (entry: string) => entry.startsWith(AGENT_LOCAL)
+
+// An override as stored: the group if any, the changed slots, and the agent's own texts its slots name.
+export function tidyOverride(override: Override): Override | undefined {
+  const slots = override.slots ?? {}
+  const named = new Set(
+    Object.values(slots)
+      .flat()
+      .filter(isLocal)
+      .map((entry) => entry.slice(AGENT_LOCAL.length)),
+  )
+  const layers = Object.fromEntries(Object.entries(override.layers ?? {}).filter(([id]) => named.has(id)))
+  if (!override.group && !Object.keys(slots).length) return undefined
+  return {
+    ...(override.group ? { group: override.group } : {}),
+    ...(Object.keys(slots).length ? { slots } : {}),
+    ...(Object.keys(layers).length ? { layers } : {}),
+  }
+}
 
 export const AgentSetting = Schema.Struct({
   profile: Schema.optional(Schema.String),
@@ -522,6 +562,10 @@ export const AssembledSection = Schema.Struct({
   memory: Schema.optional(Schema.Boolean).annotate({
     description: "A memory level's block; the memory guidance (notice.memory) is put before the first one",
   }),
+  agentPrompt: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "The profile's Agent prompt slot: the agent's own prompt (or the base prompt for an agent without one); the agent form edits the prompt here",
+  }),
   text: Schema.String,
 }).annotate({ identifier: "OperatorPromptAssembledSection" })
 export type AssembledSection = typeof AssembledSection.Type
@@ -540,6 +584,10 @@ export type AssembleInput = {
   readonly dynamic?: ReadonlyMap<string, string>
   // OpenCode's per-request Dynamic layers resolved through the pipeline (dynamic-layers.ts), by layer id.
   readonly resolved?: ReadonlyMap<string, { readonly text: string; readonly trace: OperatorResolver.Trace }>
+  // The agent form: the blocks it writes are kept while empty (the Agent prompt slot of an agent without a prompt,
+  // for the prompt to be written there; a text of the agent's own cleared while typing). Empty sections are never
+  // sent.
+  readonly editing?: boolean
 }
 
 // Builds a request's system prompt (spec §5): the profile's group in order, each type's slot in
@@ -555,14 +603,28 @@ export function assemble(input: AssembleInput) {
   const names = new Map(types(input.catalog).map((item) => [item.id, item.name]))
   const copies = copiesIn(input.catalog, shape.slots)
   const sections = shape.group.types.flatMap((type) => {
-    const found =
+    const found: Array<Found & { entry: string; agentPrompt?: boolean }> =
       type === "purpose"
         ? purpose(input).map((item) => ({ ...item, entry: item.layer.id }))
-        : (shape.slots[type] ?? []).flatMap((entry) =>
-            resolve(input, copies, entry).map((item) => ({ ...item, entry })),
-          )
+        : (shape.slots[type] ?? []).flatMap((entry) => {
+            if (isLocal(entry)) return local(input, entry).map((item) => ({ ...item, entry }))
+            const items = resolve(input, copies, entry)
+            if (!isAgentSlot(input.catalog, entry)) return items.map((item) => ({ ...item, entry }))
+            const kept: Found[] =
+              items.length || !input.editing
+                ? items
+                : [
+                    {
+                      layer: findLayer(input.catalog, entry)!,
+                      text: "",
+                      source: input.agent.name,
+                      trace: [{ kind: "agent-none", name: input.agent.name }],
+                    },
+                  ]
+            return kept.map((item) => ({ ...item, entry, agentPrompt: true }))
+          })
     return found
-      .filter((item) => item.text !== "")
+      .filter((item) => item.text !== "" || item.agentPrompt || (input.editing && isLocal(item.entry)))
       .map((item) => ({
         type,
         typeName: names.get(type) ?? type,
@@ -576,6 +638,7 @@ export function assemble(input: AssembleInput) {
         ...(item.resolution ? { resolution: item.resolution } : {}),
         ...(item.parity ? { parity: item.parity } : {}),
         ...(item.memory ? { memory: true } : {}),
+        ...(item.agentPrompt ? { agentPrompt: true } : {}),
         text: item.text,
       }))
   })
@@ -773,6 +836,37 @@ function ownRules(input: AssembleInput, layer: Layer) {
     ...layerTrace(input.catalog, layer),
   ]
   return { text: done.text, trace, resolution: done.trace }
+}
+
+// The profile's Agent prompt slot (Agent prompt, or Agent prompt or base prompt): OpenCode's, or a namespace's own.
+function isAgentSlot(catalog: Catalog, entry: string) {
+  const listed = findLayer(catalog, entry)
+  const id = listed ? (builtinLayer(listed)?.id ?? listed.id) : undefined
+  return id === base("slot.agent") || id === base("slot.agent-or-base")
+}
+
+// A text of the agent's own (agent:<localId>): "<the layer it copies> (this agent)", or "Text (this agent)".
+function local(input: AssembleInput, entry: string): Found[] {
+  const id = entry.slice(AGENT_LOCAL.length)
+  const item = input.setting?.override?.layers?.[id]
+  if (!item || (!item.text && !input.editing)) return []
+  const based = item.basedOn ? findLayer(input.catalog, item.basedOn) : undefined
+  const layer: Layer = {
+    id: entry,
+    name: `${based?.name ?? "Text"} (this agent)`,
+    type: item.type,
+    section: "custom",
+    origin: "user",
+    text: item.text,
+  }
+  return [
+    {
+      layer,
+      text: item.text,
+      source: input.agent.name,
+      trace: [{ kind: "agent-local", name: input.agent.name, detail: id }],
+    },
+  ]
 }
 
 // The text a slot entry stands for in this request, with how it was resolved.
@@ -988,8 +1082,14 @@ export function checkGroup(catalog: Catalog, group: { name: string; types: Reado
   return undefined
 }
 
-// A profile, or a profile with an override applied: its group and slots.
-export function checkSlots(catalog: Catalog, shape: { group: string; slots: Slots }) {
+// A profile, or a profile with an override applied: its group and slots, and the agent's own texts the
+// override's slots name.
+export function checkSlots(
+  catalog: Catalog,
+  shape: { group: string; slots: Slots },
+  // An agent's override: its own texts. A profile has none.
+  local?: Readonly<Record<string, LocalLayer>>,
+) {
   const group = groups(catalog).find((item) => item.id === shape.group)
   if (!group) return `No group "${shape.group}"`
   if (group.types.includes(HELPER) && (shape.slots[HELPER] ?? []).length !== 1)
@@ -1002,6 +1102,16 @@ export function checkSlots(catalog: Catalog, shape: { group: string; slots: Slot
   if (repeated) return `"${findLayer(catalog, repeated)?.name ?? repeated}" is in the profile more than once`
   for (const [type, ids] of Object.entries(shape.slots)) {
     for (const id of ids) {
+      if (isLocal(id)) {
+        if (!local) return "Only an agent's override holds texts of the agent's own"
+        const own = local[id.slice(AGENT_LOCAL.length)]
+        if (!own) return `No text "${id}" of this agent's`
+        if (own.type !== type)
+          return `A text of this agent's is ${typeName(catalog, own.type)}, not ${typeName(catalog, type)}`
+        if (LOCKED_TYPES.includes(type)) return `${typeName(catalog, type)} holds no text of an agent's own`
+        if (!own.text.trim()) return "A text of this agent's is empty"
+        continue
+      }
       const found = findLayer(catalog, id)
       if (!found) return `No layer "${id}"`
       if (found.type !== type)
