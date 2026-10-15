@@ -223,3 +223,21 @@ unix("a namespace's OpenCode and Spec profiles hold the memory layers, also when
     }),
   ),
 )
+
+// The agent form's preview of an agent not saved yet (agent_form_spec.md §6.2): its memory layers resolve with the
+// permissions a new agent starts with (it has no rules of its own yet).
+unix("an agent not saved yet previews its memory layers", () =>
+  withGlobal(() =>
+    Effect.gen(function* () {
+      const { prompts, folders } = yield* setup()
+      const preview = yield* prompts.preview({
+        agent: "scribe",
+        draft: { prompt: "Write things down.", setting: { profile: SPEC } },
+      })
+      expect(preview.agent).toBe("scribe")
+      const memory = preview.sections.filter((item) => item.memory)
+      expect(memory[0]?.text).toContain(`<namespace_memory path="${folders.namespace.folder}">`)
+      expect(preview.system.join("\n")).toContain("Write things down.")
+    }),
+  ),
+)

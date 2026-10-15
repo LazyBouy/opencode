@@ -320,7 +320,9 @@ const layer = Layer.effect(
     })
 
     const agent = Effect.fn("OperatorPermissionRules.agent")(function* (name: string, draft?: ReadonlyArray<Rule>) {
-      const info = yield* agents.get(name)
+      // An agent not saved yet (the agent form's preview): the default agent's list, as a new agent starts with
+      // OpenCode's defaults and the config's rules; it has none of its own yet.
+      const info = (yield* agents.get(name)) ?? (yield* agents.get(yield* agents.defaultAgent()))
       const all = yield* agents.list()
       const cfg = yield* config.get()
       const parsed = yield* sources()
