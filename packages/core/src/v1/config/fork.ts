@@ -47,6 +47,58 @@ export const fields = {
     description:
       "Record every model call (the exact request and the response) for the session's Transcript view (default: true). Kept as long as the session.",
   }),
+  operatorTelemetry: Schema.optional(
+    Schema.Struct({
+      enabled: Schema.optional(Schema.Boolean).annotate({
+        description:
+          "Record telemetry for the Observability page (default: true). Off stops recording; what is kept stays until retention removes it.",
+      }),
+      eventsDays: Schema.optional(Schema.Finite).annotate({
+        description: "Days detailed events (spans, log lines, samples, alert events) are kept: 1 to 365 (default: 30)",
+      }),
+      totalsDays: Schema.optional(Schema.Finite).annotate({
+        description:
+          "Days hourly totals are kept: 30 to 1825, never less than eventsDays (default: 400, so a year can be compared with the one before)",
+      }),
+      logLevel: Schema.optional(Schema.Literals(["error", "warn", "info"])).annotate({
+        description: "Server log lines kept for the Logs tab: this level and above (default: warn)",
+      }),
+      loops: Schema.optional(
+        Schema.Struct({
+          sameCallSameResult: Schema.optional(Schema.Finite).annotate({
+            description:
+              "A turn is a possible loop after this many identical tool calls in a row with the same result (default: 3)",
+          }),
+          sameCall: Schema.optional(Schema.Finite).annotate({
+            description: "A turn is a possible loop after this many identical tool calls in a row (default: 5)",
+          }),
+          toolCalls: Schema.optional(Schema.Finite).annotate({
+            description: "A turn is a possible loop with more tool calls than this (default: 50)",
+          }),
+          modelCalls: Schema.optional(Schema.Finite).annotate({
+            description: "A turn is a possible loop with more model calls than this (default: 30)",
+          }),
+        }),
+      ).annotate({ description: "When a turn is flagged as a possible loop" }),
+      dailyBudget: Schema.optional(Schema.NullOr(Schema.Finite)).annotate({
+        description: "A daily cost budget in dollars, for the Daily cost alert and the Dashboard (default: none)",
+      }),
+      dashboard: Schema.optional(
+        Schema.Struct({
+          stuckMinutes: Schema.optional(Schema.Finite).annotate({
+            description:
+              "A running session with no new activity for this many minutes, and no approval waiting, counts as stuck (default: 10)",
+          }),
+          queueMinutes: Schema.optional(Schema.Finite).annotate({
+            description: "A queue whose oldest message waited this many minutes counts as backed up (default: 10)",
+          }),
+        }),
+      ).annotate({ description: "The Dashboard's thresholds" }),
+    }),
+  ).annotate({
+    description:
+      "Observability: what is recorded about sessions, model calls, tools, approvals and the server log, and for how long",
+  }),
 }
 
 // Agent keys this fork adds. ConfigAgentV1 spreads these fields into its schema and their names into

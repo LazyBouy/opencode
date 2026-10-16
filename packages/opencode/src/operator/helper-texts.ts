@@ -212,7 +212,12 @@ const layer = Layer.effect(
         context,
         ...(message ? [`<session>\n<first-message>\n${message}\n</first-message>\n</session>`] : []),
       ].join("\n")
-      const builtin = generate.text({ agent: OperatorProfile.DYNAMIC_GENERATOR, sessionID, prompt })
+      const builtin = generate.text({
+        agent: OperatorProfile.DYNAMIC_GENERATOR,
+        sessionID,
+        prompt,
+        purpose: "dynamic layer",
+      })
       const writer = yield* writerOf(namespace, layer)
       if (!writer) return yield* builtin
       return yield* runHelper(
@@ -371,7 +376,7 @@ const layer = Layer.effect(
         const holder = yield* Effect.promise(() =>
           OperatorHelperAgents.roleHolder(namespace, OperatorProfile.PURPOSE_GENERATOR),
         )
-        const builtin = generate.text({ agent: OperatorProfile.PURPOSE_GENERATOR, prompt })
+        const builtin = generate.text({ agent: OperatorProfile.PURPOSE_GENERATOR, prompt, purpose: "project purpose" })
         if (!holder) return yield* builtin
         return yield* runHelper(
           {

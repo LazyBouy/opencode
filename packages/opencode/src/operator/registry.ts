@@ -113,3 +113,12 @@ export const helpers: {
     args: Record<string, unknown>
   }) => Promise<string>
 } = {}
+
+export const telemetry: {
+  /** A permission decision record was written (permission-decisions.ts): it ends the request's wait. */
+  decision?: (record: unknown) => void
+  /** A helper run ended (generate.ts), with its totals. */
+  helper?: (run: unknown) => void
+  /** Sessions moved to Trash (true) or restored from it (false) (trash.ts). */
+  trash?: (sessionIDs: ReadonlyArray<string>, trashed: boolean) => void
+} = {}

@@ -252,13 +252,22 @@ const layer = Layer.effect(
       // Without actions: one model call.
       if (!actions.length) {
         yield* Effect.promise(() => writeRun(record))
-        const called = yield* generate.call({ agent, prompt: input.input }).pipe(
-          Effect.map(Option.some),
-          Effect.raceFirst(Effect.sleep(limit).pipe(Effect.as(Option.none()))),
-          Effect.catch((error) => Effect.fail(fail(error.message))),
-          Effect.onInterrupt(() => finish({ status: "cancelled" }).pipe(Effect.asVoid)),
-          Effect.tapError((error) => finish({ status: "failed", error: error.message })),
-        )
+        const called = yield* generate
+          .call({
+            agent,
+            prompt: input.input,
+            purpose: `helper ${input.name} (${input.startedBy.kind})`,
+            ...((input.parentSessionID ?? input.startedBy.sessionID)
+              ? { startedFrom: input.parentSessionID ?? input.startedBy.sessionID }
+              : {}),
+          })
+          .pipe(
+            Effect.map(Option.some),
+            Effect.raceFirst(Effect.sleep(limit).pipe(Effect.as(Option.none()))),
+            Effect.catch((error) => Effect.fail(fail(error.message))),
+            Effect.onInterrupt(() => finish({ status: "cancelled" }).pipe(Effect.asVoid)),
+            Effect.tapError((error) => finish({ status: "failed", error: error.message })),
+          )
         if (Option.isNone(called)) {
           yield* finish({ status: "timeout", error: `It took longer than ${stored.timeout} s` })
           return yield* fail(`The helper took longer than its time limit (${stored.timeout} s)`)

@@ -2077,6 +2077,23 @@ export type Config = {
     }
   }
   operatorRecordCalls?: boolean
+  operatorTelemetry?: {
+    enabled?: boolean
+    eventsDays?: number
+    totalsDays?: number
+    logLevel?: "error" | "warn" | "info"
+    loops?: {
+      sameCallSameResult?: number
+      sameCall?: number
+      toolCalls?: number
+      modelCalls?: number
+    }
+    dailyBudget?: number
+    dashboard?: {
+      stuckMinutes?: number
+      queueMinutes?: number
+    }
+  }
 }
 
 export type OperatorStatus = {
@@ -3549,6 +3566,10 @@ export type OperatorPermissionDecision = {
    * Where it was decided: a place in the web UI, or client (the TUI or an API client)
    */
   via: "inbox" | "agent" | "session" | "details" | "project" | "chat" | "client"
+  tool?: {
+    messageID: string
+    callID: string
+  }
 }
 
 export type Model = {

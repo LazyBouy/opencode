@@ -16,6 +16,7 @@ import { OperatorProjectConfig } from "./project-config"
 import { OperatorReloadWhenIdle } from "./reload-when-idle"
 import { OperatorConfig } from "./config"
 import { OperatorProfileStore } from "./profile-store"
+import { OperatorRegistry } from "./registry"
 import { OperatorTrashFiles } from "./trash-files"
 
 export const Kind = OperatorTrashFiles.Kind
@@ -72,9 +73,19 @@ const layer = Layer.effect(
       return rows.filter((row) => row.directory === key || row.directory.startsWith(prefix))
     })
 
+    const tellTelemetry = (ids: ReadonlyArray<string>, trashed: boolean) => {
+      try {
+        OperatorRegistry.telemetry.trash?.(ids, trashed)
+      } catch {
+        // never reaches the move
+      }
+    }
+
     const archive = Effect.fnUntraced(function* (ids: ReadonlyArray<string>) {
       const time = Date.now()
       for (const id of ids) yield* sessions.setArchived({ sessionID: SessionID.make(id), time })
+      // Observability shows them as In Trash (telemetry.ts).
+      tellTelemetry(ids, true)
     })
 
     // Upstream has no unarchive: its session projection leaves the archive time when an update has
@@ -87,6 +98,7 @@ const layer = Layer.effect(
         .run()
         .pipe(Effect.orDie)
       yield* sessions.setArchived({ sessionID: SessionID.make(id), time: undefined }).pipe(Effect.ignore)
+      tellTelemetry([id], false)
     })
 
     const project = Effect.fn("OperatorTrash.project")(function* (key: string) {

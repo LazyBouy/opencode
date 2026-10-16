@@ -32901,6 +32901,58 @@
           },
           "operatorRecordCalls": {
             "type": "boolean"
+          },
+          "operatorTelemetry": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "eventsDays": {
+                "type": "number"
+              },
+              "totalsDays": {
+                "type": "number"
+              },
+              "logLevel": {
+                "type": "string",
+                "enum": ["error", "warn", "info"]
+              },
+              "loops": {
+                "type": "object",
+                "properties": {
+                  "sameCallSameResult": {
+                    "type": "number"
+                  },
+                  "sameCall": {
+                    "type": "number"
+                  },
+                  "toolCalls": {
+                    "type": "number"
+                  },
+                  "modelCalls": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "dailyBudget": {
+                "type": "number"
+              },
+              "dashboard": {
+                "type": "object",
+                "properties": {
+                  "stuckMinutes": {
+                    "type": "number"
+                  },
+                  "queueMinutes": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
           }
         },
         "additionalProperties": false
@@ -36325,6 +36377,19 @@
             "type": "string",
             "enum": ["inbox", "agent", "session", "details", "project", "chat", "client"],
             "description": "Where it was decided: a place in the web UI, or client (the TUI or an API client)"
+          },
+          "tool": {
+            "type": "object",
+            "properties": {
+              "messageID": {
+                "type": "string"
+              },
+              "callID": {
+                "type": "string"
+              }
+            },
+            "required": ["messageID", "callID"],
+            "additionalProperties": false
           }
         },
         "required": [

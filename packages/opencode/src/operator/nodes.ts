@@ -39,6 +39,7 @@ import { OperatorDynamicLayers } from "./dynamic-layers"
 import { OperatorMemoryPage } from "./memory-page"
 import { OperatorToolPatterns } from "./tool-patterns"
 import { OperatorMemoryService } from "./memory-service"
+import { OperatorTelemetry } from "./telemetry/telemetry"
 
 // Services the fork's routes need, added to the server's service graph in one place.
 export const operatorNodes = [
@@ -83,4 +84,5 @@ export const operatorNodes = [
   OperatorTrashItems.node,
   OperatorCapabilities.node,
   OperatorLayoutMove.node,
+  OperatorTelemetry.node,
 ] as const

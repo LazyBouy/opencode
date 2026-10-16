@@ -15,6 +15,7 @@ import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { OperatorProfileStore } from "./profile-store"
 import { OperatorProjects } from "./projects"
+import { OperatorRegistry } from "./registry"
 
 // Every decision on a permission request (fixes_spec.md §4.3), made anywhere: the fork's reply card
 // (which says what it decided and where, before it replies), and replies from other clients (the TUI,
@@ -71,6 +72,9 @@ export const Decided = Schema.Struct({
   note: Schema.optional(Schema.String),
   who: Schema.String.annotate({ description: "The config `username` (one shared server password: no logins)" }),
   via: Via,
+  tool: Schema.optional(Schema.Struct({ messageID: Schema.String, callID: Schema.String })).annotate({
+    description: "The tool call that asked, from the request (observability nests the wait under it)",
+  }),
 }).annotate({ identifier: "OperatorPermissionDecision" })
 export type Decided = typeof Decided.Type
 
@@ -227,8 +231,17 @@ const layer = Layer.effect(
         ...(draft.note ? { note: draft.note } : {}),
         who: entry.who ?? (os.userInfo().username || "user"),
         via: draft.via,
+        ...(entry.request.tool
+          ? { tool: { messageID: entry.request.tool.messageID, callID: entry.request.tool.callID } }
+          : {}),
       }
       void append(out).catch(() => undefined)
+      // Observability ends the request's wait (telemetry.ts).
+      try {
+        OperatorRegistry.telemetry.decision?.(out)
+      } catch {
+        // never reaches the reply
+      }
     }
 
     // A reply with no note from the fork came from another client.
