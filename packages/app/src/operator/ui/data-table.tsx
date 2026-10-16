@@ -36,6 +36,10 @@ export interface DataTableProps<T> {
   readonly loading?: boolean
   readonly empty?: JSX.Element
   readonly onRowClick?: (row: T) => void
+  /** Sorted and paged by the server: rows show as given; a sortable header asks for `onSort`. */
+  readonly server?: { readonly sort: Sort | undefined; readonly onSort: (sort: Sort | undefined) => void }
+  /** Data attributes for a row (data-depth, …). */
+  readonly rowAttrs?: (row: T) => Record<string, string | undefined>
 }
 
 // Sortable, filterable table for operator pages. Rows open with a click or Enter when onRowClick is set.
@@ -59,7 +63,8 @@ export function DataTable<T>(props: DataTableProps<T>) {
   // A server that answers with an unexpected shape shows an empty table rather than breaking the page.
   const source = () => (Array.isArray(props.rows) ? props.rows : [])
   // The page's own search, else the table's (a long table on a page without one).
-  const ownSearch = () => props.filter === undefined && isLong(source().length)
+  const ownSearch = () => !props.server && props.filter === undefined && isLong(source().length)
+  const sort = () => (props.server ? props.server.sort : store.sort)
   const textOf = (row: T) =>
     props.search
       ? props.search(row)
@@ -68,15 +73,17 @@ export function DataTable<T>(props: DataTableProps<T>) {
           .filter((value) => value !== undefined && value !== null)
           .join(" ")
   const sorted = createMemo(() => {
+    if (props.server) return source()
     const query = ownSearch() ? store.query : props.filter
     const filtered = query ? filterRows(source(), query, textOf) : source()
     return sortRows(filtered, store.sort, (row, id) => props.columns.find((column) => column.id === id)?.value?.(row))
   })
   const page = createMemo(() => pageOf(sorted(), { text: () => "", sorted: false, page: store.page, size: store.size }))
-  const rows = () => (isLong(sorted().length) ? page().items : sorted())
+  const paged = () => !props.server && isLong(sorted().length)
+  const rows = () => (paged() ? page().items : sorted())
   const direction = (column: Column<T>) => {
-    if (store.sort?.column !== column.id) return column.value ? "none" : undefined
-    return store.sort.direction === "asc" ? "ascending" : "descending"
+    if (sort()?.column !== column.id) return column.value ? "none" : undefined
+    return sort()!.direction === "asc" ? "ascending" : "descending"
   }
 
   return (
@@ -103,7 +110,11 @@ export function DataTable<T>(props: DataTableProps<T>) {
                     <button
                       type="button"
                       data-slot="operator-table-sort"
-                      onClick={() => setStore({ sort: nextSort(store.sort, column.id), page: 0 })}
+                      onClick={() =>
+                        props.server
+                          ? props.server.onSort(nextSort(sort(), column.id))
+                          : setStore({ sort: nextSort(store.sort, column.id), page: 0 })
+                      }
                     >
                       {column.header}
                       <span
@@ -135,6 +146,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
           <For each={rows()}>
             {(row) => (
               <tr
+                {...(props.rowAttrs?.(row) ?? {})}
                 data-clickable={props.onRowClick ? "" : undefined}
                 tabIndex={props.onRowClick ? 0 : undefined}
                 onClick={() => {
@@ -159,7 +171,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
           </For>
         </tbody>
       </table>
-      <Show when={isLong(sorted().length)}>
+      <Show when={paged()}>
         <Pager
           page={page()}
           onPage={(next) => setStore("page", next)}

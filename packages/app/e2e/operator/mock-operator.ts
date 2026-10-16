@@ -1,5 +1,6 @@
 import type { Page, Route } from "@playwright/test"
 import { createPromptMock, type PromptMock } from "./mock-namespaces"
+import { createTelemetryMock, type TelemetryMock } from "./mock-telemetry"
 import { callFor, callsFor, rawFor } from "./mock-calls"
 import { draftFor, lastFor, permissionsFor, sessionPermissionsFor, toolPromptFor } from "./mock-tool-prompt"
 import { type ModelDefaultsMock, modelRoute } from "./mock-models"
@@ -530,6 +531,7 @@ export interface OperatorMock {
   readonly projectsOpened: string[]
   readonly folders: Set<string>
   readonly prompt: PromptMock
+  readonly telemetry: TelemetryMock
   pending: (typeof pendingRequest)[]
   // The reply card's decisions, and the decisions recorded.
   decides: Array<{ id: string; body: Record<string, unknown> }>
@@ -705,7 +707,9 @@ export async function mockOperator(page: Page) {
     (name) => (agents.find((agent) => agent.name === name) as { prompt?: string } | undefined)?.prompt,
     (folder) => folder === directory || folder.startsWith(`${directory}/`) || folder.startsWith(workspace),
   )
+  const telemetry = createTelemetryMock(now)
   const state: OperatorMock = {
+    telemetry: telemetry.state,
     replies: [],
     writes: [],
     projectConfig: { mode: "own", text: '{\n  "username": "me"\n}\n', tracked: false },
@@ -932,6 +936,7 @@ export async function mockOperator(page: Page) {
   await page.route("**/operator/**", (route) => {
     const url = new URL(route.request().url())
     const method = route.request().method()
+    if (url.pathname.startsWith("/operator/telemetry/")) return telemetry.handle(route, url, method)
     if (url.pathname === "/operator/status")
       return json(route, { version: "1.18.34-fork", startedAt: now - 7_200_000, platform: "linux", arch: "x64" })
     if (url.pathname === "/operator/stats") return json(route, stats)

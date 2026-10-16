@@ -17,7 +17,11 @@ type Option = Partial<ProjectOption> & { label: string }
 // "All projects"; the others always show one project. The projects are the Projects page's, grouped by namespace,
 // each labelled "name · id", its folder shown on hover; beside the picker, the chosen project's and its namespace's
 // ids (specs/docs/issues/002). A link to a folder that isn't a project says so, and offers to make it one.
-export function ScopePicker(props: { all?: boolean }) {
+export function ScopePicker(props: {
+  all?: boolean
+  /** Only this namespace's projects (a page whose namespace picker narrows them); "*" or none: all. */
+  namespace?: string
+}) {
   const language = useLanguage()
   const dialog = useDialog()
   const scope = useOperatorScope()
@@ -26,11 +30,13 @@ export function ScopePicker(props: { all?: boolean }) {
   const namespaces = useNamespaces()
   const selected = () => (props.all ? scope.directory() : scoped())
   const namespaceOf = (id: string) => namespaces.data?.find((item) => item.namespace.id === id)
+  const listed = () =>
+    projects().filter((item) => !props.namespace || props.namespace === "*" || item.namespace === props.namespace)
   const options = createMemo<Option[]>(() => [
     ...(props.all ? [{ label: language.t("operator.scope.all") }] : []),
-    ...projects(),
+    ...listed(),
   ])
-  const grouped = () => new Set(projects().map((item) => item.namespace)).size > 1
+  const grouped = () => new Set(listed().map((item) => item.namespace)).size > 1
   const current = () => projects().find((item) => item.directory === selected())
   const notProject = () => {
     const linked = scope.linked()
