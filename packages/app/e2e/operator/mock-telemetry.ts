@@ -4,7 +4,171 @@ import type { Route } from "@playwright/test"
 // server would (sorting, roots, paging with a cursor, facets), with every query recorded.
 
 const MIN = 60_000
+const HOUR = 60 * MIN
+const DAY = 24 * HOUR
 type Row = Record<string, any>
+
+// ---- metrics (§12): synthetic series on the server's steps and frames ----
+
+const RANGES: Record<string, number> = {
+  "15m": 15 * MIN,
+  "1h": HOUR,
+  "6h": 6 * HOUR,
+  "24h": DAY,
+  "7d": 7 * DAY,
+  "30d": 30 * DAY,
+  "90d": 90 * DAY,
+  "365d": 365 * DAY,
+}
+const stepOf = (length: number, beyond: boolean) => {
+  const step =
+    length <= 15 * MIN
+      ? 15_000
+      : length <= HOUR
+        ? MIN
+        : length <= 6 * HOUR
+          ? 5 * MIN
+          : length <= DAY
+            ? 15 * MIN
+            : length <= 7 * DAY
+              ? HOUR
+              : length <= 30 * DAY
+                ? 6 * HOUR
+                : DAY
+  return beyond ? Math.max(HOUR, step) : step
+}
+const UNITS: Record<string, string> = {
+  turn_error_rate: "percent",
+  turn_active: "ms",
+  turn_wait: "ms",
+  call_duration: "ms",
+  ttft: "ms",
+  output_speed: "tps",
+  tokens: "tokens",
+  cache_hit: "percent",
+  cost: "usd",
+  cost_per_turn: "usd",
+  cost_billed: "usd",
+  helper_cost: "usd",
+  approval_wait: "ms",
+  approval_oldest: "ms",
+  queue_oldest: "ms",
+  queue_wait: "ms",
+  context_used: "tokens",
+  mcp_errors: "percent",
+}
+const KINDS: Record<string, string> = {
+  turns: "turn",
+  turn_error_rate: "turn",
+  turn_active: "turn",
+  turn_wait: "turn",
+  calls: "model_call",
+  call_errors: "model_call",
+  call_duration: "model_call",
+  output_speed: "model_call",
+  tokens: "model_call",
+  cache_hit: "model_call",
+  cost: "model_call",
+  tool_calls: "tool_call",
+  tool_errors: "tool_call",
+  tool_table: "tool_call",
+}
+// A chart's own split and lines; anything else is one "p50"/"calls"-style line.
+const SHAPES: Record<string, { split?: string; keys: string[]; filters?: Array<Record<string, string>> }> = {
+  turns: { split: "status", keys: ["ok", "error"], filters: [{ status: "ok" }, { status: "error" }] },
+  turn_active: { keys: ["ok_p50", "ok_p95", "failed_p50", "failed_p95"] },
+  call_errors: {
+    keys: ["errors", "http_429", "retries_exhausted"],
+    filters: [{ status: "error" }, { http: "429" }, {}],
+  },
+  tokens: { keys: ["input", "cache_read", "cache_write", "output", "reasoning"] },
+  cache_hit: {
+    split: "model",
+    keys: ["gpt-5", "claude-sonnet-4-5"],
+    filters: [{ model: "gpt-5" }, { model: "claude-sonnet-4-5" }],
+  },
+  context_used: { split: "providerModel", keys: ["openai/gpt-5"] },
+  tool_calls: { split: "tool", keys: ["bash", "edit"], filters: [{ tool: "bash" }, { tool: "edit" }] },
+  approvals: { split: "decision", keys: ["allow", "deny"] },
+  calls: { keys: ["calls"] },
+}
+const HISTOGRAMS = new Set(["calls_per_turn", "tools_per_turn"])
+
+export function metricOf(q: URLSearchParams, now: number) {
+  const metric = q.get("metric") ?? ""
+  const from = q.get("from") ? Number(q.get("from")) : now - (RANGES[q.get("range") ?? "24h"] ?? DAY)
+  const to = q.get("to") ? Number(q.get("to")) : now + 1
+  const beyond = from < now - 30 * DAY
+  const length = q.get("from") ? to - from : (RANGES[q.get("range") ?? "24h"] ?? DAY)
+  const step = q.get("step") ? Number(q.get("step")) : stepOf(length, beyond)
+  const start = Math.floor(from / step) * step
+  const count = Math.max(1, Math.ceil((to - start) / step))
+  const unit = UNITS[metric] ?? "count"
+  const scale = unit === "ms" ? 1000 : unit === "usd" ? 0.01 : unit === "tokens" ? 1000 : unit === "percent" ? 10 : 1
+  const head = {
+    step,
+    from: start,
+    to: start + count * step,
+    source: beyond ? "totals" : "events",
+    approx: beyond,
+    unit,
+    ...(KINDS[metric] ? { kind: KINDS[metric] } : {}),
+    other: [] as string[],
+  }
+  if (metric === "ttft") return { ...head, series: [], note: "needs-recording" }
+  if (metric === "tool_table")
+    return {
+      ...head,
+      series: [],
+      table: [
+        { tool: "bash", mcp: 0, calls: 12, errors: 2, error_rate: 16.7, denials: 1, p50: 800, p95: 4000, wait: 300 },
+        { tool: "github", mcp: 1, calls: 3, errors: 0, error_rate: 0, denials: 0, p50: 400, p95: 900, wait: 0 },
+      ],
+    }
+  if (metric === "approval_table")
+    return {
+      ...head,
+      series: [],
+      table: [{ permission: "bash", requests: 5, allowed: 80, p95: 60_000, decided_by: "user" }],
+    }
+  if (HISTOGRAMS.has(metric))
+    return {
+      ...head,
+      kind: "turn",
+      buckets: ["1", "2", "4", "8", "16", "32", "64", "128+"],
+      series: [
+        { key: "turns", label: "turns", points: [3, 5, 2, 1, 0, 0, 0, 0].map((value, index) => [index, value]) },
+      ],
+    }
+  const points = (offset: number) =>
+    Array.from({ length: count }, (_, index) => [start + index * step, (1 + ((index + offset) % 4)) * scale])
+  const groupBy = q.get("groupBy")
+  if (groupBy) {
+    const keys = ["gpt-5", "claude-sonnet-4-5", "Other"]
+    return {
+      ...head,
+      split: groupBy,
+      other: ["gemini-2.5-pro", "grok-4"],
+      series: keys.map((key, at) => ({
+        key,
+        label: key,
+        points: points(at),
+        ...(key === "Other" ? {} : { filter: { [groupBy]: key } }),
+      })),
+    }
+  }
+  const shape = SHAPES[metric] ?? { keys: [metric.includes("wait") || unit === "ms" ? "p50" : metric] }
+  return {
+    ...head,
+    ...(shape.split ? { split: shape.split } : {}),
+    series: shape.keys.map((key, at) => ({
+      key,
+      label: key,
+      points: points(at),
+      ...(shape.filters?.[at] ? { filter: shape.filters[at] } : {}),
+    })),
+  }
+}
 
 const tokens = (input = 0, output = 0, read = 0, write = 0) => ({
   tokens_input: input,
@@ -520,6 +684,7 @@ export function createTelemetryMock(now: number) {
       }
       return json(route, { rows: rows.toSorted((a, b) => b.time_ms - a.time_ms), seq })
     }
+    if (path === "/metrics") return json(route, metricOf(q, now))
     return json(route, { name: "NotFound", data: { message: path } }, 404)
   }
   return { state, handle }

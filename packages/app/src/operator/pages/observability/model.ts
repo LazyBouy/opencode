@@ -33,7 +33,20 @@ export type FilterKey = (typeof FILTERS)[number]
 // `session`, `turn` and `span` open the session detail (§8.4: the Dashboard links with them); a filter on one session
 // is `inSession` in the page's URL (the API's `session`).
 export const OVERLAY = ["session", "turn", "span"] as const
-export const PAGE = ["tab", "range", "from", "to", "sort", "view", "live", "cols", "section", "inSession"] as const
+export const PAGE = [
+  "tab",
+  "range",
+  "from",
+  "to",
+  "sort",
+  "view",
+  "live",
+  "cols",
+  "section",
+  "inSession",
+  "by",
+  "compare",
+] as const
 
 export const TABS = ["sessions", "events", "metrics", "logs", "alerts"] as const
 export type Tab = (typeof TABS)[number]
@@ -90,6 +103,15 @@ export function reach(range: Range, now: number, eventsDays: number) {
   const from = range.from ?? now - (STEPS[range.range ?? DEFAULT_RANGE] ?? STEPS[DEFAULT_RANGE]!)
   return { from, beyond: from < now - eventsDays * 24 * 60 * 60_000 }
 }
+
+/** Metrics' group-by per section in the URL (`by=turns:model,calls:provider`), as section → key. */
+export const groupsOf = (value: string | undefined) =>
+  Object.fromEntries(
+    (value ?? "")
+      .split(",")
+      .map((item) => item.split(":"))
+      .filter((pair): pair is [string, string] => pair.length === 2 && !!pair[0] && !!pair[1]),
+  ) as Record<string, string>
 
 export const isTab = (value: string | undefined): value is Tab =>
   !!value && (TABS as ReadonlyArray<string>).includes(value)

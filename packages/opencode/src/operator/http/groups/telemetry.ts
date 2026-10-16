@@ -15,6 +15,7 @@ export const OperatorTelemetryPaths = {
   events: "/operator/telemetry/events",
   logs: "/operator/telemetry/logs",
   facets: "/operator/telemetry/facets",
+  metrics: "/operator/telemetry/metrics",
   backfill: "/operator/telemetry/backfill",
   storage: "/operator/telemetry/storage",
 } as const
@@ -159,6 +160,24 @@ export const OperatorTelemetryGroup = HttpApiGroup.make("operatorTelemetry")
         "operator.telemetry.facets",
         "Count a field's values",
         "Up to 20 values of a field with their counts under the filter, leaving that field's own filter out.",
+      ),
+    ),
+    HttpApiEndpoint.get("metrics", OperatorTelemetryPaths.metrics, {
+      query: Schema.Struct({
+        ...T.FilterQuery,
+        metric: Schema.String.annotate({ description: "A metric id (observability_spec.md §12.3)" }),
+        groupBy: Schema.optional(Schema.String).annotate({
+          description: "One the metric's section offers: agent, project, model, provider or kind",
+        }),
+        step: Schema.optional(Schema.String).annotate({ description: "auto (default, §12.2) or ms" }),
+      }),
+      success: described(T.Metric, "The metric's series"),
+      error: ApiTelemetryNotFoundError,
+    }).annotateMerge(
+      annotations(
+        "operator.telemetry.metrics",
+        "Get a metric",
+        "One chart's series under the filter: from spans inside the detailed window, from hourly totals (≈) past it. A split shows the top 5 values and Other.",
       ),
     ),
     HttpApiEndpoint.get("backfillStatus", OperatorTelemetryPaths.backfill, {

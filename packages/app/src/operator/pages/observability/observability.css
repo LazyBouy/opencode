@@ -461,3 +461,40 @@ tr:focus-within [data-slot="operator-obs-row-actions"] {
   white-space: pre-wrap;
   font-family: var(--font-mono, monospace);
 }
+
+/* Metrics (§12): collapsible sections of charts. */
+[data-component="operator-obs-metrics"] {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+[data-slot="operator-obs-section"] > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+[data-slot="operator-obs-section"] > header h3 {
+  display: inline;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+[data-slot="operator-obs-charts"] {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+
+[data-slot="operator-obs-chart-cell"] {
+  min-width: 0;
+}
+
+[data-slot="operator-obs-chart-cell"][data-wide] {
+  grid-column: 1 / -1;
+}

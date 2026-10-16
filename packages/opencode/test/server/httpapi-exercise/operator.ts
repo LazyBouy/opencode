@@ -1456,6 +1456,15 @@ export const operatorScenarios: Scenario[] = [
     .get("/operator/telemetry/facets", "operator.telemetry.facets")
     .at((ctx) => ({ path: "/operator/telemetry/facets?scope=events&field=kind&range=7d", headers: ctx.headers() }))
     .json(200, array),
+  http.protected
+    .get("/operator/telemetry/metrics", "operator.telemetry.metrics")
+    .at((ctx) => ({ path: "/operator/telemetry/metrics?metric=calls&groupBy=model&range=6h", headers: ctx.headers() }))
+    .json(200, (body) => {
+      object(body)
+      array(body.series)
+      check(body.step === 5 * 60_000, "a 6 h range steps by 5 minutes")
+      check(body.source === "events", "inside the detailed window, from events")
+    }),
   http.protected.get("/operator/telemetry/backfill", "operator.telemetry.backfillStatus").json(200, (body) => {
     object(body)
     check(["idle", "running", "done", "failed"].includes(String(body.state)), "a known state")

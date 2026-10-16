@@ -3770,6 +3770,50 @@ export type OperatorTelemetryFacet = {
   count: number
 }
 
+export type OperatorTelemetryMetricSeries = {
+  /**
+   * A value of the split (Other for the rest), or the line's name
+   */
+  key: string
+  label: string
+  /**
+   * [time (ms, the step's start; a histogram's bucket index), value or null]
+   */
+  points: Array<Array<number>>
+  filter?: {
+    [key: string]: string
+  }
+  line?: boolean
+}
+
+export type OperatorTelemetryMetric = {
+  /**
+   * ms
+   */
+  step: number
+  from: number
+  to: number
+  source: "events" | "totals"
+  /**
+   * From hourly totals: percentiles estimated within a bucket
+   */
+  approx: boolean
+  unit: "count" | "ms" | "percent" | "usd" | "tokens" | "tps"
+  kind?: string
+  series: Array<OperatorTelemetryMetricSeries>
+  /**
+   * The values counted in Other
+   */
+  other: Array<string>
+  split?: string
+  table?: Array<{
+    [key: string]: string | number
+  }>
+  buckets?: Array<string>
+  note?: "needs-events" | "needs-recording"
+  ignored?: Array<string>
+}
+
 export type OperatorTelemetryBackfill = {
   state: "idle" | "running" | "done" | "failed"
   done: number
@@ -13875,6 +13919,71 @@ export type OperatorTelemetryFacetsResponses = {
 }
 
 export type OperatorTelemetryFacetsResponse = OperatorTelemetryFacetsResponses[keyof OperatorTelemetryFacetsResponses]
+
+export type OperatorTelemetryMetricsData = {
+  body?: never
+  path?: never
+  query: {
+    range?: string
+    from?: string
+    to?: string
+    ns?: string
+    dir?: string
+    session?: string
+    agent?: string
+    agentType?: string
+    model?: string
+    provider?: string
+    tool?: string
+    mcp?: string
+    kind?: string
+    status?: string
+    errorType?: string
+    finish?: string
+    decision?: string
+    minCost?: string
+    maxCost?: string
+    minDuration?: string
+    maxDuration?: string
+    minTokens?: string
+    loop?: string
+    http?: string
+    q?: string
+    roots?: string
+    sessionStatus?: string
+    stuck?: string
+    /**
+     * A metric id (observability_spec.md §12.3)
+     */
+    metric: string
+    groupBy?: string
+    step?: string
+  }
+  url: "/operator/telemetry/metrics"
+}
+
+export type OperatorTelemetryMetricsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * OperatorTelemetryNotFoundError
+   */
+  404: OperatorTelemetryNotFoundError
+}
+
+export type OperatorTelemetryMetricsError = OperatorTelemetryMetricsErrors[keyof OperatorTelemetryMetricsErrors]
+
+export type OperatorTelemetryMetricsResponses = {
+  /**
+   * The metric's series
+   */
+  200: OperatorTelemetryMetric
+}
+
+export type OperatorTelemetryMetricsResponse =
+  OperatorTelemetryMetricsResponses[keyof OperatorTelemetryMetricsResponses]
 
 export type OperatorTelemetryBackfillStatusData = {
   body?: never

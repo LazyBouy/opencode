@@ -6733,6 +6733,303 @@
         ]
       }
     },
+    "/operator/telemetry/metrics": {
+      "get": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.metrics",
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "ns",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "session",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "agentType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "tool",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "mcp",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "errorType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "finish",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "decision",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "minCost",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "maxCost",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "minDuration",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "maxDuration",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "minTokens",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "loop",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "http",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "roots",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "sessionStatus",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "stuck",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "metric",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "description": "A metric id (observability_spec.md §12.3)"
+            },
+            "required": true
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "step",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The metric's series",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryMetric"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorTelemetryNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "One chart's series under the filter: from spans inside the detailed window, from hourly totals (≈) past it. A split shows the top 5 values and Other.",
+        "summary": "Get a metric",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.metrics({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/operator/telemetry/backfill": {
       "get": {
         "tags": ["operator telemetry"],
@@ -38399,6 +38696,119 @@
           }
         },
         "required": ["value", "count"],
+        "additionalProperties": false
+      },
+      "OperatorTelemetryMetricSeries": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "A value of the split (Other for the rest), or the line's name"
+          },
+          "label": {
+            "type": "string"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "description": "[time (ms, the step's start; a histogram's bucket index), value or null]"
+          },
+          "filter": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "line": {
+            "type": "boolean"
+          }
+        },
+        "required": ["key", "label", "points"],
+        "additionalProperties": false
+      },
+      "OperatorTelemetryMetric": {
+        "type": "object",
+        "properties": {
+          "step": {
+            "type": "number",
+            "description": "ms"
+          },
+          "from": {
+            "type": "number"
+          },
+          "to": {
+            "type": "number"
+          },
+          "source": {
+            "type": "string",
+            "enum": ["events", "totals"]
+          },
+          "approx": {
+            "type": "boolean",
+            "description": "From hourly totals: percentiles estimated within a bucket"
+          },
+          "unit": {
+            "type": "string",
+            "enum": ["count", "ms", "percent", "usd", "tokens", "tps"]
+          },
+          "kind": {
+            "type": "string"
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorTelemetryMetricSeries"
+            }
+          },
+          "other": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The values counted in Other"
+          },
+          "split": {
+            "type": "string"
+          },
+          "table": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              }
+            }
+          },
+          "buckets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "note": {
+            "type": "string",
+            "enum": ["needs-events", "needs-recording"]
+          },
+          "ignored": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["step", "from", "to", "source", "approx", "unit", "series", "other"],
         "additionalProperties": false
       },
       "OperatorTelemetryBackfill": {

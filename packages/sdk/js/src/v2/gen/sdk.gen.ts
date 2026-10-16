@@ -427,6 +427,8 @@ import type {
   OperatorTelemetryKeepResponses,
   OperatorTelemetryLogsErrors,
   OperatorTelemetryLogsResponses,
+  OperatorTelemetryMetricsErrors,
+  OperatorTelemetryMetricsResponses,
   OperatorTelemetrySessionErrors,
   OperatorTelemetrySessionResponses,
   OperatorTelemetrySessionsErrors,
@@ -4820,6 +4822,98 @@ export class Telemetry extends HeyApiClient {
       ThrowOnError
     >({
       url: "/operator/telemetry/facets",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get a metric
+   *
+   * One chart's series under the filter: from spans inside the detailed window, from hourly totals (≈) past it. A split shows the top 5 values and Other.
+   */
+  public metrics<ThrowOnError extends boolean = false>(
+    parameters: {
+      range?: string
+      from?: string
+      to?: string
+      ns?: string
+      dir?: string
+      session?: string
+      agent?: string
+      agentType?: string
+      model?: string
+      provider?: string
+      tool?: string
+      mcp?: string
+      kind?: string
+      status?: string
+      errorType?: string
+      finish?: string
+      decision?: string
+      minCost?: string
+      maxCost?: string
+      minDuration?: string
+      maxDuration?: string
+      minTokens?: string
+      loop?: string
+      http?: string
+      q?: string
+      roots?: string
+      sessionStatus?: string
+      stuck?: string
+      metric: string
+      groupBy?: string
+      step?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "range" },
+            { in: "query", key: "from" },
+            { in: "query", key: "to" },
+            { in: "query", key: "ns" },
+            { in: "query", key: "dir" },
+            { in: "query", key: "session" },
+            { in: "query", key: "agent" },
+            { in: "query", key: "agentType" },
+            { in: "query", key: "model" },
+            { in: "query", key: "provider" },
+            { in: "query", key: "tool" },
+            { in: "query", key: "mcp" },
+            { in: "query", key: "kind" },
+            { in: "query", key: "status" },
+            { in: "query", key: "errorType" },
+            { in: "query", key: "finish" },
+            { in: "query", key: "decision" },
+            { in: "query", key: "minCost" },
+            { in: "query", key: "maxCost" },
+            { in: "query", key: "minDuration" },
+            { in: "query", key: "maxDuration" },
+            { in: "query", key: "minTokens" },
+            { in: "query", key: "loop" },
+            { in: "query", key: "http" },
+            { in: "query", key: "q" },
+            { in: "query", key: "roots" },
+            { in: "query", key: "sessionStatus" },
+            { in: "query", key: "stuck" },
+            { in: "query", key: "metric" },
+            { in: "query", key: "groupBy" },
+            { in: "query", key: "step" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorTelemetryMetricsResponses,
+      OperatorTelemetryMetricsErrors,
+      ThrowOnError
+    >({
+      url: "/operator/telemetry/metrics",
       ...options,
       ...params,
     })

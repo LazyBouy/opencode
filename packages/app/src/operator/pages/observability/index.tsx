@@ -13,6 +13,7 @@ import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
 import { ready, useOperatorClient } from "../../data"
 import { formatCount, formatDateTime } from "../../format"
+import { OPENCODE } from "../profile-model"
 import { useOperatorScope } from "../../scope"
 import { EmptyState } from "../../ui/empty-state"
 import { FieldHelp } from "../../ui/field-help"
@@ -24,19 +25,21 @@ import { OverlayFrame } from "../../ui/overlay-frame"
 import { useOverlayParams } from "../../ui/overlay-nav"
 import { ScopePicker } from "../../ui/scope-picker"
 import { TimeRange } from "../../ui/time-range"
-import { chips, filterOf, isTab, type Params, rangeOf, rangeQuery, reach, type Tab } from "./model"
+import { chips, filterOf, groupsOf, isTab, type Params, rangeOf, rangeQuery, reach, type Tab } from "./model"
 import { EventsTab } from "./events"
 import { LogsTab } from "./logs"
+import { MetricsTab } from "./metrics"
 import { SessionDetail, SpanPanel } from "./session-detail"
 import { SessionsTab } from "./sessions"
 import "./observability.css"
 
 // Observability (observability_spec.md §8): "what exactly happened, when, and why?" across sessions. One time range
 // and one scope for the whole page; the URL is the state (§8.4), so links can be shared, Back works and the Dashboard
-// links in. Tabs: Sessions (the rest come with their phases). A session opens in its detail over the tab.
+// links in. Tabs: Sessions, Events, Metrics and Logs (Alerts comes with its phase). A session opens in its detail
+// over the tab.
 
 type Key = Parameters<ReturnType<typeof useLanguage>["t"]>[0]
-const BUILT: ReadonlyArray<Tab> = ["sessions", "events", "logs"]
+const BUILT: ReadonlyArray<Tab> = ["sessions", "events", "metrics", "logs"]
 const REFRESH = 30_000
 
 export default function ObservabilityPage() {
@@ -49,7 +52,7 @@ export default function ObservabilityPage() {
   const namespaces = useNamespaceScope()
   const [prefs, setPrefs] = persisted(
     Persist.global("operator.observability"),
-    createStore({ range: "24h", facets: true }),
+    createStore({ range: "24h", facets: true, closed: [] as string[] }),
   )
   const tab = (): Tab => (isTab(params.tab) && BUILT.includes(params.tab) ? params.tab : "sessions")
   const range = () => rangeOf(params as Params, prefs.range)
@@ -151,6 +154,79 @@ export default function ObservabilityPage() {
     })
   }
 
+  // Metrics (§12): Group by and Compare per section in the URL; collapsed sections per viewer.
+  const groups = () => groupsOf(params.by)
+  const compared = () => (params.compare ?? "").split(",").filter(Boolean)
+  const setGroup = (section: string, key: string | undefined) => {
+    const next = { ...groups(), [section]: key }
+    const value = Object.entries(next)
+      .filter(([, item]) => item)
+      .map(([name, item]) => `${name}:${item}`)
+      .join(",")
+    setParams({ by: value || undefined })
+  }
+  const setCompare = (section: string, on: boolean) => {
+    const next = on ? [...new Set([...compared(), section])] : compared().filter((item) => item !== section)
+    setParams({ compare: next.join(",") || undefined })
+  }
+  const toggleSection = (section: string) =>
+    setPrefs("closed", (closed) =>
+      closed.includes(section) ? closed.filter((item) => item !== section) : [...closed, section],
+    )
+  // Context used is a share of each model's context: the limits from the providers of the project in scope (or the
+  // namespace's default project).
+  const limitsDir = () =>
+    scope.directory() ??
+    namespaces.namespaces().find((item) => item.namespace.id === (ns() ?? OPENCODE))?.defaultProject ??
+    namespaces.namespaces()[0]?.defaultProject
+  const providers = useQuery(() => ({
+    queryKey: api.key("providers", limitsDir()),
+    enabled: tab() === "metrics",
+    staleTime: 5 * 60_000,
+    queryFn: () =>
+      api
+        .client()
+        .config.providers(limitsDir() ? { directory: limitsDir() } : {})
+        .then((result) => result.data!),
+  }))
+  const limits = createMemo(() =>
+    Object.fromEntries(
+      (ready(providers)?.providers ?? []).flatMap((provider) =>
+        Object.values(provider.models)
+          .filter((model) => model.limit?.context)
+          .map((model) => [`${provider.id}/${model.id}`, model.limit.context]),
+      ),
+    ),
+  )
+  // A point opens Events filtered to its step and series; a project filter is the page's scope.
+  const toEvents = (filter: Record<string, string>, from: number, to: number) => {
+    const { dir, session, ...rest } = filter
+    if (dir) scope.setDirectory(dir)
+    setParams({
+      tab: "events",
+      ...rest,
+      ...(session ? { inSession: session } : {}),
+      from: String(from),
+      to: String(to),
+      range: undefined,
+      sort: undefined,
+      live: undefined,
+      section: undefined,
+    })
+  }
+  const [zoomedFrom, setZoomedFrom] = createSignal<{ range?: string; from?: number; to?: number }>()
+  const zoom = (from: number, to: number) => {
+    if (!zoomedFrom()) setZoomedFrom(range())
+    setRange({ from, to })
+  }
+  const rangeLabel = () =>
+    range().range
+      ? t(`operator.timeRange.${range().range}` as Key)
+      : t("operator.timeRange.customShown", {
+          from: formatDateTime(range().from, language.intl()),
+          to: formatDateTime(range().to, language.intl()),
+        })
+
   const setFilter = (key: string, value: string | undefined) => setParams({ [key]: value || undefined })
   const [search, setSearch] = createSignal(params.q ?? "")
   createEffect(
@@ -216,7 +292,17 @@ export default function ObservabilityPage() {
               size="small"
               variant="ghost"
               aria-label={t("operator.obs.refresh")}
-              onClick={() => void queryClient.invalidateQueries({ queryKey: api.key("telemetry-sessions") })}
+              onClick={() =>
+                void queryClient.invalidateQueries({
+                  queryKey: api.key(
+                    tab() === "metrics"
+                      ? "telemetry-metric"
+                      : tab() === "sessions"
+                        ? "telemetry-sessions"
+                        : `telemetry-${tab()}`,
+                  ),
+                })
+              }
             >
               <Icon name="reset" size="small" />
             </ButtonV2>
@@ -234,7 +320,19 @@ export default function ObservabilityPage() {
             }}
           />
           <ScopePicker all namespace={params.ns ?? "*"} />
-          <TimeRange value={range()} onChange={setRange} />
+          <TimeRange
+            value={range()}
+            onChange={(value) => {
+              setZoomedFrom(undefined)
+              setRange(value)
+            }}
+            {...(zoomedFrom() ? { zoomedFrom: zoomedFrom()! } : {})}
+            onResetZoom={() => {
+              const before = zoomedFrom()
+              setZoomedFrom(undefined)
+              if (before) setRange(before)
+            }}
+          />
         </div>
       </PageHeader>
       <Show when={ready(backfill)?.state === "running"}>
@@ -333,7 +431,8 @@ export default function ObservabilityPage() {
       </Show>
       <div data-component="operator-obs-layout" data-facets={prefs.facets ? "" : undefined}>
         <Facets
-          scope={tab() === "logs" ? "logs" : tab() === "events" ? "events" : "sessions"}
+          scope={tab() === "logs" ? "logs" : tab() === "events" || tab() === "metrics" ? "events" : "sessions"}
+          fields={FACET_FIELDS[tab()]}
           query={tab() === "logs" ? logsQuery() : query()}
           open={prefs.facets}
           onToggle={() => setPrefs("facets", !prefs.facets)}
@@ -387,6 +486,24 @@ export default function ObservabilityPage() {
               }}
             />
           </Show>
+          <Show when={tab() === "metrics"}>
+            <MetricsTab
+              query={query()}
+              refresh={refresh()}
+              rangeLabel={rangeLabel()}
+              groups={groups()}
+              onGroup={setGroup}
+              compare={compared()}
+              onCompare={setCompare}
+              closed={prefs.closed}
+              onToggle={toggleSection}
+              {...(params.section ? { focus: params.section } : {})}
+              eventsDays={eventsDays()}
+              limits={limits()}
+              onEvents={toEvents}
+              onZoom={zoom}
+            />
+          </Show>
           <Show when={tab() === "logs"}>
             <LogsTab
               query={logsQuery()}
@@ -418,12 +535,14 @@ export default function ObservabilityPage() {
 const FACET_FIELDS: Record<string, ReadonlyArray<string>> = {
   sessions: ["sessionStatus", "agent", "agentType", "model", "dir"],
   events: ["kind", "status", "agent", "model", "tool", "errorType", "dir"],
+  metrics: ["agent", "model", "provider", "tool", "status", "dir"],
   logs: ["level", "service"],
 }
 
 /** The facet panel (§8.1): each field's top values with counts under the filter; a value picks it. */
 function Facets(props: {
   scope: "sessions" | "events" | "logs"
+  fields: ReadonlyArray<string> | undefined
   query: Record<string, string>
   open: boolean
   onToggle: () => void
@@ -439,7 +558,7 @@ function Facets(props: {
         {t("operator.obs.facets")}
       </ButtonV2>
       <Show when={props.open}>
-        <For each={FACET_FIELDS[props.scope] ?? []}>
+        <For each={props.fields ?? []}>
           {(field) => (
             <Facet
               scope={props.scope}

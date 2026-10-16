@@ -1,0 +1,349 @@
+/* Charts (observability_spec.md §17, §18): colours from the theme only; every series also has a dash or a pattern. */
+
+[data-component="operator-chart-frame"] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--v2-border-border-muted);
+  border-radius: 8px;
+  background: var(--v2-background-bg-layer-01);
+}
+
+[data-component="operator-chart-frame"] > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+[data-component="operator-chart-frame"] > header h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--v2-text-text-base);
+}
+
+[data-component="operator-chart-frame"] > header > button:last-child {
+  margin-left: auto;
+}
+
+[data-component="operator-chart-frame"] > footer {
+  font-size: 12px;
+}
+
+[data-slot="operator-chart-state"] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  padding: 12px;
+  text-align: center;
+  color: var(--v2-text-text-muted);
+}
+
+[data-component="operator-chart"] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+[data-slot="operator-chart-plot"] {
+  position: relative;
+  min-width: 0;
+  border-radius: 4px;
+  outline: none;
+}
+
+[data-slot="operator-chart-plot"]:focus-visible {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: 2px;
+}
+
+[data-slot="operator-chart-plot"] .u-select {
+  background: color-mix(in srgb, var(--v2-text-text-accent) 18%, transparent);
+}
+
+[data-slot="operator-chart-plot"] .u-over {
+  cursor: crosshair;
+}
+
+[data-slot="operator-chart-tip"] {
+  position: absolute;
+  z-index: 5;
+  min-width: 140px;
+  padding: 6px 8px;
+  border: 1px solid var(--v2-border-border-base);
+  border-radius: 6px;
+  background: var(--v2-background-bg-base);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+[data-slot="operator-chart-tip-time"] {
+  margin-bottom: 4px;
+  color: var(--v2-text-text-muted);
+}
+
+[data-slot="operator-chart-tip-row"] {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+[data-slot="operator-chart-tip-row"] strong {
+  margin-left: auto;
+  padding-left: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-slot="operator-chart-legend"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--v2-text-text-muted);
+}
+
+[data-slot="operator-chart-legend"] li {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* A series' colour, for swatches, histogram bars and bar-list bars. */
+:is([data-slot="operator-chart-swatch"], [data-slot="operator-histogram-bar"], [data-slot="operator-bar-list-bar"]) {
+  --swatch: var(--v2-agent-build-solid);
+}
+:is(
+  [data-slot="operator-chart-swatch"],
+  [data-slot="operator-histogram-bar"],
+  [data-slot="operator-bar-list-bar"]
+)[data-color="1"] {
+  --swatch: var(--v2-agent-explore-solid);
+}
+:is(
+  [data-slot="operator-chart-swatch"],
+  [data-slot="operator-histogram-bar"],
+  [data-slot="operator-bar-list-bar"]
+)[data-color="2"] {
+  --swatch: var(--v2-agent-plan-solid);
+}
+:is(
+  [data-slot="operator-chart-swatch"],
+  [data-slot="operator-histogram-bar"],
+  [data-slot="operator-bar-list-bar"]
+)[data-color="3"] {
+  --swatch: var(--v2-agent-review-solid);
+}
+:is(
+  [data-slot="operator-chart-swatch"],
+  [data-slot="operator-histogram-bar"],
+  [data-slot="operator-bar-list-bar"]
+)[data-color="4"] {
+  --swatch: var(--v2-agent-writer-solid);
+}
+:is(
+  [data-slot="operator-chart-swatch"],
+  [data-slot="operator-histogram-bar"],
+  [data-slot="operator-bar-list-bar"]
+)[data-tone="danger"] {
+  --swatch: var(--v2-state-fg-danger);
+}
+:is(
+  [data-slot="operator-chart-swatch"],
+  [data-slot="operator-histogram-bar"],
+  [data-slot="operator-bar-list-bar"]
+)[data-tone="warning"] {
+  --swatch: var(--v2-state-fg-warning);
+}
+:is(
+  [data-slot="operator-chart-swatch"],
+  [data-slot="operator-histogram-bar"],
+  [data-slot="operator-bar-list-bar"]
+)[data-tone="success"] {
+  --swatch: var(--v2-state-fg-success);
+}
+:is(
+  [data-slot="operator-chart-swatch"],
+  [data-slot="operator-histogram-bar"],
+  [data-slot="operator-bar-list-bar"]
+)[data-tone="muted"] {
+  --swatch: var(--v2-text-text-muted);
+}
+
+[data-slot="operator-chart-swatch"] {
+  --swatch-back: color-mix(in srgb, var(--swatch) 22%, var(--v2-background-bg-base));
+  display: inline-block;
+  flex: none;
+  width: 16px;
+  height: 10px;
+}
+
+/* Lines: the dash the chart draws. */
+[data-slot="operator-chart-swatch"][data-dash] {
+  height: 2px;
+  background: var(--swatch);
+}
+[data-slot="operator-chart-swatch"][data-dash="1"] {
+  background: repeating-linear-gradient(90deg, var(--swatch) 0 6px, transparent 6px 9px);
+}
+[data-slot="operator-chart-swatch"][data-dash="2"] {
+  background: repeating-linear-gradient(90deg, var(--swatch) 0 2px, transparent 2px 5px);
+}
+[data-slot="operator-chart-swatch"][data-dash="3"] {
+  background: repeating-linear-gradient(
+    90deg,
+    var(--swatch) 0 10px,
+    transparent 10px 13px,
+    var(--swatch) 13px 15px,
+    transparent 15px 18px
+  );
+}
+[data-slot="operator-chart-swatch"][data-dash="4"] {
+  background: repeating-linear-gradient(90deg, var(--swatch) 0 1px, transparent 1px 5px);
+}
+[data-slot="operator-chart-swatch"][data-dash="5"] {
+  background: repeating-linear-gradient(90deg, var(--swatch) 0 12px, transparent 12px 17px);
+}
+[data-slot="operator-chart-swatch"][data-compare] {
+  height: 2px;
+  background: repeating-linear-gradient(90deg, var(--v2-text-text-muted) 0 4px, transparent 4px 8px);
+}
+
+/* Stacked fills: the pattern the chart draws. */
+[data-slot="operator-chart-swatch"][data-pattern] {
+  border: 1px solid var(--swatch);
+  background: color-mix(in srgb, var(--swatch) 60%, var(--v2-background-bg-base));
+}
+[data-slot="operator-chart-swatch"][data-pattern="hatch"] {
+  background: repeating-linear-gradient(-45deg, var(--swatch) 0 1.5px, var(--swatch-back) 1.5px 5px);
+}
+[data-slot="operator-chart-swatch"][data-pattern="back"] {
+  background: repeating-linear-gradient(45deg, var(--swatch) 0 1.5px, var(--swatch-back) 1.5px 5px);
+}
+[data-slot="operator-chart-swatch"][data-pattern="cross"] {
+  background:
+    repeating-linear-gradient(45deg, var(--swatch) 0 1px, transparent 1px 5px),
+    repeating-linear-gradient(-45deg, var(--swatch) 0 1px, var(--swatch-back) 1px 5px);
+}
+[data-slot="operator-chart-swatch"][data-pattern="dots"] {
+  background:
+    radial-gradient(var(--swatch) 0.9px, transparent 1.2px) 0 0 / 4px 4px,
+    var(--swatch-back);
+}
+
+/* Histogram: one column per bucket. */
+[data-component="operator-histogram"] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+[data-slot="operator-histogram-plot"] {
+  display: flex;
+  gap: 6px;
+  height: var(--chart-height);
+}
+
+[data-slot="operator-histogram-bucket"] {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+[data-slot="operator-histogram-bars"] {
+  display: flex;
+  flex: 1;
+  align-items: flex-end;
+  gap: 2px;
+  border-bottom: 1px solid var(--v2-border-border-muted);
+}
+
+[data-slot="operator-histogram-bar"] {
+  flex: 1;
+  border-radius: 2px 2px 0 0;
+  background: var(--swatch);
+}
+
+[data-slot="operator-histogram-label"] {
+  padding-top: 2px;
+  font-size: 11px;
+  text-align: center;
+  color: var(--v2-text-text-muted);
+}
+
+/* Bar list: ranked rows with inline bars. */
+[data-component="operator-bar-list"] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+[data-component="operator-bar-list"] li {
+  display: grid;
+  grid-template-columns: minmax(80px, 30%) 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+
+[data-component="operator-bar-list"] li > :is(button[data-slot="operator-link"], p) {
+  grid-column: 1 / -1;
+  justify-self: start;
+  margin: 0;
+}
+
+[data-slot="operator-bar-list-label"] {
+  overflow: hidden;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button[data-slot="operator-bar-list-label"] {
+  color: var(--v2-text-text-accent);
+}
+
+[data-slot="operator-bar-list-track"] {
+  overflow: hidden;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--v2-background-bg-layer-02);
+}
+
+[data-slot="operator-bar-list-bar"] {
+  display: block;
+  height: 100%;
+  background: var(--swatch);
+}
+
+[data-slot="operator-bar-list-value"] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Show as table. */
+[data-component="operator-chart-table"] {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+[data-slot="operator-chart-table-scroll"] {
+  overflow: auto;
+  max-width: 100%;
+  max-height: 260px;
+}

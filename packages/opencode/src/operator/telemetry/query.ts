@@ -71,7 +71,7 @@ const list = (value: string | undefined) =>
     .map((item) => item.trim())
     .filter(Boolean) ?? []
 
-type Clause = { sql: string; params: Array<string | number> }
+export type Clause = { sql: string; params: Array<string | number> }
 const AND = (clauses: Clause[]): Clause => ({
   sql: clauses.length ? clauses.map((clause) => `(${clause.sql})`).join(" AND ") : "1 = 1",
   params: clauses.flatMap((clause) => clause.params),
@@ -97,7 +97,8 @@ const SPAN_FIELDS = {
 } as const
 export type Field = keyof typeof SPAN_FIELDS | "dir"
 
-function scope(filter: Filter, context: Context, column = "project_key"): Clause[] {
+/** The namespace or project filter on a project key column. */
+export function scope(filter: Filter, context: Context, column = "project_key"): Clause[] {
   const out: Clause[] = []
   if (filter.dir) out.push({ sql: `${column} = ?`, params: [filter.dir] })
   else if (filter.ns) {

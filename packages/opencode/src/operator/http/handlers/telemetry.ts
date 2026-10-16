@@ -6,6 +6,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { PartTable } from "@opencode-ai/core/session/sql"
 import { OperatorProfileStore } from "@/operator/profile-store"
 import { OperatorTelemetry } from "@/operator/telemetry/telemetry"
+import { OperatorTelemetryMetrics } from "@/operator/telemetry/metrics"
 import { OperatorTelemetryQuery } from "@/operator/telemetry/query"
 import { OperatorTelemetryStore } from "@/operator/telemetry/store"
 import { OperatorRootApi } from "../groups/overview"
@@ -213,6 +214,22 @@ export const operatorTelemetryHandlers = HttpApiBuilder.group(OperatorRootApi, "
         Effect.gen(function* () {
           const { scope, field, ...rest } = ctx.query
           return OperatorTelemetryQuery.facet(store(), filterOf(rest), yield* context(), { scope, field })
+        }),
+      )
+      .handle("metrics", (ctx) =>
+        Effect.gen(function* () {
+          const { metric, groupBy, step, ...rest } = ctx.query
+          if (!(OperatorTelemetryMetrics.IDS as ReadonlyArray<string>).includes(metric))
+            return yield* notFound(`No metric ${metric}`)
+          const size = step === "auto" ? undefined : number(step)
+          return OperatorTelemetryMetrics.compute(store(), {
+            metric: metric as OperatorTelemetryMetrics.Metric,
+            ...(groupBy ? { groupBy } : {}),
+            ...(size !== undefined && size > 0 ? { step: size } : {}),
+            filter: filterOf(rest),
+            context: yield* context(),
+            eventsDays: telemetry.settings().eventsDays,
+          })
         }),
       )
       .handle("backfillStatus", () => Effect.sync(() => telemetry.progress()))

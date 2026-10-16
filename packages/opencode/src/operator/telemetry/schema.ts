@@ -207,6 +207,41 @@ export const Storage = Schema.Struct({
   oldestLog: Schema.optional(Schema.Finite),
 }).annotate({ identifier: "OperatorTelemetryStorage" })
 
+export const MetricSeries = Schema.Struct({
+  key: Schema.String.annotate({ description: "A value of the split (Other for the rest), or the line's name" }),
+  label: Schema.String,
+  points: Schema.Array(Schema.Array(Schema.NullOr(Schema.Finite))).annotate({
+    description: "[time (ms, the step's start; a histogram's bucket index), value or null]",
+  }),
+  filter: Schema.optional(Schema.Record(Schema.String, Schema.String)).annotate({
+    description: "The Events filter a point opens, besides the metric's kind and the step's time",
+  }),
+  line: Schema.optional(Schema.Boolean).annotate({ description: "Drawn as a line over the stacked series" }),
+}).annotate({ identifier: "OperatorTelemetryMetricSeries" })
+
+export const Metric = Schema.Struct({
+  step: Schema.Finite.annotate({ description: "ms" }),
+  from: Schema.Finite,
+  to: Schema.Finite,
+  source: Schema.Literals(["events", "totals"]),
+  approx: Schema.Boolean.annotate({ description: "From hourly totals: percentiles estimated within a bucket" }),
+  unit: Schema.Literals(["count", "ms", "percent", "usd", "tokens", "tps"]),
+  kind: Schema.optional(Schema.String).annotate({ description: "The span kind a point opens in Events" }),
+  series: Schema.Array(MetricSeries),
+  other: Schema.Array(Schema.String).annotate({ description: "The values counted in Other" }),
+  split: Schema.optional(Schema.String).annotate({
+    description: "What the series' keys are values of, when split: status, decision, model, project, agent, …",
+  }),
+  table: Schema.optional(
+    Schema.Array(Schema.Record(Schema.String, Schema.NullOr(Schema.Union([Schema.String, Schema.Finite])))),
+  ),
+  buckets: Schema.optional(Schema.Array(Schema.String)).annotate({ description: "A histogram's bucket labels" }),
+  note: Schema.optional(Schema.Literals(["needs-events", "needs-recording"])),
+  ignored: Schema.optional(Schema.Array(Schema.String)).annotate({
+    description: "Filters (or groupBy) hourly totals don't keep, so not applied",
+  }),
+}).annotate({ identifier: "OperatorTelemetryMetric" })
+
 /** The shared filter (§7.2), as query parameters: lists comma-separated, numbers as text. */
 export const FilterQuery = {
   range: Schema.optional(Schema.String).annotate({
