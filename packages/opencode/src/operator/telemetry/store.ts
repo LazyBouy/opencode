@@ -13,7 +13,7 @@ import { Global } from "@opencode-ai/core/global"
 // `seq` grows on every insert or update, server-wide, for the live tail. Nothing here holds content (§4.7): no
 // prompts, outputs, tool arguments or results, only short error messages and salted hashes.
 
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 
 export const KINDS = [
   "turn",
@@ -315,6 +315,24 @@ const MIGRATIONS: ReadonlyArray<ReadonlyArray<string>> = [
     `CREATE INDEX IF NOT EXISTS sample_name ON sample (name, time_ms)`,
     `CREATE TABLE IF NOT EXISTS kept_session (session_id TEXT PRIMARY KEY, time_ms INTEGER NOT NULL)`,
   ],
+  // Version 2: hourly totals (§6.2), what spans that went left in them, and the hours to recompute.
+  [
+    ...(["total_hour", "total_frozen"] as const).flatMap((table) => [
+      `CREATE TABLE IF NOT EXISTS ${table} (
+        hour_ms INTEGER NOT NULL,
+        kind TEXT, project_key TEXT, agent TEXT, agent_type TEXT, model TEXT, provider TEXT,
+        tool TEXT, mcp_server TEXT, status TEXT, error_type TEXT,
+        count INTEGER NOT NULL, duration_ms INTEGER NOT NULL, active_ms INTEGER NOT NULL, wait_ms INTEGER NOT NULL,
+        tokens_input INTEGER NOT NULL, tokens_output INTEGER NOT NULL, tokens_reasoning INTEGER NOT NULL,
+        tokens_cache_read INTEGER NOT NULL, tokens_cache_write INTEGER NOT NULL,
+        cost REAL NOT NULL, cost_side REAL NOT NULL, cost_billed REAL NOT NULL,
+        http_429 INTEGER NOT NULL, retries INTEGER NOT NULL, loops INTEGER NOT NULL,
+        hist_active TEXT NOT NULL, hist_ttft TEXT NOT NULL, hist_wait TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS ${table}_hour ON ${table} (hour_ms)`,
+    ]),
+    `CREATE TABLE IF NOT EXISTS dirty_hour (hour_ms INTEGER PRIMARY KEY)`,
+  ],
 ]
 
 const placeholders = (count: number) => Array.from({ length: count }, () => "?").join(", ")
@@ -330,6 +348,8 @@ export class Store {
     this.file = file
     fs.mkdirSync(path.dirname(file), { recursive: true })
     this.db = new Database(file, { create: true })
+    // Purging frees pages as it goes (§6.1); set before the first table, or converted once below.
+    this.db.exec("PRAGMA auto_vacuum = INCREMENTAL")
     this.db.exec("PRAGMA journal_mode = WAL")
     this.db.exec("PRAGMA synchronous = NORMAL")
     this.db.exec("PRAGMA busy_timeout = 5000")
@@ -356,6 +376,8 @@ export class Store {
       this.setMeta("schema_version", String(SCHEMA_VERSION))
     })()
     if (!this.meta("secret")) this.setMeta("secret", crypto.randomBytes(32).toString("hex"))
+    const vacuum = this.db.query("PRAGMA auto_vacuum").get() as { auto_vacuum: number } | null
+    if (vacuum?.auto_vacuum !== 2) this.db.exec("VACUUM")
   }
 
   meta(key: string): string | undefined {

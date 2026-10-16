@@ -4,6 +4,7 @@ import { Effect, Layer, Schedule } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { InstanceBootstrap } from "@/project/bootstrap-service"
 import { InstanceStore } from "@/project/instance-store"
+import { OperatorCallStore } from "@/operator/call-store"
 import { OperatorQueueStore } from "@/operator/queue-store"
 import { OperatorTelemetry } from "@/operator/telemetry/telemetry"
 import { OperatorTelemetryStore } from "@/operator/telemetry/store"
@@ -101,5 +102,41 @@ unix("a queued message is a span from queued to delivered; the sampler counts th
       session_id: "ses_target",
     })
     expect(yield* bytes(store.file)).not.toContain("SECRET-QUEUED-3321")
+  }),
+)
+
+unix("history is built from the stored sessions: their turns and calls, the same again when run twice", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* configure()
+    yield* llm.text("ok")
+    const created = yield* session()
+    yield* send(created.id, "hello", "build")
+    const telemetry = yield* OperatorTelemetry.Service
+    yield* telemetry.backfill()
+    expect(telemetry.progress()).toMatchObject({ state: "done", done: 1, total: 1 })
+    const store = OperatorTelemetryStore.store()
+    const spans = store.spansOfSession(created.id)
+    const turn = spans.find((span) => span.kind === "turn")!
+    const calls = spans.filter((span) => span.kind === "model_call")
+    expect(turn).toMatchObject({ status: "ok", source: "backfill", agent: "build" })
+    expect(calls.length).toBeGreaterThanOrEqual(1)
+    // Its end is where its last assistant message completed (no idle status in history).
+    expect(turn.end_ms).toBe(Math.max(...calls.map((call) => call.end_ms ?? 0)))
+    expect(store.session(created.id)).toMatchObject({ turns: 1, status: "idle", project_key: expect.any(String) })
+    // Run again once the session's recorded calls have settled (a side call may still be written): the same rows.
+    yield* Effect.gen(function* () {
+      const first = (yield* Effect.promise(() => OperatorCallStore.list(created.id))).filter((call) => call.finishedAt)
+      yield* Effect.sleep("300 millis")
+      const second = (yield* Effect.promise(() => OperatorCallStore.list(created.id))).filter((call) => call.finishedAt)
+      if (first.length !== second.length) return yield* Effect.fail("not yet")
+    }).pipe(Effect.retry({ times: 20 }), Effect.orDie)
+    yield* telemetry.backfill()
+    const strip = () => store.spansOfSession(created.id).map(({ seq, ...rest }) => rest)
+    const again = strip()
+    yield* telemetry.backfill()
+    expect(strip()).toEqual(again)
+    expect(again.map((span) => span.id)).toEqual(
+      expect.arrayContaining(spans.map((span) => span.id).filter((id) => !id.startsWith("msg:"))),
+    )
   }),
 )

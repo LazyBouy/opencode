@@ -1,13 +1,13 @@
 export * as OperatorTelemetry from "./telemetry"
 
 import path from "path"
-import { inArray } from "drizzle-orm"
+import { asc, eq, gte, inArray } from "drizzle-orm"
 import { Context, Effect, Layer, Schedule, Scope } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Global } from "@opencode-ai/core/global"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { SessionTable } from "@opencode-ai/core/session/sql"
+import { MessageTable, PartTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { Config } from "@/config/config"
 import { MCP } from "@/mcp"
@@ -15,15 +15,18 @@ import { McpCatalog } from "@/mcp/catalog"
 import { InstanceStore } from "@/project/instance-store"
 import { OperatorCallStore } from "../call-store"
 import { OperatorHelperAgents } from "../helper-agents"
+import { OperatorPermissionDecisions } from "../permission-decisions"
 import { OperatorProjects } from "../projects"
 import { OperatorQueueStore } from "../queue-store"
 import { OperatorRegistry } from "../registry"
+import { OperatorTelemetryBackfill } from "./backfill"
 import { OperatorTelemetryBatch } from "./batch"
 import { OperatorTelemetryCalls } from "./calls"
 import { OperatorTelemetryDerive } from "./derive"
 import { OperatorTelemetryIngest } from "./ingest"
 import { OperatorTelemetryLogs } from "./logs"
 import { OperatorTelemetryNames } from "./names"
+import { OperatorTelemetryRetention } from "./retention"
 import { OperatorTelemetryStore } from "./store"
 import { OperatorTelemetryWriter } from "./writer"
 
@@ -45,12 +48,15 @@ export type Settings = {
   enabled: boolean
   loops: OperatorTelemetryDerive.Loops
   logLevel: OperatorTelemetryLogs.Level
+  eventsDays: number
+  totalsDays: number
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   enabled: true,
   loops: OperatorTelemetryDerive.DEFAULT_LOOPS,
   logLevel: "warn",
+  ...OperatorTelemetryRetention.days({}),
 }
 
 /** The settings in a config's `operatorTelemetry`, with defaults. */
@@ -68,6 +74,7 @@ export function settingsOf(config: { operatorTelemetry?: Record<string, any> } |
       modelCalls: positive(loops.modelCalls, DEFAULT_SETTINGS.loops.modelCalls),
     },
     logLevel: value.logLevel === "error" || value.logLevel === "info" ? value.logLevel : "warn",
+    ...OperatorTelemetryRetention.days(value),
   }
 }
 
@@ -89,6 +96,13 @@ export interface Interface {
   readonly ingest: OperatorTelemetryIngest.Ingest
   /** Rows dropped because the backlog was full (§5.6). */
   readonly dropped: () => number
+  /** Builds history from the stored sessions (§5.11), in the background of whoever runs it. */
+  readonly backfill: (input?: { log?: boolean }) => Effect.Effect<void>
+  readonly progress: () => OperatorTelemetryBackfill.Progress
+  /** Purges what retention no longer keeps (§6.1). */
+  readonly purge: () => Effect.Effect<OperatorTelemetryRetention.Purged>
+  /** Recomputes the hourly totals of hours whose spans changed (§6.2). */
+  readonly totals: () => Effect.Effect<number>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorTelemetry") {}
@@ -303,9 +317,183 @@ const layer = Layer.effect(
         }),
       )
 
+    const logFile = path.join(Global.Path.log, "opencode.log")
+
+    // ---- building history (§5.11) ----
+
+    let progress: OperatorTelemetryBackfill.Progress =
+      (() => {
+        try {
+          const stored = store.meta("backfill")
+          const value = stored ? (JSON.parse(stored) as OperatorTelemetryBackfill.Progress) : undefined
+          // One a stopped server left running starts again.
+          return value?.state === "running" ? { ...value, state: "failed" as const, error: "server stopped" } : value
+        } catch {
+          return undefined
+        }
+      })() ?? OperatorTelemetryBackfill.IDLE
+    const firstStart = !store.meta("backfill")
+    const save = (next: OperatorTelemetryBackfill.Progress) => {
+      progress = next
+      store.setMeta("backfill", JSON.stringify(next))
+    }
+
+    const backfill = (input: { log?: boolean } = {}) =>
+      Effect.gen(function* () {
+        if (progress.state === "running") return
+        const startedAt = Date.now()
+        const startSeq = store.lastSeq()
+        const since = startedAt - settings.eventsDays * OperatorTelemetryRetention.DAY
+        const sessions = yield* db
+          .select({
+            id: SessionTable.id,
+            parent: SessionTable.parent_id,
+            title: SessionTable.title,
+            directory: SessionTable.directory,
+          })
+          .from(SessionTable)
+          .where(gte(SessionTable.time_updated, since))
+          .orderBy(asc(SessionTable.time_created), asc(SessionTable.id))
+          .all()
+          .pipe(Effect.orDie)
+        save({ state: "running", done: 0, total: sessions.length, startedAt })
+        let clock = startedAt
+        let pending = new OperatorTelemetryBatch.Batch()
+        const replayer = new OperatorTelemetryIngest.Ingest(() => pending, {
+          secret: store.meta("secret") ?? "",
+          backfill: true,
+          now: () => clock,
+        })
+        // A batch to the store; a row a live event wrote since the backfill started wins (§5.11).
+        const commit = Effect.fnUntraced(function* () {
+          const taken = pending
+          pending = new OperatorTelemetryBatch.Batch()
+          for (const [id] of taken.spans) {
+            const existing = store.span(id)
+            if (existing && existing.seq > startSeq && existing.source !== "backfill") taken.spans.delete(id)
+          }
+          const ids = new Set<string>(taken.sessions)
+          for (const span of taken.spans.values()) if (span.session_id) ids.add(span.session_id)
+          yield* resolve([...ids])
+          for (const span of taken.spans.values()) {
+            const context = span.session_id ? contexts.get(span.session_id) : undefined
+            if (!context) continue
+            span.root_session_id ??= context.rootID ?? span.session_id
+            if (context.projectKey) span.project_key ??= context.projectKey
+            if (context.directory) span.directory ??= context.directory
+            if (context.agentType) span.agent_type ??= context.agentType
+          }
+          OperatorTelemetryWriter.apply(store, taken, {
+            sessions: ids,
+            contextOf,
+            loops: settings.loops,
+            now: Date.now(),
+          })
+          yield* Effect.sleep(`${OperatorTelemetryBackfill.PAUSE_MS} millis`)
+        })
+        let done = 0
+        for (const session of sessions) {
+          const [messages, parts] = yield* Effect.all([
+            db
+              .select({ id: MessageTable.id, data: MessageTable.data })
+              .from(MessageTable)
+              .where(eq(MessageTable.session_id, session.id))
+              .orderBy(asc(MessageTable.time_created), asc(MessageTable.id))
+              .all()
+              .pipe(Effect.orDie),
+            db
+              .select({ id: PartTable.id, message_id: PartTable.message_id, data: PartTable.data })
+              .from(PartTable)
+              .where(eq(PartTable.session_id, session.id))
+              .orderBy(asc(PartTable.message_id), asc(PartTable.id))
+              .all()
+              .pipe(Effect.orDie),
+          ])
+          OperatorTelemetryBackfill.replay(
+            replayer,
+            session,
+            messages as unknown as OperatorTelemetryBackfill.Message[],
+            parts as unknown as OperatorTelemetryBackfill.Part[],
+            (time) => {
+              clock = time
+            },
+          )
+          const calls = yield* Effect.promise(() => OperatorCallStore.list(session.id).catch(() => []))
+          for (const span of OperatorTelemetryCalls.spans({ sessionID: session.id, calls, ingest: replayer }))
+            pending.span({ ...span, source: "backfill" })
+          const decisions = yield* Effect.promise(() =>
+            OperatorPermissionDecisions.read({ sessionID: session.id, limit: 100_000 }).catch(() => []),
+          )
+          for (const record of decisions.toSorted((a, b) => a.askedAt - b.askedAt)) replayer.decision(record)
+          done += 1
+          if (pending.size() >= OperatorTelemetryBackfill.BATCH) {
+            yield* commit()
+            save({ ...progress, done })
+          }
+        }
+        for (const item of OperatorQueueStore.store().list({ limit: 100_000 }))
+          if (item.createdAt >= since) pending.span({ ...queueSpan(item), source: "backfill" })
+        // The server log's last part, on a first backfill.
+        if (input.log) {
+          let at: OperatorTelemetryLogs.Position | undefined
+          for (let step = 0; step < 20; step++) {
+            const read = yield* Effect.promise(() =>
+              OperatorTelemetryLogs.read({
+                file: logFile,
+                position: at,
+                level: settings.logLevel,
+                fromStart: OperatorTelemetryBackfill.LOG_BYTES,
+              }),
+            )
+            for (const entry of read.entries) pending.log(entry)
+            if (!read.position || (at && read.position.offset === at.offset)) break
+            at = read.position
+            if (pending.size() >= OperatorTelemetryBackfill.BATCH) yield* commit()
+          }
+        }
+        yield* commit()
+        save({ state: "done", done, total: sessions.length, startedAt, finishedAt: Date.now() })
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.sync(() =>
+            save({ ...progress, state: "failed", finishedAt: Date.now(), error: String(cause).slice(0, 500) }),
+          ).pipe(Effect.andThen(warn("telemetry backfill failed", cause))),
+        ),
+      )
+
+    // ---- retention and totals (§6) ----
+
+    const purge = () =>
+      Effect.sync(() => {
+        const result = OperatorTelemetryRetention.purge(store, {
+          eventsDays: settings.eventsDays,
+          totalsDays: settings.totalsDays,
+          now: Date.now(),
+        })
+        // Sessions that lost spans but keep some: their summary from what is left.
+        if (result.touched.size)
+          store.transaction(() => {
+            for (const id of result.touched) {
+              const row = store.session(id)
+              if (row) OperatorTelemetryDerive.session(store, id, OperatorTelemetryWriter.contextOf(row), Date.now())
+            }
+          })
+        const { touched, ...counts } = result
+        return counts
+      }).pipe(
+        Effect.catchCause((cause) =>
+          warn("telemetry purge failed", cause).pipe(
+            Effect.as({ spans: 0, logs: 0, samples: 0, mcp: 0, sessions: 0, totals: 0 }),
+          ),
+        ),
+      )
+    const totals = () =>
+      Effect.sync(() => OperatorTelemetryWriter.totals(store)).pipe(
+        Effect.catchCause((cause) => warn("telemetry totals failed", cause).pipe(Effect.as(0))),
+      )
+
     // ---- the server log ----
 
-    const logFile = path.join(Global.Path.log, "opencode.log")
     let position: OperatorTelemetryLogs.Position | undefined = (() => {
       try {
         const stored = store.meta("log_position")
@@ -427,6 +615,14 @@ const layer = Layer.effect(
         Effect.delay("10 seconds"),
         Effect.forkIn(scope),
       )
+      yield* totals().pipe(
+        Effect.repeat(Schedule.spaced("60 seconds")),
+        Effect.delay("15 seconds"),
+        Effect.forkIn(scope),
+      )
+      yield* purge().pipe(Effect.repeat(Schedule.spaced("6 hours")), Effect.delay("30 seconds"), Effect.forkIn(scope))
+      // The store's first start builds history (§5.11).
+      if (firstStart) yield* backfill({ log: true }).pipe(Effect.delay("5 seconds"), Effect.forkIn(scope))
       // What is left at shutdown is written.
       yield* Effect.addFinalizer(() => flush())
       // Failures are reported, not thrown.
@@ -438,7 +634,17 @@ const layer = Layer.effect(
       }).pipe(Effect.repeat(Schedule.spaced("60 seconds")), Effect.forkIn(scope))
     }
 
-    return Service.of({ flush, tail, sample, ingest, dropped: () => dropped })
+    return Service.of({
+      flush,
+      tail,
+      sample,
+      ingest,
+      dropped: () => dropped,
+      backfill,
+      progress: () => progress,
+      purge,
+      totals,
+    })
   }),
 )
 

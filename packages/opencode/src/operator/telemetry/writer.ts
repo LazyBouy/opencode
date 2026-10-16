@@ -3,6 +3,7 @@ export * as OperatorTelemetryWriter from "./writer"
 import type { OperatorTelemetryBatch } from "./batch"
 import { OperatorTelemetryDerive } from "./derive"
 import type { OperatorTelemetryStore } from "./store"
+import { OperatorTelemetryTotals } from "./totals"
 
 // One flush (observability_spec.md §5.6): a batch written in one transaction, then what depends on it worked out from
 // the stored spans (derive.ts): the tool calls' waits, the turns' totals and loops, and the sessions' summaries,
@@ -24,8 +25,10 @@ export function apply(
     const tools = new Set<string>()
     const turns = new Set<string>()
     const sessions = new Set<string>([...(input.sessions ?? []), ...batch.sessions])
+    const hours: Array<number | null> = []
     const mark = (span: OperatorTelemetryStore.Span | undefined) => {
       if (!span) return
+      hours.push(span.start_ms)
       if (span.kind === "tool_call") tools.add(span.id)
       if (span.kind === "permission_wait" && span.parent_id?.startsWith("tool:")) tools.add(span.parent_id)
       if (span.turn_id) turns.add(span.turn_id)
@@ -39,7 +42,9 @@ export function apply(
       store.upsertSpan(span)
       mark(store.span(span.id))
     }
+    // A session deleted for good leaves what it added to the totals (§5.10).
     for (const id of batch.deletedSessions) {
+      OperatorTelemetryTotals.freeze(store, store.spansOfSession(id))
       store.deleteSession(id)
       sessions.delete(id)
     }
@@ -48,7 +53,11 @@ export function apply(
     for (const row of batch.mcp) store.insertMcpStatus(row)
     if (batch.logPosition) store.setMeta("log_position", JSON.stringify(batch.logPosition))
     for (const id of tools) OperatorTelemetryDerive.tool(store, id, input.now)
-    for (const id of turns) OperatorTelemetryDerive.turn(store, id, input.loops, input.now)
+    for (const id of turns) {
+      OperatorTelemetryDerive.turn(store, id, input.loops, input.now)
+      hours.push(store.span(id)?.start_ms ?? null)
+    }
+    OperatorTelemetryTotals.mark(store, hours)
     const pending = [...sessions]
     for (let step = 0; pending.length && step < 10_000; step++) {
       const id = pending.shift()!
@@ -103,4 +112,9 @@ export function contextOf(row: OperatorTelemetryStore.SessionRow): OperatorTelem
     ...(row.root_id ? { rootID: row.root_id } : {}),
     trashed: row.trashed === 1,
   }
+}
+
+/** Recomputes the hours whose spans changed (every 60 s, §6.2). */
+export function totals(store: OperatorTelemetryStore.Store) {
+  return store.transaction(() => OperatorTelemetryTotals.recompute(store))
 }

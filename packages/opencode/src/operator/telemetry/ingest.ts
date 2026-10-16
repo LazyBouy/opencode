@@ -136,6 +136,11 @@ export type Options = {
   /** The MCP server a tool comes from, when the folder's servers are known. */
   mcpServerOf?: (directory: string | undefined, tool: string) => string | undefined
   now?: () => number
+  /**
+   * Reading history (§5.11): turns end when their last assistant message completed, as no idle status comes, and the
+   * rows are marked as the backfill's.
+   */
+  backfill?: boolean
 }
 
 export class Ingest {
@@ -177,7 +182,7 @@ export class Ingest {
   }
 
   private write(span: SpanWrite) {
-    this.batch().span(span)
+    this.batch().span(this.options.backfill ? { ...span, source: "backfill" } : span)
   }
 
   private argsHash(state: SessionState, partID: string, tool: string, input: unknown) {
@@ -287,11 +292,12 @@ export class Ingest {
     return turn
   }
 
-  private endTurn(state: SessionState, end: number) {
+  private endTurn(state: SessionState, at: number) {
     const turn = state.turn
     if (!turn) return
     state.turn = undefined
     const last = turn.lastAssistant ? state.assistants.get(turn.lastAssistant) : undefined
+    const end = this.options.backfill ? (last?.completed ?? last?.created ?? turn.start) : at
     const error = last?.error
     const outcome: Pick<SpanWrite, "status" | "error_type" | "error_message"> = error
       ? error.name === "MessageAbortedError"
@@ -587,7 +593,7 @@ export class Ingest {
     if (!request?.id || !request.sessionID) return
     const state = this.state(request.sessionID)
     const partID = request.tool ? state.parts.get(request.tool.callID) : undefined
-    const turnID = state.turn?.id
+    const turnID = (request.tool ? state.assistants.get(request.tool.messageID)?.turnID : undefined) ?? state.turn?.id
     this.waits.set(request.id, { sessionID: request.sessionID, start: this.now() })
     this.write({
       id: `perm:${request.id}`,
@@ -615,7 +621,7 @@ export class Ingest {
     this.waits.delete(record.requestID)
     const state = this.state(record.sessionID)
     const partID = record.tool ? state.parts.get(record.tool.callID) : undefined
-    const turnID = state.turn?.id
+    const turnID = (record.tool ? state.assistants.get(record.tool.messageID)?.turnID : undefined) ?? state.turn?.id
     const cancelled = record.decision === "cancelled"
     this.write({
       id: `perm:${record.requestID}`,
@@ -656,6 +662,12 @@ export class Ingest {
       })
     const assistant = state.assistants.get(record.tool.messageID)
     if (assistant && state.turn && assistant.turnID === state.turn.id) state.turn.denied.add(assistant.id)
+  }
+
+  /** The end of a session's history (backfill): its last turn ends where its last assistant message did. */
+  finish(sessionID: string) {
+    const state = this.sessions.get(sessionID)
+    if (state) this.endTurn(state, this.now())
   }
 
   /** A helper run (generate.ts): a span with its own totals, under the session's turn when a session started it. */
