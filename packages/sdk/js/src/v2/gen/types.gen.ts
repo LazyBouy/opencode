@@ -3742,6 +3742,9 @@ export type OperatorTelemetrySpanPage = {
    * The highest seq seen, for the next `after`
    */
   seq: number
+  titles?: {
+    [key: string]: string
+  }
 }
 
 export type OperatorTelemetryLogEntry = {
@@ -3794,6 +3797,15 @@ export type OperatorTelemetryStorage = {
   lastPurge?: number
   eventsDays: number
   totalsDays: number
+  /**
+   * The server log file the Logs tab keeps lines from
+   */
+  logPath: string
+  /**
+   * The lowest level kept: error, warn or info
+   */
+  logLevel: string
+  oldestLog?: number
 }
 
 export type Model = {

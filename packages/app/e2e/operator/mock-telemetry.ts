@@ -309,11 +309,48 @@ export function createTelemetryMock(now: number) {
     msg_u22: "Now run the whole suite\nand report",
     msg_cu: "Look for the test file",
   }
+  // Every span, for Events, each with its seq (a write bumps it, as the store does).
+  let seq = 0
+  const all: Row[] = [...turns, ...spans, childTurn].map((span) => ({ ...span, seq: ++seq }))
+  const logs: Row[] = [
+    {
+      id: "log:1:0",
+      seq: ++seq,
+      time_ms: now - 20 * MIN,
+      level: "WARN",
+      message: "failed to materialize reference",
+      run: "r1",
+      service: "skill",
+      session_id: null,
+      fields: JSON.stringify({ name: "effect", repository: "github.com/x/y" }),
+    },
+    {
+      id: "log:1:100",
+      seq: ++seq,
+      time_ms: now - 10 * MIN,
+      level: "ERROR",
+      message: "stream error",
+      run: "r1",
+      service: "llm",
+      session_id: main,
+      fields: JSON.stringify({ provider: "anthropic", model: "claude-sonnet-4-5", "error.message": "overloaded" }),
+    },
+  ]
   const state = {
     queries: [] as Array<{ path: string; params: URLSearchParams }>,
     sessions,
     kept: new Set<string>(),
     backfill: { state: "done" as string, done: 64, total: 64 },
+    spans: all,
+    logs,
+    /** A span written now (new, or changed): it gets the next seq. */
+    write(span: Row) {
+      const at = all.findIndex((item) => item.id === span.id)
+      const next = { ...(at >= 0 ? all[at] : SPAN_DEFAULTS), ...span, seq: ++seq }
+      if (at >= 0) all[at] = next
+      else all.push(next)
+      return next
+    },
   }
 
   const sortOf = (sort: string | null) => {
@@ -394,7 +431,7 @@ export function createTelemetryMock(now: number) {
     const span = path.match(/^\/span\/(.+)$/)
     if (span) {
       const id = decodeURIComponent(span[1]!)
-      const found = [...Object.values(turnsOf).flat(), ...Object.values(spansOf).flat()].find((item) => item.id === id)
+      const found = all.find((item) => item.id === id)
       if (!found) return json(route, { name: "OperatorTelemetryNotFoundError", data: { message: "none" } }, 404)
       return json(route, {
         span: found,
@@ -437,8 +474,52 @@ export function createTelemetryMock(now: number) {
         kept: 0,
         eventsDays: 30,
         totalsDays: 400,
+        logPath: "/root/.local/share/opencode/log/opencode.log",
+        logLevel: "warn",
+        oldestLog: now - 20 * MIN,
       })
-    if (path === "/events" || path === "/logs") return json(route, { rows: [], seq: 0 })
+    if (path === "/events") {
+      const kinds = q.get("kind")?.split(",")
+      const statuses = q.get("status")?.split(",")
+      const from = Number(q.get("from") ?? NaN)
+      const to = Number(q.get("to") ?? NaN)
+      const session = q.get("session")
+      const rows = all
+        .filter((span) => !kinds || kinds.includes(span.kind))
+        .filter((span) => !statuses || statuses.includes(span.status))
+        .filter((span) => !session || span.session_id === session || span.root_session_id === session)
+        .filter((span) => !Number.isFinite(from) || (span.start_ms >= from && span.start_ms < to))
+      const titles = Object.fromEntries(state.sessions.map((row) => [row.id, row.title]))
+      if (q.get("after") !== null) {
+        const after = Number(q.get("after"))
+        const tail = rows.filter((span) => span.seq > after).toSorted((a, b) => a.seq - b.seq)
+        return json(route, { rows: tail, seq: tail.at(-1)?.seq ?? after, titles })
+      }
+      const sorted = rows.toSorted((a, b) => b.start_ms - a.start_ms || (a.id < b.id ? 1 : -1))
+      const offset = Number(q.get("cursor") ?? 0)
+      const limit = Number(q.get("limit") ?? 100)
+      return json(route, {
+        rows: sorted.slice(offset, offset + limit),
+        seq,
+        titles,
+        ...(offset + limit < sorted.length ? { nextCursor: String(offset + limit) } : {}),
+      })
+    }
+    if (path === "/logs") {
+      const kept: Record<string, string[]> = {
+        error: ["ERROR"],
+        warn: ["ERROR", "WARN"],
+        info: ["ERROR", "WARN", "INFO"],
+      }
+      const levels = kept[q.get("level") ?? "warn"] ?? kept.warn!
+      const rows = logs.filter((entry) => levels.includes(entry.level))
+      if (q.get("after") !== null) {
+        const after = Number(q.get("after"))
+        const tail = rows.filter((entry) => entry.seq > after).toSorted((a, b) => a.seq - b.seq)
+        return json(route, { rows: tail, seq: tail.at(-1)?.seq ?? after })
+      }
+      return json(route, { rows: rows.toSorted((a, b) => b.time_ms - a.time_ms), seq })
+    }
     return json(route, { name: "NotFound", data: { message: path } }, 404)
   }
   return { state, handle }

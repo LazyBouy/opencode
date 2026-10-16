@@ -38324,6 +38324,12 @@
           "seq": {
             "type": "number",
             "description": "The highest seq seen, for the next `after`"
+          },
+          "titles": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         },
         "required": ["rows", "seq"],
@@ -38458,9 +38464,32 @@
           },
           "totalsDays": {
             "type": "number"
+          },
+          "logPath": {
+            "type": "string",
+            "description": "The server log file the Logs tab keeps lines from"
+          },
+          "logLevel": {
+            "type": "string",
+            "description": "The lowest level kept: error, warn or info"
+          },
+          "oldestLog": {
+            "type": "number"
           }
         },
-        "required": ["path", "bytes", "spans", "logs", "sessions", "dropped", "kept", "eventsDays", "totalsDays"],
+        "required": [
+          "path",
+          "bytes",
+          "spans",
+          "logs",
+          "sessions",
+          "dropped",
+          "kept",
+          "eventsDays",
+          "totalsDays",
+          "logPath",
+          "logLevel"
+        ],
         "additionalProperties": false
       },
       "Model": {

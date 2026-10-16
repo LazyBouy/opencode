@@ -12,17 +12,22 @@ import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
 import { ready, useOperatorClient } from "../../data"
-import { formatCount } from "../../format"
+import { formatCount, formatDateTime } from "../../format"
 import { useOperatorScope } from "../../scope"
 import { EmptyState } from "../../ui/empty-state"
 import { FieldHelp } from "../../ui/field-help"
 import { NamespacePicker, useNamespaceScope } from "../../ui/namespace-picker"
 import { PageHeader } from "../../ui/page-header"
 import { useRecordOverlay } from "../../ui/record-overlay"
+import { LiveIndicator } from "../../ui/live-indicator"
+import { OverlayFrame } from "../../ui/overlay-frame"
+import { useOverlayParams } from "../../ui/overlay-nav"
 import { ScopePicker } from "../../ui/scope-picker"
 import { TimeRange } from "../../ui/time-range"
 import { chips, filterOf, isTab, type Params, rangeOf, rangeQuery, reach, type Tab } from "./model"
-import { SessionDetail } from "./session-detail"
+import { EventsTab } from "./events"
+import { LogsTab } from "./logs"
+import { SessionDetail, SpanPanel } from "./session-detail"
 import { SessionsTab } from "./sessions"
 import "./observability.css"
 
@@ -31,7 +36,7 @@ import "./observability.css"
 // links in. Tabs: Sessions (the rest come with their phases). A session opens in its detail over the tab.
 
 type Key = Parameters<ReturnType<typeof useLanguage>["t"]>[0]
-const BUILT: ReadonlyArray<Tab> = ["sessions"]
+const BUILT: ReadonlyArray<Tab> = ["sessions", "events", "logs"]
 const REFRESH = 30_000
 
 export default function ObservabilityPage() {
@@ -108,6 +113,43 @@ export default function ObservabilityPage() {
     ["session", "turn", "span"],
   )
   const open = (row: OperatorTelemetrySessionRow) => setParams({ session: row.id, turn: undefined, span: undefined })
+  const openSession = (id: string) => setParams({ session: id, turn: undefined, span: undefined, ev: undefined })
+  // A span from Events or a log line opens in its own overlay, with Open session (§11.1).
+  useRecordOverlay(
+    () => !!params.ev,
+    () => (
+      <SpanOverlay
+        onOpenAt={(span) =>
+          setParams({
+            ev: undefined,
+            session: span.session_id ?? undefined,
+            turn: span.turn_id ?? undefined,
+            span: span.id,
+          })
+        }
+      />
+    ),
+    ["ev"],
+  )
+  // Live (§8.6): Events and Logs, with a relative range ending now.
+  const live = () => params.live === "1" && relative()
+  // The Logs tab's own filters: the lowest level, service, text and session.
+  const logsQuery = createMemo(() => ({
+    ...rangeQuery(range()),
+    ...(params.level ? { level: params.level } : { level: "warn" }),
+    ...(params.service ? { service: params.service } : {}),
+    ...(params.q ? { q: params.q } : {}),
+    ...(params.inSession ? { session: params.inSession } : {}),
+  }))
+  const logsNote = () => {
+    const found = ready(storage)
+    if (!found) return undefined
+    return t("operator.obs.logsNote", {
+      levels: t(`operator.obs.levelsKept.${found.logLevel}` as Key),
+      since: found.oldestLog ? formatDateTime(found.oldestLog, language.intl()) : t("operator.obs.logsNoneYet"),
+      path: found.logPath,
+    })
+  }
 
   const setFilter = (key: string, value: string | undefined) => setParams({ [key]: value || undefined })
   const [search, setSearch] = createSignal(params.q ?? "")
@@ -134,9 +176,9 @@ export default function ObservabilityPage() {
           percent: progress.total ? Math.round((progress.done / progress.total) * 100) : 0,
         }),
       }
-    if (active().length || params.q)
+    if (active().length || params.q || params.inSession || params.level || params.service)
       return {
-        description: t("operator.obs.empty.noMatch", {
+        description: t(`operator.obs.empty.noMatch.${tab()}` as Key, {
           range: t(`operator.timeRange.${range().range ?? "custom"}` as Key),
         }),
         action: (
@@ -153,7 +195,15 @@ export default function ObservabilityPage() {
     return { description: t("operator.obs.empty.nothing") }
   }
   const clearFilters = () =>
-    setParams(Object.fromEntries([...active().map((chip) => [chip.key, undefined]), ["q", undefined]]))
+    setParams(
+      Object.fromEntries([
+        ...active().map((chip) => [chip.key, undefined]),
+        ["q", undefined],
+        ["inSession", undefined],
+        ["level", undefined],
+        ["service", undefined],
+      ]),
+    )
 
   return (
     <>
@@ -233,6 +283,38 @@ export default function ObservabilityPage() {
           value={search()}
           onInput={(event) => onSearch(event.currentTarget.value)}
         />
+        <Show when={params.inSession}>
+          <Tag data-testid="obs-chip">
+            <span>
+              {t("operator.obs.filter.session")}: {params.inSession}
+            </span>
+            <button
+              type="button"
+              data-slot="operator-obs-chip-remove"
+              aria-label={t("operator.obs.removeFilter", { name: t("operator.obs.filter.session") })}
+              onClick={() => setFilter("inSession", undefined)}
+            >
+              ×
+            </button>
+          </Tag>
+        </Show>
+        <Show when={tab() === "events" || tab() === "logs"}>
+          <span class="inline-flex items-center gap-2" data-testid="obs-live">
+            <CheckboxV2
+              label={t("operator.obs.live")}
+              checked={live()}
+              disabled={!relative()}
+              onChange={(checked: boolean) => setFilter("live", checked ? "1" : undefined)}
+            />
+            <FieldHelp
+              field={t("operator.obs.live")}
+              text={t(relative() ? "operator.obs.help.live" : "operator.obs.help.liveCustom")}
+            />
+            <Show when={live()}>
+              <LiveIndicator live={true} />
+            </Show>
+          </span>
+        </Show>
         <Show when={tab() === "sessions"}>
           <span class="inline-flex items-center">
             <CheckboxV2
@@ -251,8 +333,8 @@ export default function ObservabilityPage() {
       </Show>
       <div data-component="operator-obs-layout" data-facets={prefs.facets ? "" : undefined}>
         <Facets
-          scope="sessions"
-          query={query()}
+          scope={tab() === "logs" ? "logs" : tab() === "events" ? "events" : "sessions"}
+          query={tab() === "logs" ? logsQuery() : query()}
           open={prefs.facets}
           onToggle={() => setPrefs("facets", !prefs.facets)}
           onPick={(key, value) => setFilter(key, value)}
@@ -281,6 +363,52 @@ export default function ObservabilityPage() {
               }}
             />
           </Show>
+          <Show when={tab() === "events"}>
+            <EventsTab
+              query={query()}
+              sort={params.sort}
+              onSort={(sort) => setParams({ sort })}
+              kind={params.kind}
+              onKind={(kind) => setFilter("kind", kind)}
+              live={live()}
+              onOpen={(span) => setParams({ ev: span.id })}
+              onOpenSession={openSession}
+              onUpdated={(time) => setUpdated(time)}
+              empty={() => {
+                const state = emptyState()
+                return (
+                  <EmptyState
+                    icon="eye"
+                    title={t("operator.obs.tab.events")}
+                    description={state.description}
+                    action={state.action}
+                  />
+                )
+              }}
+            />
+          </Show>
+          <Show when={tab() === "logs"}>
+            <LogsTab
+              query={logsQuery()}
+              level={params.level}
+              onLevel={(level) => setFilter("level", level)}
+              live={live()}
+              onOpenSession={openSession}
+              onUpdated={(time) => setUpdated(time)}
+              note={logsNote()}
+              empty={() => {
+                const state = emptyState()
+                return (
+                  <EmptyState
+                    icon="eye"
+                    title={t("operator.obs.tab.logs")}
+                    description={state.description}
+                    action={state.action}
+                  />
+                )
+              }}
+            />
+          </Show>
         </div>
       </div>
     </>
@@ -289,11 +417,13 @@ export default function ObservabilityPage() {
 
 const FACET_FIELDS: Record<string, ReadonlyArray<string>> = {
   sessions: ["sessionStatus", "agent", "agentType", "model", "dir"],
+  events: ["kind", "status", "agent", "model", "tool", "errorType", "dir"],
+  logs: ["level", "service"],
 }
 
 /** The facet panel (§8.1): each field's top values with counts under the filter; a value picks it. */
 function Facets(props: {
-  scope: "sessions"
+  scope: "sessions" | "events" | "logs"
   query: Record<string, string>
   open: boolean
   onToggle: () => void
@@ -341,7 +471,11 @@ function Facet(props: {
     queryFn: () =>
       api
         .client()
-        .operator.telemetry.facets({ ...props.query, scope: props.scope as "sessions", field: props.field })
+        .operator.telemetry.facets({
+          ...props.query,
+          scope: props.scope as "sessions" | "events" | "logs",
+          field: props.field,
+        })
         .then((result) => result.data ?? []),
   }))
   const list = () => ready(values) ?? []
@@ -352,11 +486,17 @@ function Facet(props: {
   const label = (value: string) =>
     props.field === "sessionStatus"
       ? t(`operator.obs.status.session.${value}` as Key)
-      : props.field === "agentType"
-        ? t(`operator.obs.agentType.${value}` as Key)
-        : props.field === "dir"
-          ? (value.split("/").filter(Boolean).at(-1) ?? value)
-          : value
+      : props.field === "status"
+        ? t(`operator.obs.status.span.${value}` as Key)
+        : props.field === "kind"
+          ? t(`operator.obs.kind.${value}` as Key)
+          : props.field === "level"
+            ? t(`operator.obs.level.${value.toLowerCase()}` as Key)
+            : props.field === "agentType"
+              ? t(`operator.obs.agentType.${value}` as Key)
+              : props.field === "dir"
+                ? (value.split("/").filter(Boolean).at(-1) ?? value)
+                : value
   return (
     <section data-slot="operator-obs-facet" data-field={props.field}>
       <h4>{t(`operator.obs.filter.${props.field}` as Key)}</h4>
@@ -389,5 +529,33 @@ function Facet(props: {
         </Show>
       </Show>
     </section>
+  )
+}
+
+/** One span, from Events (`ev`): its panel, with Open session at that span. */
+function SpanOverlay(props: { onOpenAt: (span: import("@opencode-ai/sdk/v2/client").OperatorTelemetrySpan) => void }) {
+  const api = useOperatorClient()
+  const [params, setParams] = useOverlayParams<{ ev?: string; session?: string }>()
+  const span = useQuery(() => ({
+    queryKey: api.key("telemetry-span", params.ev),
+    enabled: !!params.ev,
+    queryFn: () =>
+      api
+        .client()
+        .operator.telemetry.span({ id: params.ev! }, { throwOnError: true })
+        .then((result) => result.data!),
+  }))
+  return (
+    <OverlayFrame label={ready(span)?.span.name ?? params.ev} editing={false}>
+      <div data-component="operator-obs-detail">
+        <SpanPanel
+          detail={ready(span)}
+          loading={span.isPending}
+          onClose={() => setParams({ ev: undefined })}
+          onOpenSession={(id) => setParams({ ev: undefined, session: id })}
+          onOpenAt={props.onOpenAt}
+        />
+      </div>
+    </OverlayFrame>
   )
 }

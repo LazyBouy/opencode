@@ -391,3 +391,73 @@ tr:focus-within [data-slot="operator-obs-row-actions"] {
     animation: none !important;
   }
 }
+
+/* Events and Logs */
+
+[data-slot="operator-obs-kinds"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+[data-slot="operator-obs-scroll"] {
+  max-height: 70vh;
+  overflow: auto;
+}
+
+[data-slot="operator-obs-new"] {
+  display: block;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--v2-border-border-accent, var(--v2-border-border-base));
+  border-radius: 6px;
+  background: var(--v2-background-bg-layer-01);
+  color: var(--v2-text-text-accent, var(--v2-text-text-base));
+  cursor: pointer;
+}
+
+[data-slot="operator-sr-only"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+[data-slot="operator-obs-error"] {
+  display: inline-block;
+  max-width: 40ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+[data-slot="operator-obs-message"] {
+  max-width: 60ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-slot="operator-obs-log-fields"] {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 2px 12px;
+  margin: 4px 0 8px;
+}
+
+[data-slot="operator-obs-log-fields"] dt {
+  color: var(--v2-text-text-muted);
+  font-family: var(--font-mono, monospace);
+}
+
+[data-slot="operator-obs-log-fields"] dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font-family: var(--font-mono, monospace);
+}

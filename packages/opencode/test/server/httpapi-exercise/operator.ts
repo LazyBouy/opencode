@@ -1471,5 +1471,6 @@ export const operatorScenarios: Scenario[] = [
     object(body)
     check(typeof body.bytes === "number" && typeof body.spans === "number", "the store's size and rows")
     check(body.eventsDays === 30, "the default retention")
+    check(typeof body.logPath === "string" && body.logLevel === "warn", "the log it keeps lines from, and the level")
   }),
 ]

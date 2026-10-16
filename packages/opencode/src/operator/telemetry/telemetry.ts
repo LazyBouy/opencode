@@ -87,6 +87,11 @@ export function settingsOf(config: { operatorTelemetry?: Record<string, any> } |
   }
 }
 
+/** The server log the recorder tails (§5.8). */
+export function logFile() {
+  return path.join(Global.Path.log, "opencode.log")
+}
+
 /** Whether the recorder's own loops run (flushing, the log tail, the sampler). Off in tests, which call them. */
 export function loopOn(env: NodeJS.ProcessEnv = process.env) {
   if (env.OPENCODE_TELEMETRY === "on") return true
@@ -329,7 +334,7 @@ const layer = Layer.effect(
         }),
       )
 
-    const logFile = path.join(Global.Path.log, "opencode.log")
+    const log = logFile()
 
     // ---- building history (§5.11) ----
 
@@ -450,7 +455,7 @@ const layer = Layer.effect(
           for (let step = 0; step < 20; step++) {
             const read = yield* Effect.promise(() =>
               OperatorTelemetryLogs.read({
-                file: logFile,
+                file: log,
                 position: at,
                 level: settings.logLevel,
                 fromStart: OperatorTelemetryBackfill.LOG_BYTES,
@@ -524,7 +529,7 @@ const layer = Layer.effect(
       }
     })()
     const tail = () =>
-      Effect.promise(() => OperatorTelemetryLogs.read({ file: logFile, position, level: settings.logLevel })).pipe(
+      Effect.promise(() => OperatorTelemetryLogs.read({ file: log, position, level: settings.logLevel })).pipe(
         Effect.map((result) => {
           for (const entry of result.entries) batch.log(entry)
           const moved =

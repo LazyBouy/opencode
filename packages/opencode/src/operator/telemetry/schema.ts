@@ -124,6 +124,9 @@ export const SpanPage = Schema.Struct({
   rows: Schema.Array(Span),
   nextCursor: Schema.optional(Schema.String),
   seq: Schema.Finite.annotate({ description: "The highest seq seen, for the next `after`" }),
+  titles: Schema.optional(Schema.Record(Schema.String, Schema.String)).annotate({
+    description: "The titles of the sessions the rows are in, by id",
+  }),
 }).annotate({ identifier: "OperatorTelemetrySpanPage" })
 
 export const SessionPage = Schema.Struct({
@@ -199,6 +202,9 @@ export const Storage = Schema.Struct({
   lastPurge: Schema.optional(Schema.Finite),
   eventsDays: Schema.Finite,
   totalsDays: Schema.Finite,
+  logPath: Schema.String.annotate({ description: "The server log file the Logs tab keeps lines from" }),
+  logLevel: Schema.String.annotate({ description: "The lowest level kept: error, warn or info" }),
+  oldestLog: Schema.optional(Schema.Finite),
 }).annotate({ identifier: "OperatorTelemetryStorage" })
 
 /** The shared filter (§7.2), as query parameters: lists comma-separated, numbers as text. */

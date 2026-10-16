@@ -169,7 +169,25 @@ export const operatorTelemetryHandlers = HttpApiBuilder.group(OperatorRootApi, "
             ...(number(ctx.query.limit) !== undefined ? { limit: number(ctx.query.limit) } : {}),
             ...(number(ctx.query.after) !== undefined ? { after: number(ctx.query.after) } : {}),
           })
-          return { rows: page.rows, seq: page.seq, ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}) }
+          // The sessions' titles, for the rows to name them.
+          const ids = [...new Set(page.rows.map((row) => row.session_id).filter((id): id is string => !!id))]
+          const titles = ids.length
+            ? Object.fromEntries(
+                (
+                  store()
+                    .db.query(`SELECT id, title FROM session_row WHERE id IN (${ids.map(() => "?").join(", ")})`)
+                    .all(...ids) as Array<{ id: string; title: string | null }>
+                )
+                  .filter((row) => row.title)
+                  .map((row) => [row.id, row.title!]),
+              )
+            : {}
+          return {
+            rows: page.rows,
+            seq: page.seq,
+            titles,
+            ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
+          }
         }),
       )
       .handle("logs", (ctx) =>
@@ -214,6 +232,7 @@ export const operatorTelemetryHandlers = HttpApiBuilder.group(OperatorRootApi, "
           )
           const count = (sql: string) => (db.db.query(sql).get() as { n: number | null }).n ?? 0
           const oldest = (db.db.query("SELECT min(start_ms) AS n FROM span").get() as { n: number | null }).n
+          const oldestLog = (db.db.query("SELECT min(time_ms) AS n FROM log_entry").get() as { n: number | null }).n
           const lastPurge = Number(db.meta("last_purge") ?? 0)
           const settings = telemetry.settings()
           return {
@@ -228,6 +247,9 @@ export const operatorTelemetryHandlers = HttpApiBuilder.group(OperatorRootApi, "
             ...(lastPurge ? { lastPurge } : {}),
             eventsDays: settings.eventsDays,
             totalsDays: settings.totalsDays,
+            logPath: OperatorTelemetry.logFile(),
+            logLevel: settings.logLevel,
+            ...(oldestLog !== null ? { oldestLog } : {}),
           }
         }),
       )

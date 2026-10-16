@@ -5,6 +5,7 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Dialog } from "@opencode-ai/ui/v2/dialog-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import type { OperatorTelemetrySessionDetail, OperatorTelemetrySpan } from "@opencode-ai/sdk/v2/client"
+import { useSearchParams } from "@solidjs/router"
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createEffect, createMemo, createSignal, For, type JSX, on, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
@@ -38,6 +39,7 @@ export function SessionDetail(props: { records: () => ReadonlyArray<string> }) {
   const projects = useOperatorProjects()
   const namespaces = useNamespaceScope()
   const [params, setParams] = useOverlayParams<{ session?: string; turn?: string; span?: string }>()
+  const [, setPage] = useSearchParams()
   const id = () => params.session ?? ""
 
   // The latest turns first; earlier pages come before them.
@@ -335,6 +337,23 @@ export function SessionDetail(props: { records: () => ReadonlyArray<string> }) {
                   <SpanPanel
                     detail={ready(selected)}
                     loading={selected.isPending}
+                    onShowInEvents={(span) => {
+                      const turn = turns().find(
+                        (item) => item.span.id === (span.kind === "turn" ? span.id : span.turn_id),
+                      )
+                      const window = turn?.span ?? span
+                      setPage({
+                        tab: "events",
+                        inSession: span.session_id ?? undefined,
+                        from: String(window.start_ms ?? 0),
+                        to: String((window.end_ms ?? Date.now()) + 1),
+                        range: undefined,
+                        session: undefined,
+                        turn: undefined,
+                        span: undefined,
+                        full: undefined,
+                      })
+                    }}
                     onClose={() => setParams({ span: undefined })}
                     onOpenSession={(child) =>
                       setParams({ session: child, turn: undefined, span: undefined }, { replace: false })
@@ -360,11 +379,15 @@ function Fact(props: { label: string; children: JSX.Element }) {
 }
 
 /** A span's fields, grouped (§10.4), with links to where it came from. */
-function SpanPanel(props: {
+export function SpanPanel(props: {
   detail: { span: Span; links: Record<string, string | undefined> } | undefined
   loading: boolean
   onClose: () => void
   onOpenSession: (sessionID: string) => void
+  /** Show in Events: the Events tab, filtered to its session and its turn's time. */
+  onShowInEvents?: (span: Span) => void
+  /** Open session: the session detail at this span (from the Events tab). */
+  onOpenAt?: (span: Span) => void
 }) {
   const language = useLanguage()
   const t = language.t
@@ -553,6 +576,16 @@ function SpanPanel(props: {
                     {t("operator.obs.openSubagent")}
                   </ButtonV2>
                 )}
+              </Show>
+              <Show when={props.onOpenAt && s().session_id}>
+                <ButtonV2 size="small" variant="outline" onClick={() => props.onOpenAt!(s())}>
+                  {t("operator.obs.openSession")}
+                </ButtonV2>
+              </Show>
+              <Show when={props.onShowInEvents && s().session_id}>
+                <ButtonV2 size="small" variant="ghost" onClick={() => props.onShowInEvents!(s())}>
+                  {t("operator.obs.showInEvents")}
+                </ButtonV2>
               </Show>
             </div>
           </>
