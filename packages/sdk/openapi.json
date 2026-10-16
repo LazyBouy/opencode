@@ -5440,6 +5440,1408 @@
         ]
       }
     },
+    "/operator/telemetry/sessions": {
+      "get": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.sessions",
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "ns",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "session",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "agentType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "tool",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "mcp",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "errorType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "finish",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "decision",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "minCost",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "maxCost",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "minDuration",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "maxDuration",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "minTokens",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "loop",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "http",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "roots",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "sessionStatus",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "stuck",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sessions with activity in the range",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetrySessionPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Sessions with activity in the range, matching the filter: their summary rows, sorted on any column (lastActivity, turnStart, cost, …), paged with a cursor.",
+        "summary": "List sessions",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.sessions({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/telemetry/session/{id}": {
+      "get": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.session",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "turns",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["latest", "all"]
+            },
+            "required": false
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The session's summary and turns",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetrySessionDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorTelemetryNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "One session's summary row and its turns, newest last, each with its prompt's first line read from the session.",
+        "summary": "Get a session",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.session({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/telemetry/session/{id}/turn/{turnID}": {
+      "get": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.turn",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "turnID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The turn's spans",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryTurnTree"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorTelemetryNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Every span under a turn, in start order, for its tree and timeline. A subagent's own turns are read from its session.",
+        "summary": "Get a turn's spans",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.turn({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/telemetry/session/{id}/keep": {
+      "post": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.keep",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Kept",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Kept"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorTelemetryNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Its spans and log lines are never purged until it is let go or deleted.",
+        "summary": "Keep a session beyond retention",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.keep({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.unkeep",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Let go",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Let go"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Retention purges it again as it does others.",
+        "summary": "Let a kept session go",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.unkeep({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/telemetry/span/{id}": {
+      "get": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.span",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The span",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetrySpanDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorTelemetryNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "One span with all its fields, and links to its session, recorded call, decision record and part.",
+        "summary": "Get a span",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.span({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/telemetry/events": {
+      "get": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.events",
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "ns",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "session",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "agentType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "tool",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "mcp",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "errorType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "finish",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "decision",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "minCost",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "maxCost",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "minDuration",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "maxDuration",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "minTokens",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "loop",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "http",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "roots",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "sessionStatus",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "stuck",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Spans",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetrySpanPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Every span matching the filter, newest first by default; `after` gives the rows written since a seq, for the live tail.",
+        "summary": "List events",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.events({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/telemetry/logs": {
+      "get": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.logs",
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "session",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "service",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Log lines",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryLogPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Server log lines kept from the log file, newest first; `after` for the live tail.",
+        "summary": "List server log lines",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.logs({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/telemetry/facets": {
+      "get": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.facets",
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "ns",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "session",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "agentType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "tool",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "mcp",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "errorType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "finish",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "decision",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "minCost",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "maxCost",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "minDuration",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "maxDuration",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "minTokens",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "loop",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "http",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "roots",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "sessionStatus",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "stuck",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["events", "sessions", "logs"]
+            },
+            "required": true
+          },
+          {
+            "name": "field",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "description": "The field: kind, status, agent, model, tool, dir, sessionStatus, …"
+            },
+            "required": true
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "service",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Values with counts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorTelemetryFacet"
+                  },
+                  "description": "Values with counts"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Up to 20 values of a field with their counts under the filter, leaving that field's own filter out.",
+        "summary": "Count a field's values",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.facets({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/telemetry/backfill": {
+      "get": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.backfillStatus",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Progress",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryBackfill"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "How far building history from the stored sessions is.",
+        "summary": "Building history",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.backfillStatus({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.backfill",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryBackfill"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Builds history again from the stored sessions, recorded calls, decision records and the queue, in the background. Safe to repeat.",
+        "summary": "Rebuild from history",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.backfill({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/telemetry/storage": {
+      "get": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.storage",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The store",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryStorage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The store's size, rows, oldest span, dropped events, kept sessions, last purge and retention.",
+        "summary": "Telemetry storage",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.storage({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/event": {
       "get": {
         "tags": ["event"],
@@ -36407,6 +37809,660 @@
         ],
         "additionalProperties": false
       },
+      "OperatorTelemetrySessionRow": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "agent_type": {
+            "type": "string"
+          },
+          "project_key": {
+            "type": "string"
+          },
+          "directory": {
+            "type": "string"
+          },
+          "parent_id": {
+            "type": "string"
+          },
+          "root_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "description": "running, waiting, idle, error, denied, stopped, interrupted, trash: the latest turn's, or Trash"
+          },
+          "first_ms": {
+            "type": "number"
+          },
+          "last_ms": {
+            "type": "number"
+          },
+          "turns": {
+            "type": "number"
+          },
+          "model_calls": {
+            "type": "number"
+          },
+          "tool_calls": {
+            "type": "number"
+          },
+          "errors": {
+            "type": "number"
+          },
+          "denials": {
+            "type": "number"
+          },
+          "retries": {
+            "type": "number"
+          },
+          "wait_ms": {
+            "type": "number"
+          },
+          "active_ms": {
+            "type": "number"
+          },
+          "tokens_input": {
+            "type": "number"
+          },
+          "tokens_output": {
+            "type": "number"
+          },
+          "tokens_reasoning": {
+            "type": "number"
+          },
+          "tokens_cache_read": {
+            "type": "number"
+          },
+          "tokens_cache_write": {
+            "type": "number"
+          },
+          "cost": {
+            "type": "number",
+            "description": "Its own model calls"
+          },
+          "cost_total": {
+            "type": "number",
+            "description": "With its subagents' sessions"
+          },
+          "cost_billed": {
+            "type": "number"
+          },
+          "loop": {
+            "type": "string"
+          },
+          "trashed": {
+            "type": "number"
+          },
+          "turn_start_ms": {
+            "type": "number"
+          },
+          "current": {
+            "type": "string"
+          },
+          "subagents": {
+            "type": "number"
+          },
+          "model": {
+            "type": "string"
+          },
+          "kept": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "seq",
+          "title",
+          "agent",
+          "agent_type",
+          "project_key",
+          "directory",
+          "parent_id",
+          "root_id",
+          "status",
+          "first_ms",
+          "last_ms",
+          "turns",
+          "model_calls",
+          "tool_calls",
+          "errors",
+          "denials",
+          "retries",
+          "wait_ms",
+          "active_ms",
+          "tokens_input",
+          "tokens_output",
+          "tokens_reasoning",
+          "tokens_cache_read",
+          "tokens_cache_write",
+          "cost",
+          "cost_total",
+          "cost_billed",
+          "loop",
+          "trashed",
+          "turn_start_ms",
+          "current",
+          "subagents",
+          "model"
+        ],
+        "additionalProperties": false
+      },
+      "OperatorTelemetrySessionPage": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorTelemetrySessionRow"
+            }
+          },
+          "nextCursor": {
+            "type": "string"
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": ["rows", "total"],
+        "additionalProperties": false
+      },
+      "OperatorTelemetrySpan": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable, from the source: turn:<message>, call:<call>, tool:<part>, …"
+          },
+          "seq": {
+            "type": "number",
+            "description": "Grows on every insert or update, server-wide (the live tail's `after`)"
+          },
+          "kind": {
+            "type": "string",
+            "description": "turn, model_call, tool_call, permission_wait, subagent, compaction, retry, helper_run, queue_item, alert"
+          },
+          "name": {
+            "type": "string"
+          },
+          "parent_id": {
+            "type": "string"
+          },
+          "turn_id": {
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "root_session_id": {
+            "type": "string"
+          },
+          "project_key": {
+            "type": "string"
+          },
+          "directory": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "agent_type": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "tool": {
+            "type": "string"
+          },
+          "mcp_server": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "error_type": {
+            "type": "string"
+          },
+          "error_message": {
+            "type": "string"
+          },
+          "http_status": {
+            "type": "number"
+          },
+          "finish_reason": {
+            "type": "string"
+          },
+          "start_ms": {
+            "type": "number"
+          },
+          "end_ms": {
+            "type": "number"
+          },
+          "duration_ms": {
+            "type": "number"
+          },
+          "active_ms": {
+            "type": "number"
+          },
+          "wait_ms": {
+            "type": "number"
+          },
+          "ttft_ms": {
+            "type": "number"
+          },
+          "attempt": {
+            "type": "number"
+          },
+          "attempts": {
+            "type": "number"
+          },
+          "tokens_input": {
+            "type": "number"
+          },
+          "tokens_output": {
+            "type": "number"
+          },
+          "tokens_reasoning": {
+            "type": "number"
+          },
+          "tokens_cache_read": {
+            "type": "number"
+          },
+          "tokens_cache_write": {
+            "type": "number"
+          },
+          "cost": {
+            "type": "number"
+          },
+          "cost_billed": {
+            "type": "number"
+          },
+          "context_tokens": {
+            "type": "number"
+          },
+          "context_limit": {
+            "type": "number"
+          },
+          "decision": {
+            "type": "string"
+          },
+          "decision_source": {
+            "type": "string"
+          },
+          "decided_by": {
+            "type": "string"
+          },
+          "permission": {
+            "type": "string"
+          },
+          "pattern": {
+            "type": "string"
+          },
+          "args_hash": {
+            "type": "string"
+          },
+          "result_hash": {
+            "type": "string"
+          },
+          "loop": {
+            "type": "string"
+          },
+          "call_id": {
+            "type": "string"
+          },
+          "message_id": {
+            "type": "string"
+          },
+          "part_id": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "attrs": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "seq",
+          "kind",
+          "name",
+          "parent_id",
+          "turn_id",
+          "session_id",
+          "root_session_id",
+          "project_key",
+          "directory",
+          "agent",
+          "agent_type",
+          "model",
+          "provider",
+          "tool",
+          "mcp_server",
+          "status",
+          "error_type",
+          "error_message",
+          "http_status",
+          "finish_reason",
+          "start_ms",
+          "end_ms",
+          "duration_ms",
+          "active_ms",
+          "wait_ms",
+          "ttft_ms",
+          "attempt",
+          "attempts",
+          "tokens_input",
+          "tokens_output",
+          "tokens_reasoning",
+          "tokens_cache_read",
+          "tokens_cache_write",
+          "cost",
+          "cost_billed",
+          "context_tokens",
+          "context_limit",
+          "decision",
+          "decision_source",
+          "decided_by",
+          "permission",
+          "pattern",
+          "args_hash",
+          "result_hash",
+          "loop",
+          "call_id",
+          "message_id",
+          "part_id",
+          "request_id",
+          "source",
+          "attrs"
+        ],
+        "additionalProperties": false
+      },
+      "OperatorTelemetryTurn": {
+        "type": "object",
+        "properties": {
+          "span": {
+            "$ref": "#/components/schemas/OperatorTelemetrySpan"
+          },
+          "number": {
+            "type": "number",
+            "description": "1-based, in the session"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": ["span", "number"],
+        "additionalProperties": false
+      },
+      "OperatorTelemetrySessionDetail": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "$ref": "#/components/schemas/OperatorTelemetrySessionRow"
+          },
+          "turns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorTelemetryTurn"
+            }
+          },
+          "earlier": {
+            "type": "boolean",
+            "description": "There are earlier turns (page back with `before`)"
+          }
+        },
+        "required": ["session", "turns", "earlier"],
+        "additionalProperties": false
+      },
+      "OperatorTelemetryNotFoundError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorTelemetryNotFoundError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorTelemetryTurnTree": {
+        "type": "object",
+        "properties": {
+          "turn": {
+            "$ref": "#/components/schemas/OperatorTelemetrySpan"
+          },
+          "spans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorTelemetrySpan"
+            },
+            "description": "Every span of the turn, in start order; `parent_id` builds the tree. A subagent's own turns are its session's"
+          }
+        },
+        "required": ["turn", "spans"],
+        "additionalProperties": false
+      },
+      "OperatorTelemetrySpanDetail": {
+        "type": "object",
+        "properties": {
+          "span": {
+            "$ref": "#/components/schemas/OperatorTelemetrySpan"
+          },
+          "links": {
+            "type": "object",
+            "properties": {
+              "session": {
+                "type": "string"
+              },
+              "turn": {
+                "type": "string"
+              },
+              "call": {
+                "type": "string"
+              },
+              "decision": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "part": {
+                "type": "string"
+              },
+              "child": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": ["span", "links"],
+        "additionalProperties": false
+      },
+      "OperatorTelemetrySpanPage": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorTelemetrySpan"
+            }
+          },
+          "nextCursor": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "number",
+            "description": "The highest seq seen, for the next `after`"
+          }
+        },
+        "required": ["rows", "seq"],
+        "additionalProperties": false
+      },
+      "OperatorTelemetryLogEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "number"
+          },
+          "time_ms": {
+            "type": "number"
+          },
+          "level": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "run": {
+            "type": "string"
+          },
+          "service": {
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "fields": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "seq", "time_ms", "level", "message", "run", "service", "session_id", "fields"],
+        "additionalProperties": false
+      },
+      "OperatorTelemetryLogPage": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorTelemetryLogEntry"
+            }
+          },
+          "nextCursor": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "number"
+          }
+        },
+        "required": ["rows", "seq"],
+        "additionalProperties": false
+      },
+      "OperatorTelemetryFacet": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string"
+          },
+          "count": {
+            "type": "number"
+          }
+        },
+        "required": ["value", "count"],
+        "additionalProperties": false
+      },
+      "OperatorTelemetryBackfill": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": ["idle", "running", "done", "failed"]
+          },
+          "done": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          },
+          "startedAt": {
+            "type": "number"
+          },
+          "finishedAt": {
+            "type": "number"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": ["state", "done", "total"],
+        "additionalProperties": false
+      },
+      "OperatorTelemetryStorage": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "number"
+          },
+          "spans": {
+            "type": "number"
+          },
+          "logs": {
+            "type": "number"
+          },
+          "sessions": {
+            "type": "number"
+          },
+          "oldestSpan": {
+            "type": "number"
+          },
+          "dropped": {
+            "type": "number",
+            "description": "Rows dropped because the backlog was full"
+          },
+          "kept": {
+            "type": "number",
+            "description": "Sessions kept beyond retention"
+          },
+          "lastPurge": {
+            "type": "number"
+          },
+          "eventsDays": {
+            "type": "number"
+          },
+          "totalsDays": {
+            "type": "number"
+          }
+        },
+        "required": ["path", "bytes", "spans", "logs", "sessions", "dropped", "kept", "eventsDays", "totalsDays"],
+        "additionalProperties": false
+      },
       "Model": {
         "type": "object",
         "properties": {
@@ -56328,6 +58384,10 @@
     {
       "name": "operator permission decisions",
       "description": "Permission decision routes."
+    },
+    {
+      "name": "operator telemetry",
+      "description": "Observability routes."
     },
     {
       "name": "event",

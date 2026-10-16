@@ -3572,6 +3572,230 @@ export type OperatorPermissionDecision = {
   }
 }
 
+export type OperatorTelemetrySessionRow = {
+  id: string
+  seq: number
+  title: string
+  agent: string
+  agent_type: string
+  project_key: string
+  directory: string
+  parent_id: string
+  root_id: string
+  /**
+   * running, waiting, idle, error, denied, stopped, interrupted, trash: the latest turn's, or Trash
+   */
+  status: string
+  first_ms: number
+  last_ms: number
+  turns: number
+  model_calls: number
+  tool_calls: number
+  errors: number
+  denials: number
+  retries: number
+  wait_ms: number
+  active_ms: number
+  tokens_input: number
+  tokens_output: number
+  tokens_reasoning: number
+  tokens_cache_read: number
+  tokens_cache_write: number
+  /**
+   * Its own model calls
+   */
+  cost: number
+  /**
+   * With its subagents' sessions
+   */
+  cost_total: number
+  cost_billed: number
+  loop: string
+  trashed: number
+  turn_start_ms: number
+  current: string
+  subagents: number
+  model: string
+  kept?: boolean
+}
+
+export type OperatorTelemetrySessionPage = {
+  rows: Array<OperatorTelemetrySessionRow>
+  nextCursor?: string
+  total: number
+}
+
+export type OperatorTelemetrySpan = {
+  /**
+   * Stable, from the source: turn:<message>, call:<call>, tool:<part>, …
+   */
+  id: string
+  /**
+   * Grows on every insert or update, server-wide (the live tail's `after`)
+   */
+  seq: number
+  /**
+   * turn, model_call, tool_call, permission_wait, subagent, compaction, retry, helper_run, queue_item, alert
+   */
+  kind: string
+  name: string
+  parent_id: string
+  turn_id: string
+  session_id: string
+  root_session_id: string
+  project_key: string
+  directory: string
+  agent: string
+  agent_type: string
+  model: string
+  provider: string
+  tool: string
+  mcp_server: string
+  status: string
+  error_type: string
+  error_message: string
+  http_status: number
+  finish_reason: string
+  start_ms: number
+  end_ms: number
+  duration_ms: number
+  active_ms: number
+  wait_ms: number
+  ttft_ms: number
+  attempt: number
+  attempts: number
+  tokens_input: number
+  tokens_output: number
+  tokens_reasoning: number
+  tokens_cache_read: number
+  tokens_cache_write: number
+  cost: number
+  cost_billed: number
+  context_tokens: number
+  context_limit: number
+  decision: string
+  decision_source: string
+  decided_by: string
+  permission: string
+  pattern: string
+  args_hash: string
+  result_hash: string
+  loop: string
+  call_id: string
+  message_id: string
+  part_id: string
+  request_id: string
+  source: string
+  attrs: string
+}
+
+export type OperatorTelemetryTurn = {
+  span: OperatorTelemetrySpan
+  /**
+   * 1-based, in the session
+   */
+  number: number
+  label?: string
+}
+
+export type OperatorTelemetrySessionDetail = {
+  session: OperatorTelemetrySessionRow
+  turns: Array<OperatorTelemetryTurn>
+  /**
+   * There are earlier turns (page back with `before`)
+   */
+  earlier: boolean
+}
+
+export type OperatorTelemetryNotFoundError = {
+  name: "OperatorTelemetryNotFoundError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorTelemetryTurnTree = {
+  turn: OperatorTelemetrySpan
+  /**
+   * Every span of the turn, in start order; `parent_id` builds the tree. A subagent's own turns are its session's
+   */
+  spans: Array<OperatorTelemetrySpan>
+}
+
+export type OperatorTelemetrySpanDetail = {
+  span: OperatorTelemetrySpan
+  links: {
+    session?: string
+    turn?: string
+    call?: string
+    decision?: string
+    message?: string
+    part?: string
+    child?: string
+  }
+}
+
+export type OperatorTelemetrySpanPage = {
+  rows: Array<OperatorTelemetrySpan>
+  nextCursor?: string
+  /**
+   * The highest seq seen, for the next `after`
+   */
+  seq: number
+}
+
+export type OperatorTelemetryLogEntry = {
+  id: string
+  seq: number
+  time_ms: number
+  level: string
+  message: string
+  run: string
+  service: string
+  session_id: string
+  fields: string
+}
+
+export type OperatorTelemetryLogPage = {
+  rows: Array<OperatorTelemetryLogEntry>
+  nextCursor?: string
+  seq: number
+}
+
+export type OperatorTelemetryFacet = {
+  value: string
+  count: number
+}
+
+export type OperatorTelemetryBackfill = {
+  state: "idle" | "running" | "done" | "failed"
+  done: number
+  total: number
+  startedAt?: number
+  finishedAt?: number
+  error?: string
+}
+
+export type OperatorTelemetryStorage = {
+  path: string
+  bytes: number
+  spans: number
+  logs: number
+  sessions: number
+  oldestSpan?: number
+  /**
+   * Rows dropped because the backlog was full
+   */
+  dropped: number
+  /**
+   * Sessions kept beyond retention
+   */
+  kept: number
+  lastPurge?: number
+  eventsDays: number
+  totalsDays: number
+}
+
 export type Model = {
   id: string
   providerID: string
@@ -13270,6 +13494,454 @@ export type OperatorPermissionDecisionsResponses = {
 
 export type OperatorPermissionDecisionsResponse =
   OperatorPermissionDecisionsResponses[keyof OperatorPermissionDecisionsResponses]
+
+export type OperatorTelemetrySessionsData = {
+  body?: never
+  path?: never
+  query?: {
+    range?: string
+    from?: string
+    to?: string
+    ns?: string
+    dir?: string
+    session?: string
+    agent?: string
+    agentType?: string
+    model?: string
+    provider?: string
+    tool?: string
+    mcp?: string
+    kind?: string
+    status?: string
+    errorType?: string
+    finish?: string
+    decision?: string
+    minCost?: string
+    maxCost?: string
+    minDuration?: string
+    maxDuration?: string
+    minTokens?: string
+    loop?: string
+    http?: string
+    q?: string
+    roots?: string
+    sessionStatus?: string
+    stuck?: string
+    sort?: string
+    cursor?: string
+    limit?: string
+  }
+  url: "/operator/telemetry/sessions"
+}
+
+export type OperatorTelemetrySessionsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorTelemetrySessionsError = OperatorTelemetrySessionsErrors[keyof OperatorTelemetrySessionsErrors]
+
+export type OperatorTelemetrySessionsResponses = {
+  /**
+   * Sessions with activity in the range
+   */
+  200: OperatorTelemetrySessionPage
+}
+
+export type OperatorTelemetrySessionsResponse =
+  OperatorTelemetrySessionsResponses[keyof OperatorTelemetrySessionsResponses]
+
+export type OperatorTelemetrySessionData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    turns?: "latest" | "all"
+    before?: string
+  }
+  url: "/operator/telemetry/session/{id}"
+}
+
+export type OperatorTelemetrySessionErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * OperatorTelemetryNotFoundError
+   */
+  404: OperatorTelemetryNotFoundError
+}
+
+export type OperatorTelemetrySessionError = OperatorTelemetrySessionErrors[keyof OperatorTelemetrySessionErrors]
+
+export type OperatorTelemetrySessionResponses = {
+  /**
+   * The session's summary and turns
+   */
+  200: OperatorTelemetrySessionDetail
+}
+
+export type OperatorTelemetrySessionResponse =
+  OperatorTelemetrySessionResponses[keyof OperatorTelemetrySessionResponses]
+
+export type OperatorTelemetryTurnData = {
+  body?: never
+  path: {
+    id: string
+    turnID: string
+  }
+  query?: never
+  url: "/operator/telemetry/session/{id}/turn/{turnID}"
+}
+
+export type OperatorTelemetryTurnErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * OperatorTelemetryNotFoundError
+   */
+  404: OperatorTelemetryNotFoundError
+}
+
+export type OperatorTelemetryTurnError = OperatorTelemetryTurnErrors[keyof OperatorTelemetryTurnErrors]
+
+export type OperatorTelemetryTurnResponses = {
+  /**
+   * The turn's spans
+   */
+  200: OperatorTelemetryTurnTree
+}
+
+export type OperatorTelemetryTurnResponse = OperatorTelemetryTurnResponses[keyof OperatorTelemetryTurnResponses]
+
+export type OperatorTelemetryUnkeepData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/operator/telemetry/session/{id}/keep"
+}
+
+export type OperatorTelemetryUnkeepErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorTelemetryUnkeepError = OperatorTelemetryUnkeepErrors[keyof OperatorTelemetryUnkeepErrors]
+
+export type OperatorTelemetryUnkeepResponses = {
+  /**
+   * Let go
+   */
+  200: boolean
+}
+
+export type OperatorTelemetryUnkeepResponse = OperatorTelemetryUnkeepResponses[keyof OperatorTelemetryUnkeepResponses]
+
+export type OperatorTelemetryKeepData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/operator/telemetry/session/{id}/keep"
+}
+
+export type OperatorTelemetryKeepErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * OperatorTelemetryNotFoundError
+   */
+  404: OperatorTelemetryNotFoundError
+}
+
+export type OperatorTelemetryKeepError = OperatorTelemetryKeepErrors[keyof OperatorTelemetryKeepErrors]
+
+export type OperatorTelemetryKeepResponses = {
+  /**
+   * Kept
+   */
+  200: boolean
+}
+
+export type OperatorTelemetryKeepResponse = OperatorTelemetryKeepResponses[keyof OperatorTelemetryKeepResponses]
+
+export type OperatorTelemetrySpanData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/operator/telemetry/span/{id}"
+}
+
+export type OperatorTelemetrySpanErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * OperatorTelemetryNotFoundError
+   */
+  404: OperatorTelemetryNotFoundError
+}
+
+export type OperatorTelemetrySpanError = OperatorTelemetrySpanErrors[keyof OperatorTelemetrySpanErrors]
+
+export type OperatorTelemetrySpanResponses = {
+  /**
+   * The span
+   */
+  200: OperatorTelemetrySpanDetail
+}
+
+export type OperatorTelemetrySpanResponse = OperatorTelemetrySpanResponses[keyof OperatorTelemetrySpanResponses]
+
+export type OperatorTelemetryEventsData = {
+  body?: never
+  path?: never
+  query?: {
+    range?: string
+    from?: string
+    to?: string
+    ns?: string
+    dir?: string
+    session?: string
+    agent?: string
+    agentType?: string
+    model?: string
+    provider?: string
+    tool?: string
+    mcp?: string
+    kind?: string
+    status?: string
+    errorType?: string
+    finish?: string
+    decision?: string
+    minCost?: string
+    maxCost?: string
+    minDuration?: string
+    maxDuration?: string
+    minTokens?: string
+    loop?: string
+    http?: string
+    q?: string
+    roots?: string
+    sessionStatus?: string
+    stuck?: string
+    sort?: string
+    cursor?: string
+    limit?: string
+    after?: string
+  }
+  url: "/operator/telemetry/events"
+}
+
+export type OperatorTelemetryEventsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorTelemetryEventsError = OperatorTelemetryEventsErrors[keyof OperatorTelemetryEventsErrors]
+
+export type OperatorTelemetryEventsResponses = {
+  /**
+   * Spans
+   */
+  200: OperatorTelemetrySpanPage
+}
+
+export type OperatorTelemetryEventsResponse = OperatorTelemetryEventsResponses[keyof OperatorTelemetryEventsResponses]
+
+export type OperatorTelemetryLogsData = {
+  body?: never
+  path?: never
+  query?: {
+    range?: string
+    from?: string
+    to?: string
+    level?: string
+    q?: string
+    session?: string
+    service?: string
+    cursor?: string
+    limit?: string
+    after?: string
+  }
+  url: "/operator/telemetry/logs"
+}
+
+export type OperatorTelemetryLogsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorTelemetryLogsError = OperatorTelemetryLogsErrors[keyof OperatorTelemetryLogsErrors]
+
+export type OperatorTelemetryLogsResponses = {
+  /**
+   * Log lines
+   */
+  200: OperatorTelemetryLogPage
+}
+
+export type OperatorTelemetryLogsResponse = OperatorTelemetryLogsResponses[keyof OperatorTelemetryLogsResponses]
+
+export type OperatorTelemetryFacetsData = {
+  body?: never
+  path?: never
+  query: {
+    range?: string
+    from?: string
+    to?: string
+    ns?: string
+    dir?: string
+    session?: string
+    agent?: string
+    agentType?: string
+    model?: string
+    provider?: string
+    tool?: string
+    mcp?: string
+    kind?: string
+    status?: string
+    errorType?: string
+    finish?: string
+    decision?: string
+    minCost?: string
+    maxCost?: string
+    minDuration?: string
+    maxDuration?: string
+    minTokens?: string
+    loop?: string
+    http?: string
+    q?: string
+    roots?: string
+    sessionStatus?: string
+    stuck?: string
+    scope: "events" | "sessions" | "logs"
+    /**
+     * The field: kind, status, agent, model, tool, dir, sessionStatus, …
+     */
+    field: string
+    level?: string
+    service?: string
+  }
+  url: "/operator/telemetry/facets"
+}
+
+export type OperatorTelemetryFacetsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorTelemetryFacetsError = OperatorTelemetryFacetsErrors[keyof OperatorTelemetryFacetsErrors]
+
+export type OperatorTelemetryFacetsResponses = {
+  /**
+   * Values with counts
+   */
+  200: Array<OperatorTelemetryFacet>
+}
+
+export type OperatorTelemetryFacetsResponse = OperatorTelemetryFacetsResponses[keyof OperatorTelemetryFacetsResponses]
+
+export type OperatorTelemetryBackfillStatusData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/operator/telemetry/backfill"
+}
+
+export type OperatorTelemetryBackfillStatusErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorTelemetryBackfillStatusError =
+  OperatorTelemetryBackfillStatusErrors[keyof OperatorTelemetryBackfillStatusErrors]
+
+export type OperatorTelemetryBackfillStatusResponses = {
+  /**
+   * Progress
+   */
+  200: OperatorTelemetryBackfill
+}
+
+export type OperatorTelemetryBackfillStatusResponse =
+  OperatorTelemetryBackfillStatusResponses[keyof OperatorTelemetryBackfillStatusResponses]
+
+export type OperatorTelemetryBackfillData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/operator/telemetry/backfill"
+}
+
+export type OperatorTelemetryBackfillErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorTelemetryBackfillError = OperatorTelemetryBackfillErrors[keyof OperatorTelemetryBackfillErrors]
+
+export type OperatorTelemetryBackfillResponses = {
+  /**
+   * Started
+   */
+  200: OperatorTelemetryBackfill
+}
+
+export type OperatorTelemetryBackfillResponse =
+  OperatorTelemetryBackfillResponses[keyof OperatorTelemetryBackfillResponses]
+
+export type OperatorTelemetryStorageData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/operator/telemetry/storage"
+}
+
+export type OperatorTelemetryStorageErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorTelemetryStorageError = OperatorTelemetryStorageErrors[keyof OperatorTelemetryStorageErrors]
+
+export type OperatorTelemetryStorageResponses = {
+  /**
+   * The store
+   */
+  200: OperatorTelemetryStorage
+}
+
+export type OperatorTelemetryStorageResponse =
+  OperatorTelemetryStorageResponses[keyof OperatorTelemetryStorageResponses]
 
 export type EventSubscribeData = {
   body?: never

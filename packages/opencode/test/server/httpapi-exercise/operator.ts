@@ -1397,4 +1397,79 @@ export const operatorScenarios: Scenario[] = [
     .delete("/operator/notifications/{id}", "operator.notification.dismiss")
     .at((ctx) => ({ path: route("/operator/notifications/{id}", { id: "missing" }), headers: ctx.headers() }))
     .json(200, (body) => check(body === false, "nothing to dismiss")),
+  http.protected
+    .get("/operator/telemetry/sessions", "operator.telemetry.sessions")
+    .at((ctx) => ({ path: "/operator/telemetry/sessions?range=24h&roots=1&sort=cost:desc", headers: ctx.headers() }))
+    .json(200, (body) => {
+      object(body)
+      array(body.rows)
+      check(typeof body.total === "number", "a page counts the matching sessions")
+    }),
+  http.protected
+    .get("/operator/telemetry/session/{id}", "operator.telemetry.session")
+    .at((ctx) => ({ path: route("/operator/telemetry/session/{id}", { id: "ses_missing" }), headers: ctx.headers() }))
+    .status(404),
+  http.protected
+    .get("/operator/telemetry/session/{id}/turn/{turnID}", "operator.telemetry.turn")
+    .at((ctx) => ({
+      path: route("/operator/telemetry/session/{id}/turn/{turnID}", { id: "ses_missing", turnID: "turn:msg_missing" }),
+      headers: ctx.headers(),
+    }))
+    .status(404),
+  http.protected
+    .post("/operator/telemetry/session/{id}/keep", "operator.telemetry.keep")
+    .at((ctx) => ({
+      path: route("/operator/telemetry/session/{id}/keep", { id: "ses_missing" }),
+      headers: ctx.headers(),
+    }))
+    .status(404),
+  http.protected
+    .delete("/operator/telemetry/session/{id}/keep", "operator.telemetry.unkeep")
+    .at((ctx) => ({
+      path: route("/operator/telemetry/session/{id}/keep", { id: "ses_missing" }),
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => check(body === false, "nothing was kept")),
+  http.protected
+    .get("/operator/telemetry/span/{id}", "operator.telemetry.span")
+    .at((ctx) => ({ path: route("/operator/telemetry/span/{id}", { id: "turn:missing" }), headers: ctx.headers() }))
+    .status(404),
+  http.protected
+    .get("/operator/telemetry/events", "operator.telemetry.events")
+    .at((ctx) => ({
+      path: "/operator/telemetry/events?range=1h&kind=tool_call,model_call&status=error",
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => {
+      object(body)
+      array(body.rows)
+      check(typeof body.seq === "number", "a page has the seq for the live tail")
+    }),
+  http.protected
+    .get("/operator/telemetry/logs", "operator.telemetry.logs")
+    .at((ctx) => ({ path: "/operator/telemetry/logs?level=warn&after=0", headers: ctx.headers() }))
+    .json(200, (body) => {
+      object(body)
+      array(body.rows)
+    }),
+  http.protected
+    .get("/operator/telemetry/facets", "operator.telemetry.facets")
+    .at((ctx) => ({ path: "/operator/telemetry/facets?scope=events&field=kind&range=7d", headers: ctx.headers() }))
+    .json(200, array),
+  http.protected.get("/operator/telemetry/backfill", "operator.telemetry.backfillStatus").json(200, (body) => {
+    object(body)
+    check(["idle", "running", "done", "failed"].includes(String(body.state)), "a known state")
+  }),
+  http.protected
+    .post("/operator/telemetry/backfill", "operator.telemetry.backfill")
+    .mutating()
+    .json(200, (body) => {
+      object(body)
+      check(["running", "done"].includes(String(body.state)), "it runs, or has run")
+    }),
+  http.protected.get("/operator/telemetry/storage", "operator.telemetry.storage").json(200, (body) => {
+    object(body)
+    check(typeof body.bytes === "number" && typeof body.spans === "number", "the store's size and rows")
+    check(body.eventsDays === 30, "the default retention")
+  }),
 ]

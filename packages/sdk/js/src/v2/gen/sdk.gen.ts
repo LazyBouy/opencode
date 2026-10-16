@@ -415,6 +415,30 @@ import type {
   OperatorStatsResponses,
   OperatorStatusErrors,
   OperatorStatusResponses,
+  OperatorTelemetryBackfillErrors,
+  OperatorTelemetryBackfillResponses,
+  OperatorTelemetryBackfillStatusErrors,
+  OperatorTelemetryBackfillStatusResponses,
+  OperatorTelemetryEventsErrors,
+  OperatorTelemetryEventsResponses,
+  OperatorTelemetryFacetsErrors,
+  OperatorTelemetryFacetsResponses,
+  OperatorTelemetryKeepErrors,
+  OperatorTelemetryKeepResponses,
+  OperatorTelemetryLogsErrors,
+  OperatorTelemetryLogsResponses,
+  OperatorTelemetrySessionErrors,
+  OperatorTelemetrySessionResponses,
+  OperatorTelemetrySessionsErrors,
+  OperatorTelemetrySessionsResponses,
+  OperatorTelemetrySpanErrors,
+  OperatorTelemetrySpanResponses,
+  OperatorTelemetryStorageErrors,
+  OperatorTelemetryStorageResponses,
+  OperatorTelemetryTurnErrors,
+  OperatorTelemetryTurnResponses,
+  OperatorTelemetryUnkeepErrors,
+  OperatorTelemetryUnkeepResponses,
   OperatorToolListErrors,
   OperatorToolListResponses,
   OperatorToolPatternExample,
@@ -4331,6 +4355,516 @@ export class ProjectRecord extends HeyApiClient {
   }
 }
 
+export class Telemetry extends HeyApiClient {
+  /**
+   * List sessions
+   *
+   * Sessions with activity in the range, matching the filter: their summary rows, sorted on any column (lastActivity, turnStart, cost, …), paged with a cursor.
+   */
+  public sessions<ThrowOnError extends boolean = false>(
+    parameters?: {
+      range?: string
+      from?: string
+      to?: string
+      ns?: string
+      dir?: string
+      session?: string
+      agent?: string
+      agentType?: string
+      model?: string
+      provider?: string
+      tool?: string
+      mcp?: string
+      kind?: string
+      status?: string
+      errorType?: string
+      finish?: string
+      decision?: string
+      minCost?: string
+      maxCost?: string
+      minDuration?: string
+      maxDuration?: string
+      minTokens?: string
+      loop?: string
+      http?: string
+      q?: string
+      roots?: string
+      sessionStatus?: string
+      stuck?: string
+      sort?: string
+      cursor?: string
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "range" },
+            { in: "query", key: "from" },
+            { in: "query", key: "to" },
+            { in: "query", key: "ns" },
+            { in: "query", key: "dir" },
+            { in: "query", key: "session" },
+            { in: "query", key: "agent" },
+            { in: "query", key: "agentType" },
+            { in: "query", key: "model" },
+            { in: "query", key: "provider" },
+            { in: "query", key: "tool" },
+            { in: "query", key: "mcp" },
+            { in: "query", key: "kind" },
+            { in: "query", key: "status" },
+            { in: "query", key: "errorType" },
+            { in: "query", key: "finish" },
+            { in: "query", key: "decision" },
+            { in: "query", key: "minCost" },
+            { in: "query", key: "maxCost" },
+            { in: "query", key: "minDuration" },
+            { in: "query", key: "maxDuration" },
+            { in: "query", key: "minTokens" },
+            { in: "query", key: "loop" },
+            { in: "query", key: "http" },
+            { in: "query", key: "q" },
+            { in: "query", key: "roots" },
+            { in: "query", key: "sessionStatus" },
+            { in: "query", key: "stuck" },
+            { in: "query", key: "sort" },
+            { in: "query", key: "cursor" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorTelemetrySessionsResponses,
+      OperatorTelemetrySessionsErrors,
+      ThrowOnError
+    >({
+      url: "/operator/telemetry/sessions",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get a session
+   *
+   * One session's summary row and its turns, newest last, each with its prompt's first line read from the session.
+   */
+  public session<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      turns?: "latest" | "all"
+      before?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "turns" },
+            { in: "query", key: "before" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorTelemetrySessionResponses,
+      OperatorTelemetrySessionErrors,
+      ThrowOnError
+    >({
+      url: "/operator/telemetry/session/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get a turn's spans
+   *
+   * Every span under a turn, in start order, for its tree and timeline. A subagent's own turns are read from its session.
+   */
+  public turn<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      turnID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "path", key: "turnID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorTelemetryTurnResponses,
+      OperatorTelemetryTurnErrors,
+      ThrowOnError
+    >({
+      url: "/operator/telemetry/session/{id}/turn/{turnID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Let a kept session go
+   *
+   * Retention purges it again as it does others.
+   */
+  public unkeep<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
+    return (options?.client ?? this.client).delete<
+      OperatorTelemetryUnkeepResponses,
+      OperatorTelemetryUnkeepErrors,
+      ThrowOnError
+    >({
+      url: "/operator/telemetry/session/{id}/keep",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Keep a session beyond retention
+   *
+   * Its spans and log lines are never purged until it is let go or deleted.
+   */
+  public keep<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
+    return (options?.client ?? this.client).post<
+      OperatorTelemetryKeepResponses,
+      OperatorTelemetryKeepErrors,
+      ThrowOnError
+    >({
+      url: "/operator/telemetry/session/{id}/keep",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get a span
+   *
+   * One span with all its fields, and links to its session, recorded call, decision record and part.
+   */
+  public span<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
+    return (options?.client ?? this.client).get<
+      OperatorTelemetrySpanResponses,
+      OperatorTelemetrySpanErrors,
+      ThrowOnError
+    >({
+      url: "/operator/telemetry/span/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List events
+   *
+   * Every span matching the filter, newest first by default; `after` gives the rows written since a seq, for the live tail.
+   */
+  public events<ThrowOnError extends boolean = false>(
+    parameters?: {
+      range?: string
+      from?: string
+      to?: string
+      ns?: string
+      dir?: string
+      session?: string
+      agent?: string
+      agentType?: string
+      model?: string
+      provider?: string
+      tool?: string
+      mcp?: string
+      kind?: string
+      status?: string
+      errorType?: string
+      finish?: string
+      decision?: string
+      minCost?: string
+      maxCost?: string
+      minDuration?: string
+      maxDuration?: string
+      minTokens?: string
+      loop?: string
+      http?: string
+      q?: string
+      roots?: string
+      sessionStatus?: string
+      stuck?: string
+      sort?: string
+      cursor?: string
+      limit?: string
+      after?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "range" },
+            { in: "query", key: "from" },
+            { in: "query", key: "to" },
+            { in: "query", key: "ns" },
+            { in: "query", key: "dir" },
+            { in: "query", key: "session" },
+            { in: "query", key: "agent" },
+            { in: "query", key: "agentType" },
+            { in: "query", key: "model" },
+            { in: "query", key: "provider" },
+            { in: "query", key: "tool" },
+            { in: "query", key: "mcp" },
+            { in: "query", key: "kind" },
+            { in: "query", key: "status" },
+            { in: "query", key: "errorType" },
+            { in: "query", key: "finish" },
+            { in: "query", key: "decision" },
+            { in: "query", key: "minCost" },
+            { in: "query", key: "maxCost" },
+            { in: "query", key: "minDuration" },
+            { in: "query", key: "maxDuration" },
+            { in: "query", key: "minTokens" },
+            { in: "query", key: "loop" },
+            { in: "query", key: "http" },
+            { in: "query", key: "q" },
+            { in: "query", key: "roots" },
+            { in: "query", key: "sessionStatus" },
+            { in: "query", key: "stuck" },
+            { in: "query", key: "sort" },
+            { in: "query", key: "cursor" },
+            { in: "query", key: "limit" },
+            { in: "query", key: "after" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorTelemetryEventsResponses,
+      OperatorTelemetryEventsErrors,
+      ThrowOnError
+    >({
+      url: "/operator/telemetry/events",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List server log lines
+   *
+   * Server log lines kept from the log file, newest first; `after` for the live tail.
+   */
+  public logs<ThrowOnError extends boolean = false>(
+    parameters?: {
+      range?: string
+      from?: string
+      to?: string
+      level?: string
+      q?: string
+      session?: string
+      service?: string
+      cursor?: string
+      limit?: string
+      after?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "range" },
+            { in: "query", key: "from" },
+            { in: "query", key: "to" },
+            { in: "query", key: "level" },
+            { in: "query", key: "q" },
+            { in: "query", key: "session" },
+            { in: "query", key: "service" },
+            { in: "query", key: "cursor" },
+            { in: "query", key: "limit" },
+            { in: "query", key: "after" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorTelemetryLogsResponses,
+      OperatorTelemetryLogsErrors,
+      ThrowOnError
+    >({
+      url: "/operator/telemetry/logs",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Count a field's values
+   *
+   * Up to 20 values of a field with their counts under the filter, leaving that field's own filter out.
+   */
+  public facets<ThrowOnError extends boolean = false>(
+    parameters: {
+      range?: string
+      from?: string
+      to?: string
+      ns?: string
+      dir?: string
+      session?: string
+      agent?: string
+      agentType?: string
+      model?: string
+      provider?: string
+      tool?: string
+      mcp?: string
+      kind?: string
+      status?: string
+      errorType?: string
+      finish?: string
+      decision?: string
+      minCost?: string
+      maxCost?: string
+      minDuration?: string
+      maxDuration?: string
+      minTokens?: string
+      loop?: string
+      http?: string
+      q?: string
+      roots?: string
+      sessionStatus?: string
+      stuck?: string
+      scope: "events" | "sessions" | "logs"
+      field: string
+      level?: string
+      service?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "range" },
+            { in: "query", key: "from" },
+            { in: "query", key: "to" },
+            { in: "query", key: "ns" },
+            { in: "query", key: "dir" },
+            { in: "query", key: "session" },
+            { in: "query", key: "agent" },
+            { in: "query", key: "agentType" },
+            { in: "query", key: "model" },
+            { in: "query", key: "provider" },
+            { in: "query", key: "tool" },
+            { in: "query", key: "mcp" },
+            { in: "query", key: "kind" },
+            { in: "query", key: "status" },
+            { in: "query", key: "errorType" },
+            { in: "query", key: "finish" },
+            { in: "query", key: "decision" },
+            { in: "query", key: "minCost" },
+            { in: "query", key: "maxCost" },
+            { in: "query", key: "minDuration" },
+            { in: "query", key: "maxDuration" },
+            { in: "query", key: "minTokens" },
+            { in: "query", key: "loop" },
+            { in: "query", key: "http" },
+            { in: "query", key: "q" },
+            { in: "query", key: "roots" },
+            { in: "query", key: "sessionStatus" },
+            { in: "query", key: "stuck" },
+            { in: "query", key: "scope" },
+            { in: "query", key: "field" },
+            { in: "query", key: "level" },
+            { in: "query", key: "service" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorTelemetryFacetsResponses,
+      OperatorTelemetryFacetsErrors,
+      ThrowOnError
+    >({
+      url: "/operator/telemetry/facets",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Building history
+   *
+   * How far building history from the stored sessions is.
+   */
+  public backfillStatus<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<
+      OperatorTelemetryBackfillStatusResponses,
+      OperatorTelemetryBackfillStatusErrors,
+      ThrowOnError
+    >({ url: "/operator/telemetry/backfill", ...options })
+  }
+
+  /**
+   * Rebuild from history
+   *
+   * Builds history again from the stored sessions, recorded calls, decision records and the queue, in the background. Safe to repeat.
+   */
+  public backfill<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<
+      OperatorTelemetryBackfillResponses,
+      OperatorTelemetryBackfillErrors,
+      ThrowOnError
+    >({ url: "/operator/telemetry/backfill", ...options })
+  }
+
+  /**
+   * Telemetry storage
+   *
+   * The store's size, rows, oldest span, dropped events, kept sessions, last purge and retention.
+   */
+  public storage<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<
+      OperatorTelemetryStorageResponses,
+      OperatorTelemetryStorageErrors,
+      ThrowOnError
+    >({ url: "/operator/telemetry/storage", ...options })
+  }
+}
+
 export class Agent extends HeyApiClient {
   /**
    * List agents with their source
@@ -7153,6 +7687,11 @@ export class Operator extends HeyApiClient {
   private _projectRecord?: ProjectRecord
   get projectRecord(): ProjectRecord {
     return (this._projectRecord ??= new ProjectRecord({ client: this.client }))
+  }
+
+  private _telemetry?: Telemetry
+  get telemetry(): Telemetry {
+    return (this._telemetry ??= new Telemetry({ client: this.client }))
   }
 
   private _agent?: Agent

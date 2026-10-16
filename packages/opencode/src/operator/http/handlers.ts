@@ -21,6 +21,7 @@ import { operatorModelDefaultsHandlers } from "./handlers/model-defaults"
 import { operatorNamespaceConfigHandlers } from "./handlers/namespace-config"
 import { operatorProjectRecordHandlers } from "./handlers/project-records"
 import { operatorPermissionDecisionHandlers } from "./handlers/permission-decisions"
+import { operatorTelemetryHandlers } from "./handlers/telemetry"
 import { operatorCapabilityHandlers } from "./handlers/capabilities"
 import { operatorHelperHandlers } from "./handlers/helpers"
 
@@ -55,4 +56,5 @@ export const operatorRootHandlers = [
   operatorProjectRecordHandlers,
   operatorPermissionDecisionHandlers,
   operatorHelperHandlers,
+  operatorTelemetryHandlers,
 ] as const

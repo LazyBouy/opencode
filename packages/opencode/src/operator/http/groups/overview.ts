@@ -11,6 +11,7 @@ import { OperatorFolderGroup } from "./folders"
 import { OperatorProjectRecordGroup } from "./project-records"
 import { OperatorNamespaceGroup } from "./namespaces"
 import { OperatorPermissionDecisionGroup } from "./permission-decisions"
+import { OperatorTelemetryGroup } from "./telemetry"
 import { OperatorTrashGroup } from "./trash"
 import { OperatorHelperGroup } from "./helpers"
 import { OperatorLayoutGroup } from "./layout"
@@ -114,6 +115,7 @@ export const OperatorRootApi = HttpApi.make("operator-root")
   .add(OperatorNamespaceConfigGroup)
   .add(OperatorProjectRecordGroup)
   .add(OperatorPermissionDecisionGroup)
+  .add(OperatorTelemetryGroup)
   .middleware(SchemaErrorMiddleware)
   .middleware(Authorization)
   .annotateMerge(

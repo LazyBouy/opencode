@@ -50,6 +50,9 @@ export type Settings = {
   logLevel: OperatorTelemetryLogs.Level
   eventsDays: number
   totalsDays: number
+  dailyBudget: number | undefined
+  stuckMinutes: number
+  queueMinutes: number
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -57,6 +60,9 @@ export const DEFAULT_SETTINGS: Settings = {
   loops: OperatorTelemetryDerive.DEFAULT_LOOPS,
   logLevel: "warn",
   ...OperatorTelemetryRetention.days({}),
+  dailyBudget: undefined,
+  stuckMinutes: 10,
+  queueMinutes: 10,
 }
 
 /** The settings in a config's `operatorTelemetry`, with defaults. */
@@ -75,6 +81,9 @@ export function settingsOf(config: { operatorTelemetry?: Record<string, any> } |
     },
     logLevel: value.logLevel === "error" || value.logLevel === "info" ? value.logLevel : "warn",
     ...OperatorTelemetryRetention.days(value),
+    dailyBudget: typeof value.dailyBudget === "number" && value.dailyBudget > 0 ? value.dailyBudget : undefined,
+    stuckMinutes: positive(value.dashboard?.stuckMinutes, DEFAULT_SETTINGS.stuckMinutes),
+    queueMinutes: positive(value.dashboard?.queueMinutes, DEFAULT_SETTINGS.queueMinutes),
   }
 }
 
@@ -98,7 +107,10 @@ export interface Interface {
   readonly dropped: () => number
   /** Builds history from the stored sessions (§5.11), in the background of whoever runs it. */
   readonly backfill: (input?: { log?: boolean }) => Effect.Effect<void>
+  /** Starts building history again in the background (Rebuild from history); its progress at once. */
+  readonly rebuild: () => Effect.Effect<OperatorTelemetryBackfill.Progress>
   readonly progress: () => OperatorTelemetryBackfill.Progress
+  readonly settings: () => Settings
   /** Purges what retention no longer keeps (§6.1). */
   readonly purge: () => Effect.Effect<OperatorTelemetryRetention.Purged>
   /** Recomputes the hourly totals of hours whose spans changed (§6.2). */
@@ -338,9 +350,8 @@ const layer = Layer.effect(
       store.setMeta("backfill", JSON.stringify(next))
     }
 
-    const backfill = (input: { log?: boolean } = {}) =>
+    const run = (input: { log?: boolean } = {}) =>
       Effect.gen(function* () {
-        if (progress.state === "running") return
         const startedAt = Date.now()
         const startSeq = store.lastSeq()
         const since = startedAt - settings.eventsDays * OperatorTelemetryRetention.DAY
@@ -460,6 +471,16 @@ const layer = Layer.effect(
           ).pipe(Effect.andThen(warn("telemetry backfill failed", cause))),
         ),
       )
+
+    const backfill = (input: { log?: boolean } = {}) =>
+      Effect.suspend(() => (progress.state === "running" ? Effect.void : run(input)))
+    const rebuild = () =>
+      Effect.gen(function* () {
+        if (progress.state === "running") return progress
+        save({ state: "running", done: 0, total: 0, startedAt: Date.now() })
+        yield* run().pipe(Effect.forkIn(scope))
+        return progress
+      })
 
     // ---- retention and totals (§6) ----
 
@@ -590,6 +611,9 @@ const layer = Layer.effect(
     yield* Effect.acquireRelease(
       Effect.sync(() => {
         current = token
+        // One more of the server's own listeners: not a leak (Node warns past 10).
+        const limit = GlobalBus.getMaxListeners()
+        if (limit && GlobalBus.listenerCount("event") >= limit) GlobalBus.setMaxListeners(limit + 1)
         GlobalBus.on("event", onEvent)
         Object.assign(OperatorRegistry.telemetry, hooks)
       }),
@@ -641,7 +665,9 @@ const layer = Layer.effect(
       ingest,
       dropped: () => dropped,
       backfill,
+      rebuild,
       progress: () => progress,
+      settings: () => settings,
       purge,
       totals,
     })
