@@ -271,7 +271,7 @@ html[data-theme="iphi"]
 
 [data-component="operator-stat"] [data-slot="operator-stat-hint"] {
   font-size: 12px;
-  color: var(--v2-text-text-faint);
+  color: var(--v2-text-text-muted);
 }
 
 [data-component="operator-stat"][data-tone="good"] [data-slot="operator-stat-value"] {

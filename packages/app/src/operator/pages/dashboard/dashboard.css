@@ -62,6 +62,24 @@
   }
 }
 
+/* The header's right side (§3): the server chip and the pickers, then the range and its age, so the page keeps two
+   header lines. */
+[data-slot="operator-dash-header-actions"] {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+/* The range in words: as wide as they need. */
+[data-slot="operator-dash-controls"] [data-slot="segmented-control-v2"] {
+  width: auto;
+}
+
+[data-slot="operator-dash-controls"] [data-slot="segmented-control-v2-item"] {
+  flex: none;
+}
+
 /* Block titles */
 
 [data-slot="operator-dash-block-title"],
@@ -177,6 +195,22 @@ html[data-theme="iphi"] [data-component="operator-dash-attention"] {
 
 [data-slot="operator-dash-panel"] [data-component="operator-table"] :is(th, td) {
   padding: 6px 8px;
+}
+
+[data-slot="operator-dash-panel"] [data-component="operator-table"] td {
+  height: 30px;
+  padding-block: 4px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+/* A session's title on one line; the whole title in its tooltip. */
+[data-slot="operator-dash-title"] {
+  display: inline-block;
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
 }
 
 [data-slot="operator-dash-current"] {

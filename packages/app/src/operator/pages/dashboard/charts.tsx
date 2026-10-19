@@ -32,6 +32,8 @@ const REFRESH = 60_000
 // Outcomes bottom to top (§7.1).
 const OUTCOMES = ["ok", "error", "denied", "cancelled", "interrupted", "running"]
 const BY: ReadonlyArray<SpendBy> = ["model", "project", "agent"]
+// Lower than Observability's charts, so the page fits one screen (§3).
+const HEIGHT = 160
 
 type ChartProps = {
   /** The range (`range`, or `from` and `to`) and scope, as the API takes them. */
@@ -163,6 +165,7 @@ export function ActivityChart(props: ChartProps) {
               to={result().to}
               series={series()}
               mode="bars"
+              height={HEIGHT}
               format={format}
               formatTime={parts.formatTime}
               label={`${title()}, ${props.rangeLabel}: ${format(parts.total(series()))}`}
@@ -284,6 +287,7 @@ export function SpendChart(
               to={result().to}
               series={series()}
               mode={props.view === "tokens" ? "area" : "bars"}
+              height={HEIGHT}
               {...(threshold() !== undefined ? { threshold: threshold()! } : {})}
               format={format()}
               formatTime={parts.formatTime}

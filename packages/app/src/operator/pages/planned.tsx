@@ -4,6 +4,8 @@ import { PageHeader } from "../ui/page-header"
 import { useLanguage } from "@/context/language"
 import type { OperatorPage } from "../pages"
 
+type Key = Parameters<ReturnType<typeof useLanguage>["t"]>[0]
+
 // Placeholder for an operator page that is not built yet: it says what the page will do.
 export function PlannedPage(props: { page: OperatorPage }) {
   const language = useLanguage()
@@ -17,7 +19,8 @@ export function PlannedPage(props: { page: OperatorPage }) {
       <EmptyState
         icon={props.page.icon}
         title={language.t("operator.planned.title")}
-        description={language.t(`operator.page.${props.page.id}.planned`)}
+        // Built pages (the Dashboard) have no planned text.
+        description={language.t(`operator.page.${props.page.id}.planned` as Key)}
       />
     </>
   )

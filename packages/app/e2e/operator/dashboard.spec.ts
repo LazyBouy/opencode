@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright"
 import { expect, type Page, test } from "@playwright/test"
 import { fixture, pageMessages } from "../smoke/session-timeline.fixture"
 import { mockOpenCodeServer } from "../utils/mock-server"
@@ -368,4 +369,113 @@ test("telemetry off: the charts say so", async ({ page }) => {
   await expect(page.getByTestId("dash-chart-activity").getByTestId("dash-telemetry-off")).toBeVisible()
   await expect(page.getByTestId("dash-chart-spend").getByTestId("dash-telemetry-off")).toBeVisible()
   expect(state.telemetry.queries.some((query) => query.path === "/metrics")).toBe(false)
+})
+
+// Full panels: six running sessions, eight agents and Other, eight tools and Other.
+const fill = (state: Mock) => {
+  const now = Date.now()
+  for (const [at, row] of state.telemetry.sessions.slice(10, 15).entries())
+    Object.assign(row, { status: "running", turn_start_ms: now - (at + 1) * 60_000, current: "execute_tool read" })
+  const group = state.telemetry.dashboard.groups
+  group.agent!.rows = Array.from({ length: 8 }, (_, at) => ({
+    ...group.agent!.rows[0],
+    key: `agent${at}`,
+    label: `agent${at}`,
+  }))
+  group.tool!.rows = Array.from({ length: 8 }, (_, at) => ({
+    ...group.tool!.rows[0],
+    key: `tool_${at}`,
+    label: `tool_${at}`,
+  }))
+}
+const bottom = async (page: Page, selector: string) => {
+  const boxes = await Promise.all((await page.locator(selector).all()).map((item) => item.boundingBox()))
+  return Math.max(...boxes.map((box) => box!.y + box!.height))
+}
+const tops = async (page: Page, selector: string) =>
+  Promise.all((await page.locator(selector).all()).map(async (item) => (await item.boundingBox())!))
+
+test("fits: at 1440 × 900 the charts end inside the window, at 1920 × 1080 the panels too", async ({ page }) => {
+  const state = await mockOperator(page)
+  fill(state)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto("/operator")
+  await expect(chart(page, "activity").locator("canvas").first()).toBeVisible()
+  await expect(chart(page, "spend").locator("canvas").first()).toBeVisible()
+  expect(await bottom(page, '[data-slot="operator-dash-chart"]')).toBeLessThanOrEqual(900)
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await expect(page.getByRole("row", { name: /agent7/ })).toBeVisible()
+  await expect(
+    page.locator('[data-slot="operator-dash-panel"]').filter({ hasText: "Running now" }).getByRole("row"),
+  ).toHaveCount(7)
+  // Four panels a row.
+  const panels = await tops(page, '[data-slot="operator-dash-panel"]')
+  expect(new Set(panels.map((box) => Math.round(box.y))).size).toBe(1)
+  expect(await bottom(page, '[data-slot="operator-dash-panel"]')).toBeLessThanOrEqual(1080)
+})
+
+test("narrow windows keep the order: three tiles a row below 1280 px, one column below 768 px", async ({ page }) => {
+  await mockOperator(page)
+  const order = async () => {
+    const strip = (await page.getByTestId("dash-attention").boundingBox())!
+    const tiles = await tops(page, '[data-slot="operator-dash-tiles"] > [data-component="operator-stat"]')
+    const charts = await tops(page, '[data-slot="operator-dash-chart"]')
+    const panels = await tops(page, '[data-slot="operator-dash-panel"]')
+    expect(strip.y).toBeLessThan(tiles[0]!.y)
+    expect(Math.max(...tiles.map((box) => box.y))).toBeLessThan(charts[0]!.y)
+    expect(Math.max(...charts.map((box) => box.y))).toBeLessThan(panels[0]!.y)
+    return { tiles, charts, panels }
+  }
+  await page.setViewportSize({ width: 1024, height: 768 })
+  await page.goto("/operator")
+  await expect(page.getByTestId("dash-tile-cost")).toContainText("$18.40")
+  const wide = await order()
+  expect(wide.tiles.map((box) => Math.round(box.y))).toEqual(
+    [0, 0, 0, 1, 1, 1].map((row) => Math.round(wide.tiles[row * 3]!.y)),
+  )
+  expect(Math.round(wide.charts[0]!.y)).toBe(Math.round(wide.charts[1]!.y))
+  await page.setViewportSize({ width: 600, height: 900 })
+  const narrow = await order()
+  const xs = new Set(narrow.tiles.map((box) => Math.round(box.x)))
+  expect(xs.size).toBe(1)
+  for (const [at, box] of narrow.tiles.entries()) if (at) expect(box.y).toBeGreaterThan(narrow.tiles[at - 1]!.y)
+  expect(narrow.charts[1]!.y).toBeGreaterThan(narrow.charts[0]!.y)
+})
+
+test("six requests on load: attention, tiles, two charts, recent sessions and the breakdowns", async ({ page }) => {
+  const state = await mockOperator(page)
+  await page.goto("/operator")
+  await expect(chart(page, "spend").locator("canvas").first()).toBeVisible()
+  await expect(chart(page, "activity").locator("canvas").first()).toBeVisible()
+  await expect(
+    page.locator('[data-slot="operator-dash-panel"]').filter({ hasText: "Recent sessions" }).getByRole("row"),
+  ).toHaveCount(9)
+  await expect(page.getByRole("row", { name: /Other \(5 agents\)/ })).toBeVisible()
+  // The sidebar's alert badge is the shell's, not the page's.
+  const asked = state.telemetry.queries.map((query) => query.path).filter((path) => !path.startsWith("/alert"))
+  expect(asked.toSorted()).toEqual(["/attention", "/breakdown", "/metrics", "/metrics", "/sessions", "/tiles"])
+})
+
+test("no serious accessibility violations", async ({ page }) => {
+  const state = await mockOperator(page)
+  state.telemetry.dashboard.items = [
+    item("approvals", { count: 2, worst: { ageMs: 14 * 60_000 }, alert: true, link: { page: "inbox", params: {} } }),
+    item("mcp", { severity: "critical", worst: { label: "github", status: "needs_auth" } }),
+  ]
+  await page.goto("/operator")
+  await expect(chart(page, "activity").locator("canvas").first()).toBeVisible()
+  await expect(chart(page, "spend").locator("canvas").first()).toBeVisible()
+  const result = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .include('[data-component="operator-page-header"]')
+    .include('[data-component="operator-dash"]')
+    .analyze()
+  const serious = result.violations
+    .filter((violation) => violation.impact === "serious" || violation.impact === "critical")
+    .map((violation) => ({
+      rule: violation.id,
+      help: violation.help,
+      nodes: violation.nodes.slice(0, 3).map((node) => node.target.join(" ")),
+    }))
+  expect(serious).toEqual([])
 })

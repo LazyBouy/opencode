@@ -115,7 +115,9 @@ export function RunningNow(props: {
       help: t("operator.obs.help.session"),
       cell: (row) => (
         <span data-slot="operator-obs-session">
-          <span>{row.title || row.id}</span>
+          <span data-slot="operator-dash-title" title={row.title || row.id}>
+            {row.title || row.id}
+          </span>
           <span data-slot="operator-obs-row-actions">
             <A
               href={hrefOf({ page: "observability", params: { session: row.id } }, props.scope)}
@@ -218,7 +220,11 @@ export function RecentSessions(props: {
       id: "title",
       header: t("operator.obs.col.session"),
       help: t("operator.obs.help.session"),
-      cell: (row) => row.title || row.id,
+      cell: (row) => (
+        <span data-slot="operator-dash-title" title={row.title || row.id}>
+          {row.title || row.id}
+        </span>
+      ),
     },
     {
       id: "project",
@@ -278,7 +284,11 @@ export function RecentSessions(props: {
       id: "title",
       header: t("operator.obs.col.session"),
       help: t("operator.obs.help.session"),
-      cell: (row) => row.title,
+      cell: (row) => (
+        <span data-slot="operator-dash-title" title={row.title}>
+          {row.title}
+        </span>
+      ),
     },
     {
       id: "project",

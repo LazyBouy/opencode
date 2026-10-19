@@ -409,8 +409,6 @@ export const dict = {
 
   "operator.page.dashboard.title": "Dashboard",
   "operator.page.dashboard.description": "Health, activity and cost at a glance.",
-  "operator.page.dashboard.planned":
-    "Tiles for server health, active sessions, turns, tool calls, tokens and cost, with recent sessions and pending approvals.",
   "operator.page.projects.title": "Projects",
   "operator.page.projects.description":
     "Every project the server knows, with its namespace, prompt settings, activity and cost.",
@@ -1400,23 +1398,7 @@ export const dict = {
   "operator.column.size": "Size",
   "operator.column.modified": "Modified",
 
-  "operator.dashboard.range": "Time range",
-  "operator.dashboard.days": "{{count}} days",
-  "operator.dashboard.server": "Server",
-  "operator.dashboard.runningSince": "Started {{time}}",
-  "operator.dashboard.activeToday": "Active today",
-  "operator.dashboard.activeTodayHint": "Sessions updated today",
-  "operator.dashboard.sessions": "Sessions",
-  "operator.dashboard.inRange": "Started in the last {{count}} days",
-  "operator.dashboard.tokens": "Tokens",
   "operator.dashboard.tokensHint": "{{input}} in · {{output}} out",
-  "operator.dashboard.cost": "Cost",
-  "operator.dashboard.approvals": "Waiting for approval",
-  "operator.dashboard.openInbox": "Open the inbox",
-  "operator.dashboard.recent": "Recent sessions",
-  "operator.dashboard.agents": "Agents in this period",
-  "operator.dashboard.noSessions": "No sessions yet",
-  "operator.dashboard.noAgent": "(none)",
 
   "operator.dash.range": "Time range",
   "operator.dash.help.range":

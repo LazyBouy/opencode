@@ -250,54 +250,55 @@ export default function DashboardPage() {
         title={t("operator.page.dashboard.title")}
         description={t("operator.page.dashboard.description")}
         actions={
-          <span class="inline-flex flex-wrap items-center gap-2">
-            <ServerChip health={health} />
-            <NamespacePicker
-              current={params.ns ?? "*"}
-              onChange={(id) => {
-                if (id !== "*" && scope.directory()) scope.setDirectory(undefined)
-              }}
-            />
-            <ScopePicker all namespace={params.ns ?? "*"} />
-          </span>
-        }
-      >
-        <div class="flex flex-wrap items-center gap-3" data-slot="operator-dash-controls">
-          <span class="inline-flex items-center gap-1">
-            <SegmentedControlV2
-              aria-label={t("operator.dash.range")}
-              value={custom() ? null : range()}
-              onChange={(value) => value && setRange(value as Range)}
-              data-testid="dash-range"
-            >
-              <For each={RANGES}>
-                {(item) => (
-                  <SegmentedControlItemV2 value={item} aria-label={t(`operator.dash.rangeWords.${item}`)}>
-                    {t(`operator.dash.rangeShort.${item}`)}
-                  </SegmentedControlItemV2>
-                )}
-              </For>
-            </SegmentedControlV2>
-            <FieldHelp field={t("operator.dash.range")} text={t("operator.dash.help.range")} />
-          </span>
-          <Show when={custom()}>
-            <span class="inline-flex items-center gap-2" data-testid="dash-custom-range">
-              <span data-slot="operator-note">{rangeLabel()}</span>
-              <ButtonV2 size="small" variant="outline" onClick={() => setRange(range())}>
-                {t("operator.dash.resetZoom")}
-              </ButtonV2>
+          <div data-slot="operator-dash-header-actions">
+            <span class="inline-flex flex-wrap items-center justify-end gap-2">
+              <ServerChip health={health} />
+              <NamespacePicker
+                current={params.ns ?? "*"}
+                onChange={(id) => {
+                  if (id !== "*" && scope.directory()) scope.setDirectory(undefined)
+                }}
+              />
+              <ScopePicker all namespace={params.ns ?? "*"} />
             </span>
-          </Show>
-          <span class="inline-flex items-center gap-2" data-testid="dash-updated">
-            <ButtonV2 size="small" variant="ghost" aria-label={t("operator.dash.refresh")} onClick={refreshAll}>
-              <Icon name="reset" size="small" />
-            </ButtonV2>
-            <Show when={updated() !== undefined}>
-              <span data-slot="operator-note">{t("operator.obs.updated", { seconds: updated()! })}</span>
-            </Show>
-          </span>
-        </div>
-      </PageHeader>
+            <div class="flex flex-wrap items-center justify-end gap-3" data-slot="operator-dash-controls">
+              <span class="inline-flex items-center gap-1">
+                <SegmentedControlV2
+                  aria-label={t("operator.dash.range")}
+                  value={custom() ? null : range()}
+                  onChange={(value) => value && setRange(value as Range)}
+                  data-testid="dash-range"
+                >
+                  <For each={RANGES}>
+                    {(item) => (
+                      <SegmentedControlItemV2 value={item}>
+                        {t(`operator.dash.rangeWords.${item}`)}
+                      </SegmentedControlItemV2>
+                    )}
+                  </For>
+                </SegmentedControlV2>
+                <FieldHelp field={t("operator.dash.range")} text={t("operator.dash.help.range")} />
+              </span>
+              <Show when={custom()}>
+                <span class="inline-flex items-center gap-2" data-testid="dash-custom-range">
+                  <span data-slot="operator-note">{rangeLabel()}</span>
+                  <ButtonV2 size="small" variant="outline" onClick={() => setRange(range())}>
+                    {t("operator.dash.resetZoom")}
+                  </ButtonV2>
+                </span>
+              </Show>
+              <span class="inline-flex items-center gap-2" data-testid="dash-updated">
+                <ButtonV2 size="small" variant="ghost" aria-label={t("operator.dash.refresh")} onClick={refreshAll}>
+                  <Icon name="reset" size="small" />
+                </ButtonV2>
+                <Show when={updated() !== undefined}>
+                  <span data-slot="operator-note">{t("operator.obs.updated", { seconds: updated()! })}</span>
+                </Show>
+              </span>
+            </div>
+          </div>
+        }
+      />
 
       <div data-component="operator-dash" data-testid="dash">
         <AttentionStrip
