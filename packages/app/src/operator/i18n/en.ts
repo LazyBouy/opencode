@@ -1433,6 +1433,9 @@ export const dict = {
   "operator.dash.previous.7d": "previous 7 days",
   "operator.dash.previous.14d": "previous 14 days",
   "operator.dash.previous.30d": "previous 30 days",
+  "operator.dash.previous.custom": "previous period",
+  "operator.dash.rangeShort.custom": "period",
+  "operator.dash.resetZoom": "Reset",
   "operator.dash.refresh": "Refresh now",
   "operator.dash.age.min": "{{n}} min",
   "operator.dash.age.h": "{{n}} h",
@@ -1491,6 +1494,8 @@ export const dict = {
   "operator.dash.tile.cost": "Cost",
   "operator.dash.tile.noTurns": "No turns in the last {{range}}",
   "operator.dash.tile.noRequests": "No approval requests in the last {{range}}",
+  "operator.dash.tile.noTurnsCustom": "No turns in this period",
+  "operator.dash.tile.noRequestsCustom": "No approval requests in this period",
   "operator.dash.tile.off": "Telemetry is off",
   "operator.dash.help.tile.turns":
     "Turns started in the range, in the page's scope (traffic). The hint counts their sessions and the sessions running now. Opens Observability's Sessions.",
@@ -1539,6 +1544,17 @@ export const dict = {
     "Turns started in each period, by how they ended. Denied means a permission decision stopped the turn.",
   "operator.dash.help.spendCost":
     "OpenCode's cost estimate, counted when each call happened. Provider-billed amounts are in Observability.",
+  "operator.dash.help.spendTokens":
+    "Tokens per step by type: input (not read from the cache), cache read, cache write, output and reasoning. Never one mixed total.",
+  "operator.dash.spend.view": "Show",
+  "operator.dash.spend.cost": "Cost",
+  "operator.dash.spend.tokens": "Tokens",
+  "operator.dash.spend.by": "Cost by",
+  "operator.dash.help.spendBy": "Stack the cost by model, project or agent: the top 5, then the rest as Other.",
+  "operator.dash.budgetLine": "Dotted line: the daily budget, {{amount}}",
+  "operator.dash.chart.legendTotal": "{{label}} · {{total}}",
+  "operator.dash.chart.noTurns": "No turns in this range",
+  "operator.dash.chart.noSpend": "Nothing spent in this range",
 
   "operator.dash.viewAll": "View all → Observability",
   "operator.dash.openSettings": "Observability settings",

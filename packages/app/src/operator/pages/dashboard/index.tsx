@@ -4,6 +4,7 @@ import { SegmentedControlItemV2, SegmentedControlV2 } from "@opencode-ai/ui/v2/s
 import type { OperatorDashboardItem, OperatorPendingPermission } from "@opencode-ai/sdk/v2/client"
 import { useSearchParams } from "@solidjs/router"
 import { useQuery, useQueryClient } from "@tanstack/solid-query"
+import { DateTime } from "luxon"
 import { createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
@@ -18,7 +19,7 @@ import { ScopePicker } from "../../ui/scope-picker"
 import { ServerChip, useServerHealth } from "../../ui/server-chip"
 import { useSessionOverlay } from "../session-overlay"
 import { AttentionStrip } from "./attention"
-import { DashboardCharts } from "./charts"
+import { ActivityChart, type SpendBy, SpendChart, type SpendView } from "./charts"
 import { RANGES, type Range, rangeOf, throttle } from "./model"
 import { AgentsPanel, RecentSessions, RunningNow, ToolsPanel } from "./panels"
 import { DashboardTiles } from "./tiles"
@@ -44,16 +45,36 @@ export default function DashboardPage() {
   const api = useOperatorClient()
   const sdk = useServerSDK()
   const queryClient = useQueryClient()
-  const [params, setParams] = useSearchParams<{ range?: string; ns?: string }>()
+  const [params, setParams] = useSearchParams<{ range?: string; ns?: string; from?: string; to?: string }>()
   const scope = useOperatorScope()
   const [prefs, setPrefs] = persisted(
     Persist.global("operator.dashboard"),
-    createStore({ days: 14 as number, range: "" as string }),
+    createStore({ days: 14 as number, range: "" as string, spend: "cost" as SpendView, by: "model" as SpendBy }),
   )
   const range = (): Range => rangeOf(params.range, prefs)
+  // A zoom on a chart: a custom range in the URL (from, to) until Reset (§7).
+  const custom = () => {
+    const from = Number(params.from)
+    const to = Number(params.to)
+    return Number.isFinite(from) && Number.isFinite(to) && to > from ? { from, to } : undefined
+  }
   const setRange = (value: Range) => {
     setPrefs("range", value)
-    setParams({ range: value })
+    setParams({ range: value, from: undefined, to: undefined })
+  }
+  const zoom = (from: number, to: number) => setParams({ from: String(from), to: String(to) })
+  // The range as the API takes it, and as links carry it.
+  const rangeParams = (): Record<string, string> => {
+    const found = custom()
+    return found ? { from: String(found.from), to: String(found.to) } : { range: range() }
+  }
+  const words = () => (custom() ? ("custom" as const) : range())
+  const rangeLabel = () => {
+    const found = custom()
+    if (!found) return t(`operator.timeRange.${range()}`)
+    const at = (time: number) =>
+      DateTime.fromMillis(time).setLocale(language.intl()).toLocaleString(DateTime.DATETIME_SHORT)
+    return t("operator.timeRange.customShown", { from: at(found.from), to: at(found.to) })
   }
   const ns = () => (params.ns && params.ns !== "*" ? params.ns : undefined)
   // The scope as the API takes it: a project, else a namespace, else everything.
@@ -75,24 +96,24 @@ export default function DashboardPage() {
         .then((result) => result.data!),
   }))
   const tiles = useQuery(() => ({
-    queryKey: api.key("telemetry-tiles", range(), scoped()),
+    queryKey: api.key("telemetry-tiles", rangeParams(), scoped()),
     refetchInterval: SLOW,
     queryFn: () =>
       api
         .client()
-        .operator.telemetry.tiles({ range: range(), ...scoped() }, { throwOnError: true })
+        .operator.telemetry.tiles({ ...rangeParams(), ...scoped() }, { throwOnError: true })
         .then((result) => result.data!),
   }))
   // Telemetry off (§9.3): only what doesn't need history.
   const off = () => ready(attention)?.telemetry.enabled === false || ready(tiles)?.enabled === false
   const breakdown = useQuery(() => ({
-    queryKey: api.key("telemetry-breakdown", range(), scoped()),
+    queryKey: api.key("telemetry-breakdown", rangeParams(), scoped()),
     refetchInterval: SLOW,
     queryFn: () =>
       api
         .client()
         .operator.telemetry.breakdown(
-          { by: "agent,tool", range: range(), limit: "8", ...scoped() },
+          { by: "agent,tool", ...rangeParams(), limit: "8", ...scoped() },
           { throwOnError: true },
         )
         .then((result) => result.data!),
@@ -144,6 +165,7 @@ export default function DashboardPage() {
   const all = [
     "telemetry-attention",
     "telemetry-tiles",
+    "telemetry-metric",
     "telemetry-breakdown",
     "telemetry-sessions",
     "sessions",
@@ -244,7 +266,7 @@ export default function DashboardPage() {
           <span class="inline-flex items-center gap-1">
             <SegmentedControlV2
               aria-label={t("operator.dash.range")}
-              value={range()}
+              value={custom() ? null : range()}
               onChange={(value) => value && setRange(value as Range)}
               data-testid="dash-range"
             >
@@ -258,6 +280,14 @@ export default function DashboardPage() {
             </SegmentedControlV2>
             <FieldHelp field={t("operator.dash.range")} text={t("operator.dash.help.range")} />
           </span>
+          <Show when={custom()}>
+            <span class="inline-flex items-center gap-2" data-testid="dash-custom-range">
+              <span data-slot="operator-note">{rangeLabel()}</span>
+              <ButtonV2 size="small" variant="outline" onClick={() => setRange(range())}>
+                {t("operator.dash.resetZoom")}
+              </ButtonV2>
+            </span>
+          </Show>
           <span class="inline-flex items-center gap-2" data-testid="dash-updated">
             <ButtonV2 size="small" variant="ghost" aria-label={t("operator.dash.refresh")} onClick={refreshAll}>
               <Icon name="reset" size="small" />
@@ -283,8 +313,35 @@ export default function DashboardPage() {
           scope={scoped()}
           onShowRunning={showRunning}
         />
-        <DashboardTiles data={ready(tiles)} loading={tiles.isPending} range={range()} scope={scoped()} />
-        <DashboardCharts />
+        <DashboardTiles
+          data={ready(tiles)}
+          loading={tiles.isPending}
+          words={words()}
+          extra={rangeParams()}
+          scope={scoped()}
+        />
+        <ActivityChart
+          query={{ ...rangeParams(), ...scoped() }}
+          scope={scoped()}
+          rangeLabel={rangeLabel()}
+          known={!!ready(attention) || !!ready(tiles)}
+          off={off()}
+          onZoom={zoom}
+        />
+        <SpendChart
+          query={{ ...rangeParams(), ...scoped() }}
+          scope={scoped()}
+          rangeLabel={rangeLabel()}
+          known={!!ready(attention) || !!ready(tiles)}
+          off={off()}
+          onZoom={zoom}
+          view={prefs.spend === "tokens" ? "tokens" : "cost"}
+          by={(["model", "project", "agent"] as const).find((item) => item === prefs.by) ?? "model"}
+          onView={(view) => setPrefs("spend", view)}
+          onBy={(by) => setPrefs("by", by)}
+          budget={ready(tiles)?.budget?.limit ?? null}
+          days={!custom() && range() !== "24h"}
+        />
         <RunningNow
           rows={ready(attention)?.runningNow.rows}
           total={ready(attention)?.runningNow.total ?? 0}
@@ -307,14 +364,14 @@ export default function DashboardPage() {
           loading={breakdown.isPending}
           off={off()}
           scope={scoped()}
-          range={range()}
+          extra={rangeParams()}
         />
         <ToolsPanel
           group={ready(breakdown)?.groups.tool}
           loading={breakdown.isPending}
           off={off()}
           scope={scoped()}
-          range={range()}
+          extra={rangeParams()}
         />
       </div>
     </>

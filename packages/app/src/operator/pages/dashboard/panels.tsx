@@ -346,7 +346,8 @@ export function AgentsPanel(props: {
   loading: boolean
   off: boolean
   scope: Scope
-  range: string
+  /** The page's range, as links carry it. */
+  extra: Record<string, string>
 }) {
   const language = useLanguage()
   const t = language.t
@@ -388,7 +389,7 @@ export function AgentsPanel(props: {
       hrefOf(
         { page: "observability", params: { tab: "sessions", agent: row.other ? row.other.join(",") : row.key } },
         props.scope,
-        { range: props.range },
+        props.extra,
       ),
     )
   const columns: Column<Row>[] = [
@@ -469,7 +470,7 @@ export function AgentsPanel(props: {
       {...(props.off
         ? {}
         : {
-            view: hrefOf({ page: "observability", params: { tab: "sessions" } }, props.scope, { range: props.range }),
+            view: hrefOf({ page: "observability", params: { tab: "sessions" } }, props.scope, props.extra),
           })}
     >
       <Show when={!props.off} fallback={<TelemetryOff />}>
@@ -494,7 +495,8 @@ export function ToolsPanel(props: {
   loading: boolean
   off: boolean
   scope: Scope
-  range: string
+  /** The page's range, as links carry it. */
+  extra: Record<string, string>
 }) {
   const language = useLanguage()
   const t = language.t
@@ -529,7 +531,7 @@ export function ToolsPanel(props: {
   const serverOf = (key: string) => props.group?.rows.find((row) => row.key === key)?.server
   const toolLink = (params: Record<string, string>) =>
     hrefOf({ page: "observability", params: { tab: "events", kind: "tool_call", ...params } }, props.scope, {
-      range: props.range,
+      ...props.extra,
     })
   return (
     <Panel

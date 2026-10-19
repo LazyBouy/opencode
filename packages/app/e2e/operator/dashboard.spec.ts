@@ -285,3 +285,87 @@ test("no turns in the range: the tiles say so instead of comparing zeros", async
   await expect(turns.locator('[data-slot="operator-stat-change"]')).toHaveCount(0)
   await expect(page.getByRole("link", { name: "Turn errors: No turns in the last 7 days" })).toBeVisible()
 })
+
+const chart = (page: Page, id: string) => page.locator(`[data-testid="obs-chart"][data-metric="dash-${id}"]`)
+const lastMetric = (state: Mock, metric: string) =>
+  state.telemetry.queries.findLast((query) => query.path === "/metrics" && query.params.get("metric") === metric)
+    ?.params
+
+test("Activity: turns by outcome with totals; a step opens its turns; dragging zooms the page, Reset goes back", async ({
+  page,
+}) => {
+  const state = await mockOperator(page)
+  await page.goto("/operator?range=7d")
+  const activity = chart(page, "activity")
+  await expect(activity.getByRole("heading", { level: 2, name: "Activity: turns by outcome" })).toBeVisible()
+  await expect(activity.locator('[data-slot="operator-chart-legend"]')).toContainText(/OK · \d+/)
+  await expect(activity.locator('[data-slot="operator-chart-legend"]')).toContainText(/Error · \d+/)
+  expect(lastMetric(state, "turns")?.get("range")).toBe("7d")
+  // The bottom of the stack is OK: its turns in that hour, in Observability.
+  const over = activity.locator(".u-over")
+  await expect(over).toBeVisible()
+  let box = (await over.boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height - 3)
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height - 3)
+  await expect(page).toHaveURL(/\/operator\/observability\?.*tab=events/)
+  const url = new URL(page.url())
+  expect([url.searchParams.get("kind"), url.searchParams.get("status")]).toEqual(["turn", "ok"])
+  expect(Number(url.searchParams.get("to")) - Number(url.searchParams.get("from"))).toBe(60 * 60_000)
+  await page.goBack()
+  // Dragging: a custom range for the whole page, shown by the range control with Reset.
+  box = (await chart(page, "activity").locator(".u-over").boundingBox())!
+  await page.mouse.move(box.x + box.width * 0.3, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width * 0.45, box.y + box.height / 2, { steps: 4 })
+  await page.mouse.move(box.x + box.width * 0.6, box.y + box.height / 2, { steps: 4 })
+  await page.mouse.up()
+  await expect(page).toHaveURL(/from=\d+/)
+  await expect(page.getByTestId("dash-custom-range")).toBeVisible()
+  await expect.poll(() => last(state, "/tiles")?.get("from")).not.toBeNull()
+  await expect.poll(() => last(state, "/breakdown")?.get("from")).not.toBeNull()
+  await expect(page.getByTestId("dash-tile-turnErrors")).toContainText("vs prev. period")
+  await page.getByTestId("dash-custom-range").getByRole("button", { name: "Reset" }).click()
+  await expect(page).toHaveURL(/range=7d/)
+  expect(new URL(page.url()).searchParams.get("from")).toBeNull()
+})
+
+test("Spend: Cost by model with the budget on daily steps, by project, Tokens by type, Show as table", async ({
+  page,
+}) => {
+  const state = await mockOperator(page)
+  state.telemetry.settings.dailyBudget = 10
+  await page.goto("/operator?range=14d")
+  const spend = chart(page, "spend")
+  await expect(spend.locator('[data-slot="operator-chart-legend"]')).toContainText("gpt-5")
+  await expect(spend.locator('[data-slot="operator-chart-legend"]')).toContainText("Other")
+  await expect.poll(() => lastMetric(state, "cost")?.get("step")).toBe(String(24 * 60 * 60_000))
+  expect(lastMetric(state, "cost")?.get("groupBy")).toBe("model")
+  await expect(spend.getByTestId("dash-budget-note")).toHaveText("Dotted line: the daily budget, $10.00")
+  // By project.
+  await spend.locator('[data-component="select-v2-root"][aria-label="Cost by"] [data-component="select-v2"]').click()
+  await page.locator('[data-component="menu-v2-item"]').filter({ hasText: "By project" }).click()
+  await expect.poll(() => lastMetric(state, "cost")?.get("groupBy")).toBe("project")
+  // Tokens by type, never one total; the "by" goes away.
+  await spend.getByTestId("dash-spend-view").getByRole("button", { name: "Tokens" }).click()
+  await expect.poll(() => lastMetric(state, "tokens")?.get("range")).toBe("14d")
+  await expect(spend.locator('[data-slot="operator-chart-legend"]')).toContainText("Cache read")
+  await expect(spend.getByTestId("dash-spend-by")).toHaveCount(0)
+  await expect(spend.getByTestId("dash-budget-note")).toHaveCount(0)
+  await spend.getByTestId("obs-chart-as-table").click()
+  await expect(spend.locator("table tbody tr").first()).toBeVisible()
+  // 24 hours: the Metrics tab's steps, no budget line.
+  await spend.getByTestId("dash-spend-view").getByRole("button", { name: "Cost" }).click()
+  await page.getByTestId("dash-range").getByRole("button", { name: "24 hours" }).click()
+  await expect.poll(() => lastMetric(state, "cost")?.get("range")).toBe("24h")
+  expect(lastMetric(state, "cost")?.get("step")).toBeNull()
+  await expect(spend.getByTestId("dash-budget-note")).toHaveCount(0)
+})
+
+test("telemetry off: the charts say so", async ({ page }) => {
+  const state = await mockOperator(page)
+  state.telemetry.settings.enabled = false
+  await page.goto("/operator")
+  await expect(page.getByTestId("dash-chart-activity").getByTestId("dash-telemetry-off")).toBeVisible()
+  await expect(page.getByTestId("dash-chart-spend").getByTestId("dash-telemetry-off")).toBeVisible()
+  expect(state.telemetry.queries.some((query) => query.path === "/metrics")).toBe(false)
+})

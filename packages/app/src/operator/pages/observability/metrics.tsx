@@ -166,7 +166,8 @@ const DANGER = new Set([
 const WARNING = new Set(["denied", "denials", "interrupted", "needs_auth"])
 const MUTED = new Set(["cancelled", "disabled"])
 const SUCCESS = new Set(["ok", "allow", "connected"])
-const toneOf = (key: string): Tone | undefined =>
+/** A series' tone by its key: failures danger, denials warning, cancelled muted, successes success. */
+export const toneOf = (key: string): Tone | undefined =>
   DANGER.has(key)
     ? "danger"
     : WARNING.has(key)

@@ -1,5 +1,6 @@
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { type JSX, Show } from "solid-js"
+import { Dynamic } from "solid-js/web"
 import { useLanguage } from "@/context/language"
 import { FieldHelp } from "../field-help"
 
@@ -23,6 +24,10 @@ export function ChartFrame(props: {
   asTable: boolean
   onAsTable: (value: boolean) => void
   wide?: boolean
+  /** The title's heading level (4 inside Observability's sections, 2 on the Dashboard). */
+  level?: 2 | 3 | 4
+  /** Controls beside the title (a view toggle, a "by" selector). */
+  actions?: JSX.Element
   children: JSX.Element
 }) {
   const t = useLanguage().t
@@ -35,11 +40,14 @@ export function ChartFrame(props: {
       aria-labelledby={`obs-chart-${props.id}`}
     >
       <header>
-        <h4 id={`obs-chart-${props.id}`}>{props.title}</h4>
+        <Dynamic component={`h${props.level ?? 4}`} id={`obs-chart-${props.id}`}>
+          {props.title}
+        </Dynamic>
         <FieldHelp field={props.title} text={props.help} />
         <Show when={props.unit}>
           <span data-slot="operator-note">{props.unit}</span>
         </Show>
+        {props.actions}
         <Show when={props.table && !props.empty && !props.loading && !props.error}>
           <ButtonV2
             size="small"

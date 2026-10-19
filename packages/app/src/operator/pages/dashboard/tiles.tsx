@@ -52,7 +52,10 @@ const num = (value: number | null | undefined) => (typeof value === "number" ? v
 export function DashboardTiles(props: {
   data: OperatorDashboardTiles | undefined
   loading: boolean
-  range: Range
+  /** The range's words: a preset, or a zoomed custom range. */
+  words: Range | "custom"
+  /** The range as links carry it. */
+  extra: Record<string, string>
   scope: { ns?: string; dir?: string }
 }) {
   const language = useLanguage()
@@ -71,10 +74,16 @@ export function DashboardTiles(props: {
     if (unit === "usd") return formatCost(value, locale())
     return formatCount(value, locale())
   }
-  const previous = () => t(`operator.dash.previous.${props.range}` as Key)
-  const rangeWords = () => t(`operator.dash.rangeWords.${props.range}` as Key)
+  const previous = () => t(`operator.dash.previous.${props.words}` as Key)
   // The comparison line's short range ("14 d"); the tile's sentence has the words.
-  const short = () => t(`operator.dash.rangeShort.${props.range}` as Key)
+  const short = () => t(`operator.dash.rangeShort.${props.words}` as Key)
+  // "No turns in the last 7 days", or "in this period" for a custom range.
+  const emptyText = (id: TileId) => {
+    const key = EMPTY[id] ?? "operator.dash.tile.noTurns"
+    return props.words === "custom"
+      ? t(`${key}Custom` as Key)
+      : t(key, { range: t(`operator.dash.rangeWords.${props.words}` as Key) })
+  }
   const label = (id: TileId) => t(`operator.dash.tile.${id}` as Key)
   // A tile's value; no turns at all is no data ("No turns in the last 7 days", §6.4), not a 0 to compare.
   const valueOf = (id: TileId) => {
@@ -111,7 +120,7 @@ export function DashboardTiles(props: {
     if (value === null)
       return t("operator.dash.sentence.none", {
         label: label(id),
-        empty: t(EMPTY[id] ?? "operator.dash.tile.noTurns", { range: rangeWords() }),
+        empty: emptyText(id),
       })
     const change = tile.change as Change
     const arrow = arrowOf(change)
@@ -127,7 +136,7 @@ export function DashboardTiles(props: {
     if (!data) return undefined
     const n = (value: number) => formatCount(value, locale())
     const parts: string[] = []
-    if (valueOf(id) === null && EMPTY[id]) return t(EMPTY[id]!, { range: rangeWords() })
+    if (valueOf(id) === null && EMPTY[id]) return emptyText(id)
     if (id === "turns") {
       const hint = data.turns.hint
       if (num(hint.sessions) !== null) parts.push(t("operator.dash.hint.sessions", { count: n(hint.sessions) }))
@@ -219,7 +228,7 @@ export function DashboardTiles(props: {
             hint={hintOf(id)}
             {...(progress(id) ? { progress: progress(id)! } : {})}
             {...(off() ? {} : { trend: trend(id), trendLabel: trendLabel(id) })}
-            href={hrefOf({ page: "observability", params: LINKS[id] }, props.scope, { range: props.range })}
+            href={hrefOf({ page: "observability", params: LINKS[id] }, props.scope, props.extra)}
             name={sentence(id)}
           />
         )}

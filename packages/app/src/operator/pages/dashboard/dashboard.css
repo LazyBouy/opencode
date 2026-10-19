@@ -163,8 +163,9 @@ html[data-theme="iphi"] [data-component="operator-dash-attention"] {
 
 /* Charts (§7) */
 
-[data-slot="operator-dash-chart-area"] {
-  min-height: 220px;
+[data-slot="operator-dash-chart-actions"] :is([data-component="select-v2-root"], [data-component="select-v2"]) {
+  width: 150px;
+  min-width: 0;
 }
 
 /* Panels (§8) */
