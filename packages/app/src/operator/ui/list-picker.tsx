@@ -106,7 +106,13 @@ export function ListPicker<T>(props: ListPickerProps<T>) {
         </Popover.Trigger>
       </div>
       <Popover.Portal>
-        <Popover.Content data-component="operator-list-picker-content" aria-label={props["aria-label"]}>
+        {/* A top layer for Kobalte: inside a modal overlay, its list is not hidden from screen readers, and clicks and
+            focus in it count as inside the overlay. */}
+        <Popover.Content
+          data-component="operator-list-picker-content"
+          data-kb-top-layer=""
+          aria-label={props["aria-label"]}
+        >
           <ListSearch
             label={language.t("operator.list.search", { what: props["aria-label"] ?? "" })}
             query={query()}

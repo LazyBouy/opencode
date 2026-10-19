@@ -93,15 +93,19 @@ test("a new rule from the form: its condition in words, saved", async ({ page })
   const form = page.getByTestId("obs-alert-form")
   await expect(form).toBeVisible()
   await form.getByLabel("Name", { exact: true }).fill("Bursts of 429s")
-  // Thirteen metrics: the long-list picker, with search. Its list opens outside the overlay, which the modal hides
-  // from the accessibility tree (includeHidden); pointer and keyboard reach it.
+  // Thirteen metrics: the long-list picker, with search. Its list opens outside the overlay and is still in the
+  // accessibility tree (a role lookup skips hidden elements).
   await form
     .locator('[data-component="operator-list-picker"][aria-label="Metric"] [data-slot="list-picker-trigger"]')
     .click()
   const list = page.locator('[data-component="operator-list-picker-content"]')
   await list.locator("input").fill("Rate limits")
-  await list.getByRole("option", { name: "Rate limits (HTTP 429)", includeHidden: true }).click()
+  await expect(list.getByRole("listbox", { name: "Metric" })).toBeVisible()
+  await list.getByRole("option", { name: "Rate limits (HTTP 429)" }).click()
   await form.getByRole("spinbutton", { name: "Threshold (count)" }).fill("2")
+  // A short list (upstream's select) in the same overlay: its options are reachable by role too.
+  await form.locator('[data-component="select-v2-root"][aria-label="Severity"] [data-component="select-v2"]').click()
+  await page.getByRole("option", { name: "Critical" }).click()
   await expect(page.getByTestId("obs-alert-preview")).toHaveText("Fires when: Rate limits (HTTP 429) > 2 over 15 min.")
   await page.getByTestId("obs-alert-save").click()
   await expect
