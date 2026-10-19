@@ -271,3 +271,17 @@ test("building history, and an unreachable server with Retry", async ({ page }) 
   await page.getByTestId("dash-unreachable").getByRole("button", { name: "Retry" }).click()
   await expect(page.getByTestId("dash-building")).toContainText("Building history from your sessions… 40%.")
 })
+
+test("no turns in the range: the tiles say so instead of comparing zeros", async ({ page }) => {
+  const state = await mockOperator(page)
+  state.telemetry.dashboard.tiles = {
+    turns: { value: 0, previous: 0, change: { kind: "same" } },
+    turnErrors: { value: null, previous: null, change: { kind: "insufficient" } },
+  }
+  await page.goto("/operator?range=7d")
+  const turns = page.getByTestId("dash-tile-turns")
+  await expect(turns.locator('[data-slot="operator-stat-value"]')).toHaveText("—")
+  await expect(turns).toContainText("No turns in the last 7 days")
+  await expect(turns.locator('[data-slot="operator-stat-change"]')).toHaveCount(0)
+  await expect(page.getByRole("link", { name: "Turn errors: No turns in the last 7 days" })).toBeVisible()
+})

@@ -76,6 +76,11 @@ export function DashboardTiles(props: {
   // The comparison line's short range ("14 d"); the tile's sentence has the words.
   const short = () => t(`operator.dash.rangeShort.${props.range}` as Key)
   const label = (id: TileId) => t(`operator.dash.tile.${id}` as Key)
+  // A tile's value; no turns at all is no data ("No turns in the last 7 days", §6.4), not a 0 to compare.
+  const valueOf = (id: TileId) => {
+    const value = num(tiles()?.[id].value)
+    return id === "turns" && value === 0 ? null : value
+  }
 
   const amountOf = (change: Change) => {
     const size = Math.abs(change.value ?? 0)
@@ -85,7 +90,7 @@ export function DashboardTiles(props: {
   }
   const changeOf = (id: TileId): StatChange | undefined => {
     const tile = tiles()?.[id]
-    if (!tile || num(tile.value) === null) return undefined
+    if (!tile || valueOf(id) === null) return undefined
     const change = tile.change as Change
     const text =
       change.kind === "relative"
@@ -102,7 +107,7 @@ export function DashboardTiles(props: {
     const tile = tiles()?.[id]
     if (off()) return t("operator.dash.sentence.none", { label: label(id), empty: t("operator.dash.tile.off") })
     if (!tile) return label(id)
-    const value = num(tile.value)
+    const value = valueOf(id)
     if (value === null)
       return t("operator.dash.sentence.none", {
         label: label(id),
@@ -122,7 +127,7 @@ export function DashboardTiles(props: {
     if (!data) return undefined
     const n = (value: number) => formatCount(value, locale())
     const parts: string[] = []
-    if (num(data[id].value) === null && EMPTY[id]) return t(EMPTY[id]!, { range: rangeWords() })
+    if (valueOf(id) === null && EMPTY[id]) return t(EMPTY[id]!, { range: rangeWords() })
     if (id === "turns") {
       const hint = data.turns.hint
       if (num(hint.sessions) !== null) parts.push(t("operator.dash.hint.sessions", { count: n(hint.sessions) }))
@@ -207,7 +212,7 @@ export function DashboardTiles(props: {
             help={t(`operator.dash.help.tile.${id}` as Key)}
             loading={props.loading && !props.data}
             value={(() => {
-              const value = num(tiles()?.[id].value)
+              const value = valueOf(id)
               return value === null || off() ? "—" : format(id, value)
             })()}
             {...(changeOf(id) ? { change: changeOf(id)! } : {})}
