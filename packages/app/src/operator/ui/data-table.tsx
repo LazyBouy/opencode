@@ -1,4 +1,4 @@
-import { createMemo, For, type JSX, Show } from "solid-js"
+import { createEffect, createMemo, For, type JSX, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
@@ -40,6 +40,10 @@ export interface DataTableProps<T> {
   readonly server?: { readonly sort: Sort | undefined; readonly onSort: (sort: Sort | undefined) => void }
   /** Data attributes for a row (data-depth, …). */
   readonly rowAttrs?: (row: T) => Record<string, string | undefined>
+  /** Told the ids of the columns shown, in order, whenever they change (an export of what is on screen). */
+  readonly onColumns?: (ids: ReadonlyArray<string>) => void
+  /** Shows these optional columns and hides the others when it changes (a saved view applied); the picker still works. */
+  readonly applyColumns?: ReadonlyArray<string>
 }
 
 // Sortable, filterable table for operator pages. Rows open with a click or Enter when onRowClick is set.
@@ -59,6 +63,16 @@ export function DataTable<T>(props: DataTableProps<T>) {
     : fresh
   const visible = (column: Column<T>) => !column.optional || (choice.shown[column.id] ?? !column.hidden)
   const columns = createMemo(() => props.columns.filter(visible))
+  createEffect(() => props.onColumns?.(columns().map((column) => column.id)))
+  createEffect(
+    on(
+      () => props.applyColumns,
+      (ids) => {
+        if (!ids) return
+        for (const column of props.columns) if (column.optional) setChoice("shown", column.id, ids.includes(column.id))
+      },
+    ),
+  )
   const picker = () => !!props.columnsKey && props.columns.some((column) => column.optional)
   // A server that answers with an unexpected shape shows an empty table rather than breaking the page.
   const source = () => (Array.isArray(props.rows) ? props.rows : [])

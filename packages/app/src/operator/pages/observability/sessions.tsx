@@ -33,6 +33,9 @@ export function SessionsTab(props: {
   /** The sessions shown, for the detail's ‹ ›. */
   onRows: (ids: ReadonlyArray<string>) => void
   empty: () => JSX.Element
+  /** The columns shown (for export and saved views), and a saved view's to show. */
+  onColumns?: (ids: ReadonlyArray<string>) => void
+  applyColumns?: ReadonlyArray<string>
 }) {
   const language = useLanguage()
   const t = language.t
@@ -375,6 +378,8 @@ export function SessionsTab(props: {
         rows={rows()}
         columns={columns}
         columnsKey="observability-sessions"
+        {...(props.onColumns ? { onColumns: props.onColumns } : {})}
+        {...(props.applyColumns ? { applyColumns: props.applyColumns } : {})}
         loading={sessions.isPending}
         empty={props.empty()}
         server={{

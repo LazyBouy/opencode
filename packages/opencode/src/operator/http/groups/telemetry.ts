@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { OperatorTelemetrySchema as T } from "@/operator/telemetry/schema"
 import { described } from "@/server/routes/instance/httpapi/groups/metadata"
 
@@ -22,6 +22,12 @@ export const OperatorTelemetryPaths = {
   reset: "/operator/telemetry/alert/rule/:id/reset",
   alerts: "/operator/telemetry/alert/event",
   ack: "/operator/telemetry/alert/event/:id/ack",
+  views: "/operator/telemetry/view",
+  view: "/operator/telemetry/view/:id",
+  settings: "/operator/telemetry/settings",
+  clear: "/operator/telemetry/clear",
+  export: "/operator/telemetry/export",
+  exportCount: "/operator/telemetry/export/count",
   backfill: "/operator/telemetry/backfill",
   storage: "/operator/telemetry/storage",
 } as const
@@ -41,6 +47,22 @@ export class ApiTelemetryAlertError extends Schema.ErrorClass<{
   { name: Schema.Literal("OperatorTelemetryAlertError"), data: Schema.Struct({ message: Schema.String }) },
   { httpApiStatus: 400 },
 ) {}
+
+export class ApiTelemetryInvalidError extends Schema.ErrorClass<{
+  readonly name: "OperatorTelemetryInvalidError"
+  readonly data: { readonly message: string }
+}>("OperatorTelemetryInvalidError")(
+  { name: Schema.Literal("OperatorTelemetryInvalidError"), data: Schema.Struct({ message: Schema.String }) },
+  { httpApiStatus: 400 },
+) {}
+
+const exportQuery = {
+  ...T.FilterQuery,
+  tab: Schema.Literals(["sessions", "events", "logs"]),
+  sort: Schema.optional(Schema.String),
+  level: Schema.optional(Schema.String).annotate({ description: "Logs: the lowest level" }),
+  service: Schema.optional(Schema.String).annotate({ description: "Logs: services" }),
+}
 
 const paging = {
   sort: Schema.optional(Schema.String).annotate({ description: "A column, with :asc or :desc" }),
@@ -291,6 +313,109 @@ export const OperatorTelemetryGroup = HttpApiGroup.make("operatorTelemetry")
         "operator.telemetry.alertAck",
         "Acknowledge an alert",
         "Records who and when, and takes the alert off the badges. It keeps firing until it resolves.",
+      ),
+    ),
+    HttpApiEndpoint.get("views", OperatorTelemetryPaths.views, {
+      success: described(Schema.Array(T.View), "Saved views"),
+    }).annotateMerge(
+      annotations(
+        "operator.telemetry.views",
+        "List saved views",
+        "The built-in views (read-only), then everyone's saved views on this server.",
+      ),
+    ),
+    HttpApiEndpoint.post("viewCreate", OperatorTelemetryPaths.views, {
+      payload: T.ViewInput,
+      success: described(T.View, "Saved"),
+      error: ApiTelemetryInvalidError,
+    }).annotateMerge(
+      annotations(
+        "operator.telemetry.viewCreate",
+        "Save a view",
+        "A tab, its filters and sort, the visible columns and the facet panel; never the time range or scope.",
+      ),
+    ),
+    HttpApiEndpoint.put("viewUpdate", OperatorTelemetryPaths.view, {
+      params: { id: Schema.String },
+      payload: T.ViewPatch,
+      success: described(T.View, "Saved"),
+      error: [ApiTelemetryNotFoundError, ApiTelemetryInvalidError],
+    }).annotateMerge(
+      annotations(
+        "operator.telemetry.viewUpdate",
+        "Update a view",
+        "Save (its state) or Rename. Built-in views can't change.",
+      ),
+    ),
+    HttpApiEndpoint.delete("viewDelete", OperatorTelemetryPaths.view, {
+      params: { id: Schema.String },
+      success: described(Schema.Boolean, "Moved to Trash"),
+      error: [ApiTelemetryNotFoundError, ApiTelemetryInvalidError],
+    }).annotateMerge(
+      annotations(
+        "operator.telemetry.viewDelete",
+        "Delete a view",
+        "Moves a saved view to Trash, where it can be restored.",
+      ),
+    ),
+    HttpApiEndpoint.get("settings", OperatorTelemetryPaths.settings, {
+      success: described(T.Settings, "Observability settings"),
+    }).annotateMerge(
+      annotations(
+        "operator.telemetry.settings",
+        "Observability settings",
+        "Recording, retention, the log level kept, loop rules, the daily budget, the Dashboard's thresholds and call recording.",
+      ),
+    ),
+    HttpApiEndpoint.put("settingsUpdate", OperatorTelemetryPaths.settings, {
+      payload: T.SettingsInput,
+      success: described(T.SettingsSaved, "Saved"),
+      error: ApiTelemetryInvalidError,
+    }).annotateMerge(
+      annotations(
+        "operator.telemetry.settingsUpdate",
+        "Save Observability settings",
+        "Writes `operatorTelemetry` and `operatorRecordCalls` in the global config. Telemetry applies them at once; call recording when projects reload.",
+      ),
+    ),
+    HttpApiEndpoint.post("clear", OperatorTelemetryPaths.clear, {
+      success: described(T.Cleared, "Cleared"),
+    }).annotateMerge(
+      annotations(
+        "operator.telemetry.clear",
+        "Clear telemetry",
+        "Moves the telemetry store to Trash as one entry and starts an empty one. Restoring it from Trash replaces the store then current, which goes to Trash.",
+      ),
+    ),
+    HttpApiEndpoint.get("exportCount", OperatorTelemetryPaths.exportCount, {
+      query: Schema.Struct(exportQuery),
+      success: described(T.ExportCount, "Rows matching"),
+    }).annotateMerge(
+      annotations(
+        "operator.telemetry.exportCount",
+        "Count an export",
+        "How many rows the current filter and range would export, and the limit (100,000).",
+      ),
+    ),
+    HttpApiEndpoint.get("export", OperatorTelemetryPaths.export, {
+      query: Schema.Struct({
+        ...exportQuery,
+        format: Schema.Literals(["csv", "jsonl"]),
+        cols: Schema.optional(Schema.String).annotate({ description: "CSV: the visible columns, by id" }),
+        tz: Schema.optional(Schema.String).annotate({
+          description: "The viewer's offset from UTC in minutes, for times",
+        }),
+      }),
+      success: described(
+        Schema.String.pipe(HttpApiSchema.asText({ contentType: "text/csv; charset=utf-8" })),
+        "The file",
+      ),
+      error: ApiTelemetryInvalidError,
+    }).annotateMerge(
+      annotations(
+        "operator.telemetry.export",
+        "Export",
+        "Streams Sessions, Events or Logs under the filter, sort and range: CSV (the visible columns) or JSON Lines (every stored field), up to 100,000 rows. Holds no content.",
       ),
     ),
     HttpApiEndpoint.get("backfillStatus", OperatorTelemetryPaths.backfill, {

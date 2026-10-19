@@ -22,15 +22,17 @@ export function apply(
   },
 ) {
   store.transaction(() => {
-    const tools = new Set<string>()
+    // Tool calls to work out again, with their row when this write just read it.
+    const tools = new Map<string, OperatorTelemetryStore.Span | undefined>()
     const turns = new Set<string>()
     const sessions = new Set<string>([...(input.sessions ?? []), ...batch.sessions])
     const hours: Array<number | null> = []
     const mark = (span: OperatorTelemetryStore.Span | undefined) => {
       if (!span) return
       hours.push(span.start_ms)
-      if (span.kind === "tool_call") tools.add(span.id)
-      if (span.kind === "permission_wait" && span.parent_id?.startsWith("tool:")) tools.add(span.parent_id)
+      if (span.kind === "tool_call") tools.set(span.id, span)
+      if (span.kind === "permission_wait" && span.parent_id?.startsWith("tool:") && !tools.has(span.parent_id))
+        tools.set(span.parent_id, undefined)
       if (span.turn_id) turns.add(span.turn_id)
       if (span.session_id) sessions.add(span.session_id)
     }
@@ -52,7 +54,7 @@ export function apply(
     for (const sample of batch.samples) store.insertSample(sample)
     for (const row of batch.mcp) store.insertMcpStatus(row)
     if (batch.logPosition) store.setMeta("log_position", JSON.stringify(batch.logPosition))
-    for (const id of tools) OperatorTelemetryDerive.tool(store, id, input.now)
+    for (const [id, span] of tools) OperatorTelemetryDerive.tool(store, id, input.now, span)
     for (const id of turns) {
       OperatorTelemetryDerive.turn(store, id, input.loops, input.now)
       hours.push(store.span(id)?.start_ms ?? null)

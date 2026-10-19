@@ -28,6 +28,8 @@ export const Kind = Schema.Literals([
   "plugin",
   "config",
   "alert-rule",
+  "telemetry-view",
+  "telemetry",
 ]).annotate({ identifier: "OperatorTrashKind" })
 export type Kind = typeof Kind.Type
 

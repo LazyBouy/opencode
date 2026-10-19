@@ -13,7 +13,7 @@ import { Global } from "@opencode-ai/core/global"
 // `seq` grows on every insert or update, server-wide, for the live tail. Nothing here holds content (§4.7): no
 // prompts, outputs, tool arguments or results, only short error messages and salted hashes.
 
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 
 export const KINDS = [
   "turn",
@@ -348,21 +348,46 @@ const MIGRATIONS: ReadonlyArray<ReadonlyArray<string>> = [
     `CREATE INDEX IF NOT EXISTS alert_event_start ON alert_event (start_ms)`,
     `CREATE INDEX IF NOT EXISTS alert_event_open ON alert_event (end_ms)`,
   ],
+  // Version 4: Events pages sort on the start then the id (query.ts `page`, §7.3). These indexes hold exactly that
+  // order, so a newest-first page reads only its own rows: of all spans, of one kind, of one status.
+  [
+    `CREATE INDEX IF NOT EXISTS span_page ON span (COALESCE(start_ms, -9e18), id)`,
+    `CREATE INDEX IF NOT EXISTS span_kind_page ON span (kind, COALESCE(start_ms, -9e18), id)`,
+    `CREATE INDEX IF NOT EXISTS span_status_page ON span (status, COALESCE(start_ms, -9e18), id)`,
+  ],
 ]
 
 const placeholders = (count: number) => Array.from({ length: count }, () => "?").join(", ")
 
 export class Store {
-  readonly db: Database
+  /** The open file; `reopen` replaces it in place, so holders of this store keep working. */
+  db!: Database
   readonly file: string
-  private seq: number
-  private readonly upsertSpanStmt
-  private readonly upsertSessionStmt
+  private seq = 0
+  private upsertSpanStmt!: ReturnType<Database["prepare"]>
+  private upsertSessionStmt!: ReturnType<Database["prepare"]>
 
   constructor(file: string) {
     this.file = file
-    fs.mkdirSync(path.dirname(file), { recursive: true })
-    this.db = new Database(file, { create: true })
+    this.open()
+  }
+
+  /**
+   * Closes the file, lets `swap` move it and its WAL (Clear telemetry moves them to Trash; a restore puts others back),
+   * then opens what is at the path: a new empty store, or the one put back.
+   */
+  async reopen(swap: () => Promise<void>) {
+    this.db.close()
+    try {
+      await swap()
+    } finally {
+      this.open()
+    }
+  }
+
+  private open() {
+    fs.mkdirSync(path.dirname(this.file), { recursive: true })
+    this.db = new Database(this.file, { create: true })
     // Purging frees pages as it goes (§6.1); set before the first table, or converted once below.
     this.db.exec("PRAGMA auto_vacuum = INCREMENTAL")
     this.db.exec("PRAGMA journal_mode = WAL")

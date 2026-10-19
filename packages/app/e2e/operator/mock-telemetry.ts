@@ -265,6 +265,25 @@ const spanRow = (id: string, kind: string, fields: Row): Row => ({ ...SPAN_DEFAU
 
 export type TelemetryMock = ReturnType<typeof createTelemetryMock>["state"]
 
+const BUILTIN_VIEWS = [
+  ["errors", "events", { status: "error", sort: "start:desc" }],
+  ["denied", "events", { status: "denied", sort: "start:desc" }],
+  ["awaiting", "events", { kind: "permission_wait", status: "running", sort: "start:asc" }],
+  ["rate_limited", "events", { http: "429", sort: "start:desc" }],
+  ["expensive", "sessions", { sort: "cost:desc" }],
+  ["slow_turns", "events", { kind: "turn", sort: "active:desc" }],
+  ["loops", "events", { kind: "turn", loop: "1", sort: "start:desc" }],
+  ["interrupted", "events", { status: "interrupted", sort: "start:desc" }],
+  ["failing_tools", "events", { kind: "tool_call", status: "error", sort: "start:desc" }],
+].map(([key, tab, params]) => ({
+  id: `builtin-${key}`,
+  name: key,
+  builtin: key,
+  state: { tab, params, ...(key === "failing_tools" ? { facets: true, expand: ["tool"] } : {}) },
+  createdAt: 0,
+  updatedAt: 0,
+}))
+
 type TrashEntry = {
   id: string
   kind: string
@@ -589,6 +608,25 @@ export function createTelemetryMock(now: number, hooks: { trash?: (entry: TrashE
     ],
     /** Every write to the alert API. */
     alertWrites: [] as Array<{ method: string; path: string; body: unknown }>,
+    views: BUILTIN_VIEWS.map((view) => ({ ...view })) as Row[],
+    /** Records in Trash, by Trash id, to bring back on restore. */
+    trashed: new Map<string, { kind: string; record: Row }>(),
+    settings: {
+      enabled: true,
+      eventsDays: 30,
+      totalsDays: 400,
+      logLevel: "warn",
+      loops: { sameCallSameResult: 3, sameCall: 5, toolCalls: 50, modelCalls: 30 },
+      dailyBudget: null as number | null,
+      stuckMinutes: 10,
+      queueMinutes: 10,
+      recordCalls: true,
+      limits: { eventsDays: { min: 1, max: 365 }, totalsDays: { min: 30, max: 1825 } },
+    },
+    /** Every write to views, settings and Clear, and every export asked for. */
+    writes: [] as Array<{ method: string; path: string; body: unknown; params?: URLSearchParams }>,
+    /** Rows the export count says match (for the 100,000-row limit). */
+    exportRows: 42,
     queries: [] as Array<{ path: string; params: URLSearchParams }>,
     sessions,
     kept: new Set<string>(),
@@ -620,6 +658,80 @@ export function createTelemetryMock(now: number, hooks: { trash?: (entry: TrashE
   }
   const json = (route: Route, body: unknown, status = 200) =>
     route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) })
+
+  const phase8 = (route: Route, path: string, method: string, q: URLSearchParams) => {
+    const body = (() => {
+      try {
+        return route.request().postDataJSON() as Row | null
+      } catch {
+        return null
+      }
+    })()
+    if (method !== "GET" || path.startsWith("/export")) state.writes.push({ method, path, body, params: q })
+    if (path === "/view" && method === "GET") return json(route, state.views)
+    if (path === "/view" && method === "POST") {
+      const made = {
+        ...body,
+        id: `view-${state.views.length + 1}`,
+        createdBy: "operator",
+        createdAt: now,
+        updatedAt: now,
+      }
+      state.views.push(made)
+      return json(route, made)
+    }
+    const view = path.match(/^\/view\/([^/]+)$/)
+    if (view) {
+      const found = state.views.find((item) => item.id === view[1])
+      if (!found) return json(route, { name: "OperatorTelemetryNotFoundError", data: { message: "none" } }, 404)
+      if (found.builtin)
+        return json(
+          route,
+          { name: "OperatorTelemetryInvalidError", data: { message: "Built-in views can't change" } },
+          400,
+        )
+      if (method === "PUT") {
+        Object.assign(found, body, { updatedAt: now })
+        return json(route, found)
+      }
+      state.views.splice(state.views.indexOf(found), 1)
+      const id = `trash-view-${found.id}`
+      state.trashed.set(id, { kind: "telemetry-view", record: found })
+      hooks.trash?.({ id, kind: "telemetry-view", name: String(found.name), deletedAt: now, files: [] })
+      return json(route, true)
+    }
+    if (path === "/settings" && method === "GET") return json(route, state.settings)
+    if (path === "/settings") {
+      if ((body?.eventsDays as number) < 1)
+        return json(
+          route,
+          { name: "OperatorTelemetryInvalidError", data: { message: "Keep detailed events for 1 to 365 days" } },
+          400,
+        )
+      const changed = body?.recordCalls !== state.settings.recordCalls
+      state.settings = { ...state.settings, ...(body as typeof state.settings) }
+      return json(route, { settings: state.settings, ...(changed ? { reload: "when-idle" } : {}) })
+    }
+    if (path === "/clear") {
+      hooks.trash?.({ id: "trash-telemetry-1", kind: "telemetry", name: "telemetry.sqlite", deletedAt: now, files: [] })
+      return json(route, { trash: "trash-telemetry-1" })
+    }
+    if (path === "/export/count") return json(route, { rows: state.exportRows, limit: 100_000 })
+    if (path === "/export") {
+      const csv = q.get("format") === "csv"
+      return route.fulfill({
+        status: 200,
+        contentType: csv ? "text/csv; charset=utf-8" : "application/x-ndjson; charset=utf-8",
+        headers: {
+          "content-disposition": `attachment; filename="opencode-${q.get("tab")}-202610190000-202610200000.${csv ? "csv" : "jsonl"}"`,
+        },
+        body: csv
+          ? "start_ms,kind,name\r\n2026-10-19T10:00:00.000+00:00,turn,invoke_agent build\r\n"
+          : '{"id":"turn:1"}\n',
+      })
+    }
+    return json(route, { name: "NotFound", data: { message: path } }, 404)
+  }
 
   const alerts = (route: Route, path: string, method: string) => {
     const body = (() => {
@@ -858,7 +970,22 @@ export function createTelemetryMock(now: number, hooks: { trash?: (entry: TrashE
     }
     if (path === "/metrics") return json(route, metricOf(q, now))
     if (path.startsWith("/alert/")) return alerts(route, path, method)
+    if (
+      path === "/view" ||
+      path.startsWith("/view/") ||
+      path === "/settings" ||
+      path === "/clear" ||
+      path.startsWith("/export")
+    )
+      return phase8(route, path, method, q)
     return json(route, { name: "NotFound", data: { message: path } }, 404)
   }
-  return { state, handle }
+  /** A record restored from Trash comes back. */
+  const restore = (entry: { id: string }) => {
+    const found = state.trashed.get(entry.id)
+    if (!found) return
+    state.trashed.delete(entry.id)
+    if (found.kind === "telemetry-view") state.views.push(found.record)
+  }
+  return { state, handle, restore }
 }

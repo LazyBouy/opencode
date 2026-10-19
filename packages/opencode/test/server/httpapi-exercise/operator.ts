@@ -1544,6 +1544,80 @@ export const operatorScenarios: Scenario[] = [
       headers: ctx.headers(),
     }))
     .status(404),
+  http.protected.get("/operator/telemetry/view", "operator.telemetry.views").json(200, (body) => {
+    array(body)
+    check(
+      body.some((item) => isRecord(item) && item.builtin === "errors"),
+      "the built-in views are listed",
+    )
+  }),
+  http.protected
+    .post("/operator/telemetry/view", "operator.telemetry.viewCreate")
+    .at((ctx) => ({
+      path: "/operator/telemetry/view",
+      headers: ctx.headers(),
+      body: { name: "Exerciser view", state: { tab: "events", params: { status: "error", range: "7d" } } },
+    }))
+    .json(200, (body) => {
+      object(body)
+      check(body.name === "Exerciser view", "the new view")
+      check(isRecord(body.state) && isRecord(body.state.params) && !("range" in body.state.params), "no range kept")
+    }),
+  http.protected
+    .put("/operator/telemetry/view/{id}", "operator.telemetry.viewUpdate")
+    .at((ctx) => ({
+      path: route("/operator/telemetry/view/{id}", { id: "builtin-errors" }),
+      headers: ctx.headers(),
+      body: { name: "Renamed" },
+    }))
+    .status(400),
+  http.protected
+    .delete("/operator/telemetry/view/{id}", "operator.telemetry.viewDelete")
+    .at((ctx) => ({ path: route("/operator/telemetry/view/{id}", { id: "view-missing" }), headers: ctx.headers() }))
+    .status(404),
+  http.protected.get("/operator/telemetry/settings", "operator.telemetry.settings").json(200, (body) => {
+    object(body)
+    check(typeof body.eventsDays === "number" && isRecord(body.limits), "settings with their limits")
+  }),
+  http.protected
+    .put("/operator/telemetry/settings", "operator.telemetry.settingsUpdate")
+    .at((ctx) => ({
+      path: "/operator/telemetry/settings",
+      headers: ctx.headers(),
+      body: {
+        enabled: true,
+        eventsDays: 0,
+        totalsDays: 400,
+        logLevel: "warn",
+        loops: { sameCallSameResult: 3, sameCall: 5, toolCalls: 50, modelCalls: 30 },
+        dailyBudget: null,
+        stuckMinutes: 10,
+        queueMinutes: 10,
+        recordCalls: true,
+      },
+    }))
+    .status(400),
+  http.protected
+    .post("/operator/telemetry/clear", "operator.telemetry.clear")
+    .json(200, (body) => check(isRecord(body) && typeof body.trash === "string", "the store went to Trash")),
+  http.protected
+    .get("/operator/telemetry/export/count", "operator.telemetry.exportCount")
+    .at((ctx) => ({ path: "/operator/telemetry/export/count?tab=events&range=24h", headers: ctx.headers() }))
+    .json(200, (body) => check(isRecord(body) && body.limit === 100_000, "the limit")),
+  http.protected
+    .get("/operator/telemetry/export", "operator.telemetry.export")
+    .at((ctx) => ({
+      path: "/operator/telemetry/export?tab=logs&format=csv&range=24h&tz=60",
+      headers: ctx.headers(),
+    }))
+    .status(
+      200,
+      (_ctx, result) =>
+        Effect.sync(() => {
+          check(result.text.startsWith("time_ms,level,message"), "a CSV with its header")
+        }),
+      "status",
+    ),
   http.protected.get("/operator/telemetry/backfill", "operator.telemetry.backfillStatus").json(200, (body) => {
     object(body)
     check(["idle", "running", "done", "failed"].includes(String(body.state)), "a known state")

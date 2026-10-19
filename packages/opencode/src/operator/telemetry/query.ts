@@ -333,10 +333,16 @@ export function events(
       .all(...tail.params, limit) as OperatorTelemetryStore.Span[]
     return { rows, nextCursor: undefined, seq: rows.at(-1)?.seq ?? options.after }
   }
+  const sort = sortOf(options.sort, SPAN_SORTS, "start:desc")
+  // Sorted by start: the range said in the sort's own terms too, so the page indexes (store.ts v4) serve both.
+  const { from, to } = window(filter, context.now)
   const result = page<OperatorTelemetryStore.Span>(store.db, {
     table: "span",
-    where,
-    sort: sortOf(options.sort, SPAN_SORTS, "start:desc"),
+    where:
+      sort.key === "start"
+        ? AND([where, { sql: `${sort.expression} >= ? AND ${sort.expression} < ?`, params: [from, to] }])
+        : where,
+    sort,
     cursor: options.cursor,
     limit,
   })
@@ -367,21 +373,19 @@ export function sessions(
 
 const LEVELS = ["ERROR", "WARN", "INFO", "DEBUG"]
 
-export function logs(
-  store: OperatorTelemetryStore.Store,
-  filter: {
-    range?: string
-    from?: number
-    to?: number
-    level?: string
-    q?: string
-    session?: string
-    service?: string
-  },
-  context: Pick<Context, "now">,
-  options: { cursor?: string; limit?: number; after?: number } = {},
-) {
-  const { from, to } = window(filter, context.now)
+export type LogFilter = {
+  range?: string
+  from?: number
+  to?: number
+  level?: string
+  q?: string
+  session?: string
+  service?: string
+}
+
+/** The filter on log lines: the range, the lowest level, session, service and text. */
+export function logWhere(filter: LogFilter, now: number): Clause {
+  const { from, to } = window(filter, now)
   const clauses: Clause[] = [{ sql: "time_ms >= ? AND time_ms < ?", params: [from, to] }]
   const level = (filter.level ?? "").toUpperCase()
   if (LEVELS.includes(level)) clauses.push(IN("level", LEVELS.slice(0, LEVELS.indexOf(level) + 1)))
@@ -391,9 +395,19 @@ export function logs(
     const like = `%${filter.q.trim().replace(/[%_\\]/g, (char) => `\\${char}`)}%`
     clauses.push({ sql: "message LIKE ? ESCAPE '\\' OR fields LIKE ? ESCAPE '\\'", params: [like, like] })
   }
+  return AND(clauses)
+}
+
+export function logs(
+  store: OperatorTelemetryStore.Store,
+  filter: LogFilter,
+  context: Pick<Context, "now">,
+  options: { cursor?: string; limit?: number; after?: number } = {},
+) {
+  const where = logWhere(filter, context.now)
   const limit = limitOf(options.limit, 100, 1000)
   if (options.after !== undefined) {
-    const tail = AND([...clauses, { sql: "seq > ?", params: [options.after] }])
+    const tail = AND([where, { sql: "seq > ?", params: [options.after] }])
     const rows = store.db
       .query(`SELECT * FROM log_entry WHERE ${tail.sql} ORDER BY seq ASC LIMIT ?`)
       .all(...tail.params, limit) as OperatorTelemetryStore.LogEntry[]
@@ -401,7 +415,7 @@ export function logs(
   }
   const result = page<OperatorTelemetryStore.LogEntry>(store.db, {
     table: "log_entry",
-    where: AND(clauses),
+    where,
     sort: sortOf("time:desc", { time: "time_ms" }, "time:desc"),
     cursor: options.cursor,
     limit,

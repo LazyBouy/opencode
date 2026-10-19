@@ -35,8 +35,19 @@ export function useTrash() {
   const refresh = () => queryClient.invalidateQueries({ queryKey: api.key() })
   const fail = (error: unknown) =>
     showToast({ title: language.t("operator.trash.failed"), description: requestError(error) })
-  const restore = (entry: OperatorTrashEntry) =>
-    api
+  const confirm = useConfirm()
+  const restore = async (entry: OperatorTrashEntry) => {
+    // A telemetry store replaces the one in use (which goes to Trash itself): ask first (observability_spec.md §15).
+    if (
+      entry.kind === "telemetry" &&
+      !(await confirm({
+        title: language.t("operator.trash.telemetryTitle"),
+        description: language.t("operator.trash.telemetryBody"),
+        confirm: language.t("operator.trash.restore"),
+      }))
+    )
+      return
+    return api
       .client()
       .operator.trash.restore({ id: entry.id }, { throwOnError: true })
       .then(async () => {
@@ -44,6 +55,7 @@ export function useTrash() {
         await refresh()
       })
       .catch(fail)
+  }
   const purge = (entry: OperatorTrashEntry) =>
     api.client().operator.trash.purge({ id: entry.id }, { throwOnError: true }).then(refresh).catch(fail)
   return { entries, restore, purge, refresh, fail }
@@ -96,6 +108,8 @@ const kinds = [
   "plugin",
   "config",
   "alert-rule",
+  "telemetry-view",
+  "telemetry",
 ] as const
 
 // Trash: everything deleted in the operator pages, newest first. An entry opens in the overlay, with

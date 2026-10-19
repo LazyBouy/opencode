@@ -1,17 +1,29 @@
 import fs from "fs/promises"
+import os from "os"
 import { asc, inArray } from "drizzle-orm"
 import { Effect } from "effect"
+import * as Stream from "effect/Stream"
+import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Database } from "@opencode-ai/core/database/database"
+import { Global } from "@opencode-ai/core/global"
 import { PartTable } from "@opencode-ai/core/session/sql"
+import { Config } from "@/config/config"
+import { OperatorConfig } from "@/operator/config"
+import { OperatorProfile } from "@/operator/profile"
 import { OperatorProfileStore } from "@/operator/profile-store"
+import { OperatorReloadWhenIdle } from "@/operator/reload-when-idle"
+import { OperatorTelemetryExport } from "@/operator/telemetry/export"
+import { OperatorTelemetryRetention } from "@/operator/telemetry/retention"
+import { OperatorTelemetryViews } from "@/operator/telemetry/views"
+import { InstanceStore } from "@/project/instance-store"
 import { OperatorTelemetryAlerting } from "@/operator/telemetry/alerting"
 import { OperatorTelemetry } from "@/operator/telemetry/telemetry"
 import { OperatorTelemetryMetrics } from "@/operator/telemetry/metrics"
 import { OperatorTelemetryQuery } from "@/operator/telemetry/query"
 import { OperatorTelemetryStore } from "@/operator/telemetry/store"
 import { OperatorRootApi } from "../groups/overview"
-import { ApiTelemetryAlertError, ApiTelemetryNotFoundError } from "../groups/telemetry"
+import { ApiTelemetryAlertError, ApiTelemetryInvalidError, ApiTelemetryNotFoundError } from "../groups/telemetry"
 
 const notFound = (message: string) =>
   new ApiTelemetryNotFoundError({ name: "OperatorTelemetryNotFoundError", data: { message } })
@@ -41,12 +53,24 @@ const invalid = (error: { message: string }) =>
 const alertError = (error: OperatorTelemetryAlerting.AlertError) =>
   error.missing ? notFound(error.message) : invalid(error)
 
+const badInput = (message: string) =>
+  new ApiTelemetryInvalidError({ name: "OperatorTelemetryInvalidError", data: { message } })
+
 const LABEL = 120
 
 export const operatorTelemetryHandlers = HttpApiBuilder.group(OperatorRootApi, "operatorTelemetry", (handlers) =>
   Effect.gen(function* () {
     const telemetry = yield* OperatorTelemetry.Service
     const alerting = yield* OperatorTelemetryAlerting.Service
+    const config = yield* Config.Service
+    const operatorConfig = yield* OperatorConfig.Service
+    const reloads = yield* OperatorReloadWhenIdle.Service
+    const instances = yield* InstanceStore.Service
+    // Who saved a view: the config's username (one shared password, no accounts).
+    const username = Effect.fnUntraced(function* () {
+      const global = yield* config.getGlobal().pipe(Effect.orElseSucceed(() => undefined))
+      return global?.username || os.userInfo().username || "user"
+    })
     const profiles = yield* OperatorProfileStore.Service
     const db = (yield* Database.Service).db
     const store = () => OperatorTelemetryStore.store()
@@ -57,6 +81,32 @@ export const operatorTelemetryHandlers = HttpApiBuilder.group(OperatorRootApi, "
         now: Date.now(),
         stuckMinutes: telemetry.settings().stuckMinutes,
       })
+    })
+    // Observability settings (§15) as they are now: the global config's, with call recording.
+    const settingsNow = Effect.fnUntraced(function* () {
+      const global = yield* config.getGlobal().pipe(Effect.orElseSucceed(() => undefined))
+      const value = OperatorTelemetry.settingsOf(global as { operatorTelemetry?: Record<string, any> } | undefined)
+      return {
+        enabled: value.enabled,
+        eventsDays: value.eventsDays,
+        totalsDays: value.totalsDays,
+        logLevel: value.logLevel,
+        loops: value.loops,
+        dailyBudget: value.dailyBudget ?? null,
+        stuckMinutes: value.stuckMinutes,
+        queueMinutes: value.queueMinutes,
+        recordCalls: (global as { operatorRecordCalls?: boolean } | undefined)?.operatorRecordCalls !== false,
+        limits: {
+          eventsDays: {
+            min: OperatorTelemetryRetention.RANGES.eventsDays.min,
+            max: OperatorTelemetryRetention.RANGES.eventsDays.max,
+          },
+          totalsDays: {
+            min: OperatorTelemetryRetention.RANGES.totalsDays.min,
+            max: OperatorTelemetryRetention.RANGES.totalsDays.max,
+          },
+        },
+      }
     })
     const kept = () =>
       new Set(
@@ -255,6 +305,138 @@ export const operatorTelemetryHandlers = HttpApiBuilder.group(OperatorRootApi, "
       })
       .handle("alertAck", (ctx) =>
         alerting.acknowledge(ctx.params.id).pipe(Effect.mapError((error) => notFound(error.message))),
+      )
+      .handle("views", () => Effect.promise(() => OperatorTelemetryViews.list()))
+      .handle("viewCreate", (ctx) =>
+        Effect.gen(function* () {
+          const name = ctx.payload.name.trim()
+          if (!name) return yield* badInput("A view needs a name")
+          const now = Date.now()
+          const createdBy = yield* username()
+          return yield* Effect.promise(() =>
+            OperatorTelemetryViews.write({
+              id: OperatorTelemetryViews.newId(),
+              name,
+              ...(ctx.payload.description?.trim() ? { description: ctx.payload.description.trim() } : {}),
+              state: ctx.payload.state as OperatorTelemetryViews.State,
+              createdBy,
+              createdAt: now,
+              updatedAt: now,
+            }),
+          )
+        }),
+      )
+      .handle("viewUpdate", (ctx) =>
+        Effect.gen(function* () {
+          const view = yield* Effect.promise(() => OperatorTelemetryViews.get(ctx.params.id))
+          if (!view) return yield* notFound(`No view ${ctx.params.id}`)
+          if (view.builtin) return yield* badInput("Built-in views can't change; Save as makes a copy")
+          const name = ctx.payload.name?.trim()
+          if (ctx.payload.name !== undefined && !name) return yield* badInput("A view needs a name")
+          return yield* Effect.promise(() =>
+            OperatorTelemetryViews.write({
+              ...view,
+              ...(name ? { name } : {}),
+              ...(ctx.payload.description !== undefined ? { description: ctx.payload.description.trim() } : {}),
+              ...(ctx.payload.state ? { state: ctx.payload.state as OperatorTelemetryViews.State } : {}),
+              updatedAt: Date.now(),
+            }),
+          )
+        }),
+      )
+      .handle("viewDelete", (ctx) =>
+        Effect.gen(function* () {
+          const view = yield* Effect.promise(() => OperatorTelemetryViews.get(ctx.params.id))
+          if (!view) return yield* notFound(`No view ${ctx.params.id}`)
+          if (view.builtin) return yield* badInput("Built-in views can't be deleted")
+          yield* Effect.promise(() => OperatorTelemetryViews.trash(view))
+          return true
+        }),
+      )
+      .handle("settings", () => settingsNow())
+      .handle("settingsUpdate", (ctx) =>
+        Effect.gen(function* () {
+          const input = ctx.payload
+          const { min: eventsMin, max: eventsMax } = OperatorTelemetryRetention.RANGES.eventsDays
+          const { min: totalsMin, max: totalsMax } = OperatorTelemetryRetention.RANGES.totalsDays
+          if (!Number.isInteger(input.eventsDays) || input.eventsDays < eventsMin || input.eventsDays > eventsMax)
+            return yield* badInput(`Keep detailed events for ${eventsMin} to ${eventsMax} days`)
+          if (!Number.isInteger(input.totalsDays) || input.totalsDays < totalsMin || input.totalsDays > totalsMax)
+            return yield* badInput(`Keep totals for ${totalsMin} to ${totalsMax} days`)
+          if (input.totalsDays < input.eventsDays) return yield* badInput("Totals are kept at least as long as events")
+          const whole = (value: number) => Number.isInteger(value) && value > 0
+          if (!Object.values(input.loops).every(whole)) return yield* badInput("Loop rules are whole numbers above 0")
+          if (!whole(input.stuckMinutes) || !whole(input.queueMinutes))
+            return yield* badInput("The Dashboard's thresholds are whole minutes above 0")
+          if (input.dailyBudget !== null && !(input.dailyBudget > 0)) return yield* badInput("A budget is more than $0")
+          const before = yield* settingsNow()
+          const value = {
+            enabled: input.enabled,
+            eventsDays: input.eventsDays,
+            totalsDays: input.totalsDays,
+            logLevel: input.logLevel,
+            loops: input.loops,
+            // null removes the key: no budget.
+            dailyBudget: input.dailyBudget,
+            dashboard: { stuckMinutes: input.stuckMinutes, queueMinutes: input.queueMinutes },
+          }
+          const patch = { operatorTelemetry: value, operatorRecordCalls: input.recordCalls }
+          const directory =
+            (yield* profiles.defaultProject(OperatorProfile.OPENCODE).pipe(Effect.orElseSucceed(() => undefined))) ??
+            Global.Path.config
+          yield* instances
+            .provide({ directory }, operatorConfig.update("global", patch))
+            .pipe(Effect.mapError((error) => badInput(error.message)))
+          // Telemetry applies them now; the cached global config is read again next time.
+          yield* config.invalidate()
+          telemetry.apply(
+            OperatorTelemetry.settingsOf({
+              operatorTelemetry: { ...value, dailyBudget: input.dailyBudget ?? undefined },
+            }),
+          )
+          // Call recording is read by each project's config: it applies when they reload.
+          const reload = before.recordCalls !== input.recordCalls ? yield* reloads.want("global") : undefined
+          return { settings: yield* settingsNow(), ...(reload ? { reload } : {}) }
+        }),
+      )
+      .handle("clear", () => telemetry.clear().pipe(Effect.map((entry) => ({ trash: entry.id }))))
+      .handle("exportCount", (ctx) =>
+        Effect.gen(function* () {
+          const { tab, sort: _sort, ...rest } = ctx.query
+          const rows = OperatorTelemetryExport.count(store(), {
+            tab,
+            filter: filterOf(rest) as OperatorTelemetryExport.Input["filter"],
+            context: yield* context(),
+          })
+          return { rows, limit: OperatorTelemetryExport.LIMIT }
+        }),
+      )
+      .handleRaw("export", (ctx) =>
+        Effect.gen(function* () {
+          const { tab, sort, format, cols, tz, ...rest } = ctx.query
+          const now = yield* context()
+          const filter = filterOf(rest) as OperatorTelemetryExport.Input["filter"]
+          const input = { tab, filter, context: now, ...(sort ? { sort } : {}) }
+          const rows = OperatorTelemetryExport.count(store(), input)
+          if (rows > OperatorTelemetryExport.LIMIT)
+            return yield* badInput(
+              `${rows} rows match; the limit is ${OperatorTelemetryExport.LIMIT}. Narrow the range or the filters.`,
+            )
+          const offset = Number(tz)
+          const minutes = Number.isFinite(offset) ? Math.max(-14 * 60, Math.min(14 * 60, Math.round(offset))) : 0
+          const lines = OperatorTelemetryExport.lines(store(), {
+            ...input,
+            format,
+            ...(cols ? { columns: cols.split(",") } : {}),
+            offset: minutes,
+          })
+          const range = OperatorTelemetryQuery.window(filter, now.now)
+          const name = OperatorTelemetryExport.filename(tab, format, range, minutes)
+          return HttpServerResponse.stream(Stream.fromIterable(lines).pipe(Stream.encodeText), {
+            contentType: format === "csv" ? "text/csv; charset=utf-8" : "application/x-ndjson; charset=utf-8",
+            headers: { "Content-Disposition": `attachment; filename="${name}"`, "Cache-Control": "no-store" },
+          })
+        }),
       )
       .handle("backfillStatus", () => Effect.sync(() => telemetry.progress()))
       .handle("backfill", () => telemetry.rebuild())

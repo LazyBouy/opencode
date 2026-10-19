@@ -7538,6 +7538,979 @@
         ]
       }
     },
+    "/operator/telemetry/view": {
+      "get": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.views",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Saved views",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorTelemetryView"
+                  },
+                  "description": "Saved views"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The built-in views (read-only), then everyone's saved views on this server.",
+        "summary": "List saved views",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.views({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.viewCreate",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorTelemetryInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorTelemetryInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "A tab, its filters and sort, the visible columns and the facet panel; never the time range or scope.",
+        "summary": "Save a view",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperatorTelemetryViewInput"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.viewCreate({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/telemetry/view/{id}": {
+      "put": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.viewUpdate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorTelemetryInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorTelemetryInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorTelemetryNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Save (its state) or Rename. Built-in views can't change.",
+        "summary": "Update a view",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperatorTelemetryViewPatch"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.viewUpdate({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.viewDelete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Moved to Trash",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Moved to Trash"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorTelemetryInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorTelemetryInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorTelemetryNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Moves a saved view to Trash, where it can be restored.",
+        "summary": "Delete a view",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.viewDelete({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/telemetry/settings": {
+      "get": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.settings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Observability settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetrySettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Recording, retention, the log level kept, loop rules, the daily budget, the Dashboard's thresholds and call recording.",
+        "summary": "Observability settings",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.settings({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.settingsUpdate",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetrySettingsSaved"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorTelemetryInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorTelemetryInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Writes `operatorTelemetry` and `operatorRecordCalls` in the global config. Telemetry applies them at once; call recording when projects reload.",
+        "summary": "Save Observability settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperatorTelemetrySettingsInput"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.settingsUpdate({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/telemetry/clear": {
+      "post": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.clear",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Cleared",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryCleared"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Moves the telemetry store to Trash as one entry and starts an empty one. Restoring it from Trash replaces the store then current, which goes to Trash.",
+        "summary": "Clear telemetry",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.clear({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/telemetry/export/count": {
+      "get": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.exportCount",
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "ns",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "session",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "agentType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "tool",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "mcp",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "errorType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "finish",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "decision",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "minCost",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "maxCost",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "minDuration",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "maxDuration",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "minTokens",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "loop",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "http",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "roots",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "sessionStatus",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "stuck",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "tab",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["sessions", "events", "logs"]
+            },
+            "required": true
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "service",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rows matching",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryExportCount"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "How many rows the current filter and range would export, and the limit (100,000).",
+        "summary": "Count an export",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.exportCount({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/telemetry/export": {
+      "get": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.export",
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "ns",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "session",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "agentType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "tool",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "mcp",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "errorType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "finish",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "decision",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "minCost",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "maxCost",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "minDuration",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "maxDuration",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "minTokens",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "loop",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "http",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "roots",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "sessionStatus",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "stuck",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "tab",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["sessions", "events", "logs"]
+            },
+            "required": true
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "service",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["csv", "jsonl"]
+            },
+            "required": true
+          },
+          {
+            "name": "cols",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "tz",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The file",
+            "content": {
+              "text/csv; charset=utf-8": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorTelemetryInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorTelemetryInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Streams Sessions, Events or Logs under the filter, sort and range: CSV (the visible columns) or JSON Lines (every stored field), up to 100,000 rows. Holds no content.",
+        "summary": "Export",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.export({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/operator/telemetry/backfill": {
       "get": {
         "tags": ["operator telemetry"],
@@ -36784,7 +37757,9 @@
           "memory",
           "plugin",
           "config",
-          "alert-rule"
+          "alert-rule",
+          "telemetry-view",
+          "telemetry"
         ]
       },
       "OperatorTrashEntry": {
@@ -39659,6 +40634,332 @@
           "ack_ms",
           "muted"
         ],
+        "additionalProperties": false
+      },
+      "OperatorTelemetryViewState": {
+        "type": "object",
+        "properties": {
+          "tab": {
+            "type": "string",
+            "description": "sessions, events, metrics, logs or alerts"
+          },
+          "params": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Filters (§7.2 names), sort and cols, as the page's URL has them; never the range or scope"
+          },
+          "facets": {
+            "type": "boolean"
+          },
+          "expand": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["tab", "params"],
+        "additionalProperties": false
+      },
+      "OperatorTelemetryView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/OperatorTelemetryViewState"
+          },
+          "builtin": {
+            "type": "string"
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "updatedAt": {
+            "type": "number"
+          }
+        },
+        "required": ["id", "name", "state", "createdAt", "updatedAt"],
+        "additionalProperties": false
+      },
+      "OperatorTelemetryViewInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/OperatorTelemetryViewState"
+          }
+        },
+        "required": ["name", "state"],
+        "additionalProperties": false
+      },
+      "OperatorTelemetryInvalidError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorTelemetryInvalidError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorTelemetryViewPatch": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/OperatorTelemetryViewState"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OperatorTelemetrySettings": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Record telemetry"
+          },
+          "eventsDays": {
+            "type": "number",
+            "description": "Keep detailed events for (days)"
+          },
+          "totalsDays": {
+            "type": "number",
+            "description": "Keep hourly totals for (days)"
+          },
+          "logLevel": {
+            "type": "string",
+            "enum": ["error", "warn", "info"],
+            "description": "Server log lines to keep"
+          },
+          "loops": {
+            "type": "object",
+            "properties": {
+              "sameCallSameResult": {
+                "type": "number",
+                "description": "More than 0"
+              },
+              "sameCall": {
+                "type": "number",
+                "description": "More than 0"
+              },
+              "toolCalls": {
+                "type": "number",
+                "description": "More than 0"
+              },
+              "modelCalls": {
+                "type": "number",
+                "description": "More than 0"
+              }
+            },
+            "required": ["sameCallSameResult", "sameCall", "toolCalls", "modelCalls"],
+            "additionalProperties": false
+          },
+          "dailyBudget": {
+            "type": "number"
+          },
+          "stuckMinutes": {
+            "type": "number",
+            "description": "More than 0"
+          },
+          "queueMinutes": {
+            "type": "number",
+            "description": "More than 0"
+          },
+          "recordCalls": {
+            "type": "boolean",
+            "description": "operatorRecordCalls: record model calls"
+          },
+          "limits": {
+            "type": "object",
+            "properties": {
+              "eventsDays": {
+                "type": "object",
+                "properties": {
+                  "min": {
+                    "type": "number"
+                  },
+                  "max": {
+                    "type": "number"
+                  }
+                },
+                "required": ["min", "max"],
+                "additionalProperties": false
+              },
+              "totalsDays": {
+                "type": "object",
+                "properties": {
+                  "min": {
+                    "type": "number"
+                  },
+                  "max": {
+                    "type": "number"
+                  }
+                },
+                "required": ["min", "max"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["eventsDays", "totalsDays"],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "enabled",
+          "eventsDays",
+          "totalsDays",
+          "logLevel",
+          "loops",
+          "dailyBudget",
+          "stuckMinutes",
+          "queueMinutes",
+          "recordCalls",
+          "limits"
+        ],
+        "additionalProperties": false
+      },
+      "OperatorTelemetrySettingsInput": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Record telemetry"
+          },
+          "eventsDays": {
+            "type": "number",
+            "description": "Keep detailed events for (days)"
+          },
+          "totalsDays": {
+            "type": "number",
+            "description": "Keep hourly totals for (days)"
+          },
+          "logLevel": {
+            "type": "string",
+            "enum": ["error", "warn", "info"],
+            "description": "Server log lines to keep"
+          },
+          "loops": {
+            "type": "object",
+            "properties": {
+              "sameCallSameResult": {
+                "type": "number",
+                "description": "More than 0"
+              },
+              "sameCall": {
+                "type": "number",
+                "description": "More than 0"
+              },
+              "toolCalls": {
+                "type": "number",
+                "description": "More than 0"
+              },
+              "modelCalls": {
+                "type": "number",
+                "description": "More than 0"
+              }
+            },
+            "required": ["sameCallSameResult", "sameCall", "toolCalls", "modelCalls"],
+            "additionalProperties": false
+          },
+          "dailyBudget": {
+            "type": "number"
+          },
+          "stuckMinutes": {
+            "type": "number",
+            "description": "More than 0"
+          },
+          "queueMinutes": {
+            "type": "number",
+            "description": "More than 0"
+          },
+          "recordCalls": {
+            "type": "boolean",
+            "description": "operatorRecordCalls: record model calls"
+          }
+        },
+        "required": [
+          "enabled",
+          "eventsDays",
+          "totalsDays",
+          "logLevel",
+          "loops",
+          "dailyBudget",
+          "stuckMinutes",
+          "queueMinutes",
+          "recordCalls"
+        ],
+        "additionalProperties": false
+      },
+      "OperatorTelemetrySettingsSaved": {
+        "type": "object",
+        "properties": {
+          "settings": {
+            "$ref": "#/components/schemas/OperatorTelemetrySettings"
+          },
+          "reload": {
+            "type": "string",
+            "enum": ["now", "when-idle"]
+          }
+        },
+        "required": ["settings"],
+        "additionalProperties": false
+      },
+      "OperatorTelemetryCleared": {
+        "type": "object",
+        "properties": {
+          "trash": {
+            "type": "string",
+            "description": "The Trash entry holding the store that was cleared"
+          }
+        },
+        "required": ["trash"],
+        "additionalProperties": false
+      },
+      "OperatorTelemetryExportCount": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          }
+        },
+        "required": ["rows", "limit"],
         "additionalProperties": false
       },
       "OperatorTelemetryBackfill": {

@@ -121,4 +121,9 @@ export const telemetry: {
   helper?: (run: unknown) => void
   /** Sessions moved to Trash (true) or restored from it (false) (trash.ts). */
   trash?: (sessionIDs: ReadonlyArray<string>, trashed: boolean) => void
+  /**
+   * Restoring a cleared store from Trash (trash.ts): the current store goes to Trash, then `restore` puts the files back
+   * and the store opens them.
+   */
+  replaceStore?: (restore: () => Promise<void>) => Promise<void>
 } = {}

@@ -2771,6 +2771,8 @@ export type OperatorTrashKind =
   | "plugin"
   | "config"
   | "alert-rule"
+  | "telemetry-view"
+  | "telemetry"
 
 export type OperatorTrashEntry = {
   id: string
@@ -3957,6 +3959,178 @@ export type OperatorTelemetryAlertEvent = {
    * Its rule is muted now
    */
   muted: boolean
+}
+
+export type OperatorTelemetryViewState = {
+  /**
+   * sessions, events, metrics, logs or alerts
+   */
+  tab: string
+  /**
+   * Filters (§7.2 names), sort and cols, as the page's URL has them; never the range or scope
+   */
+  params: {
+    [key: string]: string
+  }
+  facets?: boolean
+  expand?: Array<string>
+}
+
+export type OperatorTelemetryView = {
+  id: string
+  name: string
+  description?: string
+  state: OperatorTelemetryViewState
+  builtin?: string
+  createdBy?: string
+  createdAt: number
+  updatedAt: number
+}
+
+export type OperatorTelemetryViewInput = {
+  name: string
+  description?: string
+  state: OperatorTelemetryViewState
+}
+
+export type OperatorTelemetryInvalidError = {
+  name: "OperatorTelemetryInvalidError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorTelemetryViewPatch = {
+  name?: string
+  description?: string
+  state?: OperatorTelemetryViewState
+}
+
+export type OperatorTelemetrySettings = {
+  /**
+   * Record telemetry
+   */
+  enabled: boolean
+  /**
+   * Keep detailed events for (days)
+   */
+  eventsDays: number
+  /**
+   * Keep hourly totals for (days)
+   */
+  totalsDays: number
+  /**
+   * Server log lines to keep
+   */
+  logLevel: "error" | "warn" | "info"
+  loops: {
+    /**
+     * More than 0
+     */
+    sameCallSameResult: number
+    /**
+     * More than 0
+     */
+    sameCall: number
+    /**
+     * More than 0
+     */
+    toolCalls: number
+    /**
+     * More than 0
+     */
+    modelCalls: number
+  }
+  dailyBudget: number
+  /**
+   * More than 0
+   */
+  stuckMinutes: number
+  /**
+   * More than 0
+   */
+  queueMinutes: number
+  /**
+   * operatorRecordCalls: record model calls
+   */
+  recordCalls: boolean
+  limits: {
+    eventsDays: {
+      min: number
+      max: number
+    }
+    totalsDays: {
+      min: number
+      max: number
+    }
+  }
+}
+
+export type OperatorTelemetrySettingsInput = {
+  /**
+   * Record telemetry
+   */
+  enabled: boolean
+  /**
+   * Keep detailed events for (days)
+   */
+  eventsDays: number
+  /**
+   * Keep hourly totals for (days)
+   */
+  totalsDays: number
+  /**
+   * Server log lines to keep
+   */
+  logLevel: "error" | "warn" | "info"
+  loops: {
+    /**
+     * More than 0
+     */
+    sameCallSameResult: number
+    /**
+     * More than 0
+     */
+    sameCall: number
+    /**
+     * More than 0
+     */
+    toolCalls: number
+    /**
+     * More than 0
+     */
+    modelCalls: number
+  }
+  dailyBudget: number
+  /**
+   * More than 0
+   */
+  stuckMinutes: number
+  /**
+   * More than 0
+   */
+  queueMinutes: number
+  /**
+   * operatorRecordCalls: record model calls
+   */
+  recordCalls: boolean
+}
+
+export type OperatorTelemetrySettingsSaved = {
+  settings: OperatorTelemetrySettings
+  reload?: "now" | "when-idle"
+}
+
+export type OperatorTelemetryCleared = {
+  /**
+   * The Trash entry holding the store that was cleared
+   */
+  trash: string
+}
+
+export type OperatorTelemetryExportCount = {
+  rows: number
+  limit: number
 }
 
 export type OperatorTelemetryBackfill = {
@@ -14385,6 +14559,323 @@ export type OperatorTelemetryAlertAckResponses = {
 
 export type OperatorTelemetryAlertAckResponse =
   OperatorTelemetryAlertAckResponses[keyof OperatorTelemetryAlertAckResponses]
+
+export type OperatorTelemetryViewsData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/operator/telemetry/view"
+}
+
+export type OperatorTelemetryViewsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorTelemetryViewsError = OperatorTelemetryViewsErrors[keyof OperatorTelemetryViewsErrors]
+
+export type OperatorTelemetryViewsResponses = {
+  /**
+   * Saved views
+   */
+  200: Array<OperatorTelemetryView>
+}
+
+export type OperatorTelemetryViewsResponse = OperatorTelemetryViewsResponses[keyof OperatorTelemetryViewsResponses]
+
+export type OperatorTelemetryViewCreateData = {
+  body?: OperatorTelemetryViewInput
+  path?: never
+  query?: never
+  url: "/operator/telemetry/view"
+}
+
+export type OperatorTelemetryViewCreateErrors = {
+  /**
+   * OperatorTelemetryInvalidError | InvalidRequestError
+   */
+  400: OperatorTelemetryInvalidError | InvalidRequestError
+}
+
+export type OperatorTelemetryViewCreateError =
+  OperatorTelemetryViewCreateErrors[keyof OperatorTelemetryViewCreateErrors]
+
+export type OperatorTelemetryViewCreateResponses = {
+  /**
+   * Saved
+   */
+  200: OperatorTelemetryView
+}
+
+export type OperatorTelemetryViewCreateResponse =
+  OperatorTelemetryViewCreateResponses[keyof OperatorTelemetryViewCreateResponses]
+
+export type OperatorTelemetryViewDeleteData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/operator/telemetry/view/{id}"
+}
+
+export type OperatorTelemetryViewDeleteErrors = {
+  /**
+   * OperatorTelemetryInvalidError | InvalidRequestError
+   */
+  400: OperatorTelemetryInvalidError | InvalidRequestError
+  /**
+   * OperatorTelemetryNotFoundError
+   */
+  404: OperatorTelemetryNotFoundError
+}
+
+export type OperatorTelemetryViewDeleteError =
+  OperatorTelemetryViewDeleteErrors[keyof OperatorTelemetryViewDeleteErrors]
+
+export type OperatorTelemetryViewDeleteResponses = {
+  /**
+   * Moved to Trash
+   */
+  200: boolean
+}
+
+export type OperatorTelemetryViewDeleteResponse =
+  OperatorTelemetryViewDeleteResponses[keyof OperatorTelemetryViewDeleteResponses]
+
+export type OperatorTelemetryViewUpdateData = {
+  body?: OperatorTelemetryViewPatch
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/operator/telemetry/view/{id}"
+}
+
+export type OperatorTelemetryViewUpdateErrors = {
+  /**
+   * OperatorTelemetryInvalidError | InvalidRequestError
+   */
+  400: OperatorTelemetryInvalidError | InvalidRequestError
+  /**
+   * OperatorTelemetryNotFoundError
+   */
+  404: OperatorTelemetryNotFoundError
+}
+
+export type OperatorTelemetryViewUpdateError =
+  OperatorTelemetryViewUpdateErrors[keyof OperatorTelemetryViewUpdateErrors]
+
+export type OperatorTelemetryViewUpdateResponses = {
+  /**
+   * Saved
+   */
+  200: OperatorTelemetryView
+}
+
+export type OperatorTelemetryViewUpdateResponse =
+  OperatorTelemetryViewUpdateResponses[keyof OperatorTelemetryViewUpdateResponses]
+
+export type OperatorTelemetrySettingsData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/operator/telemetry/settings"
+}
+
+export type OperatorTelemetrySettingsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorTelemetrySettingsError = OperatorTelemetrySettingsErrors[keyof OperatorTelemetrySettingsErrors]
+
+export type OperatorTelemetrySettingsResponses = {
+  /**
+   * Observability settings
+   */
+  200: OperatorTelemetrySettings
+}
+
+export type OperatorTelemetrySettingsResponse =
+  OperatorTelemetrySettingsResponses[keyof OperatorTelemetrySettingsResponses]
+
+export type OperatorTelemetrySettingsUpdateData = {
+  body?: OperatorTelemetrySettingsInput
+  path?: never
+  query?: never
+  url: "/operator/telemetry/settings"
+}
+
+export type OperatorTelemetrySettingsUpdateErrors = {
+  /**
+   * OperatorTelemetryInvalidError | InvalidRequestError
+   */
+  400: OperatorTelemetryInvalidError | InvalidRequestError
+}
+
+export type OperatorTelemetrySettingsUpdateError =
+  OperatorTelemetrySettingsUpdateErrors[keyof OperatorTelemetrySettingsUpdateErrors]
+
+export type OperatorTelemetrySettingsUpdateResponses = {
+  /**
+   * Saved
+   */
+  200: OperatorTelemetrySettingsSaved
+}
+
+export type OperatorTelemetrySettingsUpdateResponse =
+  OperatorTelemetrySettingsUpdateResponses[keyof OperatorTelemetrySettingsUpdateResponses]
+
+export type OperatorTelemetryClearData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/operator/telemetry/clear"
+}
+
+export type OperatorTelemetryClearErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorTelemetryClearError = OperatorTelemetryClearErrors[keyof OperatorTelemetryClearErrors]
+
+export type OperatorTelemetryClearResponses = {
+  /**
+   * Cleared
+   */
+  200: OperatorTelemetryCleared
+}
+
+export type OperatorTelemetryClearResponse = OperatorTelemetryClearResponses[keyof OperatorTelemetryClearResponses]
+
+export type OperatorTelemetryExportCountData = {
+  body?: never
+  path?: never
+  query: {
+    range?: string
+    from?: string
+    to?: string
+    ns?: string
+    dir?: string
+    session?: string
+    agent?: string
+    agentType?: string
+    model?: string
+    provider?: string
+    tool?: string
+    mcp?: string
+    kind?: string
+    status?: string
+    errorType?: string
+    finish?: string
+    decision?: string
+    minCost?: string
+    maxCost?: string
+    minDuration?: string
+    maxDuration?: string
+    minTokens?: string
+    loop?: string
+    http?: string
+    q?: string
+    roots?: string
+    sessionStatus?: string
+    stuck?: string
+    tab: "sessions" | "events" | "logs"
+    sort?: string
+    level?: string
+    service?: string
+  }
+  url: "/operator/telemetry/export/count"
+}
+
+export type OperatorTelemetryExportCountErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorTelemetryExportCountError =
+  OperatorTelemetryExportCountErrors[keyof OperatorTelemetryExportCountErrors]
+
+export type OperatorTelemetryExportCountResponses = {
+  /**
+   * Rows matching
+   */
+  200: OperatorTelemetryExportCount
+}
+
+export type OperatorTelemetryExportCountResponse =
+  OperatorTelemetryExportCountResponses[keyof OperatorTelemetryExportCountResponses]
+
+export type OperatorTelemetryExportData = {
+  body?: never
+  path?: never
+  query: {
+    range?: string
+    from?: string
+    to?: string
+    ns?: string
+    dir?: string
+    session?: string
+    agent?: string
+    agentType?: string
+    model?: string
+    provider?: string
+    tool?: string
+    mcp?: string
+    kind?: string
+    status?: string
+    errorType?: string
+    finish?: string
+    decision?: string
+    minCost?: string
+    maxCost?: string
+    minDuration?: string
+    maxDuration?: string
+    minTokens?: string
+    loop?: string
+    http?: string
+    q?: string
+    roots?: string
+    sessionStatus?: string
+    stuck?: string
+    tab: "sessions" | "events" | "logs"
+    sort?: string
+    level?: string
+    service?: string
+    format: "csv" | "jsonl"
+    cols?: string
+    tz?: string
+  }
+  url: "/operator/telemetry/export"
+}
+
+export type OperatorTelemetryExportErrors = {
+  /**
+   * OperatorTelemetryInvalidError | InvalidRequestError
+   */
+  400: OperatorTelemetryInvalidError | InvalidRequestError
+}
+
+export type OperatorTelemetryExportError = OperatorTelemetryExportErrors[keyof OperatorTelemetryExportErrors]
+
+export type OperatorTelemetryExportResponses = {
+  /**
+   * The file
+   */
+  200: string
+}
+
+export type OperatorTelemetryExportResponse = OperatorTelemetryExportResponses[keyof OperatorTelemetryExportResponses]
 
 export type OperatorTelemetryBackfillStatusData = {
   body?: never

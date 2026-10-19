@@ -73,19 +73,28 @@ export function loopOf(input: {
 }
 
 /** A tool call's wait (its permission waits; it asks inside its run) and active time (§5.4). */
-export function tool(store: Store, id: string, now: number) {
-  const span = store.span(id)
+export function tool(store: Store, id: string, now: number, known?: Span) {
+  const span = known ?? store.span(id)
   if (!span || span.kind !== "tool_call") return
-  const wait = store
-    .children(id)
-    .filter((child) => child.kind === "permission_wait")
-    .reduce((sum, child) => sum + Math.max(0, (child.end_ms ?? now) - child.start_ms), 0)
+  // Its children by the parent index; only waits count.
+  const waits = (
+    store.db.query("SELECT kind, start_ms, end_ms FROM span WHERE parent_id = ?").all(id) as Array<{
+      kind: string
+      start_ms: number
+      end_ms: number | null
+    }>
+  ).filter((child) => child.kind === "permission_wait")
+  const wait = waits.reduce((sum, child) => sum + Math.max(0, (child.end_ms ?? now) - child.start_ms), 0)
   const duration = span.end_ms === null ? undefined : Math.max(0, span.end_ms - span.start_ms)
+  const active = duration === undefined ? undefined : Math.max(0, duration - wait)
+  // Unchanged (most finished calls): nothing to write.
+  if (span.wait_ms === wait && (duration === undefined || (span.duration_ms === duration && span.active_ms === active)))
+    return
   store.upsertSpan({
     id,
     kind: "tool_call",
     wait_ms: wait,
-    ...(duration !== undefined ? { duration_ms: duration, active_ms: Math.max(0, duration - wait) } : {}),
+    ...(duration !== undefined ? { duration_ms: duration, active_ms: active } : {}),
   })
 }
 

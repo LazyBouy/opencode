@@ -436,8 +436,14 @@ import type {
   OperatorTelemetryBackfillResponses,
   OperatorTelemetryBackfillStatusErrors,
   OperatorTelemetryBackfillStatusResponses,
+  OperatorTelemetryClearErrors,
+  OperatorTelemetryClearResponses,
   OperatorTelemetryEventsErrors,
   OperatorTelemetryEventsResponses,
+  OperatorTelemetryExportCountErrors,
+  OperatorTelemetryExportCountResponses,
+  OperatorTelemetryExportErrors,
+  OperatorTelemetryExportResponses,
   OperatorTelemetryFacetsErrors,
   OperatorTelemetryFacetsResponses,
   OperatorTelemetryKeepErrors,
@@ -450,6 +456,11 @@ import type {
   OperatorTelemetrySessionResponses,
   OperatorTelemetrySessionsErrors,
   OperatorTelemetrySessionsResponses,
+  OperatorTelemetrySettingsErrors,
+  OperatorTelemetrySettingsInput,
+  OperatorTelemetrySettingsResponses,
+  OperatorTelemetrySettingsUpdateErrors,
+  OperatorTelemetrySettingsUpdateResponses,
   OperatorTelemetrySpanErrors,
   OperatorTelemetrySpanResponses,
   OperatorTelemetryStorageErrors,
@@ -458,6 +469,16 @@ import type {
   OperatorTelemetryTurnResponses,
   OperatorTelemetryUnkeepErrors,
   OperatorTelemetryUnkeepResponses,
+  OperatorTelemetryViewCreateErrors,
+  OperatorTelemetryViewCreateResponses,
+  OperatorTelemetryViewDeleteErrors,
+  OperatorTelemetryViewDeleteResponses,
+  OperatorTelemetryViewInput,
+  OperatorTelemetryViewPatch,
+  OperatorTelemetryViewsErrors,
+  OperatorTelemetryViewsResponses,
+  OperatorTelemetryViewUpdateErrors,
+  OperatorTelemetryViewUpdateResponses,
   OperatorToolListErrors,
   OperatorToolListResponses,
   OperatorToolPatternExample,
@@ -5162,6 +5183,357 @@ export class Telemetry extends HeyApiClient {
       ThrowOnError
     >({
       url: "/operator/telemetry/alert/event/{id}/ack",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List saved views
+   *
+   * The built-in views (read-only), then everyone's saved views on this server.
+   */
+  public views<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<
+      OperatorTelemetryViewsResponses,
+      OperatorTelemetryViewsErrors,
+      ThrowOnError
+    >({ url: "/operator/telemetry/view", ...options })
+  }
+
+  /**
+   * Save a view
+   *
+   * A tab, its filters and sort, the visible columns and the facet panel; never the time range or scope.
+   */
+  public viewCreate<ThrowOnError extends boolean = false>(
+    parameters?: {
+      operatorTelemetryViewInput?: OperatorTelemetryViewInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ key: "operatorTelemetryViewInput", map: "body" }] }])
+    return (options?.client ?? this.client).post<
+      OperatorTelemetryViewCreateResponses,
+      OperatorTelemetryViewCreateErrors,
+      ThrowOnError
+    >({
+      url: "/operator/telemetry/view",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Delete a view
+   *
+   * Moves a saved view to Trash, where it can be restored.
+   */
+  public viewDelete<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
+    return (options?.client ?? this.client).delete<
+      OperatorTelemetryViewDeleteResponses,
+      OperatorTelemetryViewDeleteErrors,
+      ThrowOnError
+    >({
+      url: "/operator/telemetry/view/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update a view
+   *
+   * Save (its state) or Rename. Built-in views can't change.
+   */
+  public viewUpdate<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      operatorTelemetryViewPatch?: OperatorTelemetryViewPatch
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { key: "operatorTelemetryViewPatch", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorTelemetryViewUpdateResponses,
+      OperatorTelemetryViewUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/operator/telemetry/view/{id}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Observability settings
+   *
+   * Recording, retention, the log level kept, loop rules, the daily budget, the Dashboard's thresholds and call recording.
+   */
+  public settings<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<
+      OperatorTelemetrySettingsResponses,
+      OperatorTelemetrySettingsErrors,
+      ThrowOnError
+    >({ url: "/operator/telemetry/settings", ...options })
+  }
+
+  /**
+   * Save Observability settings
+   *
+   * Writes `operatorTelemetry` and `operatorRecordCalls` in the global config. Telemetry applies them at once; call recording when projects reload.
+   */
+  public settingsUpdate<ThrowOnError extends boolean = false>(
+    parameters?: {
+      operatorTelemetrySettingsInput?: OperatorTelemetrySettingsInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ key: "operatorTelemetrySettingsInput", map: "body" }] }])
+    return (options?.client ?? this.client).put<
+      OperatorTelemetrySettingsUpdateResponses,
+      OperatorTelemetrySettingsUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/operator/telemetry/settings",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Clear telemetry
+   *
+   * Moves the telemetry store to Trash as one entry and starts an empty one. Restoring it from Trash replaces the store then current, which goes to Trash.
+   */
+  public clear<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<
+      OperatorTelemetryClearResponses,
+      OperatorTelemetryClearErrors,
+      ThrowOnError
+    >({ url: "/operator/telemetry/clear", ...options })
+  }
+
+  /**
+   * Count an export
+   *
+   * How many rows the current filter and range would export, and the limit (100,000).
+   */
+  public exportCount<ThrowOnError extends boolean = false>(
+    parameters: {
+      range?: string
+      from?: string
+      to?: string
+      ns?: string
+      dir?: string
+      session?: string
+      agent?: string
+      agentType?: string
+      model?: string
+      provider?: string
+      tool?: string
+      mcp?: string
+      kind?: string
+      status?: string
+      errorType?: string
+      finish?: string
+      decision?: string
+      minCost?: string
+      maxCost?: string
+      minDuration?: string
+      maxDuration?: string
+      minTokens?: string
+      loop?: string
+      http?: string
+      q?: string
+      roots?: string
+      sessionStatus?: string
+      stuck?: string
+      tab: "sessions" | "events" | "logs"
+      sort?: string
+      level?: string
+      service?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "range" },
+            { in: "query", key: "from" },
+            { in: "query", key: "to" },
+            { in: "query", key: "ns" },
+            { in: "query", key: "dir" },
+            { in: "query", key: "session" },
+            { in: "query", key: "agent" },
+            { in: "query", key: "agentType" },
+            { in: "query", key: "model" },
+            { in: "query", key: "provider" },
+            { in: "query", key: "tool" },
+            { in: "query", key: "mcp" },
+            { in: "query", key: "kind" },
+            { in: "query", key: "status" },
+            { in: "query", key: "errorType" },
+            { in: "query", key: "finish" },
+            { in: "query", key: "decision" },
+            { in: "query", key: "minCost" },
+            { in: "query", key: "maxCost" },
+            { in: "query", key: "minDuration" },
+            { in: "query", key: "maxDuration" },
+            { in: "query", key: "minTokens" },
+            { in: "query", key: "loop" },
+            { in: "query", key: "http" },
+            { in: "query", key: "q" },
+            { in: "query", key: "roots" },
+            { in: "query", key: "sessionStatus" },
+            { in: "query", key: "stuck" },
+            { in: "query", key: "tab" },
+            { in: "query", key: "sort" },
+            { in: "query", key: "level" },
+            { in: "query", key: "service" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorTelemetryExportCountResponses,
+      OperatorTelemetryExportCountErrors,
+      ThrowOnError
+    >({
+      url: "/operator/telemetry/export/count",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Export
+   *
+   * Streams Sessions, Events or Logs under the filter, sort and range: CSV (the visible columns) or JSON Lines (every stored field), up to 100,000 rows. Holds no content.
+   */
+  public export<ThrowOnError extends boolean = false>(
+    parameters: {
+      range?: string
+      from?: string
+      to?: string
+      ns?: string
+      dir?: string
+      session?: string
+      agent?: string
+      agentType?: string
+      model?: string
+      provider?: string
+      tool?: string
+      mcp?: string
+      kind?: string
+      status?: string
+      errorType?: string
+      finish?: string
+      decision?: string
+      minCost?: string
+      maxCost?: string
+      minDuration?: string
+      maxDuration?: string
+      minTokens?: string
+      loop?: string
+      http?: string
+      q?: string
+      roots?: string
+      sessionStatus?: string
+      stuck?: string
+      tab: "sessions" | "events" | "logs"
+      sort?: string
+      level?: string
+      service?: string
+      format: "csv" | "jsonl"
+      cols?: string
+      tz?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "range" },
+            { in: "query", key: "from" },
+            { in: "query", key: "to" },
+            { in: "query", key: "ns" },
+            { in: "query", key: "dir" },
+            { in: "query", key: "session" },
+            { in: "query", key: "agent" },
+            { in: "query", key: "agentType" },
+            { in: "query", key: "model" },
+            { in: "query", key: "provider" },
+            { in: "query", key: "tool" },
+            { in: "query", key: "mcp" },
+            { in: "query", key: "kind" },
+            { in: "query", key: "status" },
+            { in: "query", key: "errorType" },
+            { in: "query", key: "finish" },
+            { in: "query", key: "decision" },
+            { in: "query", key: "minCost" },
+            { in: "query", key: "maxCost" },
+            { in: "query", key: "minDuration" },
+            { in: "query", key: "maxDuration" },
+            { in: "query", key: "minTokens" },
+            { in: "query", key: "loop" },
+            { in: "query", key: "http" },
+            { in: "query", key: "q" },
+            { in: "query", key: "roots" },
+            { in: "query", key: "sessionStatus" },
+            { in: "query", key: "stuck" },
+            { in: "query", key: "tab" },
+            { in: "query", key: "sort" },
+            { in: "query", key: "level" },
+            { in: "query", key: "service" },
+            { in: "query", key: "format" },
+            { in: "query", key: "cols" },
+            { in: "query", key: "tz" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorTelemetryExportResponses,
+      OperatorTelemetryExportErrors,
+      ThrowOnError
+    >({
+      url: "/operator/telemetry/export",
       ...options,
       ...params,
     })

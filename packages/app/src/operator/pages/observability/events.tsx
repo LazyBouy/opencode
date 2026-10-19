@@ -44,6 +44,9 @@ export function EventsTab(props: {
   onOpenSession: (sessionID: string) => void
   onUpdated: (time: number) => void
   empty: () => JSX.Element
+  /** The columns shown (for export and saved views), and a saved view's to show. */
+  onColumns?: (ids: ReadonlyArray<string>) => void
+  applyColumns?: ReadonlyArray<string>
 }) {
   const language = useLanguage()
   const t = language.t
@@ -327,6 +330,8 @@ export function EventsTab(props: {
           rows={rows()}
           columns={columns}
           columnsKey="observability-events"
+          {...(props.onColumns ? { onColumns: props.onColumns } : {})}
+          {...(props.applyColumns ? { applyColumns: props.applyColumns } : {})}
           loading={events.isPending}
           empty={props.empty()}
           server={{

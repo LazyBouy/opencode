@@ -163,6 +163,18 @@ const layer = Layer.effect(
     const restore = Effect.fn("OperatorTrash.restore")(function* (id: string) {
       const entry = yield* Effect.promise(() => get(id))
       if (!entry) return yield* fail(`Nothing in Trash with id ${id}`)
+      // A cleared telemetry store replaces the current one, which goes to Trash first (observability_spec.md §15).
+      if (entry.kind === "telemetry") {
+        const replace = OperatorRegistry.telemetry.replaceStore
+        if (!replace) return yield* fail("Telemetry isn't running, so its store can't be replaced now")
+        yield* Effect.promise(() =>
+          replace(async () => {
+            for (const file of entry.files) await move(path.join(root(), id, file.stored), file.path)
+          }),
+        )
+        yield* Effect.promise(() => fs.rm(path.join(root(), id), { recursive: true, force: true }))
+        return entry
+      }
       const taken = yield* Effect.promise(async () => {
         for (const file of entry.files) if (await exists(file.path)) return file.path
         return undefined

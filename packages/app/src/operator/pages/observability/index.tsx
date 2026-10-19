@@ -1,6 +1,7 @@
 import { Icon } from "@opencode-ai/ui/icon"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { CheckboxV2 } from "@opencode-ai/ui/v2/checkbox-v2"
 import { SegmentedControlItemV2, SegmentedControlV2 } from "@opencode-ai/ui/v2/segmented-control-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
@@ -25,8 +26,12 @@ import { OverlayFrame } from "../../ui/overlay-frame"
 import { useOverlayParams } from "../../ui/overlay-nav"
 import { ScopePicker } from "../../ui/scope-picker"
 import { TimeRange } from "../../ui/time-range"
-import { chips, filterOf, groupsOf, isTab, type Params, rangeOf, rangeQuery, reach, type Tab } from "./model"
+import { chips, FILTERS, filterOf, groupsOf, isTab, type Params, rangeOf, rangeQuery, reach, type Tab } from "./model"
+import { AddFilter } from "./add-filter"
 import { EventsTab } from "./events"
+import { ExportMenu } from "./export"
+import { SettingsOverlay, useTelemetrySettings } from "./settings"
+import { type View, ViewsMenu } from "./views"
 import { AlertsTab, needsAttention, RuleOverlay, useFiringAlerts } from "./alerts"
 import { LogsTab } from "./logs"
 import { MetricsTab } from "./metrics"
@@ -42,6 +47,8 @@ import "./observability.css"
 type Key = Parameters<ReturnType<typeof useLanguage>["t"]>[0]
 const BUILT: ReadonlyArray<Tab> = ["sessions", "events", "metrics", "logs", "alerts"]
 const REFRESH = 30_000
+// The URL's filters a saved view keeps: all but the scope (§8.5).
+const FILTER_KEYS: ReadonlyArray<string> = FILTERS.filter((key) => key !== "ns" && key !== "dir")
 
 export default function ObservabilityPage() {
   const language = useLanguage()
@@ -143,6 +150,43 @@ export default function ObservabilityPage() {
   )
   const firing = useFiringAlerts()
   const attention = () => needsAttention(ready(firing) ?? []).length
+  // Observability settings (§15), from the ⋯ menu.
+  useRecordOverlay(
+    () => params.settings === "1",
+    () => <SettingsOverlay />,
+    ["settings"],
+  )
+  const settings = useTelemetrySettings()
+  // What a saved view keeps (§8.5) and what export writes: the tables' visible columns, and the facets showing all.
+  const [columns, setColumns] = createStore<Record<string, ReadonlyArray<string>>>({})
+  const [applied, setApplied] = createSignal<{ tab: string; ids: ReadonlyArray<string> }>()
+  const [expanded, setExpanded] = createSignal<ReadonlyArray<string>>([])
+  const VIEW_KEYS = [...FILTER_KEYS, "inSession", "level", "service", "sort", "by", "compare"]
+  const viewState = () => ({
+    tab: tab(),
+    params: Object.fromEntries([
+      ...VIEW_KEYS.flatMap((key) => (params[key] ? [[key, params[key]!]] : [])),
+      ...(columns[tab()]?.length ? [["cols", columns[tab()]!.join(",")]] : []),
+    ]) as Record<string, string>,
+    facets: prefs.facets,
+    ...(expanded().length ? { expand: [...expanded()] } : {}),
+  })
+  const applyView = (view: View) => {
+    const { cols, ...rest } = view.state.params
+    setParams({
+      ...Object.fromEntries([...VIEW_KEYS, "kind", "live"].map((key) => [key, undefined])),
+      ...rest,
+      tab: view.state.tab === "sessions" ? undefined : view.state.tab,
+      view: view.id,
+    })
+    if (view.state.facets !== undefined) setPrefs("facets", view.state.facets)
+    setExpanded(view.state.expand ?? [])
+    if (cols) setApplied({ tab: view.state.tab, ids: cols.split(",") })
+  }
+  const appliedFor = (name: string) => {
+    const found = applied()
+    return found?.tab === name ? found.ids : undefined
+  }
   // Live (§8.6): Events and Logs, with a relative range ending now.
   const live = () => params.live === "1" && relative()
   // The Logs tab's own filters: the lowest level, service, text and session.
@@ -254,6 +298,15 @@ export default function ObservabilityPage() {
 
   // What an empty tab says, and what to do next (§8.7).
   const emptyState = (): { description: string; action?: JSX.Element } => {
+    if (ready(settings)?.enabled === false)
+      return {
+        description: t("operator.obs.empty.off"),
+        action: (
+          <ButtonV2 size="small" variant="outline" onClick={() => setParams({ settings: "1" })}>
+            {t("operator.obs.empty.turnOn")}
+          </ButtonV2>
+        ),
+      }
     const progress = ready(backfill)
     if (progress?.state === "running")
       return {
@@ -297,6 +350,26 @@ export default function ObservabilityPage() {
         description={t("operator.page.observability.description")}
         actions={
           <span class="inline-flex items-center gap-2" data-testid="obs-updated">
+            <Show when={tab() === "sessions" || tab() === "events" || tab() === "logs"}>
+              <ExportMenu
+                tab={tab() as "sessions" | "events" | "logs"}
+                query={tab() === "logs" ? logsQuery() : query()}
+                {...(params.sort && tab() !== "logs" ? { sort: params.sort } : {})}
+                {...(columns[tab()] ? { columns: columns[tab()]! } : {})}
+              />
+            </Show>
+            <MenuV2>
+              <MenuV2.Trigger as={ButtonV2} size="small" variant="ghost" aria-label={t("operator.obs.more")}>
+                <Icon name="menu" size="small" />
+              </MenuV2.Trigger>
+              <MenuV2.Portal>
+                <MenuV2.Content>
+                  <MenuV2.Item onSelect={() => setParams({ settings: "1" })} data-testid="obs-open-settings">
+                    {t("operator.obs.settings.title")}
+                  </MenuV2.Item>
+                </MenuV2.Content>
+              </MenuV2.Portal>
+            </MenuV2>
             <ButtonV2
               size="small"
               variant="ghost"
@@ -376,6 +449,12 @@ export default function ObservabilityPage() {
         </For>
       </SegmentedControlV2>
       <div data-slot="operator-obs-filterbar">
+        <ViewsMenu
+          current={params.view}
+          state={viewState}
+          onApply={applyView}
+          onSaved={(view) => setParams({ view: view?.id })}
+        />
         <For each={active()}>
           {(chip) => (
             <Tag data-testid="obs-chip">
@@ -393,6 +472,9 @@ export default function ObservabilityPage() {
             </Tag>
           )}
         </For>
+        <Show when={tab() === "sessions" || tab() === "events" || tab() === "metrics"}>
+          <AddFilter tab={tab()} current={params as Params} onAdd={(key, value) => setFilter(key, value)} />
+        </Show>
         <TextInputV2
           appearance="base"
           type="search"
@@ -458,6 +540,8 @@ export default function ObservabilityPage() {
           onToggle={() => setPrefs("facets", !prefs.facets)}
           onPick={(key, value) => setFilter(key, value)}
           current={params as Params}
+          expanded={expanded()}
+          onExpand={(field) => setExpanded([...new Set([...expanded(), field])])}
         />
         <div data-slot="operator-obs-content">
           <Show when={tab() === "sessions"}>
@@ -469,6 +553,8 @@ export default function ObservabilityPage() {
               onOpen={open}
               onUpdated={(time) => setUpdated(time)}
               onRows={setListed}
+              onColumns={(ids) => setColumns("sessions", ids)}
+              {...(appliedFor("sessions") ? { applyColumns: appliedFor("sessions")! } : {})}
               empty={() => {
                 const state = emptyState()
                 return (
@@ -492,6 +578,8 @@ export default function ObservabilityPage() {
               live={live()}
               onOpen={(span) => setParams({ ev: span.id })}
               onOpenSession={openSession}
+              onColumns={(ids) => setColumns("events", ids)}
+              {...(appliedFor("events") ? { applyColumns: appliedFor("events")! } : {})}
               onUpdated={(time) => setUpdated(time)}
               empty={() => {
                 const state = emptyState()
@@ -571,6 +659,9 @@ function Facets(props: {
   onToggle: () => void
   onPick: (key: string, value: string | undefined) => void
   current: Params
+  /** Facets showing all their values. */
+  expanded: ReadonlyArray<string>
+  onExpand: (field: string) => void
 }) {
   const language = useLanguage()
   const t = language.t
@@ -589,6 +680,8 @@ function Facets(props: {
               query={props.query}
               current={props.current}
               onPick={props.onPick}
+              expanded={props.expanded.includes(field)}
+              onExpand={() => props.onExpand(field)}
             />
           )}
         </For>
@@ -603,11 +696,14 @@ function Facet(props: {
   query: Record<string, string>
   current: Params
   onPick: (key: string, value: string | undefined) => void
+  expanded: boolean
+  onExpand: () => void
 }) {
   const language = useLanguage()
   const t = language.t
   const api = useOperatorClient()
-  const [more, setMore] = createSignal(false)
+  const [shown, setMore] = createSignal(false)
+  const more = () => shown() || props.expanded
   const values = useQuery(() => ({
     queryKey: api.key("telemetry-facet", props.scope, props.field, props.query),
     queryFn: () =>
@@ -665,7 +761,14 @@ function Facet(props: {
           </For>
         </ul>
         <Show when={list().length > 10 && !more()}>
-          <ButtonV2 size="small" variant="ghost" onClick={() => setMore(true)}>
+          <ButtonV2
+            size="small"
+            variant="ghost"
+            onClick={() => {
+              setMore(true)
+              props.onExpand()
+            }}
+          >
             {t("operator.obs.showMore")}
           </ButtonV2>
         </Show>

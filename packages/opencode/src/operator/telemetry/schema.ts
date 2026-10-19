@@ -320,6 +320,80 @@ export const AlertEvent = Schema.Struct({
   muted: Schema.Boolean.annotate({ description: "Its rule is muted now" }),
 }).annotate({ identifier: "OperatorTelemetryAlertEvent" })
 
+export const ViewState = Schema.Struct({
+  tab: Schema.String.annotate({ description: "sessions, events, metrics, logs or alerts" }),
+  params: Schema.Record(Schema.String, Schema.String).annotate({
+    description: "Filters (§7.2 names), sort and cols, as the page's URL has them; never the range or scope",
+  }),
+  facets: Schema.optional(Schema.Boolean).annotate({ description: "The facet panel open" }),
+  expand: Schema.optional(Schema.Array(Schema.String)).annotate({ description: "Facets showing all their values" }),
+}).annotate({ identifier: "OperatorTelemetryViewState" })
+
+export const View = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  description: Schema.optional(Schema.String),
+  state: ViewState,
+  builtin: Schema.optional(Schema.String).annotate({ description: "A built-in view (read-only): its key" }),
+  createdBy: Schema.optional(Schema.String),
+  createdAt: Schema.Finite,
+  updatedAt: Schema.Finite,
+}).annotate({ identifier: "OperatorTelemetryView" })
+
+export const ViewInput = Schema.Struct({
+  name: Schema.String,
+  description: Schema.optional(Schema.String),
+  state: ViewState,
+}).annotate({ identifier: "OperatorTelemetryViewInput" })
+
+export const ViewPatch = Schema.Struct({
+  name: Schema.optional(Schema.String),
+  description: Schema.optional(Schema.String),
+  state: Schema.optional(ViewState),
+}).annotate({ identifier: "OperatorTelemetryViewPatch" })
+
+const positive = Schema.Finite.annotate({ description: "More than 0" })
+export const SettingsInput = Schema.Struct({
+  enabled: Schema.Boolean.annotate({ description: "Record telemetry" }),
+  eventsDays: Schema.Finite.annotate({ description: "Keep detailed events for (days)" }),
+  totalsDays: Schema.Finite.annotate({ description: "Keep hourly totals for (days)" }),
+  logLevel: Schema.Literals(["error", "warn", "info"]).annotate({ description: "Server log lines to keep" }),
+  loops: Schema.Struct({
+    sameCallSameResult: positive,
+    sameCall: positive,
+    toolCalls: positive,
+    modelCalls: positive,
+  }),
+  dailyBudget: Schema.NullOr(Schema.Finite).annotate({ description: "$ a day; null: none" }),
+  stuckMinutes: positive,
+  queueMinutes: positive,
+  recordCalls: Schema.Boolean.annotate({ description: "operatorRecordCalls: record model calls" }),
+}).annotate({ identifier: "OperatorTelemetrySettingsInput" })
+
+export const Settings = Schema.Struct({
+  ...SettingsInput.fields,
+  limits: Schema.Struct({
+    eventsDays: Schema.Struct({ min: Schema.Finite, max: Schema.Finite }),
+    totalsDays: Schema.Struct({ min: Schema.Finite, max: Schema.Finite }),
+  }),
+}).annotate({ identifier: "OperatorTelemetrySettings" })
+
+export const SettingsSaved = Schema.Struct({
+  settings: Settings,
+  reload: Schema.optional(Schema.Literals(["now", "when-idle"])).annotate({
+    description: "Call recording applies when projects reload: now, or once no session is running",
+  }),
+}).annotate({ identifier: "OperatorTelemetrySettingsSaved" })
+
+export const Cleared = Schema.Struct({
+  trash: Schema.String.annotate({ description: "The Trash entry holding the store that was cleared" }),
+}).annotate({ identifier: "OperatorTelemetryCleared" })
+
+export const ExportCount = Schema.Struct({
+  rows: Schema.Finite,
+  limit: Schema.Finite,
+}).annotate({ identifier: "OperatorTelemetryExportCount" })
+
 /** The shared filter (§7.2), as query parameters: lists comma-separated, numbers as text. */
 export const FilterQuery = {
   range: Schema.optional(Schema.String).annotate({

@@ -19,6 +19,7 @@ import { OperatorPermissionDecisions } from "../permission-decisions"
 import { OperatorProjects } from "../projects"
 import { OperatorQueueStore } from "../queue-store"
 import { OperatorRegistry } from "../registry"
+import { OperatorTrashFiles } from "../trash-files"
 import { OperatorTelemetryBackfill } from "./backfill"
 import { OperatorTelemetryBatch } from "./batch"
 import { OperatorTelemetryCalls } from "./calls"
@@ -124,6 +125,12 @@ export interface Interface {
   readonly record: (span: OperatorTelemetryStore.SpanWrite) => void
   /** Folders with activity in the last 15 minutes: the ones whose MCP servers are sampled (§5.9). */
   readonly activeFolders: () => ReadonlySet<string>
+  /** New settings, at once (Observability settings, §15), without waiting for the next sample. */
+  readonly apply: (next: Settings) => void
+  /** Clear telemetry (§15): the store's files go to Trash as one entry, and an empty store opens. */
+  readonly clear: () => Effect.Effect<OperatorTrashFiles.Entry>
+  /** While the store is swapped (Clear, a restore), nothing reads or writes it. */
+  readonly paused: () => boolean
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorTelemetry") {}
@@ -145,6 +152,9 @@ const layer = Layer.effect(
     const store = OperatorTelemetryStore.store()
     const started = Date.now() - Math.round(process.uptime() * 1000)
     let settings = DEFAULT_SETTINGS
+    // The salt for argument and result hashes (§4.7), kept across Clear telemetry so they stay comparable.
+    const secret = store.meta("secret") ?? ""
+    let paused = false
     let batch = new OperatorTelemetryBatch.Batch()
     // While a flush reads recorded calls, what they replace goes into the batch being written.
     let writing: OperatorTelemetryBatch.Batch | undefined
@@ -155,7 +165,7 @@ const layer = Layer.effect(
     const statuses = new Map<string, string>()
 
     const ingest = new OperatorTelemetryIngest.Ingest(() => writing ?? batch, {
-      secret: store.meta("secret") ?? "",
+      secret,
       mcpServerOf: (directory, tool) => {
         if (!directory) return undefined
         return servers.get(directory)?.find((server) => tool.startsWith(McpCatalog.toolName(server, "")))
@@ -282,6 +292,7 @@ const layer = Layer.effect(
     let lastEmit = 0
     let emitted = store.lastSeq()
     const write = Effect.fnUntraced(function* () {
+      if (paused) return
       const taken = batch
       batch = new OperatorTelemetryBatch.Batch()
       lastFlush = Date.now()
@@ -612,10 +623,43 @@ const layer = Layer.effect(
       }
     }
     const onEvent = (event: GlobalEvent) => guarded(() => ingest.handle(event))
+    // ---- Clear telemetry (§15), and a cleared store restored from Trash ----
+
+    const storeFiles = () => [store.file, `${store.file}-wal`, `${store.file}-shm`]
+    const swap = (move: () => Promise<void>, keepSecret: boolean) =>
+      Effect.promise(async () => {
+        paused = true
+        try {
+          await store.reopen(move)
+          if (keepSecret && secret) store.setMeta("secret", secret)
+          dropped = 0
+          emitted = -1
+        } finally {
+          paused = false
+        }
+      })
+    const clear = () =>
+      Effect.gen(function* () {
+        let entry: OperatorTrashFiles.Entry | undefined
+        yield* swap(async () => {
+          entry = await OperatorTrashFiles.put({ kind: "telemetry", name: "telemetry.sqlite", paths: storeFiles() })
+        }, true)
+        return entry!
+      })
+    const replaceStore = (restore: () => Promise<void>) =>
+      Effect.runPromise(
+        swap(async () => {
+          // The current store goes to Trash too, so restoring never loses it.
+          await OperatorTrashFiles.put({ kind: "telemetry", name: "telemetry.sqlite", paths: storeFiles() })
+          await restore()
+        }, false),
+      )
+
     const hooks: typeof OperatorRegistry.telemetry = {
       decision: (record) => guarded(() => ingest.decision(record as OperatorTelemetryIngest.Decision)),
       helper: (run) => guarded(() => ingest.helper(run as OperatorTelemetryIngest.HelperRun)),
       trash: (ids, trashed) => guarded(() => ingest.trash(ids, trashed)),
+      replaceStore,
     }
     yield* Effect.acquireRelease(
       Effect.sync(() => {
@@ -641,19 +685,25 @@ const layer = Layer.effect(
       const tick = Effect.suspend(() =>
         batch.size() >= FLUSH_ROWS || (Date.now() - lastFlush >= FLUSH_MS && !batch.empty()) ? flush() : Effect.void,
       )
+      // Nothing touches the store while it is swapped.
+      const open = <A>(effect: () => Effect.Effect<A>) => Effect.suspend(() => (paused ? Effect.void : effect()))
       yield* tick.pipe(Effect.repeat(Schedule.spaced("250 millis")), Effect.forkIn(scope))
-      yield* tail().pipe(Effect.repeat(Schedule.spaced("2 seconds")), Effect.forkIn(scope))
-      yield* sample().pipe(
+      yield* open(tail).pipe(Effect.repeat(Schedule.spaced("2 seconds")), Effect.forkIn(scope))
+      yield* open(sample).pipe(
         Effect.repeat(Schedule.spaced("60 seconds")),
         Effect.delay("10 seconds"),
         Effect.forkIn(scope),
       )
-      yield* totals().pipe(
+      yield* open(totals).pipe(
         Effect.repeat(Schedule.spaced("60 seconds")),
         Effect.delay("15 seconds"),
         Effect.forkIn(scope),
       )
-      yield* purge().pipe(Effect.repeat(Schedule.spaced("6 hours")), Effect.delay("30 seconds"), Effect.forkIn(scope))
+      yield* open(purge).pipe(
+        Effect.repeat(Schedule.spaced("6 hours")),
+        Effect.delay("30 seconds"),
+        Effect.forkIn(scope),
+      )
       // The store's first start builds history (§5.11).
       if (firstStart) yield* backfill({ log: true }).pipe(Effect.delay("5 seconds"), Effect.forkIn(scope))
       // What is left at shutdown is written.
@@ -680,6 +730,11 @@ const layer = Layer.effect(
       purge,
       totals,
       record: (span) => batch.span(span),
+      apply: (next) => {
+        settings = next
+      },
+      clear,
+      paused: () => paused,
       activeFolders: () => {
         const now = Date.now()
         return new Set([...ingest.folders].filter(([, time]) => now - time <= MCP_ACTIVE_MS).map(([folder]) => folder))

@@ -1041,6 +1041,8 @@ export async function mockOperator(page: Page) {
       if (method === "DELETE" || url.pathname.endsWith("/restore")) {
         const entry = state.trash.find((item) => item.id === id)
         state.trash.splice(state.trash.indexOf(entry!), 1)
+        // A telemetry record (an alert rule, a saved view) comes back where it was.
+        if (method !== "DELETE" && entry) telemetry.restore(entry)
         return json(route, method === "DELETE" ? true : entry)
       }
       const input = body as { key?: string; sessionID?: string; kind?: string; name?: string }
