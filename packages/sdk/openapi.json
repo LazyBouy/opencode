@@ -7030,6 +7030,514 @@
         ]
       }
     },
+    "/operator/telemetry/alert/rule": {
+      "get": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.alertRules",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Alert rules with their state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorTelemetryAlertRuleView"
+                  },
+                  "description": "Alert rules with their state"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The built-in rules, then the user's, each with its state (OK, not enough data, firing, muted, couldn't evaluate, off).",
+        "summary": "List alert rules",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.alertRules({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.alertRuleCreate",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryAlertRuleView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorTelemetryAlertError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorTelemetryAlertError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "A new rule; it is evaluated every 60 s.",
+        "summary": "Create an alert rule",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperatorTelemetryAlertRuleInput"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.alertRuleCreate({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/telemetry/alert/rule/{id}": {
+      "put": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.alertRuleUpdate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryAlertRuleView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorTelemetryAlertError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorTelemetryAlertError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorTelemetryNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Saves a rule (a built-in rule keeps its id; Reset brings its defaults back). Turning a firing rule off resolves it.",
+        "summary": "Update an alert rule",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperatorTelemetryAlertRuleInput"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.alertRuleUpdate({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.alertRuleDelete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Moved to Trash",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Moved to Trash"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorTelemetryAlertError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorTelemetryAlertError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorTelemetryNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Moves a user rule to Trash (restore brings it back). Built-in rules can't be deleted.",
+        "summary": "Delete an alert rule",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.alertRuleDelete({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/telemetry/alert/rule/{id}/mute": {
+      "post": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.alertRuleMute",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Muted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryAlertRuleView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorTelemetryAlertError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorTelemetryAlertError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorTelemetryNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "A muted rule doesn't start firing and its alerts leave the badges until the time passes or it is unmuted.",
+        "summary": "Mute an alert rule",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "for": {
+                    "type": "string",
+                    "enum": ["1h", "4h", "24h", "always", "off"],
+                    "description": "1h, 4h, 24h, always (until turned back on), or off (unmute)"
+                  }
+                },
+                "required": ["for"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.alertRuleMute({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/telemetry/alert/rule/{id}/reset": {
+      "post": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.alertRuleReset",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reset",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryAlertRuleView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorTelemetryAlertError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorTelemetryAlertError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorTelemetryNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Brings a built-in rule's defaults back.",
+        "summary": "Reset a built-in rule",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.alertRuleReset({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/telemetry/alert/event": {
+      "get": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.alertEvents",
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "firing",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Alert events, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorTelemetryAlertEvent"
+                  },
+                  "description": "Alert events, newest first"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "One event per firing period, in the range (or firing now), newest first, with who acknowledged it.",
+        "summary": "List alerts",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.alertEvents({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/telemetry/alert/event/{id}/ack": {
+      "post": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.alertAck",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Acknowledged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryAlertEvent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorTelemetryNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorTelemetryNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Records who and when, and takes the alert off the badges. It keeps firing until it resolves.",
+        "summary": "Acknowledge an alert",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.alertAck({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/operator/telemetry/backfill": {
       "get": {
         "tags": ["operator telemetry"],
@@ -36275,7 +36783,8 @@
           "mcp",
           "memory",
           "plugin",
-          "config"
+          "config",
+          "alert-rule"
         ]
       },
       "OperatorTrashEntry": {
@@ -38809,6 +39318,347 @@
           }
         },
         "required": ["step", "from", "to", "source", "approx", "unit", "series", "other"],
+        "additionalProperties": false
+      },
+      "OperatorTelemetryAlertScope": {
+        "type": "object",
+        "properties": {
+          "ns": {
+            "type": "string"
+          },
+          "dir": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "tool": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OperatorTelemetryAlertRule": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "metric": {
+            "type": "string",
+            "enum": [
+              "turn_error_rate",
+              "call_error_rate",
+              "tool_error_rate",
+              "denials",
+              "rate_limits",
+              "retries_exhausted",
+              "oldest_approval",
+              "turn_active_p95",
+              "ttft_p95",
+              "cost",
+              "loops",
+              "mcp_down",
+              "oldest_queued"
+            ]
+          },
+          "op": {
+            "type": "string",
+            "enum": [">", ">=", "<", "<="]
+          },
+          "threshold": {
+            "type": "number",
+            "description": "In the metric's unit: %, count, minutes, seconds or $"
+          },
+          "window": {
+            "type": "string",
+            "enum": ["5", "15", "30", "60", "today"],
+            "description": "Minutes, or today (local midnight to now)"
+          },
+          "minCount": {
+            "type": "number"
+          },
+          "consecutive": {
+            "type": "number",
+            "description": "Evaluations in a row the condition must hold: 1 to 10"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/OperatorTelemetryAlertScope"
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["warning", "critical"]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "builtin": {
+            "type": "string"
+          },
+          "mute": {
+            "type": "object",
+            "properties": {
+              "until": {
+                "type": "number"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Muted until a time, or (no until) until turned back on"
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "updatedAt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "metric",
+          "op",
+          "threshold",
+          "window",
+          "consecutive",
+          "scope",
+          "severity",
+          "enabled",
+          "id",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "OperatorTelemetryAlertState": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": ["ok", "insufficient", "firing", "muted", "error", "disabled"]
+          },
+          "streak": {
+            "type": "number"
+          },
+          "clear": {
+            "type": "number"
+          },
+          "value": {
+            "type": "number"
+          },
+          "count": {
+            "type": "number"
+          },
+          "evaluated_ms": {
+            "type": "number"
+          },
+          "error": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": "string"
+          },
+          "last_fired_ms": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "state",
+          "streak",
+          "clear",
+          "value",
+          "count",
+          "evaluated_ms",
+          "error",
+          "event_id",
+          "last_fired_ms"
+        ],
+        "additionalProperties": false
+      },
+      "OperatorTelemetryAlertRuleView": {
+        "type": "object",
+        "properties": {
+          "rule": {
+            "$ref": "#/components/schemas/OperatorTelemetryAlertRule"
+          },
+          "state": {
+            "$ref": "#/components/schemas/OperatorTelemetryAlertState"
+          },
+          "muted": {
+            "type": "boolean"
+          }
+        },
+        "required": ["rule", "state", "muted"],
+        "additionalProperties": false
+      },
+      "OperatorTelemetryAlertRuleInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "metric": {
+            "type": "string",
+            "enum": [
+              "turn_error_rate",
+              "call_error_rate",
+              "tool_error_rate",
+              "denials",
+              "rate_limits",
+              "retries_exhausted",
+              "oldest_approval",
+              "turn_active_p95",
+              "ttft_p95",
+              "cost",
+              "loops",
+              "mcp_down",
+              "oldest_queued"
+            ]
+          },
+          "op": {
+            "type": "string",
+            "enum": [">", ">=", "<", "<="]
+          },
+          "threshold": {
+            "type": "number",
+            "description": "In the metric's unit: %, count, minutes, seconds or $"
+          },
+          "window": {
+            "type": "string",
+            "enum": ["5", "15", "30", "60", "today"],
+            "description": "Minutes, or today (local midnight to now)"
+          },
+          "minCount": {
+            "type": "number"
+          },
+          "consecutive": {
+            "type": "number",
+            "description": "Evaluations in a row the condition must hold: 1 to 10"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/OperatorTelemetryAlertScope"
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["warning", "critical"]
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": ["name", "metric", "op", "threshold", "window", "consecutive", "scope", "severity", "enabled"],
+        "additionalProperties": false
+      },
+      "OperatorTelemetryAlertError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorTelemetryAlertError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorTelemetryAlertEvent": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "rule_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string"
+          },
+          "metric": {
+            "type": "string"
+          },
+          "op": {
+            "type": "string"
+          },
+          "threshold": {
+            "type": "number"
+          },
+          "win": {
+            "type": "string"
+          },
+          "start_ms": {
+            "type": "number"
+          },
+          "end_ms": {
+            "type": "number"
+          },
+          "value": {
+            "type": "number"
+          },
+          "worst": {
+            "type": "number"
+          },
+          "scope": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "link": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "The Events filter for View events"
+          },
+          "ack_by": {
+            "type": "string"
+          },
+          "ack_ms": {
+            "type": "number"
+          },
+          "muted": {
+            "type": "boolean",
+            "description": "Its rule is muted now"
+          }
+        },
+        "required": [
+          "id",
+          "rule_id",
+          "name",
+          "severity",
+          "metric",
+          "op",
+          "threshold",
+          "win",
+          "start_ms",
+          "end_ms",
+          "value",
+          "worst",
+          "scope",
+          "link",
+          "ack_by",
+          "ack_ms",
+          "muted"
+        ],
         "additionalProperties": false
       },
       "OperatorTelemetryBackfill": {

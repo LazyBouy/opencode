@@ -90,6 +90,37 @@
   padding: 6px;
 }
 
+/* A count on an item (firing alerts on Observability): at the end of the row, or on the icon's corner in the rail. */
+[data-component="operator-sidebar"] [data-slot="operator-sidebar-item"] {
+  position: relative;
+}
+
+[data-component="operator-sidebar"] [data-slot="operator-sidebar-badge"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: auto;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--v2-state-fg-danger);
+  color: var(--v2-background-bg-base);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-component="operator-sidebar"][data-collapsed] [data-slot="operator-sidebar-badge"] {
+  position: absolute;
+  top: 0;
+  right: 2px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  font-size: 10px;
+}
+
 [data-component="operator-sidebar"]
   :is([data-slot="operator-sidebar-item"], [data-slot="operator-sidebar-toggle"]):hover {
   background: var(--v2-background-bg-layer-02);

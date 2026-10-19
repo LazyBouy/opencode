@@ -159,20 +159,26 @@ export function LogsTab(props: {
                   <>
                     <tr
                       data-clickable=""
-                      tabIndex={0}
                       data-testid="obs-log-row"
-                      aria-expanded={open().has(entry.id)}
                       onClick={() => {
                         if (window.getSelection()?.toString()) return
                         toggle(entry.id)
                       }}
-                      onKeyDown={(event) => {
-                        if (event.key !== "Enter") return
-                        event.preventDefault()
-                        toggle(entry.id)
-                      }}
                     >
                       <td title={new Date(entry.time_ms).toISOString()}>
+                        {/* A row's details open from this button (a table row can't say it is expanded). */}
+                        <button
+                          type="button"
+                          data-slot="operator-obs-disclose"
+                          aria-expanded={open().has(entry.id)}
+                          aria-label={t("operator.obs.logDetails")}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            toggle(entry.id)
+                          }}
+                        >
+                          <Icon name={open().has(entry.id) ? "chevron-down" : "chevron-right"} size="small" />
+                        </button>
                         {formatDateTime(entry.time_ms, language.intl())}
                       </td>
                       <td>

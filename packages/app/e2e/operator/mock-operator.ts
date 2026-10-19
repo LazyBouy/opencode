@@ -707,7 +707,8 @@ export async function mockOperator(page: Page) {
     (name) => (agents.find((agent) => agent.name === name) as { prompt?: string } | undefined)?.prompt,
     (folder) => folder === directory || folder.startsWith(`${directory}/`) || folder.startsWith(workspace),
   )
-  const telemetry = createTelemetryMock(now)
+  // A deleted alert rule goes to the console's Trash.
+  const telemetry = createTelemetryMock(now, { trash: (entry) => state.trash.push(entry) })
   const state: OperatorMock = {
     telemetry: telemetry.state,
     replies: [],

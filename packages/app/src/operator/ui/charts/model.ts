@@ -51,13 +51,14 @@ export function pick(series: ReadonlyArray<Values>, at: number, y: number, stack
 
 const cell = (value: string | number | null | undefined) => {
   if (value === null || value === undefined) return ""
-  const text = String(value)
+  // Text a spreadsheet would run as a formula gets a leading ' (observability_spec.md §16); numbers stay as they are.
+  const text = typeof value === "string" && /^[=+\-@]/.test(value) ? `'${value}` : String(value)
   return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text
 }
 
-/** Rows as CSV, with a header row. */
+/** Rows as CSV (RFC 4180), with a header row. */
 export function csv(header: ReadonlyArray<string>, rows: ReadonlyArray<ReadonlyArray<string | number | null>>) {
-  return [header, ...rows].map((row) => row.map(cell).join(",")).join("\n")
+  return [header, ...rows].map((row) => row.map(cell).join(",")).join("\r\n")
 }
 
 /** A step's start as an ISO time with its offset, for CSV and tooltips. */

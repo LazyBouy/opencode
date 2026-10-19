@@ -1,6 +1,7 @@
 export * as OperatorTelemetrySchema from "./schema"
 
 import { Schema } from "effect"
+import { OperatorTelemetryAlerts as A } from "./alerts"
 
 // What the telemetry API sends (observability_spec.md §7): the store's rows as they are stored (snake_case columns),
 // so the page reads the same names the store and the export use.
@@ -241,6 +242,83 @@ export const Metric = Schema.Struct({
     description: "Filters (or groupBy) hourly totals don't keep, so not applied",
   }),
 }).annotate({ identifier: "OperatorTelemetryMetric" })
+
+export const AlertScope = Schema.Struct({
+  ns: Schema.optional(Schema.String),
+  dir: Schema.optional(Schema.String).annotate({ description: "A project key" }),
+  agent: Schema.optional(Schema.String),
+  model: Schema.optional(Schema.String),
+  provider: Schema.optional(Schema.String),
+  tool: Schema.optional(Schema.String),
+}).annotate({ identifier: "OperatorTelemetryAlertScope" })
+
+export const AlertRuleInput = Schema.Struct({
+  name: Schema.String,
+  metric: Schema.Literals(A.METRICS),
+  op: Schema.Literals(A.OPS),
+  threshold: Schema.Finite.annotate({ description: "In the metric's unit: %, count, minutes, seconds or $" }),
+  window: Schema.Literals(A.WINDOWS).annotate({ description: "Minutes, or today (local midnight to now)" }),
+  minCount: Schema.optional(Schema.Finite).annotate({
+    description: "The fewest events in the window before it can fire (ratios and percentiles)",
+  }),
+  consecutive: Schema.Finite.annotate({ description: "Evaluations in a row the condition must hold: 1 to 10" }),
+  scope: AlertScope,
+  severity: Schema.Literals(A.SEVERITIES),
+  enabled: Schema.Boolean,
+}).annotate({ identifier: "OperatorTelemetryAlertRuleInput" })
+
+export const AlertRule = Schema.Struct({
+  ...AlertRuleInput.fields,
+  id: Schema.String,
+  builtin: Schema.optional(Schema.String).annotate({
+    description: "A built-in rule: edit, turn off or reset; not delete",
+  }),
+  mute: Schema.optional(
+    Schema.Struct({ until: Schema.optional(Schema.Finite) }).annotate({
+      description: "Muted until a time, or (no until) until turned back on",
+    }),
+  ),
+  createdAt: Schema.Finite,
+  updatedAt: Schema.Finite,
+}).annotate({ identifier: "OperatorTelemetryAlertRule" })
+
+export const AlertState = Schema.Struct({
+  state: Schema.Literals(A.STATES),
+  streak: Schema.Finite,
+  clear: Schema.Finite,
+  value: Schema.NullOr(Schema.Finite),
+  count: Schema.NullOr(Schema.Finite),
+  evaluated_ms: Schema.NullOr(Schema.Finite),
+  error: Schema.NullOr(Schema.String).annotate({ description: "Why it couldn't be evaluated" }),
+  event_id: Schema.NullOr(Schema.String),
+  last_fired_ms: Schema.NullOr(Schema.Finite),
+}).annotate({ identifier: "OperatorTelemetryAlertState" })
+
+export const AlertRuleView = Schema.Struct({
+  rule: AlertRule,
+  state: AlertState,
+  muted: Schema.Boolean,
+}).annotate({ identifier: "OperatorTelemetryAlertRuleView" })
+
+export const AlertEvent = Schema.Struct({
+  id: Schema.String,
+  rule_id: Schema.String,
+  name: Schema.String,
+  severity: Schema.String,
+  metric: Schema.String,
+  op: Schema.String,
+  threshold: Schema.Finite,
+  win: Schema.String,
+  start_ms: Schema.Finite,
+  end_ms: Schema.NullOr(Schema.Finite).annotate({ description: "When it resolved; null while firing" }),
+  value: Schema.NullOr(Schema.Finite).annotate({ description: "The value when it fired" }),
+  worst: Schema.NullOr(Schema.Finite),
+  scope: Schema.Record(Schema.String, Schema.String),
+  link: Schema.Record(Schema.String, Schema.String).annotate({ description: "The Events filter for View events" }),
+  ack_by: Schema.NullOr(Schema.String),
+  ack_ms: Schema.NullOr(Schema.Finite),
+  muted: Schema.Boolean.annotate({ description: "Its rule is muted now" }),
+}).annotate({ identifier: "OperatorTelemetryAlertEvent" })
 
 /** The shared filter (§7.2), as query parameters: lists comma-separated, numbers as text. */
 export const FilterQuery = {

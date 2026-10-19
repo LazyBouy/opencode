@@ -1465,6 +1465,85 @@ export const operatorScenarios: Scenario[] = [
       check(body.step === 5 * 60_000, "a 6 h range steps by 5 minutes")
       check(body.source === "events", "inside the detailed window, from events")
     }),
+  http.protected.get("/operator/telemetry/alert/rule", "operator.telemetry.alertRules").json(200, (body) => {
+    array(body)
+    check(
+      body.some((item) => isRecord(item) && isRecord(item.rule) && item.rule.builtin === "rate_limited"),
+      "the built-in rules are listed",
+    )
+  }),
+  http.protected
+    .post("/operator/telemetry/alert/rule", "operator.telemetry.alertRuleCreate")
+    .at((ctx) => ({
+      path: "/operator/telemetry/alert/rule",
+      headers: ctx.headers(),
+      body: {
+        name: "Exerciser rule",
+        metric: "denials",
+        op: ">=",
+        threshold: 3,
+        window: "15",
+        consecutive: 1,
+        scope: {},
+        severity: "warning",
+        enabled: true,
+      },
+    }))
+    .json(200, (body) => {
+      object(body)
+      check(isRecord(body.rule) && body.rule.name === "Exerciser rule", "the new rule")
+    }),
+  http.protected
+    .put("/operator/telemetry/alert/rule/{id}", "operator.telemetry.alertRuleUpdate")
+    .at((ctx) => ({
+      path: route("/operator/telemetry/alert/rule/{id}", { id: "builtin-rate_limited" }),
+      headers: ctx.headers(),
+      body: {
+        name: "Rate limited",
+        metric: "rate_limits",
+        op: ">=",
+        threshold: 8,
+        window: "15",
+        consecutive: 1,
+        scope: {},
+        severity: "warning",
+        enabled: true,
+      },
+    }))
+    .json(200, (body) => check(isRecord(body) && isRecord(body.rule) && body.rule.threshold === 8, "saved")),
+  http.protected
+    .delete("/operator/telemetry/alert/rule/{id}", "operator.telemetry.alertRuleDelete")
+    .at((ctx) => ({
+      path: route("/operator/telemetry/alert/rule/{id}", { id: "builtin-rate_limited" }),
+      headers: ctx.headers(),
+    }))
+    .status(400),
+  http.protected
+    .post("/operator/telemetry/alert/rule/{id}/mute", "operator.telemetry.alertRuleMute")
+    .at((ctx) => ({
+      path: route("/operator/telemetry/alert/rule/{id}/mute", { id: "builtin-rate_limited" }),
+      headers: ctx.headers(),
+      body: { for: "1h" },
+    }))
+    .json(200, (body) => check(isRecord(body) && body.muted === true, "muted")),
+  http.protected
+    .post("/operator/telemetry/alert/rule/{id}/reset", "operator.telemetry.alertRuleReset")
+    .at((ctx) => ({
+      path: route("/operator/telemetry/alert/rule/{id}/reset", { id: "builtin-rate_limited" }),
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => check(isRecord(body) && isRecord(body.rule) && body.rule.threshold === 5, "defaults back")),
+  http.protected
+    .get("/operator/telemetry/alert/event", "operator.telemetry.alertEvents")
+    .at((ctx) => ({ path: "/operator/telemetry/alert/event?range=7d", headers: ctx.headers() }))
+    .json(200, array),
+  http.protected
+    .post("/operator/telemetry/alert/event/{id}/ack", "operator.telemetry.alertAck")
+    .at((ctx) => ({
+      path: route("/operator/telemetry/alert/event/{id}/ack", { id: "alert-missing" }),
+      headers: ctx.headers(),
+    }))
+    .status(404),
   http.protected.get("/operator/telemetry/backfill", "operator.telemetry.backfillStatus").json(200, (body) => {
     object(body)
     check(["idle", "running", "done", "failed"].includes(String(body.state)), "a known state")

@@ -30,7 +30,15 @@ export function days(input: { eventsDays?: unknown; totalsDays?: unknown }) {
 const KEPT = "SELECT session_id FROM kept_session"
 const NOT_KEPT = `(session_id IS NULL OR session_id NOT IN (${KEPT})) AND (root_session_id IS NULL OR root_session_id NOT IN (${KEPT}))`
 
-export type Purged = { spans: number; logs: number; samples: number; mcp: number; sessions: number; totals: number }
+export type Purged = {
+  spans: number
+  logs: number
+  samples: number
+  mcp: number
+  sessions: number
+  totals: number
+  alerts: number
+}
 
 /** Purges what is older than the settings allow. Returns what went, and the sessions whose summary must be redone. */
 export function purge(
@@ -47,6 +55,7 @@ export function purge(
     mcp: 0,
     sessions: 0,
     totals: 0,
+    alerts: 0,
     touched: new Set(),
   }
   const drop = (spans: OperatorTelemetryStore.Span[]) => {
@@ -103,6 +112,11 @@ export function purge(
   out.totals =
     batched("total_hour WHERE rowid IN (SELECT rowid FROM total_hour WHERE hour_ms < ?", totals) +
     batched("total_frozen WHERE rowid IN (SELECT rowid FROM total_frozen WHERE hour_ms < ?", totals)
+  // Alert history is kept as long as the totals.
+  out.alerts = batched(
+    "alert_event WHERE id IN (SELECT id FROM alert_event WHERE end_ms IS NOT NULL AND end_ms < ?",
+    totals,
+  )
   // Summaries of sessions with nothing left, unless kept.
   out.sessions = store.transaction(
     () =>

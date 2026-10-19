@@ -265,7 +265,70 @@ const spanRow = (id: string, kind: string, fields: Row): Row => ({ ...SPAN_DEFAU
 
 export type TelemetryMock = ReturnType<typeof createTelemetryMock>["state"]
 
-export function createTelemetryMock(now: number) {
+type TrashEntry = {
+  id: string
+  kind: string
+  name: string
+  deletedAt: number
+  files: { path: string; stored: string }[]
+}
+
+// Alerts (§14): the built-in rules and one of the user's, firing now; its history.
+const ALERT_INPUT = { window: "15", consecutive: 1, scope: {}, severity: "warning", enabled: true }
+function alertRules(now: number): Row[] {
+  const state = (fields: Row = {}) => ({
+    state: "ok",
+    streak: 0,
+    clear: 0,
+    value: 0,
+    count: 0,
+    evaluated_ms: now - 30_000,
+    error: null,
+    event_id: null,
+    last_fired_ms: null,
+    ...fields,
+  })
+  const builtin = (builtin: string, name: string, metric: string, op: string, threshold: number, extra: Row = {}) => ({
+    rule: {
+      ...ALERT_INPUT,
+      id: `builtin-${builtin}`,
+      builtin,
+      name,
+      metric,
+      op,
+      threshold,
+      createdAt: 0,
+      updatedAt: 0,
+      ...extra,
+    },
+    state: state(extra.enabled === false ? { state: "disabled" } : {}),
+    muted: false,
+  })
+  return [
+    builtin("approval_waiting", "Approval waiting long", "oldest_approval", ">", 10),
+    builtin("calls_failing", "Model calls failing", "call_error_rate", ">", 20, { minCount: 10, severity: "critical" }),
+    builtin("rate_limited", "Rate limited", "rate_limits", ">=", 5),
+    builtin("daily_cost", "Daily cost", "cost", ">", 0, { window: "today", enabled: false }),
+    {
+      rule: {
+        ...ALERT_INPUT,
+        id: "rule-denials",
+        name: "Too many denials",
+        metric: "denials",
+        op: ">=",
+        threshold: 3,
+        severity: "critical",
+        scope: { agent: "build" },
+        createdAt: now - 86_400_000,
+        updatedAt: now - 86_400_000,
+      },
+      state: state({ state: "firing", value: 4, event_id: "alert-1", last_fired_ms: now - 5 * MIN, streak: 3 }),
+      muted: false,
+    },
+  ]
+}
+
+export function createTelemetryMock(now: number, hooks: { trash?: (entry: TrashEntry) => void } = {}) {
   const t0 = now - 30 * MIN
   // The busy session: 22 turns (the latest 20 first), its last with a tool call that waited for approval, a model call
   // that hit a rate limit and its retry, and a subagent.
@@ -500,7 +563,32 @@ export function createTelemetryMock(now: number) {
       fields: JSON.stringify({ provider: "anthropic", model: "claude-sonnet-4-5", "error.message": "overloaded" }),
     },
   ]
+  const alertEvent = (fields: Row): Row => ({
+    rule_id: "rule-denials",
+    name: "Too many denials",
+    severity: "critical",
+    metric: "denials",
+    op: ">=",
+    threshold: 3,
+    win: "15",
+    end_ms: null,
+    value: 3,
+    worst: 4,
+    scope: { agent: "build" },
+    link: { kind: "tool_call", status: "denied", agent: "build" },
+    ack_by: null,
+    ack_ms: null,
+    muted: false,
+    ...fields,
+  })
   const state = {
+    rules: alertRules(now),
+    alerts: [
+      alertEvent({ id: "alert-1", start_ms: now - 5 * MIN }),
+      alertEvent({ id: "alert-0", start_ms: now - 3 * 60 * MIN, end_ms: now - 2 * 60 * MIN, value: 5, worst: 6 }),
+    ],
+    /** Every write to the alert API. */
+    alertWrites: [] as Array<{ method: string; path: string; body: unknown }>,
     queries: [] as Array<{ path: string; params: URLSearchParams }>,
     sessions,
     kept: new Set<string>(),
@@ -532,6 +620,90 @@ export function createTelemetryMock(now: number) {
   }
   const json = (route: Route, body: unknown, status = 200) =>
     route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) })
+
+  const alerts = (route: Route, path: string, method: string) => {
+    const body = (() => {
+      try {
+        return route.request().postDataJSON() as Row | null
+      } catch {
+        return null
+      }
+    })()
+    if (method !== "GET") state.alertWrites.push({ method, path, body })
+    const view = (id: string) => state.rules.find((item) => item.rule.id === id)
+    const mutedNow = (ruleID: string) => !!view(ruleID)?.muted
+    const events = () => state.alerts.map((event) => ({ ...event, muted: mutedNow(event.rule_id) }))
+    if (path === "/alert/rule" && method === "GET") return json(route, state.rules)
+    if (path === "/alert/rule" && method === "POST") {
+      const created = {
+        rule: { ...body, id: `rule-${state.rules.length + 1}`, createdAt: now, updatedAt: now },
+        state: {
+          state: "ok",
+          streak: 0,
+          clear: 0,
+          value: null,
+          count: null,
+          evaluated_ms: null,
+          error: null,
+          event_id: null,
+          last_fired_ms: null,
+        },
+        muted: false,
+      }
+      state.rules.push(created)
+      return json(route, created)
+    }
+    const rule = path.match(/^\/alert\/rule\/([^/]+)(?:\/(mute|reset))?$/)
+    if (rule) {
+      const found = view(decodeURIComponent(rule[1]!))
+      if (!found) return json(route, { name: "OperatorTelemetryNotFoundError", data: { message: "none" } }, 404)
+      if (rule[2] === "mute") {
+        found.muted = body?.for !== "off"
+        found.rule = {
+          ...found.rule,
+          ...(found.muted ? { mute: body?.for === "always" ? {} : { until: now + 3_600_000 } } : {}),
+        }
+        if (!found.muted) delete found.rule.mute
+        return json(route, found)
+      }
+      if (rule[2] === "reset") return json(route, found)
+      if (method === "PUT") {
+        found.rule = { ...found.rule, ...body }
+        return json(route, found)
+      }
+      if (method === "DELETE") {
+        if (found.rule.builtin)
+          return json(
+            route,
+            { name: "OperatorTelemetryAlertError", data: { message: "Built-in rules can't be deleted" } },
+            400,
+          )
+        state.rules.splice(state.rules.indexOf(found), 1)
+        hooks.trash?.({
+          id: `trash-alert-${found.rule.id}`,
+          kind: "alert-rule",
+          name: found.rule.name,
+          deletedAt: now,
+          files: [{ path: `/data/operator/alert-rules/${found.rule.id}.json`, stored: "files/0" }],
+        })
+        return json(route, true)
+      }
+    }
+    if (path === "/alert/event")
+      return json(
+        route,
+        events().filter((event) => event.end_ms === null || route.request().url().indexOf("firing=1") < 0),
+      )
+    const ack = path.match(/^\/alert\/event\/([^/]+)\/ack$/)
+    if (ack) {
+      const found = state.alerts.find((event) => event.id === ack[1])
+      if (!found) return json(route, { name: "OperatorTelemetryNotFoundError", data: { message: "none" } }, 404)
+      found.ack_by = "operator"
+      found.ack_ms = now
+      return json(route, { ...found, muted: mutedNow(found.rule_id) })
+    }
+    return json(route, { name: "NotFound", data: { message: path } }, 404)
+  }
 
   const handle = (route: Route, url: URL, method: string) => {
     const path = url.pathname.slice("/operator/telemetry".length)
@@ -685,6 +857,7 @@ export function createTelemetryMock(now: number) {
       return json(route, { rows: rows.toSorted((a, b) => b.time_ms - a.time_ms), seq })
     }
     if (path === "/metrics") return json(route, metricOf(q, now))
+    if (path.startsWith("/alert/")) return alerts(route, path, method)
     return json(route, { name: "NotFound", data: { message: path } }, 404)
   }
   return { state, handle }

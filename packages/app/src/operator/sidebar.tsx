@@ -1,10 +1,11 @@
 import { A, useLocation } from "@solidjs/router"
 import { Icon } from "@opencode-ai/ui/icon"
-import { createEffect, For } from "solid-js"
+import { createEffect, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSettingsDialog } from "@/components/settings-dialog"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
+import { usePageBadges } from "./alert-badge"
 import { useOperatorCommands } from "./commands"
 import { isChatPage, rememberChat, useOpenDefaultChat } from "./session-views/chat"
 import { SessionViewCommands } from "./session-views/switch"
@@ -24,6 +25,8 @@ export function OperatorSidebar() {
   const language = useLanguage()
   const location = useLocation()
   const openSettings = useSettingsDialog()
+  // A count on an item (§14.5 of the observability spec: firing alerts no one acknowledged).
+  const badge = usePageBadges()
   const [store, setStore] = persisted(
     Persist.global("operator.nav"),
     createStore({ collapsed: { chat: true, operator: false } }),
@@ -91,6 +94,17 @@ export function OperatorSidebar() {
             >
               <Icon name={page.icon} />
               <span data-slot="operator-sidebar-label">{language.t(`operator.page.${page.id}.title`)}</span>
+              <Show when={badge(page.id)}>
+                {(count) => (
+                  <span
+                    data-slot="operator-sidebar-badge"
+                    data-testid="operator-nav-badge"
+                    aria-label={language.t("operator.nav.badge", { n: count() })}
+                  >
+                    {count()}
+                  </span>
+                )}
+              </Show>
             </A>
           )}
         </For>

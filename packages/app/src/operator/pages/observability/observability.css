@@ -98,8 +98,9 @@
   color: var(--v2-state-fg-danger);
 }
 
-[data-slot="operator-obs-status"][data-status="denied"],
-[data-slot="operator-obs-status"][data-status="waiting"] {
+/* The warning colour is too light for text (WCAG 1.4.3): the icon carries it, the word stays readable. */
+[data-slot="operator-obs-status"][data-status="denied"] [data-component="icon"],
+[data-slot="operator-obs-status"][data-status="waiting"] [data-component="icon"] {
   color: var(--v2-state-fg-warning);
 }
 
@@ -497,4 +498,97 @@ tr:focus-within [data-slot="operator-obs-row-actions"] {
 
 [data-slot="operator-obs-chart-cell"][data-wide] {
   grid-column: 1 / -1;
+}
+
+/* Alerts (§14.5): the tab's badge, firing alerts as cards, and the tab's sections. */
+[data-slot="operator-obs-badge"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--v2-state-fg-danger);
+  color: var(--v2-background-bg-base);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-component="operator-obs-alerts"] {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+[data-component="operator-obs-alerts"] [data-slot="operator-obs-section"] > header {
+  margin-bottom: 8px;
+}
+
+[data-component="operator-obs-alerts"] [data-slot="operator-obs-section"] > header > button {
+  margin-left: auto;
+}
+
+[data-component="operator-obs-firing"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+[data-component="operator-obs-firing"] > li {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--v2-border-border-base);
+  border-left: 3px solid var(--v2-state-fg-danger);
+  border-radius: 8px;
+  background: var(--v2-background-bg-layer-01);
+}
+
+[data-component="operator-obs-firing"] > li[data-acked] {
+  border-left-color: var(--v2-border-border-muted);
+}
+
+[data-slot="operator-obs-firing-head"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+[data-slot="operator-obs-firing-value"] {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-component="operator-obs-firing"] [data-slot="operator-actions"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* A log line's details button. */
+button[data-slot="operator-obs-disclose"] {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--v2-text-text-muted);
+  vertical-align: middle;
+}
+
+button[data-slot="operator-obs-disclose"]:focus-visible {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: 1px;
 }

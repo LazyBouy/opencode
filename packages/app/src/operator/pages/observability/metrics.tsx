@@ -256,16 +256,16 @@ export function MetricsTab(props: {
                     <SelectV2<string>
                       appearance="base"
                       aria-label={t("operator.obs.metrics.groupBy")}
-                      options={["", ...section.groups]}
-                      current={props.groups[section.id] ?? ""}
+                      options={[NO_GROUP, ...section.groups]}
+                      current={props.groups[section.id] ?? NO_GROUP}
                       label={(key) =>
-                        key
-                          ? t("operator.obs.metrics.groupByValue", {
+                        key === NO_GROUP
+                          ? t("operator.obs.metrics.noGroup")
+                          : t("operator.obs.metrics.groupByValue", {
                               name: t(`operator.obs.metrics.group.${key}` as Key),
                             })
-                          : t("operator.obs.metrics.noGroup")
                       }
-                      onSelect={(key) => props.onGroup(section.id, key || undefined)}
+                      onSelect={(key) => key && props.onGroup(section.id, key === NO_GROUP ? undefined : key)}
                     />
                     <FieldHelp field={t("operator.obs.metrics.groupBy")} text={t("operator.obs.help.groupBy")} />
                   </span>
@@ -307,6 +307,8 @@ export function MetricsTab(props: {
   )
 }
 
+// "No grouping" as an option of its own (an empty value would leave the select without a name).
+const NO_GROUP = "none"
 const SAMPLES = new Set(["approval_pending", "approval_oldest", "queue", "queue_oldest", "mcp", "running"])
 const SUMS = new Set(["count", "usd", "tokens"])
 

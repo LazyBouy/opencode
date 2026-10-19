@@ -1,4 +1,4 @@
-import { useSearchParams } from "@solidjs/router"
+import { useNavigate, useSearchParams } from "@solidjs/router"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { SegmentedControlItemV2, SegmentedControlV2 } from "@opencode-ai/ui/v2/segmented-control-v2"
 import { createMemo, For, Show } from "solid-js"
@@ -16,6 +16,8 @@ import { DecidedRequests } from "../ui/permission-requests"
 import { type OverlayBlock, RecordOverlay, RecordView, useRecordOverlay } from "../ui/record-overlay"
 import { ReplyCard } from "../ui/reply-card"
 import { closeTopOverlay, useOverlayParams } from "../ui/overlay-nav"
+import { needsAttention, useFiringAlerts } from "../alert-badge"
+import { eventsLink, FiringList } from "./observability/alerts"
 
 // Pending permission requests, grouped project → session, oldest first (as the server returns them).
 function useInbox() {
@@ -38,6 +40,7 @@ export default function InboxPage() {
   const language = useLanguage()
   const { pending, groups } = useInbox()
   const notes = useNotes()
+  const alerts = useFiringAlerts()
   const [params, setParams] = useSearchParams<{ ask?: string; itab?: string }>()
   useRecordOverlay(
     () => !!params.ask,
@@ -54,10 +57,9 @@ export default function InboxPage() {
       >
         <SegmentedControlV2
           class="operator-segmented-fit"
-          value={params.itab === "decided" || params.itab === "notes" ? params.itab : "waiting"}
+          value={TABS.includes(params.itab ?? "") ? params.itab! : "waiting"}
           onChange={(value) =>
-            value &&
-            setParams({ itab: value === "decided" || value === "notes" ? value : undefined }, { replace: true })
+            value && setParams({ itab: TABS.includes(value) ? value : undefined }, { replace: true })
           }
           aria-label={language.t("operator.requests.title")}
         >
@@ -66,12 +68,18 @@ export default function InboxPage() {
           <SegmentedControlItemV2 value="notes">
             {language.t("operator.notes.tab", { count: notes.data?.length ?? 0 })}
           </SegmentedControlItemV2>
+          <SegmentedControlItemV2 value="alerts">
+            {language.t("operator.inbox.alertsTab", { count: needsAttention(ready(alerts) ?? []).length })}
+          </SegmentedControlItemV2>
         </SegmentedControlV2>
       </PageHeader>
       <Show when={params.itab === "notes"}>
         <HelperNotes />
       </Show>
-      <Show when={params.itab !== "notes"}>
+      <Show when={params.itab === "alerts"}>
+        <InboxAlerts />
+      </Show>
+      <Show when={params.itab !== "notes" && params.itab !== "alerts"}>
         <Show when={params.itab !== "decided"} fallback={<DecidedRequests filter={{}} />}>
           <Show
             when={groups().length > 0}
@@ -135,6 +143,8 @@ export default function InboxPage() {
     </>
   )
 }
+
+const TABS = ["waiting", "decided", "notes", "alerts"]
 
 // The overlay a request opens in: the projects with requests on the left; the request's reply card.
 // Once answered it leaves the list: the next one opens, else the overlay closes.
@@ -257,5 +267,36 @@ function HelperNotes() {
       empty={language.t("operator.notes.empty")}
       initialSort={{ column: "time", direction: "desc" }}
     />
+  )
+}
+
+// Firing alerts (observability_spec.md §14.5), under an "Alerts" heading, with Acknowledge; View events opens them in
+// Observability.
+function InboxAlerts() {
+  const language = useLanguage()
+  const navigate = useNavigate()
+  const alerts = useFiringAlerts()
+  return (
+    <section data-component="operator-panel" data-testid="inbox-alerts">
+      <h2 data-slot="operator-panel-title">{language.t("operator.inbox.alerts")}</h2>
+      <Show
+        when={ready(alerts)?.length}
+        fallback={<p data-slot="operator-note">{language.t("operator.obs.alerts.noneFiring")}</p>}
+      >
+        <FiringList
+          events={ready(alerts)!}
+          onEvents={(event) => {
+            const link = eventsLink(event)
+            const query = new URLSearchParams({
+              tab: "events",
+              ...link.filter,
+              from: String(link.from),
+              to: String(link.to),
+            })
+            navigate(`/operator/observability?${query}`)
+          }}
+        />
+      </Show>
+    </section>
   )
 }

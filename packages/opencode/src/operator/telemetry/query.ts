@@ -59,6 +59,22 @@ export type Context = {
   stuckMinutes: number
 }
 
+/** The context from the project records as they are now (§4.2): a moved project brings its history. */
+export function contextOf(
+  projects: ReadonlyArray<{ readonly key: string; readonly namespace: string }>,
+  input: { now: number; stuckMinutes: number },
+): Context {
+  return {
+    now: input.now,
+    known: projects.map((project) => project.key),
+    stuckMinutes: input.stuckMinutes,
+    projectsOf: (ns: string) => ({
+      keys: projects.filter((project) => project.namespace === ns).map((project) => project.key),
+      rest: ns === "opencode",
+    }),
+  }
+}
+
 export function window(filter: Filter, now: number) {
   if (filter.from !== undefined || filter.to !== undefined) return { from: filter.from ?? 0, to: filter.to ?? now }
   const length = RANGES[filter.range ?? "24h"] ?? RANGES["24h"]!

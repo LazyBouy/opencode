@@ -415,6 +415,23 @@ import type {
   OperatorStatsResponses,
   OperatorStatusErrors,
   OperatorStatusResponses,
+  OperatorTelemetryAlertAckErrors,
+  OperatorTelemetryAlertAckResponses,
+  OperatorTelemetryAlertEventsErrors,
+  OperatorTelemetryAlertEventsResponses,
+  OperatorTelemetryAlertRuleCreateErrors,
+  OperatorTelemetryAlertRuleCreateResponses,
+  OperatorTelemetryAlertRuleDeleteErrors,
+  OperatorTelemetryAlertRuleDeleteResponses,
+  OperatorTelemetryAlertRuleInput,
+  OperatorTelemetryAlertRuleMuteErrors,
+  OperatorTelemetryAlertRuleMuteResponses,
+  OperatorTelemetryAlertRuleResetErrors,
+  OperatorTelemetryAlertRuleResetResponses,
+  OperatorTelemetryAlertRulesErrors,
+  OperatorTelemetryAlertRulesResponses,
+  OperatorTelemetryAlertRuleUpdateErrors,
+  OperatorTelemetryAlertRuleUpdateResponses,
   OperatorTelemetryBackfillErrors,
   OperatorTelemetryBackfillResponses,
   OperatorTelemetryBackfillStatusErrors,
@@ -4914,6 +4931,237 @@ export class Telemetry extends HeyApiClient {
       ThrowOnError
     >({
       url: "/operator/telemetry/metrics",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List alert rules
+   *
+   * The built-in rules, then the user's, each with its state (OK, not enough data, firing, muted, couldn't evaluate, off).
+   */
+  public alertRules<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<
+      OperatorTelemetryAlertRulesResponses,
+      OperatorTelemetryAlertRulesErrors,
+      ThrowOnError
+    >({ url: "/operator/telemetry/alert/rule", ...options })
+  }
+
+  /**
+   * Create an alert rule
+   *
+   * A new rule; it is evaluated every 60 s.
+   */
+  public alertRuleCreate<ThrowOnError extends boolean = false>(
+    parameters?: {
+      operatorTelemetryAlertRuleInput?: OperatorTelemetryAlertRuleInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [{ args: [{ key: "operatorTelemetryAlertRuleInput", map: "body" }] }],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorTelemetryAlertRuleCreateResponses,
+      OperatorTelemetryAlertRuleCreateErrors,
+      ThrowOnError
+    >({
+      url: "/operator/telemetry/alert/rule",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Delete an alert rule
+   *
+   * Moves a user rule to Trash (restore brings it back). Built-in rules can't be deleted.
+   */
+  public alertRuleDelete<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
+    return (options?.client ?? this.client).delete<
+      OperatorTelemetryAlertRuleDeleteResponses,
+      OperatorTelemetryAlertRuleDeleteErrors,
+      ThrowOnError
+    >({
+      url: "/operator/telemetry/alert/rule/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update an alert rule
+   *
+   * Saves a rule (a built-in rule keeps its id; Reset brings its defaults back). Turning a firing rule off resolves it.
+   */
+  public alertRuleUpdate<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      operatorTelemetryAlertRuleInput?: OperatorTelemetryAlertRuleInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { key: "operatorTelemetryAlertRuleInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorTelemetryAlertRuleUpdateResponses,
+      OperatorTelemetryAlertRuleUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/operator/telemetry/alert/rule/{id}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Mute an alert rule
+   *
+   * A muted rule doesn't start firing and its alerts leave the badges until the time passes or it is unmuted.
+   */
+  public alertRuleMute<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      for?: "1h" | "4h" | "24h" | "always" | "off"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "body", key: "for" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorTelemetryAlertRuleMuteResponses,
+      OperatorTelemetryAlertRuleMuteErrors,
+      ThrowOnError
+    >({
+      url: "/operator/telemetry/alert/rule/{id}/mute",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Reset a built-in rule
+   *
+   * Brings a built-in rule's defaults back.
+   */
+  public alertRuleReset<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
+    return (options?.client ?? this.client).post<
+      OperatorTelemetryAlertRuleResetResponses,
+      OperatorTelemetryAlertRuleResetErrors,
+      ThrowOnError
+    >({
+      url: "/operator/telemetry/alert/rule/{id}/reset",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List alerts
+   *
+   * One event per firing period, in the range (or firing now), newest first, with who acknowledged it.
+   */
+  public alertEvents<ThrowOnError extends boolean = false>(
+    parameters?: {
+      range?: string
+      from?: string
+      to?: string
+      firing?: string
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "range" },
+            { in: "query", key: "from" },
+            { in: "query", key: "to" },
+            { in: "query", key: "firing" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorTelemetryAlertEventsResponses,
+      OperatorTelemetryAlertEventsErrors,
+      ThrowOnError
+    >({
+      url: "/operator/telemetry/alert/event",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Acknowledge an alert
+   *
+   * Records who and when, and takes the alert off the badges. It keeps firing until it resolves.
+   */
+  public alertAck<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
+    return (options?.client ?? this.client).post<
+      OperatorTelemetryAlertAckResponses,
+      OperatorTelemetryAlertAckErrors,
+      ThrowOnError
+    >({
+      url: "/operator/telemetry/alert/event/{id}/ack",
       ...options,
       ...params,
     })

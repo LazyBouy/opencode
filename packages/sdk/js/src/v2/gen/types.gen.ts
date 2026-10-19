@@ -2770,6 +2770,7 @@ export type OperatorTrashKind =
   | "memory"
   | "plugin"
   | "config"
+  | "alert-rule"
 
 export type OperatorTrashEntry = {
   id: string
@@ -3812,6 +3813,150 @@ export type OperatorTelemetryMetric = {
   buckets?: Array<string>
   note?: "needs-events" | "needs-recording"
   ignored?: Array<string>
+}
+
+export type OperatorTelemetryAlertScope = {
+  ns?: string
+  dir?: string
+  agent?: string
+  model?: string
+  provider?: string
+  tool?: string
+}
+
+export type OperatorTelemetryAlertRule = {
+  name: string
+  metric:
+    | "turn_error_rate"
+    | "call_error_rate"
+    | "tool_error_rate"
+    | "denials"
+    | "rate_limits"
+    | "retries_exhausted"
+    | "oldest_approval"
+    | "turn_active_p95"
+    | "ttft_p95"
+    | "cost"
+    | "loops"
+    | "mcp_down"
+    | "oldest_queued"
+  op: ">" | ">=" | "<" | "<="
+  /**
+   * In the metric's unit: %, count, minutes, seconds or $
+   */
+  threshold: number
+  /**
+   * Minutes, or today (local midnight to now)
+   */
+  window: "5" | "15" | "30" | "60" | "today"
+  minCount?: number
+  /**
+   * Evaluations in a row the condition must hold: 1 to 10
+   */
+  consecutive: number
+  scope: OperatorTelemetryAlertScope
+  severity: "warning" | "critical"
+  enabled: boolean
+  id: string
+  builtin?: string
+  /**
+   * Muted until a time, or (no until) until turned back on
+   */
+  mute?: {
+    until?: number
+  }
+  createdAt: number
+  updatedAt: number
+}
+
+export type OperatorTelemetryAlertState = {
+  state: "ok" | "insufficient" | "firing" | "muted" | "error" | "disabled"
+  streak: number
+  clear: number
+  value: number
+  count: number
+  evaluated_ms: number
+  error: string
+  event_id: string
+  last_fired_ms: number
+}
+
+export type OperatorTelemetryAlertRuleView = {
+  rule: OperatorTelemetryAlertRule
+  state: OperatorTelemetryAlertState
+  muted: boolean
+}
+
+export type OperatorTelemetryAlertRuleInput = {
+  name: string
+  metric:
+    | "turn_error_rate"
+    | "call_error_rate"
+    | "tool_error_rate"
+    | "denials"
+    | "rate_limits"
+    | "retries_exhausted"
+    | "oldest_approval"
+    | "turn_active_p95"
+    | "ttft_p95"
+    | "cost"
+    | "loops"
+    | "mcp_down"
+    | "oldest_queued"
+  op: ">" | ">=" | "<" | "<="
+  /**
+   * In the metric's unit: %, count, minutes, seconds or $
+   */
+  threshold: number
+  /**
+   * Minutes, or today (local midnight to now)
+   */
+  window: "5" | "15" | "30" | "60" | "today"
+  minCount?: number
+  /**
+   * Evaluations in a row the condition must hold: 1 to 10
+   */
+  consecutive: number
+  scope: OperatorTelemetryAlertScope
+  severity: "warning" | "critical"
+  enabled: boolean
+}
+
+export type OperatorTelemetryAlertError = {
+  name: "OperatorTelemetryAlertError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorTelemetryAlertEvent = {
+  id: string
+  rule_id: string
+  name: string
+  severity: string
+  metric: string
+  op: string
+  threshold: number
+  win: string
+  start_ms: number
+  end_ms: number
+  value: number
+  worst: number
+  scope: {
+    [key: string]: string
+  }
+  /**
+   * The Events filter for View events
+   */
+  link: {
+    [key: string]: string
+  }
+  ack_by: string
+  ack_ms: number
+  /**
+   * Its rule is muted now
+   */
+  muted: boolean
 }
 
 export type OperatorTelemetryBackfill = {
@@ -13984,6 +14129,262 @@ export type OperatorTelemetryMetricsResponses = {
 
 export type OperatorTelemetryMetricsResponse =
   OperatorTelemetryMetricsResponses[keyof OperatorTelemetryMetricsResponses]
+
+export type OperatorTelemetryAlertRulesData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/operator/telemetry/alert/rule"
+}
+
+export type OperatorTelemetryAlertRulesErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorTelemetryAlertRulesError =
+  OperatorTelemetryAlertRulesErrors[keyof OperatorTelemetryAlertRulesErrors]
+
+export type OperatorTelemetryAlertRulesResponses = {
+  /**
+   * Alert rules with their state
+   */
+  200: Array<OperatorTelemetryAlertRuleView>
+}
+
+export type OperatorTelemetryAlertRulesResponse =
+  OperatorTelemetryAlertRulesResponses[keyof OperatorTelemetryAlertRulesResponses]
+
+export type OperatorTelemetryAlertRuleCreateData = {
+  body?: OperatorTelemetryAlertRuleInput
+  path?: never
+  query?: never
+  url: "/operator/telemetry/alert/rule"
+}
+
+export type OperatorTelemetryAlertRuleCreateErrors = {
+  /**
+   * OperatorTelemetryAlertError | InvalidRequestError
+   */
+  400: OperatorTelemetryAlertError | InvalidRequestError
+}
+
+export type OperatorTelemetryAlertRuleCreateError =
+  OperatorTelemetryAlertRuleCreateErrors[keyof OperatorTelemetryAlertRuleCreateErrors]
+
+export type OperatorTelemetryAlertRuleCreateResponses = {
+  /**
+   * Created
+   */
+  200: OperatorTelemetryAlertRuleView
+}
+
+export type OperatorTelemetryAlertRuleCreateResponse =
+  OperatorTelemetryAlertRuleCreateResponses[keyof OperatorTelemetryAlertRuleCreateResponses]
+
+export type OperatorTelemetryAlertRuleDeleteData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/operator/telemetry/alert/rule/{id}"
+}
+
+export type OperatorTelemetryAlertRuleDeleteErrors = {
+  /**
+   * OperatorTelemetryAlertError | InvalidRequestError
+   */
+  400: OperatorTelemetryAlertError | InvalidRequestError
+  /**
+   * OperatorTelemetryNotFoundError
+   */
+  404: OperatorTelemetryNotFoundError
+}
+
+export type OperatorTelemetryAlertRuleDeleteError =
+  OperatorTelemetryAlertRuleDeleteErrors[keyof OperatorTelemetryAlertRuleDeleteErrors]
+
+export type OperatorTelemetryAlertRuleDeleteResponses = {
+  /**
+   * Moved to Trash
+   */
+  200: boolean
+}
+
+export type OperatorTelemetryAlertRuleDeleteResponse =
+  OperatorTelemetryAlertRuleDeleteResponses[keyof OperatorTelemetryAlertRuleDeleteResponses]
+
+export type OperatorTelemetryAlertRuleUpdateData = {
+  body?: OperatorTelemetryAlertRuleInput
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/operator/telemetry/alert/rule/{id}"
+}
+
+export type OperatorTelemetryAlertRuleUpdateErrors = {
+  /**
+   * OperatorTelemetryAlertError | InvalidRequestError
+   */
+  400: OperatorTelemetryAlertError | InvalidRequestError
+  /**
+   * OperatorTelemetryNotFoundError
+   */
+  404: OperatorTelemetryNotFoundError
+}
+
+export type OperatorTelemetryAlertRuleUpdateError =
+  OperatorTelemetryAlertRuleUpdateErrors[keyof OperatorTelemetryAlertRuleUpdateErrors]
+
+export type OperatorTelemetryAlertRuleUpdateResponses = {
+  /**
+   * Saved
+   */
+  200: OperatorTelemetryAlertRuleView
+}
+
+export type OperatorTelemetryAlertRuleUpdateResponse =
+  OperatorTelemetryAlertRuleUpdateResponses[keyof OperatorTelemetryAlertRuleUpdateResponses]
+
+export type OperatorTelemetryAlertRuleMuteData = {
+  body?: {
+    /**
+     * 1h, 4h, 24h, always (until turned back on), or off (unmute)
+     */
+    for: "1h" | "4h" | "24h" | "always" | "off"
+  }
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/operator/telemetry/alert/rule/{id}/mute"
+}
+
+export type OperatorTelemetryAlertRuleMuteErrors = {
+  /**
+   * OperatorTelemetryAlertError | InvalidRequestError
+   */
+  400: OperatorTelemetryAlertError | InvalidRequestError
+  /**
+   * OperatorTelemetryNotFoundError
+   */
+  404: OperatorTelemetryNotFoundError
+}
+
+export type OperatorTelemetryAlertRuleMuteError =
+  OperatorTelemetryAlertRuleMuteErrors[keyof OperatorTelemetryAlertRuleMuteErrors]
+
+export type OperatorTelemetryAlertRuleMuteResponses = {
+  /**
+   * Muted
+   */
+  200: OperatorTelemetryAlertRuleView
+}
+
+export type OperatorTelemetryAlertRuleMuteResponse =
+  OperatorTelemetryAlertRuleMuteResponses[keyof OperatorTelemetryAlertRuleMuteResponses]
+
+export type OperatorTelemetryAlertRuleResetData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/operator/telemetry/alert/rule/{id}/reset"
+}
+
+export type OperatorTelemetryAlertRuleResetErrors = {
+  /**
+   * OperatorTelemetryAlertError | InvalidRequestError
+   */
+  400: OperatorTelemetryAlertError | InvalidRequestError
+  /**
+   * OperatorTelemetryNotFoundError
+   */
+  404: OperatorTelemetryNotFoundError
+}
+
+export type OperatorTelemetryAlertRuleResetError =
+  OperatorTelemetryAlertRuleResetErrors[keyof OperatorTelemetryAlertRuleResetErrors]
+
+export type OperatorTelemetryAlertRuleResetResponses = {
+  /**
+   * Reset
+   */
+  200: OperatorTelemetryAlertRuleView
+}
+
+export type OperatorTelemetryAlertRuleResetResponse =
+  OperatorTelemetryAlertRuleResetResponses[keyof OperatorTelemetryAlertRuleResetResponses]
+
+export type OperatorTelemetryAlertEventsData = {
+  body?: never
+  path?: never
+  query?: {
+    range?: string
+    from?: string
+    to?: string
+    firing?: string
+    limit?: string
+  }
+  url: "/operator/telemetry/alert/event"
+}
+
+export type OperatorTelemetryAlertEventsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorTelemetryAlertEventsError =
+  OperatorTelemetryAlertEventsErrors[keyof OperatorTelemetryAlertEventsErrors]
+
+export type OperatorTelemetryAlertEventsResponses = {
+  /**
+   * Alert events, newest first
+   */
+  200: Array<OperatorTelemetryAlertEvent>
+}
+
+export type OperatorTelemetryAlertEventsResponse =
+  OperatorTelemetryAlertEventsResponses[keyof OperatorTelemetryAlertEventsResponses]
+
+export type OperatorTelemetryAlertAckData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/operator/telemetry/alert/event/{id}/ack"
+}
+
+export type OperatorTelemetryAlertAckErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * OperatorTelemetryNotFoundError
+   */
+  404: OperatorTelemetryNotFoundError
+}
+
+export type OperatorTelemetryAlertAckError = OperatorTelemetryAlertAckErrors[keyof OperatorTelemetryAlertAckErrors]
+
+export type OperatorTelemetryAlertAckResponses = {
+  /**
+   * Acknowledged
+   */
+  200: OperatorTelemetryAlertEvent
+}
+
+export type OperatorTelemetryAlertAckResponse =
+  OperatorTelemetryAlertAckResponses[keyof OperatorTelemetryAlertAckResponses]
 
 export type OperatorTelemetryBackfillStatusData = {
   body?: never

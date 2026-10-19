@@ -27,6 +27,7 @@ import { ScopePicker } from "../../ui/scope-picker"
 import { TimeRange } from "../../ui/time-range"
 import { chips, filterOf, groupsOf, isTab, type Params, rangeOf, rangeQuery, reach, type Tab } from "./model"
 import { EventsTab } from "./events"
+import { AlertsTab, needsAttention, RuleOverlay, useFiringAlerts } from "./alerts"
 import { LogsTab } from "./logs"
 import { MetricsTab } from "./metrics"
 import { SessionDetail, SpanPanel } from "./session-detail"
@@ -35,11 +36,11 @@ import "./observability.css"
 
 // Observability (observability_spec.md §8): "what exactly happened, when, and why?" across sessions. One time range
 // and one scope for the whole page; the URL is the state (§8.4), so links can be shared, Back works and the Dashboard
-// links in. Tabs: Sessions, Events, Metrics and Logs (Alerts comes with its phase). A session opens in its detail
-// over the tab.
+// links in. Tabs: Sessions, Events, Metrics, Logs and Alerts (its badge counts firing alerts no one acknowledged). A
+// session opens in its detail over the tab; an alert rule in its editor.
 
 type Key = Parameters<ReturnType<typeof useLanguage>["t"]>[0]
-const BUILT: ReadonlyArray<Tab> = ["sessions", "events", "metrics", "logs"]
+const BUILT: ReadonlyArray<Tab> = ["sessions", "events", "metrics", "logs", "alerts"]
 const REFRESH = 30_000
 
 export default function ObservabilityPage() {
@@ -134,6 +135,14 @@ export default function ObservabilityPage() {
     ),
     ["ev"],
   )
+  // An alert rule's editor (§14.5).
+  useRecordOverlay(
+    () => !!params.rule,
+    () => <RuleOverlay />,
+    ["rule"],
+  )
+  const firing = useFiringAlerts()
+  const attention = () => needsAttention(ready(firing) ?? []).length
   // Live (§8.6): Events and Logs, with a relative range ending now.
   const live = () => params.live === "1" && relative()
   // The Logs tab's own filters: the lowest level, service, text and session.
@@ -351,7 +360,18 @@ export default function ObservabilityPage() {
       >
         <For each={BUILT}>
           {(item) => (
-            <SegmentedControlItemV2 value={item}>{t(`operator.obs.tab.${item}` as Key)}</SegmentedControlItemV2>
+            <SegmentedControlItemV2 value={item}>
+              {t(`operator.obs.tab.${item}` as Key)}
+              <Show when={item === "alerts" && attention()}>
+                <span
+                  data-slot="operator-obs-badge"
+                  data-testid="obs-alerts-badge"
+                  aria-label={t("operator.obs.alerts.badge", { n: attention() })}
+                >
+                  {attention()}
+                </span>
+              </Show>
+            </SegmentedControlItemV2>
           )}
         </For>
       </SegmentedControlV2>
@@ -503,6 +523,9 @@ export default function ObservabilityPage() {
               onEvents={toEvents}
               onZoom={zoom}
             />
+          </Show>
+          <Show when={tab() === "alerts"}>
+            <AlertsTab range={rangeQuery(range())} onEvents={toEvents} onOpenRule={(id) => setParams({ rule: id })} />
           </Show>
           <Show when={tab() === "logs"}>
             <LogsTab

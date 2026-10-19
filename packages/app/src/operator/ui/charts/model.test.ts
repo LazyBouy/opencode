@@ -45,7 +45,17 @@ describe("chart rules", () => {
           ['say "hi"', 2],
         ],
       ),
-    ).toBe('Time,"a,b"\nt1,1\nt2,\n"say ""hi""",2')
+    ).toBe('Time,"a,b"\r\nt1,1\r\nt2,\r\n"say ""hi""",2')
+    // Formulas are defused; negative numbers aren't.
+    expect(
+      csv(
+        ["name", "value"],
+        [
+          ["=SUM(A1)", -2],
+          ["-rm", 3],
+        ],
+      ),
+    ).toBe("name,value\r\n'=SUM(A1),-2\r\n'-rm,3")
   })
 
   test("times carry their offset", () => {

@@ -16,6 +16,12 @@ export const OperatorTelemetryPaths = {
   logs: "/operator/telemetry/logs",
   facets: "/operator/telemetry/facets",
   metrics: "/operator/telemetry/metrics",
+  rules: "/operator/telemetry/alert/rule",
+  rule: "/operator/telemetry/alert/rule/:id",
+  mute: "/operator/telemetry/alert/rule/:id/mute",
+  reset: "/operator/telemetry/alert/rule/:id/reset",
+  alerts: "/operator/telemetry/alert/event",
+  ack: "/operator/telemetry/alert/event/:id/ack",
   backfill: "/operator/telemetry/backfill",
   storage: "/operator/telemetry/storage",
 } as const
@@ -26,6 +32,14 @@ export class ApiTelemetryNotFoundError extends Schema.ErrorClass<{
 }>("OperatorTelemetryNotFoundError")(
   { name: Schema.Literal("OperatorTelemetryNotFoundError"), data: Schema.Struct({ message: Schema.String }) },
   { httpApiStatus: 404 },
+) {}
+
+export class ApiTelemetryAlertError extends Schema.ErrorClass<{
+  readonly name: "OperatorTelemetryAlertError"
+  readonly data: { readonly message: string }
+}>("OperatorTelemetryAlertError")(
+  { name: Schema.Literal("OperatorTelemetryAlertError"), data: Schema.Struct({ message: Schema.String }) },
+  { httpApiStatus: 400 },
 ) {}
 
 const paging = {
@@ -178,6 +192,105 @@ export const OperatorTelemetryGroup = HttpApiGroup.make("operatorTelemetry")
         "operator.telemetry.metrics",
         "Get a metric",
         "One chart's series under the filter: from spans inside the detailed window, from hourly totals (≈) past it. A split shows the top 5 values and Other.",
+      ),
+    ),
+    HttpApiEndpoint.get("alertRules", OperatorTelemetryPaths.rules, {
+      success: described(Schema.Array(T.AlertRuleView), "Alert rules with their state"),
+    }).annotateMerge(
+      annotations(
+        "operator.telemetry.alertRules",
+        "List alert rules",
+        "The built-in rules, then the user's, each with its state (OK, not enough data, firing, muted, couldn't evaluate, off).",
+      ),
+    ),
+    HttpApiEndpoint.post("alertRuleCreate", OperatorTelemetryPaths.rules, {
+      payload: T.AlertRuleInput,
+      success: described(T.AlertRuleView, "Created"),
+      error: ApiTelemetryAlertError,
+    }).annotateMerge(
+      annotations(
+        "operator.telemetry.alertRuleCreate",
+        "Create an alert rule",
+        "A new rule; it is evaluated every 60 s.",
+      ),
+    ),
+    HttpApiEndpoint.put("alertRuleUpdate", OperatorTelemetryPaths.rule, {
+      params: { id: Schema.String },
+      payload: T.AlertRuleInput,
+      success: described(T.AlertRuleView, "Saved"),
+      error: [ApiTelemetryNotFoundError, ApiTelemetryAlertError],
+    }).annotateMerge(
+      annotations(
+        "operator.telemetry.alertRuleUpdate",
+        "Update an alert rule",
+        "Saves a rule (a built-in rule keeps its id; Reset brings its defaults back). Turning a firing rule off resolves it.",
+      ),
+    ),
+    HttpApiEndpoint.delete("alertRuleDelete", OperatorTelemetryPaths.rule, {
+      params: { id: Schema.String },
+      success: described(Schema.Boolean, "Moved to Trash"),
+      error: [ApiTelemetryNotFoundError, ApiTelemetryAlertError],
+    }).annotateMerge(
+      annotations(
+        "operator.telemetry.alertRuleDelete",
+        "Delete an alert rule",
+        "Moves a user rule to Trash (restore brings it back). Built-in rules can't be deleted.",
+      ),
+    ),
+    HttpApiEndpoint.post("alertRuleMute", OperatorTelemetryPaths.mute, {
+      params: { id: Schema.String },
+      payload: Schema.Struct({
+        for: Schema.Literals(["1h", "4h", "24h", "always", "off"]).annotate({
+          description: "1h, 4h, 24h, always (until turned back on), or off (unmute)",
+        }),
+      }),
+      success: described(T.AlertRuleView, "Muted"),
+      error: [ApiTelemetryNotFoundError, ApiTelemetryAlertError],
+    }).annotateMerge(
+      annotations(
+        "operator.telemetry.alertRuleMute",
+        "Mute an alert rule",
+        "A muted rule doesn't start firing and its alerts leave the badges until the time passes or it is unmuted.",
+      ),
+    ),
+    HttpApiEndpoint.post("alertRuleReset", OperatorTelemetryPaths.reset, {
+      params: { id: Schema.String },
+      success: described(T.AlertRuleView, "Reset"),
+      error: [ApiTelemetryNotFoundError, ApiTelemetryAlertError],
+    }).annotateMerge(
+      annotations(
+        "operator.telemetry.alertRuleReset",
+        "Reset a built-in rule",
+        "Brings a built-in rule's defaults back.",
+      ),
+    ),
+    HttpApiEndpoint.get("alertEvents", OperatorTelemetryPaths.alerts, {
+      query: Schema.Struct({
+        range: T.FilterQuery.range,
+        from: T.FilterQuery.from,
+        to: T.FilterQuery.to,
+        firing: Schema.optional(Schema.String).annotate({
+          description: "1: only alerts firing now, whatever the range",
+        }),
+        limit: Schema.optional(Schema.String),
+      }),
+      success: described(Schema.Array(T.AlertEvent), "Alert events, newest first"),
+    }).annotateMerge(
+      annotations(
+        "operator.telemetry.alertEvents",
+        "List alerts",
+        "One event per firing period, in the range (or firing now), newest first, with who acknowledged it.",
+      ),
+    ),
+    HttpApiEndpoint.post("alertAck", OperatorTelemetryPaths.ack, {
+      params: { id: Schema.String },
+      success: described(T.AlertEvent, "Acknowledged"),
+      error: ApiTelemetryNotFoundError,
+    }).annotateMerge(
+      annotations(
+        "operator.telemetry.alertAck",
+        "Acknowledge an alert",
+        "Records who and when, and takes the alert off the badges. It keeps firing until it resolves.",
       ),
     ),
     HttpApiEndpoint.get("backfillStatus", OperatorTelemetryPaths.backfill, {

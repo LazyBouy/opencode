@@ -120,6 +120,10 @@ export interface Interface {
   readonly purge: () => Effect.Effect<OperatorTelemetryRetention.Purged>
   /** Recomputes the hourly totals of hours whose spans changed (§6.2). */
   readonly totals: () => Effect.Effect<number>
+  /** Writes a span with the next flush (alerts, §14.5). */
+  readonly record: (span: OperatorTelemetryStore.SpanWrite) => void
+  /** Folders with activity in the last 15 minutes: the ones whose MCP servers are sampled (§5.9). */
+  readonly activeFolders: () => ReadonlySet<string>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorTelemetry") {}
@@ -509,7 +513,7 @@ const layer = Layer.effect(
       }).pipe(
         Effect.catchCause((cause) =>
           warn("telemetry purge failed", cause).pipe(
-            Effect.as({ spans: 0, logs: 0, samples: 0, mcp: 0, sessions: 0, totals: 0 }),
+            Effect.as({ spans: 0, logs: 0, samples: 0, mcp: 0, sessions: 0, totals: 0, alerts: 0 }),
           ),
         ),
       )
@@ -675,6 +679,11 @@ const layer = Layer.effect(
       settings: () => settings,
       purge,
       totals,
+      record: (span) => batch.span(span),
+      activeFolders: () => {
+        const now = Date.now()
+        return new Set([...ingest.folders].filter(([, time]) => now - time <= MCP_ACTIVE_MS).map(([folder]) => folder))
+      },
     })
   }),
 )

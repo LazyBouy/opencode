@@ -13,7 +13,7 @@ import { Global } from "@opencode-ai/core/global"
 // `seq` grows on every insert or update, server-wide, for the live tail. Nothing here holds content (§4.7): no
 // prompts, outputs, tool arguments or results, only short error messages and salted hashes.
 
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 export const KINDS = [
   "turn",
@@ -332,6 +332,21 @@ const MIGRATIONS: ReadonlyArray<ReadonlyArray<string>> = [
       `CREATE INDEX IF NOT EXISTS ${table}_hour ON ${table} (hour_ms)`,
     ]),
     `CREATE TABLE IF NOT EXISTS dirty_hour (hour_ms INTEGER PRIMARY KEY)`,
+  ],
+  // Version 3: alerts (§14): each rule's evaluation state, and one event per firing period. The rules are files
+  // (alert-rules.ts).
+  [
+    `CREATE TABLE IF NOT EXISTS alert_state (
+      rule_id TEXT PRIMARY KEY, state TEXT NOT NULL, streak INTEGER NOT NULL, clear INTEGER NOT NULL,
+      value REAL, count INTEGER, evaluated_ms INTEGER, error TEXT, event_id TEXT, last_fired_ms INTEGER
+    )`,
+    `CREATE TABLE IF NOT EXISTS alert_event (
+      id TEXT PRIMARY KEY, rule_id TEXT NOT NULL, name TEXT NOT NULL, severity TEXT NOT NULL, metric TEXT NOT NULL,
+      op TEXT NOT NULL, threshold REAL NOT NULL, win TEXT NOT NULL, start_ms INTEGER NOT NULL, end_ms INTEGER,
+      value REAL, worst REAL, scope TEXT, link TEXT, ack_by TEXT, ack_ms INTEGER
+    )`,
+    `CREATE INDEX IF NOT EXISTS alert_event_start ON alert_event (start_ms)`,
+    `CREATE INDEX IF NOT EXISTS alert_event_open ON alert_event (end_ms)`,
   ],
 ]
 

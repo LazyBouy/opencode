@@ -5,12 +5,13 @@ import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Database } from "@opencode-ai/core/database/database"
 import { PartTable } from "@opencode-ai/core/session/sql"
 import { OperatorProfileStore } from "@/operator/profile-store"
+import { OperatorTelemetryAlerting } from "@/operator/telemetry/alerting"
 import { OperatorTelemetry } from "@/operator/telemetry/telemetry"
 import { OperatorTelemetryMetrics } from "@/operator/telemetry/metrics"
 import { OperatorTelemetryQuery } from "@/operator/telemetry/query"
 import { OperatorTelemetryStore } from "@/operator/telemetry/store"
 import { OperatorRootApi } from "../groups/overview"
-import { ApiTelemetryNotFoundError } from "../groups/telemetry"
+import { ApiTelemetryAlertError, ApiTelemetryNotFoundError } from "../groups/telemetry"
 
 const notFound = (message: string) =>
   new ApiTelemetryNotFoundError({ name: "OperatorTelemetryNotFoundError", data: { message } })
@@ -35,27 +36,27 @@ function filterOf(query: Record<string, string | undefined>): OperatorTelemetryQ
   } as OperatorTelemetryQuery.Filter
 }
 
+const invalid = (error: { message: string }) =>
+  new ApiTelemetryAlertError({ name: "OperatorTelemetryAlertError", data: { message: error.message } })
+const alertError = (error: OperatorTelemetryAlerting.AlertError) =>
+  error.missing ? notFound(error.message) : invalid(error)
+
 const LABEL = 120
 
 export const operatorTelemetryHandlers = HttpApiBuilder.group(OperatorRootApi, "operatorTelemetry", (handlers) =>
   Effect.gen(function* () {
     const telemetry = yield* OperatorTelemetry.Service
+    const alerting = yield* OperatorTelemetryAlerting.Service
     const profiles = yield* OperatorProfileStore.Service
     const db = (yield* Database.Service).db
     const store = () => OperatorTelemetryStore.store()
 
     // The namespaces' projects as the project records have them now (§4.2): a moved project brings its history.
     const context = Effect.fnUntraced(function* () {
-      const projects = yield* profiles.projects()
-      return {
+      return OperatorTelemetryQuery.contextOf(yield* profiles.projects(), {
         now: Date.now(),
-        known: projects.map((project) => project.key),
         stuckMinutes: telemetry.settings().stuckMinutes,
-        projectsOf: (ns: string) => ({
-          keys: projects.filter((project) => project.namespace === ns).map((project) => project.key),
-          rest: ns === "opencode",
-        }),
-      } satisfies OperatorTelemetryQuery.Context
+      })
     })
     const kept = () =>
       new Set(
@@ -231,6 +232,29 @@ export const operatorTelemetryHandlers = HttpApiBuilder.group(OperatorRootApi, "
             eventsDays: telemetry.settings().eventsDays,
           })
         }),
+      )
+      .handle("alertRules", () => alerting.rules())
+      .handle("alertRuleCreate", (ctx) => alerting.create(ctx.payload).pipe(Effect.mapError(invalid)))
+      .handle("alertRuleUpdate", (ctx) => alerting.update(ctx.params.id, ctx.payload).pipe(Effect.mapError(alertError)))
+      .handle("alertRuleDelete", (ctx) =>
+        alerting.remove(ctx.params.id).pipe(Effect.as(true), Effect.mapError(alertError)),
+      )
+      .handle("alertRuleMute", (ctx) => alerting.mute(ctx.params.id, ctx.payload.for).pipe(Effect.mapError(alertError)))
+      .handle("alertRuleReset", (ctx) => alerting.reset(ctx.params.id).pipe(Effect.mapError(alertError)))
+      .handle("alertEvents", (ctx) => {
+        const { from, to } = OperatorTelemetryQuery.window(
+          { ...ctx.query, from: number(ctx.query.from), to: number(ctx.query.to) } as OperatorTelemetryQuery.Filter,
+          Date.now(),
+        )
+        return alerting.events({
+          from,
+          to,
+          firing: ctx.query.firing === "1",
+          ...(number(ctx.query.limit) !== undefined ? { limit: number(ctx.query.limit) } : {}),
+        })
+      })
+      .handle("alertAck", (ctx) =>
+        alerting.acknowledge(ctx.params.id).pipe(Effect.mapError((error) => notFound(error.message))),
       )
       .handle("backfillStatus", () => Effect.sync(() => telemetry.progress()))
       .handle("backfill", () => telemetry.rebuild())
