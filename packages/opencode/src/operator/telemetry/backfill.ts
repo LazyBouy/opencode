@@ -56,7 +56,11 @@ export function replay(
     },
   })
   const byMessage = new Map<string, Part[]>()
-  for (const part of parts) byMessage.set(part.message_id, [...(byMessage.get(part.message_id) ?? []), part])
+  for (const part of parts) {
+    const list = byMessage.get(part.message_id)
+    if (list) list.push(part)
+    else byMessage.set(part.message_id, [part])
+  }
   for (const message of messages) {
     const info = { ...message.data, id: message.id, sessionID: session.id } as Record<string, any>
     clock(Number(info.time?.created) || 0)

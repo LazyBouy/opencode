@@ -90,9 +90,7 @@ export function tool(store: Store, id: string, now: number, known?: Span) {
   // Unchanged (most finished calls): nothing to write.
   if (span.wait_ms === wait && (duration === undefined || (span.duration_ms === duration && span.active_ms === active)))
     return
-  store.upsertSpan({
-    id,
-    kind: "tool_call",
+  store.setTiming(id, {
     wait_ms: wait,
     ...(duration !== undefined ? { duration_ms: duration, active_ms: active } : {}),
   })

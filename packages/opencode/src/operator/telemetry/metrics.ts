@@ -104,9 +104,9 @@ export type Section = keyof typeof GROUPS
 
 // ---- definitions ----
 
-type Agg = "sum" | "ratio" | "p50" | "p95"
+export type Agg = "sum" | "ratio" | "p50" | "p95"
 type Hist = "hist_active" | "hist_ttft" | "hist_wait"
-type Line = {
+export type Line = {
   key: string
   kinds: ReadonlyArray<Kind>
   /** A condition on spans (SQL, no parameters). */
@@ -148,7 +148,7 @@ type Histogram = { type: "histogram"; section: Section; field: "modelCalls" | "t
 type Table = { type: "table"; section: Section; table: "tools" | "approvals"; kind: Kind }
 type Def = Lines | Samples | Histogram | Table
 
-const count = (key: string, kinds: ReadonlyArray<Kind>, extra: Partial<Line> = {}): Line => ({
+export const count = (key: string, kinds: ReadonlyArray<Kind>, extra: Partial<Line> = {}): Line => ({
   key,
   kinds,
   agg: "sum",
@@ -156,7 +156,7 @@ const count = (key: string, kinds: ReadonlyArray<Kind>, extra: Partial<Line> = {
   totals: { value: "count", ...(extra.where ? { where: extra.where } : {}) },
   ...extra,
 })
-const share = (
+export const share = (
   key: string,
   kinds: ReadonlyArray<Kind>,
   where: string,
@@ -172,7 +172,7 @@ const share = (
   totals: { where, value: `CASE WHEN ${part} THEN count ELSE 0 END`, of: "count" },
   ...extra,
 })
-const pct = (
+export const pct = (
   key: string,
   agg: "p50" | "p95",
   kinds: ReadonlyArray<Kind>,
@@ -189,7 +189,7 @@ const pct = (
   ...(hist ? { totals: { hist, ...(where ? { where } : {}) } } : {}),
   ...extra,
 })
-const sumOf = (
+export const sumOf = (
   key: string,
   kinds: ReadonlyArray<Kind>,
   value: string,
@@ -604,8 +604,8 @@ export function stepOf(length: number, beyond: boolean) {
   return beyond ? Math.max(HOUR, step) : step
 }
 
-type Frame = { from: number; to: number; step: number; count: number }
-const frameOf = (from: number, to: number, step: number): Frame => {
+export type Frame = { from: number; to: number; step: number; count: number }
+export const frameOf = (from: number, to: number, step: number): Frame => {
   const start = Math.floor(from / step) * step
   const count = Math.max(1, Math.ceil((to - start) / step))
   return { from: start, to: start + count * step, step, count }
@@ -616,9 +616,9 @@ const BUCKET = (time: string) => `CAST((${time} - ?) / ? AS INTEGER)`
 
 // ---- cells ----
 
-type Cell = { v: number; d: number; list: number[]; hist: number[] }
-const blank = (): Cell => ({ v: 0, d: 0, list: [], hist: [] })
-const merge = (into: Cell, from: Cell) => {
+export type Cell = { v: number; d: number; list: number[]; hist: number[] }
+export const blank = (): Cell => ({ v: 0, d: 0, list: [], hist: [] })
+export const merge = (into: Cell, from: Cell) => {
   into.v += from.v
   into.d += from.d
   for (const value of from.list) into.list.push(value)
@@ -627,13 +627,14 @@ const merge = (into: Cell, from: Cell) => {
 const weight = (cell: Cell) =>
   cell.v + cell.d + cell.list.length + cell.hist.reduce((sum, value) => sum + (value ?? 0), 0)
 
-const percentile = (values: number[], p: number) => {
+export const percentile = (values: ReadonlyArray<number>, p: number) => {
   if (!values.length) return null
-  const sorted = values.toSorted((a, b) => a - b)
+  // A typed array sorts numbers without a comparator (several times faster on the 100,000 values of a month).
+  const sorted = Float64Array.from(values).sort()
   return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(p * sorted.length) - 1))]!
 }
 
-function valueOf(agg: Agg, cell: Cell | undefined): number | null {
+export function valueOf(agg: Agg, cell: Cell | undefined): number | null {
   if (agg === "sum") return cell?.v ?? 0
   if (!cell) return null
   if (agg === "ratio") return cell.d ? (cell.v / cell.d) * 100 : null
@@ -649,7 +650,7 @@ function valueOf(agg: Agg, cell: Cell | undefined): number | null {
 }
 
 /** Cells per split value and step. */
-type Grid = Map<string, Cell[]>
+export type Grid = Map<string, Cell[]>
 const cellAt = (grid: Grid, frame: Frame, key: string, index: number) => {
   if (index < 0 || index >= frame.count) return undefined
   let row = grid.get(key)
@@ -662,7 +663,7 @@ const cellAt = (grid: Grid, frame: Frame, key: string, index: number) => {
 
 // ---- reading ----
 
-type Source = {
+export type Source = {
   store: Store
   frame: Frame
   /** The filter on spans (events) or on hourly totals (totals). */
@@ -678,7 +679,7 @@ const kindsIn = (kinds: ReadonlyArray<Kind>): Clause => ({
 type Sums = Array<{ b: number; k: string; v: number | null; d: number | null }>
 
 /** One line's cells, split by a key (SQL) or not (one key, ""). */
-function read(source: Source, line: Line, key: string | undefined): Grid {
+export function read(source: Source, line: Line, key: string | undefined): Grid {
   const { store, frame } = source
   const grid: Grid = new Map()
   const kinds = kindsIn(line.kinds)
@@ -966,8 +967,11 @@ function approvalTable(source: Source): Row[] {
       `SELECT COALESCE(permission, '') AS k, COALESCE(wait_ms, duration_ms) AS v FROM span
        WHERE ${base} AND COALESCE(wait_ms, duration_ms) IS NOT NULL`,
     )
-    .all(...params) as Array<{ k: string; v: number }>)
-    waits.set(row.k, [...(waits.get(row.k) ?? []), row.v])
+    .all(...params) as Array<{ k: string; v: number }>) {
+    const list = waits.get(row.k)
+    if (list) list.push(row.v)
+    else waits.set(row.k, [row.v])
+  }
   // The decider seen most often wins (rows in ascending count, the last one kept).
   const deciders = new Map<string, string>()
   for (const row of store.db
@@ -1015,7 +1019,11 @@ const NOT_IN_TOTALS = [
   "q",
 ] as const
 
-function totalsWhere(filter: OperatorTelemetryQuery.Filter, context: OperatorTelemetryQuery.Context, frame: Frame) {
+export function totalsWhere(
+  filter: OperatorTelemetryQuery.Filter,
+  context: OperatorTelemetryQuery.Context,
+  frame: Frame,
+) {
   const clauses: Clause[] = [
     { sql: "hour_ms >= ? AND hour_ms < ?", params: [frame.from, frame.to] },
     ...OperatorTelemetryQuery.scope(filter, context),

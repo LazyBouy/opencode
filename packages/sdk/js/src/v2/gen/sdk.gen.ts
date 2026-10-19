@@ -432,10 +432,14 @@ import type {
   OperatorTelemetryAlertRulesResponses,
   OperatorTelemetryAlertRuleUpdateErrors,
   OperatorTelemetryAlertRuleUpdateResponses,
+  OperatorTelemetryAttentionErrors,
+  OperatorTelemetryAttentionResponses,
   OperatorTelemetryBackfillErrors,
   OperatorTelemetryBackfillResponses,
   OperatorTelemetryBackfillStatusErrors,
   OperatorTelemetryBackfillStatusResponses,
+  OperatorTelemetryBreakdownErrors,
+  OperatorTelemetryBreakdownResponses,
   OperatorTelemetryClearErrors,
   OperatorTelemetryClearResponses,
   OperatorTelemetryEventsErrors,
@@ -465,6 +469,8 @@ import type {
   OperatorTelemetrySpanResponses,
   OperatorTelemetryStorageErrors,
   OperatorTelemetryStorageResponses,
+  OperatorTelemetryTilesErrors,
+  OperatorTelemetryTilesResponses,
   OperatorTelemetryTurnErrors,
   OperatorTelemetryTurnResponses,
   OperatorTelemetryUnkeepErrors,
@@ -5534,6 +5540,170 @@ export class Telemetry extends HeyApiClient {
       ThrowOnError
     >({
       url: "/operator/telemetry/export",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Needs attention
+   *
+   * The Dashboard's strip: approvals waiting, alerts firing, sessions with errors, stuck sessions, possible loops, rate limits, MCP servers down, the queue, the budget and telemetry problems, now, in scope. Not cached.
+   */
+  public attention<ThrowOnError extends boolean = false>(
+    parameters?: {
+      ns?: string
+      dir?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "ns" },
+            { in: "query", key: "dir" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorTelemetryAttentionResponses,
+      OperatorTelemetryAttentionErrors,
+      ThrowOnError
+    >({
+      url: "/operator/telemetry/attention",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Dashboard tiles
+   *
+   * Turns, turn errors, turn time, approval wait, rate limits and cost over the range, each with its previous period, hint numbers and a sparkline. Cached 30 s per range and scope.
+   */
+  public tiles<ThrowOnError extends boolean = false>(
+    parameters?: {
+      range?: string
+      from?: string
+      to?: string
+      ns?: string
+      dir?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "range" },
+            { in: "query", key: "from" },
+            { in: "query", key: "to" },
+            { in: "query", key: "ns" },
+            { in: "query", key: "dir" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorTelemetryTilesResponses,
+      OperatorTelemetryTilesErrors,
+      ThrowOnError
+    >({
+      url: "/operator/telemetry/tiles",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Dashboard breakdown
+   *
+   * Agents, tools, models or projects in the range: turns, calls, errors, denials, p95 active time, cost, sessions, last used; the top rows and an Other row with the rest's sums, for each `by` asked. Cached 30 s.
+   */
+  public breakdown<ThrowOnError extends boolean = false>(
+    parameters: {
+      range?: string
+      from?: string
+      to?: string
+      ns?: string
+      dir?: string
+      session?: string
+      agent?: string
+      agentType?: string
+      model?: string
+      provider?: string
+      tool?: string
+      mcp?: string
+      kind?: string
+      status?: string
+      errorType?: string
+      finish?: string
+      decision?: string
+      minCost?: string
+      maxCost?: string
+      minDuration?: string
+      maxDuration?: string
+      minTokens?: string
+      loop?: string
+      http?: string
+      q?: string
+      roots?: string
+      sessionStatus?: string
+      stuck?: string
+      by: string
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "range" },
+            { in: "query", key: "from" },
+            { in: "query", key: "to" },
+            { in: "query", key: "ns" },
+            { in: "query", key: "dir" },
+            { in: "query", key: "session" },
+            { in: "query", key: "agent" },
+            { in: "query", key: "agentType" },
+            { in: "query", key: "model" },
+            { in: "query", key: "provider" },
+            { in: "query", key: "tool" },
+            { in: "query", key: "mcp" },
+            { in: "query", key: "kind" },
+            { in: "query", key: "status" },
+            { in: "query", key: "errorType" },
+            { in: "query", key: "finish" },
+            { in: "query", key: "decision" },
+            { in: "query", key: "minCost" },
+            { in: "query", key: "maxCost" },
+            { in: "query", key: "minDuration" },
+            { in: "query", key: "maxDuration" },
+            { in: "query", key: "minTokens" },
+            { in: "query", key: "loop" },
+            { in: "query", key: "http" },
+            { in: "query", key: "q" },
+            { in: "query", key: "roots" },
+            { in: "query", key: "sessionStatus" },
+            { in: "query", key: "stuck" },
+            { in: "query", key: "by" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorTelemetryBreakdownResponses,
+      OperatorTelemetryBreakdownErrors,
+      ThrowOnError
+    >({
+      url: "/operator/telemetry/breakdown",
       ...options,
       ...params,
     })

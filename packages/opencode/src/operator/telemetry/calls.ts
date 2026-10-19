@@ -31,7 +31,9 @@ export function spans(input: {
   const groups = new Map<string, string[]>()
   for (const call of input.calls) {
     const key = groupOf.get(call.callID)!
-    groups.set(key, [...(groups.get(key) ?? []), call.callID])
+    const group = groups.get(key)
+    if (group) group.push(call.callID)
+    else groups.set(key, [call.callID])
   }
   return input.calls.map((call) => {
     const group = groups.get(groupOf.get(call.callID)!)!

@@ -394,6 +394,136 @@ export const ExportCount = Schema.Struct({
   limit: Schema.Finite,
 }).annotate({ identifier: "OperatorTelemetryExportCount" })
 
+const maybe = Schema.NullOr(Schema.Finite)
+export const DashboardLink = Schema.Struct({
+  page: Schema.Literals(["inbox", "observability", "capabilities"]),
+  params: Schema.Record(Schema.String, Schema.String),
+}).annotate({ identifier: "OperatorDashboardLink" })
+
+export const DashboardItem = Schema.Struct({
+  kind: Schema.Literals([
+    "approvals",
+    "alerts",
+    "errors",
+    "stuck",
+    "loops",
+    "rate_limited",
+    "mcp",
+    "queue",
+    "budget",
+    "telemetry",
+  ]),
+  severity: Schema.Literals(["critical", "warning"]),
+  count: Schema.Finite,
+  worst: Schema.Struct({
+    label: Schema.optional(Schema.String),
+    ageMs: Schema.optional(Schema.Finite),
+    status: Schema.optional(Schema.String),
+    amount: Schema.optional(Schema.Finite),
+    limit: Schema.optional(Schema.Finite),
+    critical: Schema.optional(Schema.Finite),
+  }),
+  alert: Schema.Boolean.annotate({ description: "An alert firing covers it (not counted again under alerts)" }),
+  link: DashboardLink,
+}).annotate({ identifier: "OperatorDashboardItem" })
+
+export const DashboardAttention = Schema.Struct({
+  items: Schema.Array(DashboardItem),
+  running: Schema.Finite.annotate({ description: "Top sessions running or waiting for approval now" }),
+  runningNow: Schema.Struct({
+    rows: Schema.Array(SessionRow),
+    total: Schema.Finite,
+  }).annotate({
+    description:
+      "Running now: sessions running or waiting (subagents and helpers too), longest-running turn first, the first 6",
+  }),
+  telemetry: Schema.Struct({
+    enabled: Schema.Boolean,
+    dropped: Schema.Finite,
+    backfill: Schema.optional(Schema.Struct({ done: Schema.Finite, total: Schema.Finite })),
+  }),
+}).annotate({ identifier: "OperatorDashboardAttention" })
+
+const Change = Schema.Struct({
+  kind: Schema.Literals(["relative", "points", "same", "insufficient"]),
+  value: Schema.optional(Schema.Finite).annotate({ description: "% (relative) or percentage points" }),
+})
+const tile = <F extends Schema.Struct.Fields>(identifier: string, hint: F) =>
+  Schema.Struct({
+    value: maybe,
+    previous: maybe.annotate({ description: "The same over the previous period of the same length" }),
+    change: Change,
+    hint: Schema.Struct(hint),
+    series: Schema.Array(Schema.Array(maybe)).annotate({ description: "[step start (ms), value]" }),
+    approx: Schema.Boolean.annotate({ description: "Percentiles estimated from hourly totals" }),
+  }).annotate({ identifier })
+
+export const DashboardTiles = Schema.Struct({
+  enabled: Schema.Boolean,
+  tiles: Schema.optional(
+    Schema.Struct({
+      turns: tile("OperatorDashboardTurns", { sessions: maybe, running: Schema.Finite }),
+      turnErrors: tile("OperatorDashboardTurnErrors", { failed: maybe, denied: maybe, toolErrorRate: maybe }),
+      turnTime: tile("OperatorDashboardTurnTime", {
+        p50: maybe,
+        ttftP95: maybe.annotate({ description: "null: no recorded calls (call recording off)" }),
+      }),
+      approvalWait: tile("OperatorDashboardApprovalWait", {
+        requests: Schema.Finite,
+        denied: maybe,
+        waiting: Schema.Finite,
+      }),
+      rateLimits: tile("OperatorDashboardRateLimits", {
+        retries: maybe,
+        compactions: maybe,
+        contextP95: maybe.annotate({
+          description: "p95 across model calls of context tokens ÷ the model's window (models.dev), in %",
+        }),
+      }),
+      cost: tile("OperatorDashboardCost", { tokens: maybe }),
+    }),
+  ),
+  budget: Schema.optional(Schema.NullOr(Schema.Struct({ today: Schema.Finite, limit: Schema.Finite }))),
+  source: Schema.optional(Schema.Literals(["events", "totals"])),
+  step: Schema.optional(Schema.Finite),
+  from: Schema.optional(Schema.Finite),
+  to: Schema.optional(Schema.Finite),
+}).annotate({ identifier: "OperatorDashboardTiles" })
+
+const BreakdownSums = {
+  turns: Schema.optional(Schema.Finite).annotate({ description: "Not for tools" }),
+  calls: Schema.Finite,
+  errors: Schema.Finite,
+  errorRate: maybe,
+  denials: Schema.Finite,
+  cost: Schema.Finite,
+  sessions: Schema.optional(Schema.Finite).annotate({ description: "Not for tools" }),
+}
+const BreakdownGroup = Schema.Struct({
+  rows: Schema.Array(
+    Schema.Struct({
+      key: Schema.String,
+      label: Schema.String,
+      type: Schema.optional(Schema.String).annotate({ description: "usual, subagent or helper (agents)" }),
+      server: Schema.optional(Schema.String).annotate({ description: "A tool's MCP server" }),
+      ...BreakdownSums,
+      p95Active: maybe,
+      lastUsed: maybe,
+    }).annotate({ identifier: "OperatorDashboardBreakdownRow" }),
+  ),
+  other: Schema.NullOr(Schema.Struct({ keys: Schema.Array(Schema.String), ...BreakdownSums })),
+}).annotate({ identifier: "OperatorDashboardBreakdownGroup" })
+/** One group per `by` asked: the Dashboard's Agents and Tools panels come in one request (dashboard_spec.md §11). */
+export const DashboardBreakdown = Schema.Struct({
+  enabled: Schema.Boolean,
+  groups: Schema.Struct({
+    agent: Schema.optional(BreakdownGroup),
+    tool: Schema.optional(BreakdownGroup),
+    model: Schema.optional(BreakdownGroup),
+    project: Schema.optional(BreakdownGroup),
+  }),
+}).annotate({ identifier: "OperatorDashboardBreakdown" })
+
 /** The shared filter (§7.2), as query parameters: lists comma-separated, numbers as text. */
 export const FilterQuery = {
   range: Schema.optional(Schema.String).annotate({

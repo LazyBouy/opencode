@@ -704,6 +704,18 @@ const layer = Layer.effect(
         Effect.delay("30 seconds"),
         Effect.forkIn(scope),
       )
+      // The write-ahead log into the file, apart from the writes (the store doesn't checkpoint inside them).
+      yield* open(() =>
+        Effect.sync(() => store.checkpoint()).pipe(
+          Effect.catchCause((cause) => warn("telemetry checkpoint failed", cause)),
+        ),
+      ).pipe(Effect.repeat(Schedule.spaced("10 seconds")), Effect.forkIn(scope))
+      // Statistics once the first writes and the backfill have landed (purges keep them current after).
+      yield* open(() =>
+        Effect.sync(() => store.optimize()).pipe(
+          Effect.catchCause((cause) => warn("telemetry optimize failed", cause)),
+        ),
+      ).pipe(Effect.delay("5 minutes"), Effect.forkIn(scope))
       // The store's first start builds history (§5.11).
       if (firstStart) yield* backfill({ log: true }).pipe(Effect.delay("5 seconds"), Effect.forkIn(scope))
       // What is left at shutdown is written.

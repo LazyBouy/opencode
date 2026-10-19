@@ -41,8 +41,7 @@ export function apply(
       store.deleteSpan(id)
     }
     for (const span of batch.spans.values()) {
-      store.upsertSpan(span)
-      mark(store.span(span.id))
+      mark(store.writeSpan(span))
     }
     // A session deleted for good leaves what it added to the totals (§5.10).
     for (const id of batch.deletedSessions) {

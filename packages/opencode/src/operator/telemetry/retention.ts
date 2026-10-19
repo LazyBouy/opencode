@@ -130,5 +130,6 @@ export function purge(
   for (const id of [...out.touched]) if (!store.session(id)) out.touched.delete(id)
   store.db.exec("PRAGMA incremental_vacuum")
   store.setMeta("last_purge", String(input.now))
+  store.optimize()
   return out
 }

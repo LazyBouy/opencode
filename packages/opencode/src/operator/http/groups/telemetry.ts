@@ -28,6 +28,9 @@ export const OperatorTelemetryPaths = {
   clear: "/operator/telemetry/clear",
   export: "/operator/telemetry/export",
   exportCount: "/operator/telemetry/export/count",
+  attention: "/operator/telemetry/attention",
+  tiles: "/operator/telemetry/tiles",
+  breakdown: "/operator/telemetry/breakdown",
   backfill: "/operator/telemetry/backfill",
   storage: "/operator/telemetry/storage",
 } as const
@@ -416,6 +419,49 @@ export const OperatorTelemetryGroup = HttpApiGroup.make("operatorTelemetry")
         "operator.telemetry.export",
         "Export",
         "Streams Sessions, Events or Logs under the filter, sort and range: CSV (the visible columns) or JSON Lines (every stored field), up to 100,000 rows. Holds no content.",
+      ),
+    ),
+    HttpApiEndpoint.get("attention", OperatorTelemetryPaths.attention, {
+      query: Schema.Struct({ ns: T.FilterQuery.ns, dir: T.FilterQuery.dir }),
+      success: described(T.DashboardAttention, "What needs a person now"),
+    }).annotateMerge(
+      annotations(
+        "operator.telemetry.attention",
+        "Needs attention",
+        "The Dashboard's strip: approvals waiting, alerts firing, sessions with errors, stuck sessions, possible loops, rate limits, MCP servers down, the queue, the budget and telemetry problems, now, in scope. Not cached.",
+      ),
+    ),
+    HttpApiEndpoint.get("tiles", OperatorTelemetryPaths.tiles, {
+      query: Schema.Struct({
+        range: Schema.optional(Schema.String).annotate({ description: "24h, 7d, 14d (default) or 30d" }),
+        from: T.FilterQuery.from,
+        to: T.FilterQuery.to,
+        ns: T.FilterQuery.ns,
+        dir: T.FilterQuery.dir,
+      }),
+      success: described(T.DashboardTiles, "The six tiles"),
+    }).annotateMerge(
+      annotations(
+        "operator.telemetry.tiles",
+        "Dashboard tiles",
+        "Turns, turn errors, turn time, approval wait, rate limits and cost over the range, each with its previous period, hint numbers and a sparkline. Cached 30 s per range and scope.",
+      ),
+    ),
+    HttpApiEndpoint.get("breakdown", OperatorTelemetryPaths.breakdown, {
+      query: Schema.Struct({
+        ...T.FilterQuery,
+        by: Schema.String.annotate({
+          description: "agent, tool, model or project; several, comma-separated, give a group each",
+        }),
+        limit: Schema.optional(Schema.String).annotate({ description: "Rows before Other (default 8)" }),
+      }),
+      success: described(T.DashboardBreakdown, "Rows and Other, per group"),
+      error: ApiTelemetryInvalidError,
+    }).annotateMerge(
+      annotations(
+        "operator.telemetry.breakdown",
+        "Dashboard breakdown",
+        "Agents, tools, models or projects in the range: turns, calls, errors, denials, p95 active time, cost, sessions, last used; the top rows and an Other row with the rest's sums, for each `by` asked. Cached 30 s.",
       ),
     ),
     HttpApiEndpoint.get("backfillStatus", OperatorTelemetryPaths.backfill, {

@@ -2,6 +2,7 @@ import fs from "fs"
 import path from "path"
 import { describe, expect, test } from "bun:test"
 import { OperatorTelemetryBatch } from "@/operator/telemetry/batch"
+import { OperatorTelemetryDashboard } from "@/operator/telemetry/dashboard"
 import { OperatorTelemetryDerive } from "@/operator/telemetry/derive"
 import { OperatorTelemetryMetrics as M } from "@/operator/telemetry/metrics"
 import { OperatorTelemetryQuery as Q } from "@/operator/telemetry/query"
@@ -45,9 +46,9 @@ const status = () => {
   return roll < 0.9 ? "ok" : roll < 0.95 ? "error" : roll < 0.98 ? "denied" : "interrupted"
 }
 
-type Built = { store: OperatorTelemetryStore.Store; spans: number; big: string; seconds: number }
+export type Built = { store: OperatorTelemetryStore.Store; spans: number; big: string; seconds: number }
 
-function build(dir: string): Built {
+export function build(dir: string): Built {
   const store = new OperatorTelemetryStore.Store(path.join(dir, "telemetry.sqlite"))
   const started = performance.now()
   let spans = 0
@@ -267,10 +268,15 @@ function build(dir: string): Built {
     )
   })
   store.transaction(() => OperatorTelemetryTotals.recompute(store))
+  // The log checkpointed and statistics kept, as the server does (every 10 s; after purges, and minutes after start).
+  store.checkpoint()
+  store.optimize()
   return { store, spans, big: "ses_big", seconds: (performance.now() - started) / 1000 }
 }
 
 const time = (work: () => unknown, runs = 5) => {
+  // Once first, unmeasured: a running server has its statements compiled and its pages cached.
+  work()
   const samples: number[] = []
   for (let n = 0; n < runs; n++) {
     const start = performance.now()
@@ -368,6 +374,33 @@ describe.skipIf(!run)("telemetry performance (§19)", () => {
         )
       for (const field of ["kind", "status", "tool", "model", "agent"] as const)
         measure(`facet ${field}`, 300, () => Q.facet(store, month, context, { scope: "events", field }))
+      // The Dashboard (dashboard_spec.md §11).
+      measure("Dashboard attention", 100, () =>
+        OperatorTelemetryDashboard.attention(store, {
+          scope: {},
+          context,
+          enabled: true,
+          stuckMinutes: 10,
+          queueMinutes: 10,
+          dailyBudget: 10,
+          dropped: 0,
+          alerts: [],
+          activeFolders: new Set(PROJECTS),
+        }),
+      )
+      measure("Dashboard tiles, 30 days", 400, () =>
+        OperatorTelemetryDashboard.tiles(store, {
+          filter: { range: "30d" },
+          scope: {},
+          context,
+          eventsDays: 30,
+          dailyBudget: 10,
+        }),
+      )
+      for (const by of ["agent", "tool"] as const)
+        measure(`Dashboard breakdown by ${by}`, 300, () =>
+          OperatorTelemetryDashboard.breakdown(store, { by, limit: 8, filter: month, context }),
+        )
       measure("session detail with 200 turns", 500, () => {
         const { turns } = Q.turns(store, built.big, { all: true })
         for (const turn of turns.slice(-1)) store.spansOfTurn(turn.span.id)

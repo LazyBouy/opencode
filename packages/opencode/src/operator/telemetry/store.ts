@@ -13,7 +13,7 @@ import { Global } from "@opencode-ai/core/global"
 // `seq` grows on every insert or update, server-wide, for the live tail. Nothing here holds content (§4.7): no
 // prompts, outputs, tool arguments or results, only short error messages and salted hashes.
 
-export const SCHEMA_VERSION = 4
+export const SCHEMA_VERSION = 5
 
 export const KINDS = [
   "turn",
@@ -355,6 +355,12 @@ const MIGRATIONS: ReadonlyArray<ReadonlyArray<string>> = [
     `CREATE INDEX IF NOT EXISTS span_kind_page ON span (kind, COALESCE(start_ms, -9e18), id)`,
     `CREATE INDEX IF NOT EXISTS span_status_page ON span (status, COALESCE(start_ms, -9e18), id)`,
   ],
+  // Version 5: the tool index also holds what the Dashboard's Tools panel counts (kind, MCP server, status), so that
+  // count reads the index alone (dashboard_spec.md §11). It replaces the old one: no index more to keep up on writes.
+  [
+    `DROP INDEX IF EXISTS span_tool`,
+    `CREATE INDEX IF NOT EXISTS span_tool_cover ON span (tool, start_ms, kind, mcp_server, status)`,
+  ],
 ]
 
 const placeholders = (count: number) => Array.from({ length: count }, () => "?").join(", ")
@@ -365,6 +371,7 @@ export class Store {
   readonly file: string
   private seq = 0
   private upsertSpanStmt!: ReturnType<Database["prepare"]>
+  private writeSpanStmt!: ReturnType<Database["prepare"]>
   private upsertSessionStmt!: ReturnType<Database["prepare"]>
 
   constructor(file: string) {
@@ -393,7 +400,12 @@ export class Store {
     this.db.exec("PRAGMA journal_mode = WAL")
     this.db.exec("PRAGMA synchronous = NORMAL")
     this.db.exec("PRAGMA busy_timeout = 5000")
+    // Checkpoints run on their own (`checkpoint`, every 10 s from the recorder), never inside a write (§19: a flush).
+    // The log a backfill grows is cut back to 64 MB once it restarts.
+    this.db.exec("PRAGMA wal_autocheckpoint = 0")
+    this.db.exec("PRAGMA journal_size_limit = 67108864")
     this.migrate()
+    this.optimize(true)
     this.seq = Number(this.meta("seq") ?? 0)
     // A column the write leaves out keeps its value: COALESCE(new, old).
     this.upsertSpanStmt = this.db.prepare(
@@ -402,9 +414,30 @@ export class Store {
          (column) => `${column} = COALESCE(excluded.${column}, span.${column})`,
        ).join(", ")}`,
     )
+    this.writeSpanStmt = this.db.prepare(
+      `INSERT INTO span (id, seq, ${SPAN_COLUMNS.join(", ")}) VALUES (${placeholders(SPAN_COLUMNS.length + 2)})
+       ON CONFLICT(id) DO UPDATE SET seq = excluded.seq, ${SPAN_COLUMNS.map(
+         (column) => `${column} = COALESCE(excluded.${column}, span.${column})`,
+       ).join(", ")}
+       RETURNING *`,
+    )
     this.upsertSessionStmt = this.db.prepare(
       `INSERT OR REPLACE INTO session_row (${SESSION_COLUMNS.join(", ")}) VALUES (${placeholders(SESSION_COLUMNS.length)})`,
     )
+  }
+
+  /** Copies the write-ahead log into the file, without waiting on readers (the recorder runs it every 10 s). */
+  checkpoint() {
+    this.db.exec("PRAGMA wal_checkpoint(PASSIVE)")
+  }
+
+  /**
+   * Keeps SQLite's table statistics current, so it picks the selective index (without them it may read every `ok` span
+   * to find the turns). Bounded: it samples, and only tables that changed enough. On open, and after each purge.
+   */
+  optimize(open = false) {
+    this.db.exec("PRAGMA analysis_limit = 1000")
+    this.db.exec(open ? "PRAGMA optimize = 0x10002" : "PRAGMA optimize")
   }
 
   private migrate() {
@@ -449,12 +482,34 @@ export class Store {
     return result
   }
 
+  /** Writes a span: the columns it names; the others keep their value. */
   upsertSpan(write: SpanWrite) {
-    const values = SPAN_COLUMNS.map((column) => {
+    this.upsertSpanStmt.run(write.id, this.nextSeq(), ...this.valuesOf(write))
+  }
+
+  /**
+   * A tool call's derived times only (derive.ts): an UPDATE of these columns, so only the seq index changes (a full
+   * upsert sets every column, and SQLite then updates every index).
+   */
+  setTiming(id: string, timing: { wait_ms: number; duration_ms?: number; active_ms?: number }) {
+    this.db
+      .query(
+        `UPDATE span SET seq = ?, wait_ms = ?, duration_ms = COALESCE(?, duration_ms), active_ms = COALESCE(?, active_ms)
+         WHERE id = ?`,
+      )
+      .run(this.nextSeq(), timing.wait_ms, timing.duration_ms ?? null, timing.active_ms ?? null, id)
+  }
+
+  /** The same, returning the row as it now is (the writer, which reads each row it writes). */
+  writeSpan(write: SpanWrite): Span {
+    return this.writeSpanStmt.get(write.id, this.nextSeq(), ...this.valuesOf(write)) as Span
+  }
+
+  private valuesOf(write: SpanWrite) {
+    return SPAN_COLUMNS.map((column) => {
       const value = (write as Record<string, unknown>)[column]
       return value === undefined ? null : (value as string | number | null)
     })
-    this.upsertSpanStmt.run(write.id, this.nextSeq(), ...values)
   }
 
   deleteSpan(id: string) {

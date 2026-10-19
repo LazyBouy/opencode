@@ -8511,6 +8511,424 @@
         ]
       }
     },
+    "/operator/telemetry/attention": {
+      "get": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.attention",
+        "parameters": [
+          {
+            "name": "ns",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "What needs a person now",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorDashboardAttention"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The Dashboard's strip: approvals waiting, alerts firing, sessions with errors, stuck sessions, possible loops, rate limits, MCP servers down, the queue, the budget and telemetry problems, now, in scope. Not cached.",
+        "summary": "Needs attention",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.attention({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/telemetry/tiles": {
+      "get": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.tiles",
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "ns",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The six tiles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorDashboardTiles"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Turns, turn errors, turn time, approval wait, rate limits and cost over the range, each with its previous period, hint numbers and a sparkline. Cached 30 s per range and scope.",
+        "summary": "Dashboard tiles",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.tiles({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/telemetry/breakdown": {
+      "get": {
+        "tags": ["operator telemetry"],
+        "operationId": "operator.telemetry.breakdown",
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "ns",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "session",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "agentType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "tool",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "mcp",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "errorType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "finish",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "decision",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "minCost",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "maxCost",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "minDuration",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "maxDuration",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "minTokens",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "loop",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "http",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "roots",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "sessionStatus",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "stuck",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "by",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "description": "agent, tool, model or project; several, comma-separated, give a group each"
+            },
+            "required": true
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rows and Other, per group",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorDashboardBreakdown"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorTelemetryInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorTelemetryInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Agents, tools, models or projects in the range: turns, calls, errors, denials, p95 active time, cost, sessions, last used; the top rows and an Other row with the rest's sums, for each `by` asked. Cached 30 s.",
+        "summary": "Dashboard breakdown",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.telemetry.breakdown({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/operator/telemetry/backfill": {
       "get": {
         "tags": ["operator telemetry"],
@@ -40960,6 +41378,655 @@
           }
         },
         "required": ["rows", "limit"],
+        "additionalProperties": false
+      },
+      "OperatorDashboardLink": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "string",
+            "enum": ["inbox", "observability", "capabilities"]
+          },
+          "params": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["page", "params"],
+        "additionalProperties": false
+      },
+      "OperatorDashboardItem": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "approvals",
+              "alerts",
+              "errors",
+              "stuck",
+              "loops",
+              "rate_limited",
+              "mcp",
+              "queue",
+              "budget",
+              "telemetry"
+            ]
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["critical", "warning"]
+          },
+          "count": {
+            "type": "number"
+          },
+          "worst": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "ageMs": {
+                "type": "number"
+              },
+              "status": {
+                "type": "string"
+              },
+              "amount": {
+                "type": "number"
+              },
+              "limit": {
+                "type": "number"
+              },
+              "critical": {
+                "type": "number"
+              }
+            },
+            "additionalProperties": false
+          },
+          "alert": {
+            "type": "boolean",
+            "description": "An alert firing covers it (not counted again under alerts)"
+          },
+          "link": {
+            "$ref": "#/components/schemas/OperatorDashboardLink"
+          }
+        },
+        "required": ["kind", "severity", "count", "worst", "alert", "link"],
+        "additionalProperties": false
+      },
+      "OperatorDashboardAttention": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorDashboardItem"
+            }
+          },
+          "running": {
+            "type": "number",
+            "description": "Top sessions running or waiting for approval now"
+          },
+          "runningNow": {
+            "type": "object",
+            "properties": {
+              "rows": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/OperatorTelemetrySessionRow"
+                }
+              },
+              "total": {
+                "type": "number"
+              }
+            },
+            "required": ["rows", "total"],
+            "additionalProperties": false,
+            "description": "Running now: sessions running or waiting (subagents and helpers too), longest-running turn first, the first 6"
+          },
+          "telemetry": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "dropped": {
+                "type": "number"
+              },
+              "backfill": {
+                "type": "object",
+                "properties": {
+                  "done": {
+                    "type": "number"
+                  },
+                  "total": {
+                    "type": "number"
+                  }
+                },
+                "required": ["done", "total"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["enabled", "dropped"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["items", "running", "runningNow", "telemetry"],
+        "additionalProperties": false
+      },
+      "OperatorDashboardTurns": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "number"
+          },
+          "previous": {
+            "type": "number"
+          },
+          "change": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["relative", "points", "same", "insufficient"]
+              },
+              "value": {
+                "type": "number"
+              }
+            },
+            "required": ["kind"],
+            "additionalProperties": false
+          },
+          "hint": {
+            "type": "object",
+            "properties": {
+              "sessions": {
+                "type": "number"
+              },
+              "running": {
+                "type": "number"
+              }
+            },
+            "required": ["sessions", "running"],
+            "additionalProperties": false
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "description": "[step start (ms), value]"
+          },
+          "approx": {
+            "type": "boolean",
+            "description": "Percentiles estimated from hourly totals"
+          }
+        },
+        "required": ["value", "previous", "change", "hint", "series", "approx"],
+        "additionalProperties": false
+      },
+      "OperatorDashboardTurnErrors": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "number"
+          },
+          "previous": {
+            "type": "number"
+          },
+          "change": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["relative", "points", "same", "insufficient"]
+              },
+              "value": {
+                "type": "number"
+              }
+            },
+            "required": ["kind"],
+            "additionalProperties": false
+          },
+          "hint": {
+            "type": "object",
+            "properties": {
+              "failed": {
+                "type": "number"
+              },
+              "denied": {
+                "type": "number"
+              },
+              "toolErrorRate": {
+                "type": "number"
+              }
+            },
+            "required": ["failed", "denied", "toolErrorRate"],
+            "additionalProperties": false
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "description": "[step start (ms), value]"
+          },
+          "approx": {
+            "type": "boolean",
+            "description": "Percentiles estimated from hourly totals"
+          }
+        },
+        "required": ["value", "previous", "change", "hint", "series", "approx"],
+        "additionalProperties": false
+      },
+      "OperatorDashboardTurnTime": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "number"
+          },
+          "previous": {
+            "type": "number"
+          },
+          "change": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["relative", "points", "same", "insufficient"]
+              },
+              "value": {
+                "type": "number"
+              }
+            },
+            "required": ["kind"],
+            "additionalProperties": false
+          },
+          "hint": {
+            "type": "object",
+            "properties": {
+              "p50": {
+                "type": "number"
+              },
+              "ttftP95": {
+                "type": "number"
+              }
+            },
+            "required": ["p50", "ttftP95"],
+            "additionalProperties": false
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "description": "[step start (ms), value]"
+          },
+          "approx": {
+            "type": "boolean",
+            "description": "Percentiles estimated from hourly totals"
+          }
+        },
+        "required": ["value", "previous", "change", "hint", "series", "approx"],
+        "additionalProperties": false
+      },
+      "OperatorDashboardApprovalWait": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "number"
+          },
+          "previous": {
+            "type": "number"
+          },
+          "change": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["relative", "points", "same", "insufficient"]
+              },
+              "value": {
+                "type": "number"
+              }
+            },
+            "required": ["kind"],
+            "additionalProperties": false
+          },
+          "hint": {
+            "type": "object",
+            "properties": {
+              "requests": {
+                "type": "number"
+              },
+              "denied": {
+                "type": "number"
+              },
+              "waiting": {
+                "type": "number"
+              }
+            },
+            "required": ["requests", "denied", "waiting"],
+            "additionalProperties": false
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "description": "[step start (ms), value]"
+          },
+          "approx": {
+            "type": "boolean",
+            "description": "Percentiles estimated from hourly totals"
+          }
+        },
+        "required": ["value", "previous", "change", "hint", "series", "approx"],
+        "additionalProperties": false
+      },
+      "OperatorDashboardRateLimits": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "number"
+          },
+          "previous": {
+            "type": "number"
+          },
+          "change": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["relative", "points", "same", "insufficient"]
+              },
+              "value": {
+                "type": "number"
+              }
+            },
+            "required": ["kind"],
+            "additionalProperties": false
+          },
+          "hint": {
+            "type": "object",
+            "properties": {
+              "retries": {
+                "type": "number"
+              },
+              "compactions": {
+                "type": "number"
+              },
+              "contextP95": {
+                "type": "number"
+              }
+            },
+            "required": ["retries", "compactions", "contextP95"],
+            "additionalProperties": false
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "description": "[step start (ms), value]"
+          },
+          "approx": {
+            "type": "boolean",
+            "description": "Percentiles estimated from hourly totals"
+          }
+        },
+        "required": ["value", "previous", "change", "hint", "series", "approx"],
+        "additionalProperties": false
+      },
+      "OperatorDashboardCost": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "number"
+          },
+          "previous": {
+            "type": "number"
+          },
+          "change": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["relative", "points", "same", "insufficient"]
+              },
+              "value": {
+                "type": "number"
+              }
+            },
+            "required": ["kind"],
+            "additionalProperties": false
+          },
+          "hint": {
+            "type": "object",
+            "properties": {
+              "tokens": {
+                "type": "number"
+              }
+            },
+            "required": ["tokens"],
+            "additionalProperties": false
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "description": "[step start (ms), value]"
+          },
+          "approx": {
+            "type": "boolean",
+            "description": "Percentiles estimated from hourly totals"
+          }
+        },
+        "required": ["value", "previous", "change", "hint", "series", "approx"],
+        "additionalProperties": false
+      },
+      "OperatorDashboardTiles": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "tiles": {
+            "type": "object",
+            "properties": {
+              "turns": {
+                "$ref": "#/components/schemas/OperatorDashboardTurns"
+              },
+              "turnErrors": {
+                "$ref": "#/components/schemas/OperatorDashboardTurnErrors"
+              },
+              "turnTime": {
+                "$ref": "#/components/schemas/OperatorDashboardTurnTime"
+              },
+              "approvalWait": {
+                "$ref": "#/components/schemas/OperatorDashboardApprovalWait"
+              },
+              "rateLimits": {
+                "$ref": "#/components/schemas/OperatorDashboardRateLimits"
+              },
+              "cost": {
+                "$ref": "#/components/schemas/OperatorDashboardCost"
+              }
+            },
+            "required": ["turns", "turnErrors", "turnTime", "approvalWait", "rateLimits", "cost"],
+            "additionalProperties": false
+          },
+          "budget": {
+            "type": "object",
+            "properties": {
+              "today": {
+                "type": "number"
+              },
+              "limit": {
+                "type": "number"
+              }
+            },
+            "required": ["today", "limit"],
+            "additionalProperties": false
+          },
+          "source": {
+            "type": "string",
+            "enum": ["events", "totals"]
+          },
+          "step": {
+            "type": "number"
+          },
+          "from": {
+            "type": "number"
+          },
+          "to": {
+            "type": "number"
+          }
+        },
+        "required": ["enabled"],
+        "additionalProperties": false
+      },
+      "OperatorDashboardBreakdownRow": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "server": {
+            "type": "string"
+          },
+          "turns": {
+            "type": "number"
+          },
+          "calls": {
+            "type": "number"
+          },
+          "errors": {
+            "type": "number"
+          },
+          "errorRate": {
+            "type": "number"
+          },
+          "denials": {
+            "type": "number"
+          },
+          "cost": {
+            "type": "number"
+          },
+          "sessions": {
+            "type": "number"
+          },
+          "p95Active": {
+            "type": "number"
+          },
+          "lastUsed": {
+            "type": "number"
+          }
+        },
+        "required": ["key", "label", "calls", "errors", "errorRate", "denials", "cost", "p95Active", "lastUsed"],
+        "additionalProperties": false
+      },
+      "OperatorDashboardBreakdownGroup": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorDashboardBreakdownRow"
+            }
+          },
+          "other": {
+            "type": "object",
+            "properties": {
+              "keys": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "turns": {
+                "type": "number"
+              },
+              "calls": {
+                "type": "number"
+              },
+              "errors": {
+                "type": "number"
+              },
+              "errorRate": {
+                "type": "number"
+              },
+              "denials": {
+                "type": "number"
+              },
+              "cost": {
+                "type": "number"
+              },
+              "sessions": {
+                "type": "number"
+              }
+            },
+            "required": ["keys", "calls", "errors", "errorRate", "denials", "cost"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["rows", "other"],
+        "additionalProperties": false
+      },
+      "OperatorDashboardBreakdown": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "groups": {
+            "type": "object",
+            "properties": {
+              "agent": {
+                "$ref": "#/components/schemas/OperatorDashboardBreakdownGroup"
+              },
+              "tool": {
+                "$ref": "#/components/schemas/OperatorDashboardBreakdownGroup"
+              },
+              "model": {
+                "$ref": "#/components/schemas/OperatorDashboardBreakdownGroup"
+              },
+              "project": {
+                "$ref": "#/components/schemas/OperatorDashboardBreakdownGroup"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": ["enabled", "groups"],
         "additionalProperties": false
       },
       "OperatorTelemetryBackfill": {

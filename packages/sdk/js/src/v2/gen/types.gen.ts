@@ -4133,6 +4133,253 @@ export type OperatorTelemetryExportCount = {
   limit: number
 }
 
+export type OperatorDashboardLink = {
+  page: "inbox" | "observability" | "capabilities"
+  params: {
+    [key: string]: string
+  }
+}
+
+export type OperatorDashboardItem = {
+  kind:
+    | "approvals"
+    | "alerts"
+    | "errors"
+    | "stuck"
+    | "loops"
+    | "rate_limited"
+    | "mcp"
+    | "queue"
+    | "budget"
+    | "telemetry"
+  severity: "critical" | "warning"
+  count: number
+  worst: {
+    label?: string
+    ageMs?: number
+    status?: string
+    amount?: number
+    limit?: number
+    critical?: number
+  }
+  /**
+   * An alert firing covers it (not counted again under alerts)
+   */
+  alert: boolean
+  link: OperatorDashboardLink
+}
+
+export type OperatorDashboardAttention = {
+  items: Array<OperatorDashboardItem>
+  /**
+   * Top sessions running or waiting for approval now
+   */
+  running: number
+  /**
+   * Running now: sessions running or waiting (subagents and helpers too), longest-running turn first, the first 6
+   */
+  runningNow: {
+    rows: Array<OperatorTelemetrySessionRow>
+    total: number
+  }
+  telemetry: {
+    enabled: boolean
+    dropped: number
+    backfill?: {
+      done: number
+      total: number
+    }
+  }
+}
+
+export type OperatorDashboardTurns = {
+  value: number
+  previous: number
+  change: {
+    kind: "relative" | "points" | "same" | "insufficient"
+    value?: number
+  }
+  hint: {
+    sessions: number
+    running: number
+  }
+  /**
+   * [step start (ms), value]
+   */
+  series: Array<Array<number>>
+  /**
+   * Percentiles estimated from hourly totals
+   */
+  approx: boolean
+}
+
+export type OperatorDashboardTurnErrors = {
+  value: number
+  previous: number
+  change: {
+    kind: "relative" | "points" | "same" | "insufficient"
+    value?: number
+  }
+  hint: {
+    failed: number
+    denied: number
+    toolErrorRate: number
+  }
+  /**
+   * [step start (ms), value]
+   */
+  series: Array<Array<number>>
+  /**
+   * Percentiles estimated from hourly totals
+   */
+  approx: boolean
+}
+
+export type OperatorDashboardTurnTime = {
+  value: number
+  previous: number
+  change: {
+    kind: "relative" | "points" | "same" | "insufficient"
+    value?: number
+  }
+  hint: {
+    p50: number
+    ttftP95: number
+  }
+  /**
+   * [step start (ms), value]
+   */
+  series: Array<Array<number>>
+  /**
+   * Percentiles estimated from hourly totals
+   */
+  approx: boolean
+}
+
+export type OperatorDashboardApprovalWait = {
+  value: number
+  previous: number
+  change: {
+    kind: "relative" | "points" | "same" | "insufficient"
+    value?: number
+  }
+  hint: {
+    requests: number
+    denied: number
+    waiting: number
+  }
+  /**
+   * [step start (ms), value]
+   */
+  series: Array<Array<number>>
+  /**
+   * Percentiles estimated from hourly totals
+   */
+  approx: boolean
+}
+
+export type OperatorDashboardRateLimits = {
+  value: number
+  previous: number
+  change: {
+    kind: "relative" | "points" | "same" | "insufficient"
+    value?: number
+  }
+  hint: {
+    retries: number
+    compactions: number
+    contextP95: number
+  }
+  /**
+   * [step start (ms), value]
+   */
+  series: Array<Array<number>>
+  /**
+   * Percentiles estimated from hourly totals
+   */
+  approx: boolean
+}
+
+export type OperatorDashboardCost = {
+  value: number
+  previous: number
+  change: {
+    kind: "relative" | "points" | "same" | "insufficient"
+    value?: number
+  }
+  hint: {
+    tokens: number
+  }
+  /**
+   * [step start (ms), value]
+   */
+  series: Array<Array<number>>
+  /**
+   * Percentiles estimated from hourly totals
+   */
+  approx: boolean
+}
+
+export type OperatorDashboardTiles = {
+  enabled: boolean
+  tiles?: {
+    turns: OperatorDashboardTurns
+    turnErrors: OperatorDashboardTurnErrors
+    turnTime: OperatorDashboardTurnTime
+    approvalWait: OperatorDashboardApprovalWait
+    rateLimits: OperatorDashboardRateLimits
+    cost: OperatorDashboardCost
+  }
+  budget?: {
+    today: number
+    limit: number
+  }
+  source?: "events" | "totals"
+  step?: number
+  from?: number
+  to?: number
+}
+
+export type OperatorDashboardBreakdownRow = {
+  key: string
+  label: string
+  type?: string
+  server?: string
+  turns?: number
+  calls: number
+  errors: number
+  errorRate: number
+  denials: number
+  cost: number
+  sessions?: number
+  p95Active: number
+  lastUsed: number
+}
+
+export type OperatorDashboardBreakdownGroup = {
+  rows: Array<OperatorDashboardBreakdownRow>
+  other: {
+    keys: Array<string>
+    turns?: number
+    calls: number
+    errors: number
+    errorRate: number
+    denials: number
+    cost: number
+    sessions?: number
+  }
+}
+
+export type OperatorDashboardBreakdown = {
+  enabled: boolean
+  groups: {
+    agent?: OperatorDashboardBreakdownGroup
+    tool?: OperatorDashboardBreakdownGroup
+    model?: OperatorDashboardBreakdownGroup
+    project?: OperatorDashboardBreakdownGroup
+  }
+}
+
 export type OperatorTelemetryBackfill = {
   state: "idle" | "running" | "done" | "failed"
   done: number
@@ -14876,6 +15123,126 @@ export type OperatorTelemetryExportResponses = {
 }
 
 export type OperatorTelemetryExportResponse = OperatorTelemetryExportResponses[keyof OperatorTelemetryExportResponses]
+
+export type OperatorTelemetryAttentionData = {
+  body?: never
+  path?: never
+  query?: {
+    ns?: string
+    dir?: string
+  }
+  url: "/operator/telemetry/attention"
+}
+
+export type OperatorTelemetryAttentionErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorTelemetryAttentionError = OperatorTelemetryAttentionErrors[keyof OperatorTelemetryAttentionErrors]
+
+export type OperatorTelemetryAttentionResponses = {
+  /**
+   * What needs a person now
+   */
+  200: OperatorDashboardAttention
+}
+
+export type OperatorTelemetryAttentionResponse =
+  OperatorTelemetryAttentionResponses[keyof OperatorTelemetryAttentionResponses]
+
+export type OperatorTelemetryTilesData = {
+  body?: never
+  path?: never
+  query?: {
+    range?: string
+    from?: string
+    to?: string
+    ns?: string
+    dir?: string
+  }
+  url: "/operator/telemetry/tiles"
+}
+
+export type OperatorTelemetryTilesErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorTelemetryTilesError = OperatorTelemetryTilesErrors[keyof OperatorTelemetryTilesErrors]
+
+export type OperatorTelemetryTilesResponses = {
+  /**
+   * The six tiles
+   */
+  200: OperatorDashboardTiles
+}
+
+export type OperatorTelemetryTilesResponse = OperatorTelemetryTilesResponses[keyof OperatorTelemetryTilesResponses]
+
+export type OperatorTelemetryBreakdownData = {
+  body?: never
+  path?: never
+  query: {
+    range?: string
+    from?: string
+    to?: string
+    ns?: string
+    dir?: string
+    session?: string
+    agent?: string
+    agentType?: string
+    model?: string
+    provider?: string
+    tool?: string
+    mcp?: string
+    kind?: string
+    status?: string
+    errorType?: string
+    finish?: string
+    decision?: string
+    minCost?: string
+    maxCost?: string
+    minDuration?: string
+    maxDuration?: string
+    minTokens?: string
+    loop?: string
+    http?: string
+    q?: string
+    roots?: string
+    sessionStatus?: string
+    stuck?: string
+    /**
+     * agent, tool, model or project; several, comma-separated, give a group each
+     */
+    by: string
+    limit?: string
+  }
+  url: "/operator/telemetry/breakdown"
+}
+
+export type OperatorTelemetryBreakdownErrors = {
+  /**
+   * OperatorTelemetryInvalidError | InvalidRequestError
+   */
+  400: OperatorTelemetryInvalidError | InvalidRequestError
+}
+
+export type OperatorTelemetryBreakdownError = OperatorTelemetryBreakdownErrors[keyof OperatorTelemetryBreakdownErrors]
+
+export type OperatorTelemetryBreakdownResponses = {
+  /**
+   * Rows and Other, per group
+   */
+  200: OperatorDashboardBreakdown
+}
+
+export type OperatorTelemetryBreakdownResponse =
+  OperatorTelemetryBreakdownResponses[keyof OperatorTelemetryBreakdownResponses]
 
 export type OperatorTelemetryBackfillStatusData = {
   body?: never

@@ -1618,6 +1618,38 @@ export const operatorScenarios: Scenario[] = [
         }),
       "status",
     ),
+  http.protected
+    .get("/operator/telemetry/attention", "operator.telemetry.attention")
+    .at((ctx) => ({ path: "/operator/telemetry/attention", headers: ctx.headers() }))
+    .json(200, (body) => {
+      object(body)
+      array(body.items)
+      check(
+        typeof body.running === "number" && isRecord(body.telemetry) && isRecord(body.runningNow),
+        "items, the running count, Running now and telemetry",
+      )
+    }),
+  http.protected
+    .get("/operator/telemetry/tiles", "operator.telemetry.tiles")
+    .at((ctx) => ({ path: "/operator/telemetry/tiles?range=7d", headers: ctx.headers() }))
+    .json(200, (body) => {
+      object(body)
+      check(body.enabled === false || (isRecord(body.tiles) && body.step === 6 * 60 * 60_000), "six tiles, 6 h steps")
+    }),
+  http.protected
+    .get("/operator/telemetry/breakdown", "operator.telemetry.breakdown")
+    .at((ctx) => ({ path: "/operator/telemetry/breakdown?by=agent,tool&range=14d", headers: ctx.headers() }))
+    .json(200, (body) => {
+      object(body)
+      check(
+        body.enabled === false || (isRecord(body.groups) && isRecord(body.groups.agent) && isRecord(body.groups.tool)),
+        "a group for each by",
+      )
+    }),
+  http.protected
+    .get("/operator/telemetry/breakdown", "operator.telemetry.breakdown")
+    .at((ctx) => ({ path: "/operator/telemetry/breakdown?by=agent,nope", headers: ctx.headers() }))
+    .status(400),
   http.protected.get("/operator/telemetry/backfill", "operator.telemetry.backfillStatus").json(200, (body) => {
     object(body)
     check(["idle", "running", "done", "failed"].includes(String(body.state)), "a known state")

@@ -6,6 +6,7 @@ import * as Stream from "effect/Stream"
 import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Database } from "@opencode-ai/core/database/database"
+import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Global } from "@opencode-ai/core/global"
 import { PartTable } from "@opencode-ai/core/session/sql"
 import { Config } from "@/config/config"
@@ -13,6 +14,7 @@ import { OperatorConfig } from "@/operator/config"
 import { OperatorProfile } from "@/operator/profile"
 import { OperatorProfileStore } from "@/operator/profile-store"
 import { OperatorReloadWhenIdle } from "@/operator/reload-when-idle"
+import { OperatorTelemetryDashboard } from "@/operator/telemetry/dashboard"
 import { OperatorTelemetryExport } from "@/operator/telemetry/export"
 import { OperatorTelemetryRetention } from "@/operator/telemetry/retention"
 import { OperatorTelemetryViews } from "@/operator/telemetry/views"
@@ -66,6 +68,18 @@ export const operatorTelemetryHandlers = HttpApiBuilder.group(OperatorRootApi, "
     const operatorConfig = yield* OperatorConfig.Service
     const reloads = yield* OperatorReloadWhenIdle.Service
     const instances = yield* InstanceStore.Service
+    const models = yield* ModelsDev.Service
+    // Tiles and breakdowns for 30 s per range and scope (dashboard_spec.md §9.1); attention is never cached.
+    const cache = new Map<string, { at: number; value: unknown }>()
+    const cached = <A>(key: string, make: () => A): A => {
+      const now = Date.now()
+      const found = cache.get(key)
+      if (found && now - found.at < 30_000) return found.value as A
+      for (const [name, entry] of cache) if (now - entry.at >= 30_000) cache.delete(name)
+      const value = make()
+      cache.set(key, { at: now, value })
+      return value
+    }
     // Who saved a view: the config's username (one shared password, no accounts).
     const username = Effect.fnUntraced(function* () {
       const global = yield* config.getGlobal().pipe(Effect.orElseSucceed(() => undefined))
@@ -436,6 +450,85 @@ export const operatorTelemetryHandlers = HttpApiBuilder.group(OperatorRootApi, "
             contentType: format === "csv" ? "text/csv; charset=utf-8" : "application/x-ndjson; charset=utf-8",
             headers: { "Content-Disposition": `attachment; filename="${name}"`, "Cache-Control": "no-store" },
           })
+        }),
+      )
+      .handle("attention", (ctx) =>
+        Effect.gen(function* () {
+          const settings = telemetry.settings()
+          const progress = telemetry.progress()
+          const scope = {
+            ...(ctx.query.ns ? { ns: ctx.query.ns } : {}),
+            ...(ctx.query.dir ? { dir: ctx.query.dir } : {}),
+          }
+          const alerts = yield* alerting.events({ firing: true })
+          const found = OperatorTelemetryDashboard.attention(store(), {
+            scope,
+            context: yield* context(),
+            enabled: settings.enabled,
+            stuckMinutes: settings.stuckMinutes,
+            queueMinutes: settings.queueMinutes,
+            dailyBudget: settings.dailyBudget,
+            dropped: telemetry.dropped(),
+            ...(progress.state === "running" ? { backfill: { done: progress.done, total: progress.total } } : {}),
+            alerts,
+            activeFolders: telemetry.activeFolders(),
+          })
+          const set = kept()
+          return {
+            ...found,
+            runningNow: { ...found.runningNow, rows: found.runningNow.rows.map((row) => withKept(row, set)) },
+          }
+        }),
+      )
+      .handle("tiles", (ctx) =>
+        Effect.gen(function* () {
+          const settings = telemetry.settings()
+          if (!settings.enabled) return { enabled: false }
+          const filter = filterOf(ctx.query)
+          const scope = {
+            ...(ctx.query.ns ? { ns: ctx.query.ns } : {}),
+            ...(ctx.query.dir ? { dir: ctx.query.dir } : {}),
+          }
+          const now = yield* context()
+          // Models' context windows, for Context used (§6.1).
+          const catalog = yield* models.get()
+          return cached(`tiles:${JSON.stringify(ctx.query)}`, () => ({
+            enabled: true,
+            ...OperatorTelemetryDashboard.tiles(store(), {
+              filter: { ...filter, ...(filter.range || filter.from || filter.to ? {} : { range: "14d" }) },
+              scope,
+              context: now,
+              eventsDays: settings.eventsDays,
+              dailyBudget: settings.dailyBudget,
+              limitOf: (provider, model) => catalog[provider]?.models[model]?.limit.context || undefined,
+            }),
+          }))
+        }),
+      )
+      .handle("breakdown", (ctx) =>
+        Effect.gen(function* () {
+          const { by, limit, ...rest } = ctx.query
+          const asked = [...new Set(by.split(",").map((item) => item.trim()))]
+          const wrong = asked.find((item) => !OperatorTelemetryDashboard.isBy(item))
+          if (wrong !== undefined || !asked.length)
+            return yield* badInput(`Unknown breakdown "${wrong ?? ""}": use agent, tool, model or project`)
+          if (!telemetry.settings().enabled) return { enabled: false, groups: {} }
+          const size = Math.min(50, Math.max(1, number(limit) ?? 8))
+          const now = yield* context()
+          return cached(`breakdown:${JSON.stringify(ctx.query)}`, () => ({
+            enabled: true,
+            groups: Object.fromEntries(
+              asked.filter(OperatorTelemetryDashboard.isBy).map((item) => [
+                item,
+                OperatorTelemetryDashboard.breakdown(store(), {
+                  by: item,
+                  limit: size,
+                  filter: filterOf(rest),
+                  context: now,
+                }),
+              ]),
+            ),
+          }))
         }),
       )
       .handle("backfillStatus", () => Effect.sync(() => telemetry.progress()))
