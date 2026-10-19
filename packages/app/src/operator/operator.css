@@ -291,6 +291,123 @@ html[data-theme="iphi"]
   stroke-width: 1.5;
 }
 
+/* A tile that is one link (dashboard_spec.md §6.1): the label's link covers the tile; its (i) sits above it. */
+[data-component="operator-stat"][data-link] {
+  position: relative;
+}
+
+[data-component="operator-stat"][data-link]:hover {
+  border-color: var(--v2-border-border-base, var(--v2-border-border-muted));
+}
+
+[data-component="operator-stat"] [data-slot="operator-stat-label"] {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+[data-component="operator-stat"] [data-slot="operator-stat-link"] {
+  color: inherit;
+  text-decoration: none;
+}
+
+[data-component="operator-stat"] [data-slot="operator-stat-link"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+[data-component="operator-stat"] [data-slot="operator-stat-link"]:focus-visible {
+  outline: none;
+}
+
+[data-component="operator-stat"] [data-slot="operator-stat-link"]:focus-visible::after {
+  outline: 2px solid var(--v2-border-border-focus, var(--v2-background-bg-accent));
+  outline-offset: 2px;
+}
+
+[data-component="operator-stat"] [data-slot="operator-stat-help"] {
+  position: relative;
+  z-index: 1;
+}
+
+/* The change: the arrow carries the tone, the words stay readable (contrast). */
+[data-component="operator-stat"] [data-slot="operator-stat-change"] {
+  font-size: 12px;
+  color: var(--v2-text-text-muted);
+}
+
+[data-component="operator-stat"] [data-slot="operator-stat-change"][data-tone="warn"] > span {
+  color: var(--v2-state-fg-warning);
+}
+
+[data-component="operator-stat"] [data-slot="operator-stat-change"][data-tone="good"] > span {
+  color: var(--v2-state-fg-success);
+}
+
+[data-component="operator-stat"] [data-slot="operator-stat-progress"] {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--v2-text-text-muted);
+}
+
+[data-component="operator-stat"] [data-slot="operator-stat-bar"] {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--v2-background-bg-subtle, var(--v2-border-border-muted));
+  overflow: hidden;
+}
+
+[data-component="operator-stat"] [data-slot="operator-stat-bar"] > span {
+  display: block;
+  height: 100%;
+  background: var(--v2-background-bg-accent);
+}
+
+[data-component="operator-stat"]
+  [data-slot="operator-stat-progress"][data-tone="warn"]
+  [data-slot="operator-stat-bar"]
+  > span {
+  background: var(--v2-state-fg-warning);
+}
+
+[data-component="operator-stat"] [data-slot="operator-stat-skeleton"] {
+  border-radius: 4px;
+  background: var(--v2-background-bg-subtle, var(--v2-border-border-muted));
+  animation: operator-skeleton 1.4s ease-in-out infinite;
+}
+
+[data-component="operator-stat"] [data-slot="operator-stat-skeleton"][data-size="value"] {
+  height: 28px;
+  width: 60%;
+}
+
+[data-component="operator-stat"] [data-slot="operator-stat-skeleton"][data-size="line"] {
+  height: 12px;
+  width: 80%;
+}
+
+[data-component="operator-stat"] [data-slot="operator-stat-skeleton"][data-size="trend"] {
+  height: 28px;
+  width: 100%;
+}
+
+@keyframes operator-skeleton {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="operator-stat"] [data-slot="operator-stat-skeleton"] {
+    animation: none;
+  }
+}
+
 [data-component="operator-empty"] {
   display: flex;
   flex-direction: column;

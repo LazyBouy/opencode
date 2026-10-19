@@ -16,25 +16,6 @@ test.beforeEach(async ({ page }) => {
   })
 })
 
-test("the dashboard shows usage, approvals and recent sessions", async ({ page }) => {
-  await mockOperator(page)
-  await page.goto("/operator")
-
-  const tiles = page.locator('[data-slot="operator-tiles"]')
-  await expect(tiles).toContainText("1.18.34-fork")
-  await expect(tiles).toContainText("$3.25")
-  await expect(tiles.locator('[data-component="operator-stat"][data-tone="warn"]')).toContainText("1")
-  await expect(tiles.locator('[data-component="operator-sparkline"]').first()).toBeVisible()
-
-  const recent = page.locator('[data-component="operator-panel"]').filter({ hasText: "Recent sessions" })
-  await expect(recent).toContainText("Fix the parser")
-  // A recent session opens in the overlay; Open in Chats opens the full session page.
-  await recent.getByRole("row", { name: /Fix the parser/ }).click()
-  await expect(page).toHaveURL(/session=ses_op_1/)
-  await page.getByRole("dialog").getByRole("button", { name: "Open in Chats" }).click()
-  await expect(page).toHaveURL(/\/session\/ses_op_1$/)
-})
-
 test("the agents table filters, hides hidden agents and opens an agent", async ({ page }) => {
   await mockOperator(page)
   await page.goto(`/operator/agents${dir}`)

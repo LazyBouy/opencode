@@ -16,6 +16,7 @@ const RANGES: Record<string, number> = {
   "6h": 6 * HOUR,
   "24h": DAY,
   "7d": 7 * DAY,
+  "14d": 14 * DAY,
   "30d": 30 * DAY,
   "90d": 90 * DAY,
   "365d": 365 * DAY,
@@ -347,6 +348,138 @@ function alertRules(now: number): Row[] {
   ]
 }
 
+// ---- the Dashboard (dashboard_spec.md §6, §8): tiles on the range's steps, and breakdowns with an Other row ----
+
+const DASH_STEPS: Record<string, number> = { "24h": HOUR, "7d": 6 * HOUR, "14d": 12 * HOUR, "30d": DAY }
+
+export function dashboardTiles(range: string, now: number, overrides: Record<string, Row>, budget: number | null) {
+  const length = RANGES[range] ?? 14 * DAY
+  const step = DASH_STEPS[range] ?? 12 * HOUR
+  const from = now + 1 - length
+  const count = Math.round(length / step)
+  const series = (value: (at: number) => number) =>
+    Array.from({ length: count }, (_, at) => [from + at * step, value(at)])
+  const tile = (fields: Row): Row => ({ approx: false, ...fields })
+  const tiles: Record<string, Row> = {
+    turns: tile({
+      value: 1204,
+      previous: 1075,
+      change: { kind: "relative", value: 12 },
+      hint: { sessions: 86, running: 3 },
+      series: series((at) => 40 + (at % 5) * 3),
+    }),
+    turnErrors: tile({
+      value: 3.1,
+      previous: 3.9,
+      change: { kind: "points", value: -0.8 },
+      hint: { failed: 37, denied: 12, toolErrorRate: 4.1 },
+      series: series((at) => 0.9 + (at % 4)),
+    }),
+    turnTime: tile({
+      value: 41_000,
+      previous: 37_600,
+      change: { kind: "relative", value: 9 },
+      hint: { p50: 18_000, ttftP95: 2100 },
+      series: series((at) => 30_000 + (at % 3) * 5000),
+    }),
+    approvalWait: tile({
+      value: 130_000,
+      previous: 166_000,
+      change: { kind: "relative", value: -22 },
+      hint: { requests: 142, denied: 9, waiting: 2 },
+      series: series((at) => 100_000 + (at % 2) * 30_000),
+    }),
+    rateLimits: tile({
+      value: 37,
+      previous: 7,
+      change: { kind: "relative", value: 428.6 },
+      hint: { retries: 31, compactions: 3, contextP95: 64 },
+      series: series((at) => (at % 6 === 0 ? 5 : 1)),
+    }),
+    cost: tile({
+      value: 18.4,
+      previous: 17.5,
+      change: { kind: "relative", value: 5 },
+      hint: { tokens: 4_100_000 },
+      series: series((at) => 0.5 + (at % 3) * 0.2),
+    }),
+  }
+  for (const [id, fields] of Object.entries(overrides)) tiles[id] = { ...tiles[id], ...fields }
+  return {
+    enabled: true,
+    tiles,
+    budget: budget ? { today: 3.2, limit: budget } : null,
+    source: "events",
+    step,
+    from,
+    to: now + 1,
+  }
+}
+
+function dashboardGroups(now: number): Record<string, Row> {
+  const agent = (key: string, type: string, turns: number, fields: Row = {}): Row => ({
+    key,
+    label: key,
+    type,
+    turns,
+    calls: turns * 2,
+    errors: Math.round(turns / 40),
+    errorRate: 2.5,
+    denials: 1,
+    p95Active: 41_000,
+    cost: turns / 100,
+    sessions: Math.ceil(turns / 15),
+    lastUsed: now - 5 * MIN,
+    ...fields,
+  })
+  const tool = (key: string, calls: number, errors: number, fields: Row = {}): Row => ({
+    key,
+    label: key,
+    calls,
+    errors,
+    errorRate: (errors / calls) * 100,
+    denials: 0,
+    p95Active: 800,
+    cost: 0,
+    lastUsed: now - MIN,
+    ...fields,
+  })
+  return {
+    agent: {
+      rows: [
+        agent("build", "usual", 900),
+        agent("explore", "subagent", 200),
+        agent("title", "helper", 80, { calls: 80, errors: 0, errorRate: 0, denials: 0 }),
+      ],
+      other: {
+        keys: ["a1", "a2", "a3", "a4", "a5"],
+        turns: 24,
+        calls: 48,
+        errors: 1,
+        errorRate: 4.2,
+        denials: 0,
+        cost: 0.5,
+        sessions: 6,
+      },
+    },
+    tool: {
+      rows: [
+        tool("bash", 412, 10, { denials: 3 }),
+        tool("read", 288, 1),
+        tool("github_search", 97, 11, { server: "github" }),
+      ],
+      other: {
+        keys: Array.from({ length: 14 }, (_, at) => `tool${at}`),
+        calls: 120,
+        errors: 2,
+        errorRate: 1.7,
+        denials: 0,
+        cost: 0,
+      },
+    },
+  }
+}
+
 export function createTelemetryMock(now: number, hooks: { trash?: (entry: TrashEntry) => void } = {}) {
   const t0 = now - 30 * MIN
   // The busy session: 22 turns (the latest 20 first), its last with a tool call that waited for approval, a model call
@@ -546,6 +679,7 @@ export function createTelemetryMock(now: number, hooks: { trash?: (entry: TrashE
         cost: i / 100,
         cost_total: i / 100,
         status: i === 3 ? "running" : "idle",
+        ...(i === 3 ? { turn_start_ms: t0 - 4 * MIN, current: "execute_tool bash" } : {}),
       }),
     ),
   ]
@@ -631,6 +765,13 @@ export function createTelemetryMock(now: number, hooks: { trash?: (entry: TrashE
     sessions,
     kept: new Set<string>(),
     backfill: { state: "done" as string, done: 64, total: 64 },
+    /** The Dashboard (dashboard_spec.md §9.1): the strip's items, tile overrides by tile, the breakdown groups. */
+    dashboard: {
+      items: [] as Row[],
+      dropped: 0,
+      tiles: {} as Record<string, Row>,
+      groups: dashboardGroups(now),
+    },
     spans: all,
     logs,
     /** A span written now (new, or changed): it gets the next seq. */
@@ -821,6 +962,55 @@ export function createTelemetryMock(now: number, hooks: { trash?: (entry: TrashE
     const path = url.pathname.slice("/operator/telemetry".length)
     state.queries.push({ path, params: url.searchParams })
     const q = url.searchParams
+    if (path === "/attention") {
+      const enabled = state.settings.enabled
+      const running = state.sessions.filter((row) => row.status === "running" || row.status === "waiting")
+      return json(route, {
+        items: enabled
+          ? state.dashboard.items
+          : [
+              {
+                kind: "telemetry",
+                severity: "warning",
+                count: 1,
+                worst: { status: "off" },
+                alert: false,
+                link: { page: "observability", params: { settings: "1" } },
+              },
+            ],
+        running: running.filter((row) => !row.parent_id).length,
+        runningNow: enabled
+          ? {
+              rows: running.toSorted((a, b) => (a.turn_start_ms ?? 0) - (b.turn_start_ms ?? 0)).slice(0, 6),
+              total: running.length,
+            }
+          : { rows: [], total: 0 },
+        telemetry: {
+          enabled,
+          dropped: state.dashboard.dropped,
+          ...(state.backfill.state === "running"
+            ? { backfill: { done: state.backfill.done, total: state.backfill.total } }
+            : {}),
+        },
+      })
+    }
+    if (path === "/tiles") {
+      if (!state.settings.enabled) return json(route, { enabled: false })
+      return json(
+        route,
+        dashboardTiles(q.get("range") ?? "14d", now, state.dashboard.tiles, state.settings.dailyBudget),
+      )
+    }
+    if (path === "/breakdown") {
+      if (!state.settings.enabled) return json(route, { enabled: false, groups: {} })
+      const asked = (q.get("by") ?? "").split(",")
+      return json(route, {
+        enabled: true,
+        groups: Object.fromEntries(
+          asked.filter((by) => state.dashboard.groups[by]).map((by) => [by, state.dashboard.groups[by]]),
+        ),
+      })
+    }
     if (path === "/sessions") {
       const { key, down } = sortOf(q.get("sort"))
       const statuses = q.get("sessionStatus")?.split(",")

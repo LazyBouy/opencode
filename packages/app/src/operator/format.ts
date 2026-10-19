@@ -23,6 +23,15 @@ export function formatAgo(time: number | undefined, locale: string) {
   return DateTime.fromMillis(time).setLocale(locale).toRelative() ?? ""
 }
 
+/** An age in its largest sensible unit: minutes under an hour, hours under two days, then days. */
+export function ageOf(ms: number): { unit: "min" | "h" | "d"; n: number } {
+  const minutes = Math.max(1, Math.round(ms / 60_000))
+  if (minutes < 60) return { unit: "min", n: minutes }
+  const hours = Math.round(ms / 3_600_000)
+  if (hours < 48) return { unit: "h", n: hours }
+  return { unit: "d", n: Math.round(ms / 86_400_000) }
+}
+
 export function formatDateTime(time: number | undefined, locale: string) {
   if (!time) return ""
   return DateTime.fromMillis(time).setLocale(locale).toLocaleString(DateTime.DATETIME_MED)

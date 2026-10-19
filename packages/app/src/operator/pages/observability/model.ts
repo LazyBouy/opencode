@@ -51,7 +51,7 @@ export const PAGE = [
 export const TABS = ["sessions", "events", "metrics", "logs", "alerts"] as const
 export type Tab = (typeof TABS)[number]
 
-export const RANGES = ["15m", "1h", "6h", "24h", "7d", "30d", "90d", "365d"] as const
+export const RANGES = ["15m", "1h", "6h", "24h", "7d", "14d", "30d", "90d", "365d"] as const
 export type Range = { range?: string; from?: number; to?: number }
 export const DEFAULT_RANGE = "24h"
 

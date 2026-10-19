@@ -10,7 +10,7 @@ import { SelectV2 } from "./select"
 // refresh), or a custom from and to in local time (it stays). Charts zoom by setting a custom range; Reset zoom goes
 // back to the range before.
 
-export const PRESETS = ["15m", "1h", "6h", "24h", "7d", "30d", "90d", "365d"] as const
+export const PRESETS = ["15m", "1h", "6h", "24h", "7d", "14d", "30d", "90d", "365d"] as const
 const CUSTOM = "@custom"
 
 export type TimeRangeValue = { range?: string; from?: number; to?: number }
