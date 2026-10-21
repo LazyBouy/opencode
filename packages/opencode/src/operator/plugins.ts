@@ -256,5 +256,9 @@ export const promptAudit: {
   }) => void
 } = {}
 
+// Hooks (SPEC-0022): its plugin is in hooks/seams.ts with every other tie of hooks to OpenCode. It's loaded
+// when plugins start: importing it here would cycle through the session code seams.ts imports.
+const HooksPlugin: Plugin = async (input) => (await import("./hooks/seams")).plugin(input)
+
 // Built-in plugins this fork adds; upstream's plugin service registers them with its own once.
-export const operatorPlugins: Plugin[] = [PromptPlugin]
+export const operatorPlugins: Plugin[] = [PromptPlugin, HooksPlugin]

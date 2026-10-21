@@ -5,6 +5,8 @@
 export type Reply =
   | { text: string; reasoning?: string; signature?: string }
   | { tool: string; input: unknown; reasoning?: string }
+  // Several tool calls in one step (OpenAI chat only).
+  | { tools: Array<{ tool: string; input: unknown }> }
 
 export type Hit = { url: string; headers: Record<string, string>; body: string }
 
@@ -14,8 +16,19 @@ function chat(reply: Reply, id: string) {
   const chunk = (delta: unknown, extra: Record<string, unknown> = {}) =>
     `data: ${JSON.stringify({ id, object: "chat.completion.chunk", choices: [{ index: 0, delta, ...extra }] })}\n\n`
   const lines = [chunk({ role: "assistant" })]
-  if (reply.reasoning) lines.push(chunk({ reasoning_content: reply.reasoning }))
+  if ("reasoning" in reply && reply.reasoning) lines.push(chunk({ reasoning_content: reply.reasoning }))
   if ("text" in reply) lines.push(chunk({ content: reply.text }))
+  else if ("tools" in reply)
+    lines.push(
+      chunk({
+        tool_calls: reply.tools.map((item, index) => ({
+          index,
+          id: `call_${id}_${index}`,
+          type: "function",
+          function: { name: item.tool, arguments: JSON.stringify(item.input) },
+        })),
+      }),
+    )
   else
     lines.push(
       chunk({
@@ -42,6 +55,7 @@ function chat(reply: Reply, id: string) {
 }
 
 function anthropic(reply: Reply, id: string) {
+  if ("tools" in reply) throw new Error("several tool calls: OpenAI chat only")
   const event = (type: string, data: Record<string, unknown>) =>
     `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`
   const lines = [

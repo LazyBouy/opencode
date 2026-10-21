@@ -93,6 +93,39 @@ export type Execution = {
   record: OperatorHookRuns.Run
 }
 
+/** The answer fields that change what an event carries, each the input field of the same name (§7.6, §8.2). */
+export const CHANGES = ["input", "prompt", "output"] as const
+export type Change = (typeof CHANGES)[number]
+
+export type Options = {
+  /** Answer fields this call can't use: ignored and listed (e.g. `input` for MCP resource tools, §8.2). */
+  unusable?: ReadonlyArray<OperatorHookEvents.Field>
+  /** Checks a change before it's used (a tool's input against its schema); a cause makes the run a failure. */
+  check?: (field: Change, value: unknown) => Effect.Effect<string | undefined>
+}
+
+/** An event's input before each hook adds its own name and level. */
+export type EventInput = Omit<OperatorHookProtocol.Base, "hook" | "level"> & Record<string, unknown>
+
+/** Where a run came from, as the marks in a session name it (§8.3). */
+export type By = { hook: string; level: string; file: string; run: string }
+
+/** A blocking event's hooks, run in order (§7.5). */
+export type Chained = {
+  /** The first deny, or a failed run that fails closed; nothing after it ran. */
+  denied?: By & { reason?: string; failed: boolean }
+  /** The event's input after every change. */
+  input: EventInput
+  /** Each change, in order, with what it replaced. */
+  changes: Array<By & { field: Change; before: unknown }>
+  /** Each context, in order. */
+  contexts: Array<By & { text: string }>
+}
+
+const FAILED = new Set<OperatorHookRuns.Outcome>(["failed", "timed out", "stopped by the server"])
+/** Watch runs that may wait per hook and session; later ones are dropped and counted (§7.5). */
+export const WATCH_WAITING = 20
+
 export interface Interface {
   /** The hooks in force for this project (and agent), every one with its level and state. */
   readonly effective: (agent?: string) => Effect.Effect<Effective>
@@ -109,7 +142,17 @@ export interface Interface {
     hook: Hook,
     input: OperatorHookProtocol.Base & Record<string, unknown>,
     target: Target,
+    options?: Options,
   ) => Effect.Effect<Execution | undefined>
+  /** Runs a blocking event's hooks one after another: the first deny stops the rest, changes chain. */
+  readonly chain: (
+    hooks: ReadonlyArray<Hook>,
+    input: EventInput,
+    target: Target,
+    options?: Options,
+  ) => Effect.Effect<Chained>
+  /** Queues a watch event's runs, one at a time per hook and session; the session doesn't wait. */
+  readonly watch: (hooks: ReadonlyArray<Hook>, input: EventInput, target: Target) => void
   readonly runs: (filter: OperatorHookRuns.Filter) => Effect.Effect<{ runs: OperatorHookRuns.Run[]; total: number }>
   readonly run: (id: string) => Effect.Effect<OperatorHookRuns.Run | undefined>
 }
@@ -144,6 +187,10 @@ function baseOf(file: string) {
     : dir
 }
 
+// A changed value as the run log keeps it: text as it is, an input as JSON.
+const shown = (value: unknown) =>
+  value === undefined ? undefined : typeof value === "string" ? value : JSON.stringify(value, null, 2)
+
 const view = (hook: Hook): typeof HookView.Type => ({
   name: hook.name,
   event: hook.event,
@@ -168,6 +215,7 @@ const view = (hook: Hook): typeof HookView.Type => ({
 export function outcomeOf(
   hook: Hook,
   result: OperatorHookRunner.Result,
+  unusable: ReadonlyArray<OperatorHookEvents.Field> = [],
 ): { outcome: OperatorHookRuns.Outcome; answer: OperatorHookProtocol.Answer; ignored: string[]; cause?: string } {
   const event = hook.event as OperatorHookEvents.Name
   if (result.stopped) return { outcome: "stopped by the server", answer: {}, ignored: [], cause: "the server stopped" }
@@ -185,7 +233,12 @@ export function outcomeOf(
     }
   const parsed = OperatorHookProtocol.parse(event, result.stdout)
   if (!parsed.ok) return { outcome: "failed", answer: {}, ignored: [], cause: parsed.error }
-  const answer = parsed.answer
+  const answer = { ...parsed.answer }
+  for (const field of unusable)
+    if (answer[field] !== undefined) {
+      delete answer[field]
+      parsed.ignored.push(field)
+    }
   const outcome: OperatorHookRuns.Outcome =
     answer.allow === false
       ? "denied"
@@ -335,6 +388,7 @@ const layer = Layer.effect(
       hook: Hook,
       input: OperatorHookProtocol.Base & Record<string, unknown>,
       target: Target,
+      options: Options = {},
     ) {
       const settings = yield* Effect.promise(() => OperatorHookSettings.read())
       if (settings.paused) return undefined
@@ -356,7 +410,14 @@ const layer = Layer.effect(
           timeoutMs: Math.round(timeout * 1000),
         }),
       )
-      const read = outcomeOf({ ...hook, timeout }, result)
+      const read = outcomeOf({ ...hook, timeout }, result, options.unusable)
+      // A change is checked before it's used; one that doesn't fit makes the run a failure.
+      const changed = CHANGES.find((field) => read.answer[field] !== undefined)
+      if (changed && options.check) {
+        const cause = yield* options.check(changed, read.answer[changed])
+        if (cause) Object.assign(read, { outcome: "failed", answer: {}, cause })
+      }
+      const kept = changed && read.outcome === "changed" ? changed : undefined
       const record: OperatorHookRuns.Run = {
         id: OperatorHookRuns.newId(target.test ? undefined : target.sessionID),
         time,
@@ -374,6 +435,7 @@ const layer = Layer.effect(
         outcome: read.outcome,
         ...(read.cause ? { reason: read.cause } : read.answer.reason ? { reason: read.answer.reason } : {}),
         ...(read.ignored.length ? { ignored: read.ignored } : {}),
+        ...(kept ? { before: shown(input[kept]), after: shown(read.answer[kept]) } : {}),
         ...(read.answer.context !== undefined ? { context: read.answer.context } : {}),
         ...(result.stdout ? { stdout: result.stdout } : {}),
         ...(result.stderr ? { stderr: result.stderr } : {}),
@@ -388,6 +450,74 @@ const layer = Layer.effect(
       }
     })
 
+    const chain = Effect.fn("OperatorHooks.chain")(function* (
+      hooks: ReadonlyArray<Hook>,
+      input: EventInput,
+      target: Target,
+      options: Options = {},
+    ) {
+      const out: Chained = { input, changes: [], contexts: [] }
+      for (const hook of hooks) {
+        const run = yield* execute(hook, { ...out.input, hook: hook.name, level: hook.level }, target, options)
+        if (!run) break
+        const by: By = { hook: hook.name, level: hook.level, file: hook.file, run: run.record.id }
+        if (FAILED.has(run.outcome)) {
+          if (hook.onFailure === "allow") continue
+          out.denied = { ...by, reason: `Hook ${hook.name} failed: ${run.cause ?? run.outcome}`, failed: true }
+          break
+        }
+        if (run.answer.allow === false) {
+          out.denied = { ...by, ...(run.answer.reason ? { reason: run.answer.reason } : {}), failed: false }
+          break
+        }
+        for (const field of CHANGES)
+          if (run.answer[field] !== undefined) {
+            out.changes.push({ ...by, field, before: out.input[field] })
+            out.input = { ...out.input, [field]: run.answer[field] }
+          }
+        if (run.answer.context !== undefined) out.contexts.push({ ...by, text: run.answer.context })
+      }
+      return out
+    })
+
+    // Watch runs: one at a time per hook and session, at most WATCH_WAITING waiting; past that, runs are
+    // dropped and one "dropped" record counts them when the queue empties.
+    const queues = new Map<string, { waiting: Array<() => Promise<unknown>>; dropped: number }>()
+    const drain = async (key: string, hook: Hook, target: Target) => {
+      const queue = queues.get(key)!
+      while (queue.waiting.length) await queue.waiting.shift()!().catch(() => undefined)
+      queues.delete(key)
+      if (!queue.dropped) return
+      await OperatorHookRuns.record({
+        id: OperatorHookRuns.newId(target.sessionID),
+        time: Date.now(),
+        event: hook.event,
+        hook: hook.name,
+        level: hook.level,
+        file: hook.file,
+        ...(target.sessionID ? { sessionID: target.sessionID } : {}),
+        ...(target.project ? { project: target.project } : {}),
+        ...(target.agent ? { agent: target.agent } : {}),
+        outcome: "dropped",
+        reason: `${queue.dropped} waiting run${queue.dropped === 1 ? "" : "s"} over ${WATCH_WAITING} dropped`,
+        dropped: queue.dropped,
+      }).catch(() => undefined)
+    }
+    const watch = (hooks: ReadonlyArray<Hook>, input: EventInput, target: Target) => {
+      for (const hook of hooks) {
+        const key = [hook.level, hook.file, hook.name, target.sessionID ?? ""].join("\u0000")
+        const queue = queues.get(key)
+        const job = () => Effect.runPromise(execute(hook, { ...input, hook: hook.name, level: hook.level }, target))
+        if (queue) {
+          if (queue.waiting.length >= WATCH_WAITING) queue.dropped++
+          else queue.waiting.push(job)
+          continue
+        }
+        queues.set(key, { waiting: [job], dropped: 0 })
+        void drain(key, hook, target)
+      }
+    }
+
     const setSettings = Effect.fn("OperatorHooks.setSettings")(function* (patch: Partial<typeof Settings.Type>) {
       return yield* Effect.tryPromise({
         try: () => OperatorHookSettings.write(patch),
@@ -401,6 +531,8 @@ const layer = Layer.effect(
       settings: () => Effect.promise(() => OperatorHookSettings.read()),
       setSettings,
       execute,
+      chain,
+      watch,
       runs: (filter) => Effect.promise(() => OperatorHookRuns.list(filter)),
       run: (id) => Effect.promise(() => OperatorHookRuns.get(id)),
     })

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/solid-query"
 import { createMemo, onCleanup, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useOperatorClient } from "../data"
+import { HookMarks } from "./hook-marks-view"
 import { useSessionView } from "./view"
 
 // The Detailed view: the chat as it is, plus what it hides. The fork seam in session-ui's
@@ -16,7 +17,11 @@ import { useSessionView } from "./view"
 export function useDetailedParts() {
   const view = useSessionView()
   const detailed = () => view.view() === "detailed"
-  const after = (props: MessagePartProps) => <StepMarkerAfter part={props.part} message={props.message} />
+  // What hooks did to a tool call shows in every view (hook-marks-view.tsx); the step marker in Detailed only.
+  const after = (props: MessagePartProps) => [
+    <HookMarks part={props.part} />,
+    <StepMarkerAfter part={props.part} message={props.message} />,
+  ]
   const previous = { detailed: partView.detailed, after: partView.after }
   partView.detailed = detailed
   partView.after = after

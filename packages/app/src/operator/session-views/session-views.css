@@ -505,6 +505,22 @@ body[data-operator-view="transcript"]
   display: none;
 }
 
+/* What hooks did to a tool call, under it (hook-marks-view.tsx). */
+[data-component="operator-hook-marks"] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 8px;
+  font-size: 12px;
+}
+
+[data-component="operator-hook-marks"] [data-component="operator-code"] {
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 [data-slot="operator-extra"] {
   display: flex;
   flex-wrap: wrap;

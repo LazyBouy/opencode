@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { OperatorHookRunner as Runner } from "../../../src/operator/hooks/runner"
@@ -8,6 +8,8 @@ import { tmpdir } from "../../fixture/fixture"
 // group; it runs with the server's environment minus its credentials; a graceful stop kills running hooks
 // and starts none.
 
+// Files share one process: an earlier file's server may have stopped hooks on its way down.
+beforeEach(() => Runner.resume())
 afterEach(() => Runner.resume())
 
 const script = async (dir: string, name: string, text: string, mode = 0o644) => {
