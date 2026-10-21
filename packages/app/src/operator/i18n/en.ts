@@ -416,8 +416,6 @@ export const dict = {
   "operator.page.projects.planned": "Projects with their agents, settings and sessions.",
   "operator.page.agents.title": "Agents",
   "operator.page.agents.description": "Every agent your projects can use, where it is defined and how it is set up.",
-  "operator.page.agents.planned":
-    "A table of agents with their model, mode and sessions, and forms to create, edit and remove agents, including their prompt, permissions, tools, hooks and home folder.",
   "operator.page.sessions.title": "Sessions",
   "operator.page.sessions.description": "Sessions across all projects, with search and filters.",
   "operator.page.sessions.planned":
