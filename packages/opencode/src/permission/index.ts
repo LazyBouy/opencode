@@ -93,6 +93,10 @@ const layer = Layer.effect(
       }
 
       if (!needsAsk) return
+      // fork: a permission.asked hook may answer before the user is asked (operator/hooks/seams.ts)
+      const decided = yield* OperatorPermissionHook.decide(request)
+      if (decided)
+        return "allow" in decided ? undefined : yield* new PermissionV1.CorrectedError({ feedback: decided.reject })
 
       const id = request.id ?? PermissionV1.ID.ascending()
       const info: PermissionV1.Request = {

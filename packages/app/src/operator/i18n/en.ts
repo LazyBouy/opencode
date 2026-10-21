@@ -228,6 +228,7 @@ export const dict = {
   "operator.decision.via.project": "Project record",
   "operator.decision.via.chat": "Chat",
   "operator.decision.via.client": "TUI or API client",
+  "operator.decision.via.hook": "A hook",
   "operator.decision.inSession": "in the session",
   "operator.decision.column.decided": "Decided",
   "operator.decision.column.decision": "Decision",

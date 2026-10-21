@@ -3536,9 +3536,9 @@ export type OperatorPermissionDecideInput = {
   patterns?: Array<string>
   note?: string
   /**
-   * Where it was decided: a place in the web UI, or client (the TUI or an API client)
+   * Where it was decided: a place in the web UI, client (the TUI or an API client), or hook (a permission.asked hook answered before the user was asked; `who` names it)
    */
-  via: "inbox" | "agent" | "session" | "details" | "project" | "chat" | "client"
+  via: "inbox" | "agent" | "session" | "details" | "project" | "chat" | "client" | "hook"
 }
 
 export type OperatorPermissionDecisionRule = {
@@ -3608,9 +3608,9 @@ export type OperatorPermissionDecision = {
    */
   who: string
   /**
-   * Where it was decided: a place in the web UI, or client (the TUI or an API client)
+   * Where it was decided: a place in the web UI, client (the TUI or an API client), or hook (a permission.asked hook answered before the user was asked; `who` names it)
    */
-  via: "inbox" | "agent" | "session" | "details" | "project" | "chat" | "client"
+  via: "inbox" | "agent" | "session" | "details" | "project" | "chat" | "client" | "hook"
   tool?: {
     messageID: string
     callID: string

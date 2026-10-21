@@ -244,3 +244,46 @@ test("a compaction shows what compaction.before added and a compaction.after hoo
   await expect(marks.nth(0)).toContainText("Keep the TODO list.")
   await expect(marks.nth(1)).toContainText("No automatic continue: hook halt")
 })
+
+test("a call the chat groups (read, glob, grep, list) shows its marks when the group opens", async ({ page }) => {
+  await mockOpenCodeServer(page, {
+    protocol: "v1",
+    sessions: fixture.sessions.map((session) => ({ ...session })),
+    provider: fixture.provider,
+    directory: fixture.directory,
+    project: fixture.project,
+    pageMessages: (id, limit, before) => {
+      const found = withHooks(id, limit, before) as { items: Array<{ info: { role: string }; parts: unknown[] }> }
+      if (id !== sessionID || before) return found
+      const items = structuredClone(found.items)
+      items
+        .findLast((message) => message.info.role === "assistant")
+        ?.parts.push({
+          id: "prt_zz_3_glob",
+          type: "tool",
+          tool: "glob",
+          callID: "call_glob",
+          state: {
+            status: "completed",
+            input: { pattern: "**/*.md" },
+            output: "README.md\n\nFrom hook docs:\nDocs live in docs/.",
+            title: "**/*.md",
+            metadata: {
+              count: 1,
+              hook: { context: [{ ...by("docs"), event: "tool.after", text: "Docs live in docs/." }] },
+            },
+            time: { start: 3, end: 4 },
+          },
+        })
+      return { ...found, items }
+    },
+  })
+  await mockOperator(page)
+  await page.goto(`/server/${base64Encode(fixture.serverKey)}/session/${sessionID}`)
+  const item = page.locator('[data-slot="context-tool-group-item"]').filter({ hasText: "**/*.md" })
+  if (!(await item.isVisible())) await page.locator('[data-component="context-tool-group-trigger"]').last().click()
+  const mark = item.getByTestId("hook-mark")
+  await expect(mark).toHaveCount(1)
+  await expect(mark).toContainText("From hook docs")
+  await expect(mark).toContainText("Docs live in docs/.")
+})

@@ -126,6 +126,8 @@ export type Chained = {
   contexts: Array<By & { text: string }>
   /** compaction.after: a hook answered `continue: false` (no automatic "continue" turn); nothing after it ran. */
   noContinue?: By
+  /** The first hook that answered `allow: true` (permission.asked: allowed once, unless a later one denies). */
+  allowed?: By
 }
 
 const FAILED = new Set<OperatorHookRuns.Outcome>(["failed", "timed out", "stopped by the server"])
@@ -483,6 +485,7 @@ const layer = Layer.effect(
             out.input = { ...out.input, [field]: run.answer[field] }
           }
         if (run.answer.context !== undefined) out.contexts.push({ ...by, text: run.answer.context })
+        if (run.answer.allow === true) out.allowed ??= by
         if (run.answer.continue === false) {
           out.noContinue = by
           break

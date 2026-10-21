@@ -33,8 +33,18 @@ export const Decision = Schema.Literals(["allow", "allow-session", "allow-agent"
 })
 export type Decision = typeof Decision.Type
 
-export const Via = Schema.Literals(["inbox", "agent", "session", "details", "project", "chat", "client"]).annotate({
-  description: "Where it was decided: a place in the web UI, or client (the TUI or an API client)",
+export const Via = Schema.Literals([
+  "inbox",
+  "agent",
+  "session",
+  "details",
+  "project",
+  "chat",
+  "client",
+  "hook",
+]).annotate({
+  description:
+    "Where it was decided: a place in the web UI, client (the TUI or an API client), or hook (a permission.asked hook answered before the user was asked; `who` names it)",
 })
 export type Via = typeof Via.Type
 
@@ -139,6 +149,49 @@ function append(record: Decided) {
   })
   writes = next.catch(() => undefined)
   return next
+}
+
+/** A permission.asked hook answered a request before it asked the user (SPEC-0022 §8.4): no ask, but a record. */
+export function recordHook(input: {
+  request: {
+    id?: string
+    sessionID: string
+    permission: string
+    patterns: ReadonlyArray<string>
+    metadata: Record<string, unknown>
+    tool?: { messageID: string; callID: string }
+  }
+  sessionTitle?: string
+  agent?: string
+  directory: string
+  project?: string
+  namespace?: string
+  hook: string
+  decision: "allow" | "deny"
+  note?: string
+}) {
+  const time = Date.now()
+  return append({
+    requestID: input.request.id ?? PermissionV1.ID.ascending(),
+    sessionID: input.request.sessionID,
+    ...(input.sessionTitle !== undefined ? { sessionTitle: input.sessionTitle } : {}),
+    ...(input.agent !== undefined ? { agent: input.agent } : {}),
+    directory: input.directory,
+    ...(input.project !== undefined ? { project: input.project } : {}),
+    ...(input.namespace !== undefined ? { namespace: input.namespace } : {}),
+    permission: input.request.permission,
+    patterns: [...input.request.patterns],
+    metadata: input.request.metadata,
+    askedAt: time,
+    decidedAt: time,
+    decision: input.decision,
+    ...(input.note ? { note: input.note } : {}),
+    who: `hook ${input.hook}`,
+    via: "hook",
+    ...(input.request.tool
+      ? { tool: { messageID: input.request.tool.messageID, callID: input.request.tool.callID } }
+      : {}),
+  }).catch(() => undefined)
 }
 
 async function readFile(file: string): Promise<Decided[]> {

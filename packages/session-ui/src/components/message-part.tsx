@@ -608,8 +608,13 @@ function taskSession(
 const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
 const HIDDEN_TOOLS = new Set(["todowrite"])
 // fork: the session page's Detailed view (app operator/session-views sets these) also shows what the
-// chat hides: reasoning whatever the setting, hidden tools, and after a part, a step's marker
-export const partView: { detailed: () => boolean; after?: (props: MessagePartProps) => JSX.Element } = {
+// chat hides: reasoning whatever the setting, hidden tools, and after a part, a step's marker; `marks`
+// shows what hooks did under each call of a context group
+export const partView: {
+  detailed: () => boolean
+  after?: (props: MessagePartProps) => JSX.Element
+  marks?: (part: ToolPart) => JSX.Element
+} = {
   detailed: () => false,
 }
 
@@ -1150,6 +1155,7 @@ export function ContextToolGroup(props: {
                       </div>
                     </div>
                   </div>
+                  {partView.marks?.(partAccessor())}
                 </div>
               )
             }}

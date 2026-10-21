@@ -33,8 +33,8 @@ export const unix = process.platform !== "win32" ? it.instance : it.instance.ski
 export type Hook = {
   event: string
   answer?: unknown
-  body?: string[]
-  match?: string[]
+  body?: ReadonlyArray<string>
+  match?: ReadonlyArray<string>
   onFailure?: string
   sleep?: number
 }

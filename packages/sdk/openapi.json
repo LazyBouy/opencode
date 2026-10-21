@@ -40377,8 +40377,8 @@
           },
           "via": {
             "type": "string",
-            "enum": ["inbox", "agent", "session", "details", "project", "chat", "client"],
-            "description": "Where it was decided: a place in the web UI, or client (the TUI or an API client)"
+            "enum": ["inbox", "agent", "session", "details", "project", "chat", "client", "hook"],
+            "description": "Where it was decided: a place in the web UI, client (the TUI or an API client), or hook (a permission.asked hook answered before the user was asked; `who` names it)"
           }
         },
         "required": ["decision", "via"],
@@ -40539,8 +40539,8 @@
           },
           "via": {
             "type": "string",
-            "enum": ["inbox", "agent", "session", "details", "project", "chat", "client"],
-            "description": "Where it was decided: a place in the web UI, or client (the TUI or an API client)"
+            "enum": ["inbox", "agent", "session", "details", "project", "chat", "client", "hook"],
+            "description": "Where it was decided: a place in the web UI, client (the TUI or an API client), or hook (a permission.asked hook answered before the user was asked; `who` names it)"
           },
           "tool": {
             "type": "object",

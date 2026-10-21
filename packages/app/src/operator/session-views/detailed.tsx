@@ -24,12 +24,16 @@ export function useDetailedParts() {
     <HookMarks part={props.part} />,
     <StepMarkerAfter part={props.part} message={props.message} />,
   ]
-  const previous = { detailed: partView.detailed, after: partView.after }
+  // Calls of a context group (read, glob, grep, list) don't pass through `after`: their marks come here.
+  const marks = (part: Parameters<NonNullable<typeof partView.marks>>[0]) => <HookMarks part={part} />
+  const previous = { detailed: partView.detailed, after: partView.after, marks: partView.marks }
   partView.detailed = detailed
   partView.after = after
+  partView.marks = marks
   onCleanup(() => {
     if (partView.detailed === detailed) partView.detailed = previous.detailed
     if (partView.after === after) partView.after = previous.after
+    if (partView.marks === marks) partView.marks = previous.marks
   })
 }
 

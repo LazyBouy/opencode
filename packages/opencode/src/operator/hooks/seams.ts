@@ -17,6 +17,8 @@ import { ToolRegistry } from "@/tool/registry"
 import { OperatorFileCache } from "../file-cache"
 import { OperatorHelperAgents } from "../helper-agents"
 import { OperatorProfileStore } from "../profile-store"
+import { OperatorPermissionDecisions } from "../permission-decisions"
+import { OperatorPermissionHook } from "../permission-hook"
 import { OperatorProjects } from "../projects"
 import type { OperatorHookEvents } from "./events"
 import { OperatorHooks } from "./hooks"
@@ -94,8 +96,9 @@ function bounded<V>(limit = 2000) {
 // What a step's model call says about its session: the agent running it and the model. Tool calls come from
 // the step's own model call, so its `chat.params` precedes them.
 const turns = bounded<Turn>()
-// Per tool call: when it started, and what its before-hooks changed and added (applied after it ran).
+// Per tool call: when it started, its tool, and what its before-hooks changed and added (applied after it ran).
 const started = bounded<number>()
+const toolNames = bounded<string>()
 const pending = bounded<Pick<Marks, "input" | "prompt"> & { context: NonNullable<Marks["context"]> }>()
 // Calls a hook denied: their failure isn't a `tool.after`.
 const denied = bounded<true>()
@@ -192,8 +195,25 @@ type Seams = {
 
 // The servers running, newest last: only the newest acts (a test process builds several in turn, and an older one
 // takes over again when a newer one stops).
-const running: Array<{ token: object; seams: Seams }> = []
+const running: Array<{
+  token: object
+  seams: Seams
+  decide: (request: OperatorPermissionHook.Request) => Effect.Effect<OperatorPermissionHook.Decision | undefined>
+}> = []
 const activeSeams = () => running.at(-1)?.seams
+
+// permission.asked, composed with whatever else answers in that slot (§12.1: compose, never replace): hooks first.
+let installed = false
+function installDecide() {
+  if (installed) return
+  installed = true
+  const previous = OperatorPermissionHook.handlers.decide
+  OperatorPermissionHook.handlers.decide = (request) =>
+    Effect.gen(function* () {
+      const answer = yield* running.at(-1)?.decide(request) ?? Effect.succeed(undefined)
+      return answer ?? (previous ? yield* previous(request) : undefined)
+    })
+}
 const isCurrent = (token: object) => running.at(-1)?.token === token
 
 type PromptInput = {
@@ -218,6 +238,7 @@ export const plugin: Plugin = async () => ({
   "tool.execute.before": async (input, output) => {
     const instance = instanceNow()
     started.set(input.callID, Date.now())
+    toolNames.set(input.callID, input.tool)
     if (instance && EDIT_TOOLS.has(input.tool))
       editing.set(input.callID, {
         directory: (instance as { directory: string }).directory,
@@ -959,6 +980,54 @@ const layer = Layer.effect(
       )
     })
 
+    // permission.asked: a request that would ask the user (every level, lock and approval left it there). A deny
+    // rejects it with the reason for the model, an allow lets it through once; a failed run, or no answer, leaves
+    // it to the user (§7.3, §8.4). Either answer is a decision record, as the user's would be.
+    const permissionAsked = Effect.fnUntraced(function* (request: OperatorPermissionHook.Request) {
+      const turn = yield* turnOf(request.sessionID)
+      const found = yield* hooks.forEvent({
+        ...(turn.agent ? { agent: turn.agent } : {}),
+        event: "permission.asked",
+        subject: request.permission,
+      })
+      if (!found.length) return undefined
+      const base = yield* describe("permission.asked", request.sessionID, turn)
+      const callID = request.tool?.callID
+      const tool = callID ? toolNames.get(callID) : undefined
+      const result = yield* hooks.chain(
+        found,
+        {
+          ...base.input,
+          permission: request.permission,
+          patterns: [...request.patterns],
+          ...(tool ? { tool } : {}),
+          ...(callID ? { callID } : {}),
+          metadata: request.metadata,
+        },
+        { ...base.target, ...(tool ? { tool } : {}), ...(callID ? { callID } : {}) },
+      )
+      if (result.denied?.failed) return undefined
+      const by = result.denied ?? result.allowed
+      if (!by) return undefined
+      const settings = (yield* Effect.promise(() => OperatorProfileStore.readProjects()))[base.target.project ?? ""]
+      const reason = result.denied ? deniedText(result.denied) : undefined
+      yield* Effect.promise(() =>
+        OperatorPermissionDecisions.recordHook({
+          request,
+          ...(base.input.session ? { sessionTitle: base.input.session.title } : {}),
+          ...(turn.agent ? { agent: turn.agent } : {}),
+          directory: base.input.cwd,
+          ...(base.target.project
+            ? { project: base.target.project, namespace: settings?.namespace ?? "opencode" }
+            : {}),
+          hook: by.hook,
+          decision: result.denied ? "deny" : "allow",
+          ...(reason ? { note: reason } : {}),
+        }),
+      )
+      return reason ? { reject: reason } : { allow: true as const }
+    })
+
     const inInstance = <A>(instance: unknown, effect: Effect.Effect<A, unknown, any>) =>
       Effect.runPromise(
         effect.pipe(Effect.provideService(InstanceRef, instance as InstanceContext)) as Effect.Effect<
@@ -1016,7 +1085,17 @@ const layer = Layer.effect(
     }
     yield* Effect.acquireRelease(
       Effect.sync(() => {
-        running.push({ token, seams })
+        installDecide()
+        running.push({
+          token,
+          seams,
+          decide: (request) =>
+            permissionAsked(request).pipe(
+              Effect.catchCause((cause) =>
+                Effect.logError("hooks: permission.asked", { cause }).pipe(Effect.as(undefined)),
+              ),
+            ),
+        })
         // A recorded run is announced for the live views.
         OperatorHookRuns.announce.ran = (run) =>
           GlobalBus.emit("event", { payload: { type: OperatorHookRuns.RAN, properties: run } })
