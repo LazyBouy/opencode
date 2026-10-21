@@ -14,6 +14,7 @@ import { RecordView } from "../ui/record-overlay"
 import { AgentPrompt, useAgentPromptSetting } from "./agent-prompt"
 import { AgentToolPrompt } from "./agent-tools"
 import { AgentPermissions } from "./agent-permissions"
+import { AgentHooks } from "./agent-hooks"
 import { AgentQueue } from "./agent-queue"
 import { recordOf, useProjectRecords } from "./project-record"
 import { requestError } from "./config-helpers"
@@ -36,7 +37,16 @@ export default function AgentPage() {
   return <Navigate href={`/operator/agents?${query.toString()}`} />
 }
 
-export const AGENT_TABS = ["overview", "prompt", "tools", "permissions", "requests", "sessions", "queue"] as const
+export const AGENT_TABS = [
+  "overview",
+  "prompt",
+  "tools",
+  "permissions",
+  "hooks",
+  "requests",
+  "sessions",
+  "queue",
+] as const
 
 // One agent of a project (`directory`): its name, tags and actions, then the section `tab`. The
 // Agents page shows it in its overlay, with the sections as the left menu.
@@ -272,6 +282,9 @@ export function AgentDetail(props: { name: string; directory: string; tab: strin
             </Match>
             <Match when={props.tab === "permissions"}>
               <AgentPermissions agent={current().name} directory={directory()} />
+            </Match>
+            <Match when={props.tab === "hooks"}>
+              <AgentHooks agent={current().name} directory={directory()} runs />
             </Match>
             <Match when={props.tab === "sessions"}>
               <div class="flex items-center justify-between gap-2 flex-wrap" data-testid="agent-main-session">

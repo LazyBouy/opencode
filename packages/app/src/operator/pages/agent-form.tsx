@@ -21,6 +21,7 @@ import { LevelEditor } from "../ui/level-editor"
 import { PermissionImpact } from "../ui/permission-impact"
 import { orderCheck, type Rule, rulesFromConfig, rulesToConfig } from "../ui/rules"
 import { useAgentPermissions, useRefreshAgent } from "./agent-permissions"
+import { AgentHooks } from "./agent-hooks"
 import { AgentModelFields } from "./agent-model-fields"
 import { useAgents } from "./agents"
 import { agentPatch, type AgentForm, formFromSettings } from "./agent-form-state"
@@ -792,6 +793,15 @@ export default function AgentFormPage() {
                   )}
                 </Show>
               </div>
+            </Field>
+            {/* Hooks (SPEC-0022 §10.3): saved at once, apart from the form's Save; a new agent gets them once it exists. */}
+            <Field group label={language.t("operator.agent.tab.hooks")} hint={language.t("operator.hooks.agent.hint")}>
+              <Show
+                when={editing() && existing()}
+                fallback={<p data-slot="operator-note">{language.t("operator.hooks.agent.newAgent")}</p>}
+              >
+                {(agent) => <AgentHooks agent={agent().name} directory={directory()} />}
+              </Show>
             </Field>
           </div>
           <Show when={store.error}>

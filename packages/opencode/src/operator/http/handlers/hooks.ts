@@ -12,7 +12,7 @@ import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { ApiHookInvalidError, ApiHookNotFoundError } from "../groups/hooks"
 import { copyOr } from "../groups/project-config"
 
-const invalid = (error: { message: string }) =>
+const invalid = (error: { readonly message: string }) =>
   new ApiHookInvalidError({ name: "OperatorHookInvalidError", data: { message: error.message } })
 
 const number = (value: string | undefined) => {

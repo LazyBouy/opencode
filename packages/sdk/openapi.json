@@ -19081,6 +19081,55 @@
                   "permission": {
                     "$ref": "#/components/schemas/PermissionConfig"
                   },
+                  "hooks": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "event": {
+                          "type": "string"
+                        },
+                        "command": {
+                          "type": "string"
+                        },
+                        "args": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "match": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "timeout": {
+                          "type": "number"
+                        },
+                        "onFailure": {
+                          "type": "string"
+                        },
+                        "locked": {
+                          "type": "boolean"
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "description": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "description": "One hook, by its name: the event it runs at, its script and settings"
+                    }
+                  },
+                  "hooksDisabled": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "reset": {
                     "type": "array",
                     "items": {
@@ -19100,7 +19149,9 @@
                         "disable",
                         "home",
                         "prompt",
-                        "permission"
+                        "permission",
+                        "hooks",
+                        "hooksDisabled"
                       ]
                     }
                   }
@@ -19279,6 +19330,55 @@
                   "permission": {
                     "$ref": "#/components/schemas/PermissionConfig"
                   },
+                  "hooks": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "event": {
+                          "type": "string"
+                        },
+                        "command": {
+                          "type": "string"
+                        },
+                        "args": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "match": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "timeout": {
+                          "type": "number"
+                        },
+                        "onFailure": {
+                          "type": "string"
+                        },
+                        "locked": {
+                          "type": "boolean"
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "description": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "description": "One hook, by its name: the event it runs at, its script and settings"
+                    }
+                  },
+                  "hooksDisabled": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "reset": {
                     "type": "array",
                     "items": {
@@ -19298,7 +19398,9 @@
                         "disable",
                         "home",
                         "prompt",
-                        "permission"
+                        "permission",
+                        "hooks",
+                        "hooksDisabled"
                       ]
                     }
                   }
@@ -24726,6 +24828,9 @@
                   "namespace": {
                     "type": "string"
                   },
+                  "agent": {
+                    "type": "string"
+                  },
                   "name": {
                     "type": "string",
                     "description": "Letters, digits, dots, dashes and underscores"
@@ -24869,6 +24974,9 @@
                   "namespace": {
                     "type": "string"
                   },
+                  "agent": {
+                    "type": "string"
+                  },
                   "name": {
                     "type": "string"
                   },
@@ -24970,6 +25078,9 @@
                 "type": "object",
                 "properties": {
                   "namespace": {
+                    "type": "string"
+                  },
+                  "agent": {
                     "type": "string"
                   },
                   "name": {

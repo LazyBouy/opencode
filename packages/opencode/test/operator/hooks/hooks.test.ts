@@ -468,3 +468,86 @@ describe("changing hooks from the console", () => {
     ).toBe(400)
   })
 })
+
+describe("an agent's own hooks", () => {
+  test("saved in its definition, an inherited one turned off for it (never a locked one), deleted to Trash and back", async () => {
+    await using folder = await tmpdir()
+    await using project = await tmpdir({ git: true })
+    await acme(folder.path, [project.path])
+    await write(path.join(folder.path, ".opencode", "opencode.jsonc"), {
+      hooks: { guard: hook("tool.before", { locked: true }), lint: hook("tool.after") },
+    })
+    await write(path.join(project.path, ".opencode", "opencode.jsonc"), {
+      agent: { reviewer: { mode: "primary", description: "Reviews", prompt: "Review." } },
+    })
+    const agentList = async () =>
+      ((await request("GET", "/operator/hook?agent=reviewer", project.path)).body as { hooks: Hook[] }).hooks
+
+    const saved = await request("PUT", "/operator/hook", project.path, {
+      agent: "reviewer",
+      name: "mine",
+      hook: { event: "step.after", command: "hooks/mine.sh" },
+    })
+    expect(saved.body.data?.message).toBeUndefined()
+    expect(saved.status).toBe(200)
+    expect(saved.body).toMatchObject({ name: "mine", level: "agent", state: "on" })
+    const file = JSON.parse(await fs.readFile(path.join(project.path, ".opencode", "opencode.jsonc"), "utf8"))
+    expect(file.agent.reviewer.hooks).toEqual({ mine: { event: "step.after", command: "hooks/mine.sh" } })
+
+    // The project's own config has only the namespace's locked hook.
+    expect(summary(await agentList())).toEqual(["namespace:guard:on", "agent:mine:on"])
+    const locked = await request("POST", "/operator/hook/state", project.path, {
+      agent: "reviewer",
+      name: "guard",
+      off: true,
+    })
+    expect(locked.status).toBe(400)
+    expect(locked.body.data.message).toContain("locked at namespace")
+    // A locked hook can't be replaced by the agent either.
+    expect(
+      (
+        await request("PUT", "/operator/hook", project.path, {
+          agent: "reviewer",
+          name: "guard",
+          hook: { event: "tool.before", command: "x.sh" },
+        })
+      ).status,
+    ).toBe(400)
+
+    expect(
+      (await request("POST", "/operator/hook/remove", project.path, { agent: "reviewer", name: "mine" })).body,
+    ).toBe(true)
+    expect(summary(await agentList())).toEqual(["namespace:guard:on"])
+    const trash = (await request("GET", "/operator/trash", project.path)).body as Array<{
+      id: string
+      kind: string
+      name: string
+    }>
+    const entry = trash.find((item) => item.kind === "hook" && item.name === "mine")!
+    expect((await request("POST", `/operator/trash/${entry.id}/restore`, project.path)).status).toBe(200)
+    expect(summary(await agentList())).toEqual(["namespace:guard:on", "agent:mine:on"])
+  })
+
+  test("a project that uses its namespace's config: the agent turns an inherited hook off, and on again", async () => {
+    await using folder = await tmpdir()
+    await using project = await tmpdir({ git: true })
+    await acme(folder.path, [project.path])
+    await write(path.join(folder.path, ".opencode", "opencode.jsonc"), {
+      hooks: { lint: hook("tool.after") },
+      agent: { reviewer: { mode: "primary", description: "Reviews", prompt: "Review." } },
+    })
+    const off = await request("POST", "/operator/hook/state?confirmCopy=true", project.path, {
+      agent: "reviewer",
+      name: "lint",
+      off: true,
+    })
+    expect(off.status).toBe(200)
+    expect(off.body).toMatchObject({ state: "off", offAt: "agent" })
+    const on = await request("POST", "/operator/hook/state?confirmCopy=true", project.path, {
+      agent: "reviewer",
+      name: "lint",
+      off: false,
+    })
+    expect(on.body.state).toBe("on")
+  })
+})

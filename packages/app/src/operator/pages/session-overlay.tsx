@@ -20,8 +20,10 @@ import { useOpenSessionView, VIEWS } from "../session-views/view"
 import { requestError } from "./config-helpers"
 import { closeTopOverlay, useOverlayParams } from "../ui/overlay-nav"
 import { PermissionRequests } from "../ui/permission-requests"
+import { HookRunsList } from "./hook-runs"
+import { HookRunHost } from "./hooks"
 
-export const SESSION_TABS = ["conversation", "details", "subagents", "permissions", "requests"] as const
+export const SESSION_TABS = ["conversation", "details", "subagents", "permissions", "requests", "hooks"] as const
 
 // Opens a session (`session` in the URL; `stab` its section) in the overlay. `rows` are the page's
 // sessions, in order, for ‹ ›.
@@ -94,6 +96,7 @@ function SessionOverlay(props: { rows: () => ReadonlyArray<Pick<GlobalSession, "
       { id: "subagents", icon: "subagent" as const },
       { id: "permissions", icon: "shield" as const },
       { id: "requests", icon: "warning" as const },
+      { id: "hooks", icon: "code" as const },
     ].map((item) => ({
       ...item,
       label: language.t(`operator.sessionView.${item.id}` as "operator.sessionView.conversation"),
@@ -181,6 +184,15 @@ function SessionOverlay(props: { rows: () => ReadonlyArray<Pick<GlobalSession, "
           </Match>
           <Match when={tab() === "requests"}>
             <PermissionRequests filter={{ sessionID: id() }} via="session" />
+          </Match>
+          <Match when={tab() === "hooks"}>
+            {/* What hooks did in this session (SPEC-0022 §10.6), newest first; a row opens the run. */}
+            <HookRunsList
+              source={{ directory: folder, session: () => id(), scope: "all" }}
+              testid="session-hook-runs"
+              empty={language.t("operator.hooks.noSessionRuns")}
+            />
+            <HookRunHost directory={folder} />
           </Match>
           <Match when={tab() === "conversation"}>
             <div data-slot="operator-open-views" data-testid="open-full-page">

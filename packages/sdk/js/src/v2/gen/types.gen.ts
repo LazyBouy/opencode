@@ -19735,6 +19735,20 @@ export type OperatorAgentCreateData = {
     home?: string
     prompt?: string
     permission?: PermissionConfig
+    hooks?: {
+      [key: string]: {
+        event?: string
+        command?: string
+        args?: Array<string>
+        match?: Array<string>
+        timeout?: number
+        onFailure?: string
+        locked?: boolean
+        enabled?: boolean
+        description?: string
+      }
+    }
+    hooksDisabled?: Array<string>
     reset?: Array<
       | "description"
       | "mode"
@@ -19751,6 +19765,8 @@ export type OperatorAgentCreateData = {
       | "home"
       | "prompt"
       | "permission"
+      | "hooks"
+      | "hooksDisabled"
     >
   }
   path?: never
@@ -19846,6 +19862,20 @@ export type OperatorAgentUpdateData = {
     home?: string
     prompt?: string
     permission?: PermissionConfig
+    hooks?: {
+      [key: string]: {
+        event?: string
+        command?: string
+        args?: Array<string>
+        match?: Array<string>
+        timeout?: number
+        onFailure?: string
+        locked?: boolean
+        enabled?: boolean
+        description?: string
+      }
+    }
+    hooksDisabled?: Array<string>
     reset?: Array<
       | "description"
       | "mode"
@@ -19862,6 +19892,8 @@ export type OperatorAgentUpdateData = {
       | "home"
       | "prompt"
       | "permission"
+      | "hooks"
+      | "hooksDisabled"
     >
   }
   path: {
@@ -22062,6 +22094,7 @@ export type OperatorHookListResponse = OperatorHookListResponses[keyof OperatorH
 export type OperatorHookSaveData = {
   body?: {
     namespace?: string
+    agent?: string
     /**
      * Letters, digits, dots, dashes and underscores
      */
@@ -22116,6 +22149,7 @@ export type OperatorHookSaveResponse = OperatorHookSaveResponses[keyof OperatorH
 export type OperatorHookStateData = {
   body?: {
     namespace?: string
+    agent?: string
     name: string
     off: boolean
   }
@@ -22153,6 +22187,7 @@ export type OperatorHookStateResponse = OperatorHookStateResponses[keyof Operato
 export type OperatorHookRemoveData = {
   body?: {
     namespace?: string
+    agent?: string
     name: string
     script?: boolean
   }

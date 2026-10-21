@@ -5838,6 +5838,20 @@ export class Agent extends HeyApiClient {
       home?: string
       prompt?: string
       permission?: PermissionConfig
+      hooks?: {
+        [key: string]: {
+          event?: string
+          command?: string
+          args?: Array<string>
+          match?: Array<string>
+          timeout?: number
+          onFailure?: string
+          locked?: boolean
+          enabled?: boolean
+          description?: string
+        }
+      }
+      hooksDisabled?: Array<string>
       reset?: Array<
         | "description"
         | "mode"
@@ -5854,6 +5868,8 @@ export class Agent extends HeyApiClient {
         | "home"
         | "prompt"
         | "permission"
+        | "hooks"
+        | "hooksDisabled"
       >
     },
     options?: Options<never, ThrowOnError>,
@@ -5884,6 +5900,8 @@ export class Agent extends HeyApiClient {
             { in: "body", key: "home" },
             { in: "body", key: "prompt" },
             { in: "body", key: "permission" },
+            { in: "body", key: "hooks" },
+            { in: "body", key: "hooksDisabled" },
             { in: "body", key: "reset" },
           ],
         },
@@ -5970,6 +5988,20 @@ export class Agent extends HeyApiClient {
       home?: string
       prompt?: string
       permission?: PermissionConfig
+      hooks?: {
+        [key: string]: {
+          event?: string
+          command?: string
+          args?: Array<string>
+          match?: Array<string>
+          timeout?: number
+          onFailure?: string
+          locked?: boolean
+          enabled?: boolean
+          description?: string
+        }
+      }
+      hooksDisabled?: Array<string>
       reset?: Array<
         | "description"
         | "mode"
@@ -5986,6 +6018,8 @@ export class Agent extends HeyApiClient {
         | "home"
         | "prompt"
         | "permission"
+        | "hooks"
+        | "hooksDisabled"
       >
     },
     options?: Options<never, ThrowOnError>,
@@ -6015,6 +6049,8 @@ export class Agent extends HeyApiClient {
             { in: "body", key: "home" },
             { in: "body", key: "prompt" },
             { in: "body", key: "permission" },
+            { in: "body", key: "hooks" },
+            { in: "body", key: "hooksDisabled" },
             { in: "body", key: "reset" },
           ],
         },
@@ -8526,6 +8562,7 @@ export class Hook extends HeyApiClient {
       workspace?: string
       confirmCopy?: "true" | "false"
       namespace?: string
+      agent?: string
       name?: string
       previous?: string
       hook?: {
@@ -8551,6 +8588,7 @@ export class Hook extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "query", key: "confirmCopy" },
             { in: "body", key: "namespace" },
+            { in: "body", key: "agent" },
             { in: "body", key: "name" },
             { in: "body", key: "previous" },
             { in: "body", key: "hook" },
@@ -8581,6 +8619,7 @@ export class Hook extends HeyApiClient {
       workspace?: string
       confirmCopy?: "true" | "false"
       namespace?: string
+      agent?: string
       name?: string
       off?: boolean
     },
@@ -8595,6 +8634,7 @@ export class Hook extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "query", key: "confirmCopy" },
             { in: "body", key: "namespace" },
+            { in: "body", key: "agent" },
             { in: "body", key: "name" },
             { in: "body", key: "off" },
           ],
@@ -8624,6 +8664,7 @@ export class Hook extends HeyApiClient {
       workspace?: string
       confirmCopy?: "true" | "false"
       namespace?: string
+      agent?: string
       name?: string
       script?: boolean
     },
@@ -8638,6 +8679,7 @@ export class Hook extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "query", key: "confirmCopy" },
             { in: "body", key: "namespace" },
+            { in: "body", key: "agent" },
             { in: "body", key: "name" },
             { in: "body", key: "script" },
           ],

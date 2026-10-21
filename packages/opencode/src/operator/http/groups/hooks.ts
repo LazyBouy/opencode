@@ -35,6 +35,9 @@ export const OperatorHookPaths = {
 const Namespace = Schema.optional(Schema.String).annotate({
   description: "Act on this namespace's own layer (Global's id for Global) instead of the project",
 })
+const Agent = Schema.optional(Schema.String).annotate({
+  description: "An agent's own hooks (its definition: hooks, hooksDisabled) instead of the scope's",
+})
 const WriteQuery = Schema.Struct({ ...WorkspaceRoutingQueryFields, ...ConfirmCopyField })
 
 export class ApiHookInvalidError extends Schema.ErrorClass<{
@@ -114,6 +117,7 @@ export const OperatorHookApi = HttpApi.make("operator-hooks")
           query: WriteQuery,
           payload: Schema.Struct({
             namespace: Namespace,
+            agent: Agent,
             name: Schema.String.annotate({ description: "Letters, digits, dots, dashes and underscores" }),
             previous: Schema.optional(Schema.String).annotate({ description: "Its name before, when renamed" }),
             hook: ConfigForkV1.HookEntry,
@@ -130,7 +134,7 @@ export const OperatorHookApi = HttpApi.make("operator-hooks")
         ),
         HttpApiEndpoint.post("state", OperatorHookPaths.state, {
           query: WriteQuery,
-          payload: Schema.Struct({ namespace: Namespace, name: Schema.String, off: Schema.Boolean }),
+          payload: Schema.Struct({ namespace: Namespace, agent: Agent, name: Schema.String, off: Schema.Boolean }),
           success: described(OperatorHooks.HookView, "The hook"),
           error: [ApiHookInvalidError, ApiProjectConfigCopyError],
         }).annotateMerge(
@@ -144,6 +148,7 @@ export const OperatorHookApi = HttpApi.make("operator-hooks")
           query: WriteQuery,
           payload: Schema.Struct({
             namespace: Namespace,
+            agent: Agent,
             name: Schema.String,
             script: Schema.optional(Schema.Boolean).annotate({
               description: "Its script goes to Trash too (only one in the scope's hooks/ folder)",

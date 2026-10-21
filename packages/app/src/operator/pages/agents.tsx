@@ -427,6 +427,7 @@ function AgentOverlay(props: { rows: () => ReadonlyArray<AgentRow> }) {
       { id: "prompt", icon: "prompt" as const },
       { id: "tools", icon: "code" as const },
       { id: "permissions", icon: "shield" as const },
+      { id: "hooks", icon: "code" as const },
       { id: "requests", icon: "warning" as const },
       { id: "sessions", icon: "bubble-5" as const },
       { id: "queue", icon: "enter" as const },

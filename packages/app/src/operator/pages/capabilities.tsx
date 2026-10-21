@@ -19,6 +19,7 @@ import { type OverlayBlock, RecordField, RecordOverlay, RecordView, useRecordOve
 import { ScopePicker } from "../ui/scope-picker"
 import { useOverlayParams } from "../ui/overlay-nav"
 import { ToolPatternSection } from "../ui/tool-pattern"
+import { HooksTab } from "./hooks"
 import { SkillsNote } from "./skills-note"
 import {
   CapabilityActions,
@@ -173,7 +174,8 @@ export default function CapabilitiesPage() {
     ["kind", "item"],
   )
   const open = (kind: Kind, item: string) => setParams({ kind, item })
-  const tab = (): Kind => (KINDS.includes(params.tab as Kind) ? (params.tab as Kind) : "tools")
+  const tab = (): Kind | "hooks" =>
+    params.tab === "hooks" ? "hooks" : KINDS.includes(params.tab as Kind) ? (params.tab as Kind) : "tools"
 
   const search = (
     <TextInputV2
@@ -292,7 +294,13 @@ export default function CapabilitiesPage() {
                 </TabsV2.Trigger>
               )}
             </For>
+            <TabsV2.Trigger value="hooks">{language.t("operator.hooks.tabName")}</TabsV2.Trigger>
           </TabsV2.List>
+          <TabsV2.Content value="hooks">
+            <Show when={tab() === "hooks"}>
+              <HooksTab directory={data.directory} namespace={data.namespace} />
+            </Show>
+          </TabsV2.Content>
           <TabsV2.Content value="tools">
             {toolbar("tools")}
             {table(

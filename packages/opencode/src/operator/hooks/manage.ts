@@ -7,6 +7,7 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import type { ConfigForkV1 } from "@opencode-ai/core/v1/config/fork"
 import { InstanceState } from "@/effect/instance-state"
+import { OperatorAgents } from "../agents"
 import { OperatorConfig } from "../config"
 import { OperatorLayout } from "../layout"
 import { OperatorProjectConfig } from "../project-config"
@@ -17,8 +18,8 @@ import { OperatorHookResolve } from "./resolve"
 import { OperatorHookRuns } from "./runs"
 import { OperatorHookTemplates } from "./templates"
 
-// The console's changes to hooks (SPEC-0022 §10.1, §10.2, §10.4), at the Capabilities page's scope: Global, a
-// namespace (its own layer) or a project. A hook is saved into the scope's config file (a project's is
+// The console's changes to hooks (SPEC-0022 §10.1–§10.4), at the Capabilities page's scope: Global, a namespace
+// (its own layer) or a project; or an agent's own (its definition: `hooks`, `hooksDisabled`). A hook is saved into the scope's config file (a project's is
 // copy-on-write: the usual copy question), turned off or on there (`capabilities.disabled.hooks`), deleted to Trash
 // with its script if asked, or run on a sample event (Test). Scripts are written in the scope's hooks/ folder. A
 // locked inherited hook can't be replaced or turned off; a hand-edited file that does so still loads, and the list
@@ -30,7 +31,12 @@ export class InvalidError extends Schema.TaggedErrorClass<InvalidError>()("Opera
 
 type Entry = typeof ConfigForkV1.HookEntry.Type
 type Hook = OperatorHooks.Effective["hooks"][number]
-type Failure = InvalidError | OperatorConfig.InvalidError | OperatorProjectConfig.CopyNeededError
+type Failure =
+  | InvalidError
+  | OperatorConfig.InvalidError
+  | OperatorProjectConfig.CopyNeededError
+  | OperatorAgents.NotFoundError
+  | OperatorAgents.InvalidError
 
 export const NAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/
 
@@ -51,14 +57,25 @@ export interface Interface {
   /** Creates or replaces the scope's hook `name` (renaming `previous`, when given). */
   readonly save: (input: {
     namespace?: string
+    agent?: string
     name: string
     previous?: string
     hook: Entry
   }) => Effect.Effect<Hook, Failure>
   /** Turns an inherited hook off at the scope, or on again. */
-  readonly setState: (input: { namespace?: string; name: string; off: boolean }) => Effect.Effect<Hook, Failure>
+  readonly setState: (input: {
+    namespace?: string
+    agent?: string
+    name: string
+    off: boolean
+  }) => Effect.Effect<Hook, Failure>
   /** Moves the scope's hook to Trash, and its script when asked (only one in the scope's hooks/ folder). */
-  readonly remove: (input: { namespace?: string; name: string; script?: boolean }) => Effect.Effect<void, Failure>
+  readonly remove: (input: {
+    namespace?: string
+    agent?: string
+    name: string
+    script?: boolean
+  }) => Effect.Effect<void, Failure>
   /** Runs a hook of the scope on an event (a sample of its event when none is given); no session is touched. */
   readonly test: (input: {
     namespace?: string
@@ -101,6 +118,18 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const hooks = yield* OperatorHooks.Service
     const operatorConfig = yield* OperatorConfig.Service
+    const agents = yield* OperatorAgents.Service
+
+    // An agent's own hooks and the inherited ones it turns off, and the scope its definition is written at.
+    const agentOf = Effect.fnUntraced(function* (agent: string) {
+      const info = (yield* agents.list()).find((item) => item.name === agent)
+      if (!info) return yield* fail(`No agent named ${agent}`)
+      const kind = info.level.kind
+      const scope: OperatorConfig.WriteScope =
+        kind === "global" || kind === "namespace" || kind === "project" ? kind : "project"
+      const own = yield* hooks.agentOwn(agent)
+      return { scope, hooks: { ...own.hooks }, disabled: own.disabled }
+    })
 
     // The scope's config as it is now (a project without its own: its namespace's, which a first write copies).
     const configOf = Effect.fnUntraced(function* (namespace?: string) {
@@ -116,23 +145,25 @@ const layer = Layer.effect(
     const patch = (namespace: string | undefined, body: Record<string, unknown>) =>
       namespace ? operatorConfig.update("namespace", body, namespace) : operatorConfig.update("project", body)
 
-    const find = Effect.fnUntraced(function* (namespace: string | undefined, name: string) {
-      const view = yield* hooks.effective(undefined, namespace)
+    const find = Effect.fnUntraced(function* (namespace: string | undefined, name: string, agent?: string) {
+      const view = yield* hooks.effective(agent, agent ? undefined : namespace)
       return { view, hook: view.hooks.find((item) => item.name === name) }
     })
 
     const save = Effect.fn("OperatorHookManage.save")(function* (input: {
       namespace?: string
+      agent?: string
       name: string
       previous?: string
       hook: Entry
     }) {
       if (!NAME.test(input.name))
         return yield* fail("A hook's name is letters, digits, dots, dashes and underscores (up to 64)")
-      const { hook: existing } = yield* find(input.namespace, input.name)
+      const { hook: existing } = yield* find(input.namespace, input.name, input.agent)
       const scope = yield* hooks.scopeOf(input.namespace)
+      const level = input.agent ? ("agent" as const) : scope.level
       const checked = OperatorHookResolve.entry(input.name, input.hook, {
-        level: scope.level,
+        level,
         file: scope.file ?? "",
         base: path.dirname(scope.file ?? ""),
         hooks: {},
@@ -140,10 +171,19 @@ const layer = Layer.effect(
       })
       if (checked.problems.length) return yield* fail(`${input.name}: ${checked.problems.join("; ")}`)
       // A locked hook from a higher level can't be replaced here (it stays in force over any override).
-      if (existing && existing.level !== scope.level && existing.locked)
+      if (existing && existing.level !== level && existing.locked)
         return yield* fail(`${input.name} is locked at ${existing.level}: it can't be replaced here`)
-      if (input.previous && input.previous !== input.name && existing?.level === scope.level)
+      if (input.previous && input.previous !== input.name && existing?.level === level)
         return yield* fail(`There's a hook named ${input.name} here already`)
+      if (input.agent) {
+        const agent = yield* agentOf(input.agent)
+        const next = { ...agent.hooks, [input.name]: tidy(input.hook) }
+        if (input.previous && input.previous !== input.name) delete next[input.previous]
+        yield* agents.update(agent.scope, input.agent, { hooks: next as Record<string, Entry> })
+        const saved = (yield* find(undefined, input.name, input.agent)).hook
+        if (!saved) return yield* fail(`${input.name} wasn't saved`)
+        return saved
+      }
       yield* patch(input.namespace, {
         hooks: {
           [input.name]: OperatorConfig.whole(tidy(input.hook)),
@@ -157,14 +197,28 @@ const layer = Layer.effect(
 
     const setState = Effect.fn("OperatorHookManage.setState")(function* (input: {
       namespace?: string
+      agent?: string
       name: string
       off: boolean
     }) {
-      const { hook } = yield* find(input.namespace, input.name)
+      const { hook } = yield* find(input.namespace, input.name, input.agent)
       const scope = yield* hooks.scopeOf(input.namespace)
+      const level = input.agent ? "agent" : scope.level
       if (!hook) return yield* fail(`No hook named ${input.name}`)
-      if (hook.level === scope.level) return yield* fail(`${input.name} is this level's own: edit or delete it instead`)
+      if (hook.level === level) return yield* fail(`${input.name} is this level's own: edit or delete it instead`)
       if (hook.locked) return yield* fail(`${input.name} is locked at ${hook.level}: it can't be turned off below`)
+      if (input.agent) {
+        const agent = yield* agentOf(input.agent)
+        const next = input.off
+          ? [...new Set([...agent.disabled, input.name])]
+          : agent.disabled.filter((item) => item !== input.name)
+        yield* agents.update(
+          agent.scope,
+          input.agent,
+          next.length ? { hooksDisabled: next } : { reset: ["hooksDisabled"] },
+        )
+        return (yield* find(undefined, input.name, input.agent)).hook ?? hook
+      }
       const current = yield* configOf(input.namespace)
       const capabilities = isRecord(current.capabilities) ? current.capabilities : {}
       const disabled =
@@ -181,10 +235,48 @@ const layer = Layer.effect(
 
     const remove = Effect.fn("OperatorHookManage.remove")(function* (input: {
       namespace?: string
+      agent?: string
       name: string
       script?: boolean
     }) {
       const scope = yield* hooks.scopeOf(input.namespace)
+      if (input.agent) {
+        const agent = yield* agentOf(input.agent)
+        const value = agent.hooks[input.name]
+        if (value === undefined)
+          return yield* fail(`${input.name} isn't ${input.agent}'s own hook: turn it off instead`)
+        const { hook } = yield* find(undefined, input.name, input.agent)
+        const script =
+          input.script && hook?.command && scope.folder && inside(scope.folder, hook.command) ? [hook.command] : []
+        const rest = { ...agent.hooks }
+        delete rest[input.name]
+        yield* agents.update(
+          agent.scope,
+          input.agent,
+          Object.keys(rest).length ? { hooks: rest as Record<string, Entry> } : { reset: ["hooks"] },
+        )
+        const ctx = yield* InstanceState.context
+        // Restored into the config at the agent's scope: an agent file's settings merge with its config entry.
+        yield* Effect.promise(() =>
+          OperatorTrashFiles.put({
+            kind: "hook",
+            name: input.name,
+            project: ctx.directory,
+            namespace: scope.namespace,
+            ...(script.length ? { paths: script } : {}),
+            config:
+              agent.scope === "namespace"
+                ? {
+                    scope: "namespace",
+                    namespace: scope.namespace,
+                    key: ["agent", input.agent!, "hooks", input.name],
+                    value,
+                  }
+                : { scope: agent.scope, key: ["agent", input.agent!, "hooks", input.name], value },
+          }),
+        )
+        return
+      }
       const current = yield* configOf(input.namespace)
       const value = isRecord(current.hooks) ? current.hooks[input.name] : undefined
       if (value === undefined) return yield* fail(`${input.name} isn't this level's own hook: turn it off instead`)
@@ -310,4 +402,8 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = LayerNode.make({ service: Service, layer, deps: [OperatorHooks.node, OperatorConfig.node] })
+export const node = LayerNode.make({
+  service: Service,
+  layer,
+  deps: [OperatorHooks.node, OperatorConfig.node, OperatorAgents.node],
+})

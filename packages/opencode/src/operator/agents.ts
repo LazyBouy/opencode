@@ -10,6 +10,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { Glob } from "@opencode-ai/core/util/glob"
+import { ConfigForkV1 } from "@opencode-ai/core/v1/config/fork"
 import { ConfigPermissionV1 } from "@opencode-ai/core/v1/config/permission"
 import { Agent } from "@/agent/agent"
 import { Config } from "@/config/config"
@@ -82,6 +83,8 @@ export const ResetKey = Schema.Literals([
   "home",
   "prompt",
   "permission",
+  "hooks",
+  "hooksDisabled",
 ])
 export type ResetKey = typeof ResetKey.Type
 
@@ -107,6 +110,12 @@ export const Patch = Schema.Struct({
   home: Schema.optional(Schema.String),
   prompt: Schema.optional(Schema.String),
   permission: Schema.optional(ConfigPermissionV1.Info),
+  hooks: Schema.optional(Schema.Record(Schema.String, ConfigForkV1.HookEntry)).annotate({
+    description: "The agent's own hooks, by name (the whole map)",
+  }),
+  hooksDisabled: Schema.optional(Schema.Array(Schema.String)).annotate({
+    description: "Inherited hooks the agent turns off (not a locked one)",
+  }),
   reset: Schema.optional(Schema.Array(ResetKey)).annotate({
     description: "Settings to remove so their defaults apply",
   }),
@@ -446,8 +455,10 @@ const layer = Layer.effect(
         return file
       }
       const values = settings(patch)
-      // Rules are written as a whole: merged, removed rules would stay and the order would not change.
+      // Rules (and hooks) are written as a whole: merged, removed ones would stay and the order would not change.
       if (values.permission) values.permission = OperatorConfig.whole(values.permission)
+      if (values.hooks) values.hooks = OperatorConfig.whole(values.hooks)
+      if (values.hooksDisabled) values.hooksDisabled = OperatorConfig.whole(values.hooksDisabled)
       return (yield* operatorConfig.update(scope, { agent: { [name]: values } })).path
     })
 

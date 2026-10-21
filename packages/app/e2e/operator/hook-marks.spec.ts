@@ -184,13 +184,14 @@ test("the agent's Sys Prompt tab lists the hooks in force that can add text, wit
   await overlay.getByRole("tab", { name: "Sys Prompt" }).click()
   const block = overlay.getByTestId("agent-prompt-hooks")
   const hooks = block.getByTestId("agent-prompt-hook")
-  // lint (tool.after) and date (turn.before) can add text; audit (turn.after) can't; old is off.
-  await expect(hooks).toHaveCount(2)
+  // lint (tool.after), date (turn.before) and policy (tool.before) can add text; audit (turn.after) can't; old is off.
+  await expect(hooks).toHaveCount(3)
   await expect(hooks.nth(0)).toContainText("lint")
   await expect(hooks.nth(0)).toContainText("tool.after")
   await expect(hooks.nth(0)).toContainText("Project · /repo/opencode.json")
   await expect(hooks.nth(1)).toContainText("date")
   await expect(hooks.nth(1)).toContainText("Namespace")
+  await expect(hooks.nth(2)).toContainText("policy")
 })
 
 test("a compaction shows what compaction.before added and a compaction.after hook that stopped the continue", async ({

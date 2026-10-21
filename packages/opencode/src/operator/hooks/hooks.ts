@@ -1,11 +1,11 @@
 export * as OperatorHooks from "./hooks"
 
 import path from "path"
+import matter from "gray-matter"
 import { parse } from "jsonc-parser"
 import { Context, Effect, Layer, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Global } from "@opencode-ai/core/global"
-import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
 import { OperatorAgents } from "../agents"
 import { OperatorConfig } from "../config"
@@ -146,6 +146,8 @@ export const WATCH_WAITING = 20
 export interface Interface {
   /** The hooks in force for this project (and agent), or a namespace's own, every one with its level and state. */
   readonly effective: (agent?: string, namespace?: string) => Effect.Effect<Effective>
+  /** An agent's own hooks and the inherited ones it turns off, as its files have them now. */
+  readonly agentOwn: (agent: string) => Effect.Effect<{ hooks: Record<string, unknown>; disabled: string[] }>
   /** The scope's own level, config file and hooks/ folder (a namespace's, else the project's). */
   readonly scopeOf: (namespace?: string) => Effect.Effect<{
     level: "global" | "namespace" | "project"
@@ -284,13 +286,48 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const operatorConfig = yield* OperatorConfig.Service
-    const config = yield* Config.Service
     const agents = yield* OperatorAgents.Service
     // The graceful stop kills running hooks, once no other server in this process uses the runner.
     const release = OperatorHookRunner.hold()
     yield* Effect.addFinalizer(() => Effect.sync(release))
 
     const cache = new Map<string, { files: string[]; stamps: string[]; hooks: Hook[] }>()
+
+    // An agent's own hooks, from the files that define it (its config entries, then its agent file): config.get()
+    // keeps what the project loaded until it reloads, and a hook saved from the console applies at once.
+    const definitionOf = Effect.fnUntraced(function* (
+      agent: string,
+      sources: ReadonlyArray<{ path: string; text: string }>,
+    ) {
+      let entry: Record<string, unknown> | undefined
+      let file: string | undefined
+      for (const source of sources) {
+        const value = parse(source.text ?? "") as unknown
+        const found = isRecord(value) && isRecord(value.agent) ? value.agent[agent] : undefined
+        if (!isRecord(found)) continue
+        entry = { ...entry, ...found }
+        if ("hooks" in found || "hooksDisabled" in found || !file) file = source.path
+      }
+      const own = yield* agents.fileOf(agent).pipe(Effect.catch(() => Effect.succeed(undefined)))
+      if (own?.endsWith(".md")) {
+        const text = yield* Effect.promise(() => OperatorFileCache.text(own))
+        const data = text ? (matter(text).data as unknown) : undefined
+        if (isRecord(data)) entry = { ...entry, ...data }
+        file = own
+      }
+      return {
+        entry,
+        file,
+        hooks: isRecord(entry?.hooks) ? entry.hooks : {},
+        disabled: Array.isArray(entry?.hooksDisabled)
+          ? entry.hooksDisabled.filter((item): item is string => typeof item === "string")
+          : [],
+      }
+    })
+    const agentOwn = Effect.fn("OperatorHooks.agentOwn")(function* (agent: string) {
+      const found = yield* definitionOf(agent, (yield* operatorConfig.layers()).sources)
+      return { hooks: found.hooks, disabled: found.disabled }
+    })
 
     // Every level's declarations, and every file they come from or could come from.
     const read = Effect.fnUntraced(function* (agent?: string) {
@@ -343,18 +380,15 @@ const layer = Layer.effect(
         if (own.text !== undefined) add("namespace", own.file, own.text, { only: lockedOnly })
       }
       if (agent) {
-        const entry = ((yield* config.get()).agent ?? {})[agent] as Record<string, unknown> | undefined
-        const file = yield* agents.fileOf(agent).pipe(Effect.catch(() => Effect.succeed(undefined)))
-        if (file) extra.push(file)
-        if (entry)
+        const own = yield* definitionOf(agent, layers.sources)
+        if (own.file) extra.push(own.file)
+        if (own.entry)
           sources.push({
             level: "agent",
-            file: file ?? `agent ${agent}`,
-            base: file ? baseOf(file) : ctx.directory,
-            hooks: isRecord(entry.hooks) ? entry.hooks : {},
-            disabled: Array.isArray(entry.hooksDisabled)
-              ? entry.hooksDisabled.filter((item): item is string => typeof item === "string")
-              : [],
+            file: own.file ?? `agent ${agent}`,
+            base: own.file ? baseOf(own.file) : ctx.directory,
+            hooks: own.hooks,
+            disabled: own.disabled,
           })
       }
       // Where a config file could appear and be read: as permission-live.ts lists them.
@@ -624,6 +658,7 @@ const layer = Layer.effect(
     return Service.of({
       effective,
       scopeOf,
+      agentOwn,
       forEvent,
       settings: () => Effect.promise(() => OperatorHookSettings.read()),
       setSettings,
@@ -639,5 +674,5 @@ const layer = Layer.effect(
 export const node = LayerNode.make({
   service: Service,
   layer,
-  deps: [OperatorConfig.node, Config.node, OperatorAgents.node],
+  deps: [OperatorConfig.node, OperatorAgents.node],
 })
