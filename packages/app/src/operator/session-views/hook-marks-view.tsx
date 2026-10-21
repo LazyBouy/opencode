@@ -50,6 +50,18 @@ export function HookMarkList(props: { marks: Mark[]; testid?: string }) {
                   </div>
                 )}
               </Match>
+              <Match when={mark.kind === "no-continue" && mark}>
+                {(stopped) => (
+                  <div
+                    data-slot="operator-extra"
+                    data-kind="hook-no-continue"
+                    data-testid="hook-mark"
+                    title={origin([stopped().by])}
+                  >
+                    <Tag>{language.t("operator.hooks.mark.noContinue", { hook: stopped().by.hook })}</Tag>
+                  </div>
+                )}
+              </Match>
               <Match when={mark.kind === "withheld" && mark}>
                 {(withheld) => (
                   <div

@@ -2655,6 +2655,7 @@ export const dict = {
   "operator.hooks.mark.output": "Output changed by hook {{hook}}",
   "operator.hooks.mark.withheld": "Output withheld: hook {{hook}} failed",
   "operator.hooks.mark.context": "From hook {{hook}}",
+  "operator.hooks.mark.noContinue": "No automatic continue: hook {{hook}}",
   "operator.hooks.mark.original": "Show the original",
   "operator.hooks.mark.origin": "{{hook}}: {{level}} hook in {{file}}, run {{run}}",
   "operator.detailed.added.reminder.plan": "The plan agent's reminder (read-only mode)",

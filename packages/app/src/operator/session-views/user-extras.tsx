@@ -1,10 +1,12 @@
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
-import type { OperatorCallSummary } from "@opencode-ai/sdk/v2/client"
+import type { OperatorCallSummary, OperatorHookRun } from "@opencode-ai/sdk/v2/client"
 import { useQuery } from "@tanstack/solid-query"
 import { createMemo, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useOperatorClient } from "../data"
-import { MessageHookMarks } from "./hook-marks-view"
+import type { Mark } from "./hook-marks"
+import { HookMarkList, MessageHookMarks } from "./hook-marks-view"
+import { useSessionHookRuns } from "./hook-runs"
 import { useSessionView } from "./view"
 
 type Key = Parameters<ReturnType<typeof useLanguage>["t"]>[0]
@@ -21,6 +23,9 @@ export function UserExtras(props: { message: UserMessage; parts: () => ReadonlyA
   return (
     <>
       <MessageHookMarks parts={props.parts} />
+      <Show when={props.parts().some((part) => part.type === "compaction")}>
+        <CompactionHookMarks message={props.message} />
+      </Show>
       <Show when={view.view() === "detailed"}>
         <Extras message={props.message} parts={props.parts} />
       </Show>
@@ -124,6 +129,37 @@ function Extras(props: { message: UserMessage; parts: () => ReadonlyArray<Part> 
       </For>
     </div>
   )
+}
+
+// A compaction's request: what compaction.before hooks added to what it was given, and a compaction.after hook that
+// stopped the automatic "continue" turn (from the run log, which keeps each run with the compaction's message).
+function CompactionHookMarks(props: { message: UserMessage }) {
+  const api = useOperatorClient()
+  const session = useQuery(() => ({
+    queryKey: api.key("session", props.message.sessionID),
+    queryFn: () =>
+      api
+        .client()
+        .session.get({ sessionID: props.message.sessionID })
+        .then((result) => result.data!),
+  }))
+  const directory = () => session.data?.directory
+  const before = useSessionHookRuns(() => props.message.sessionID, directory, "compaction.before")
+  const after = useSessionHookRuns(() => props.message.sessionID, directory, "compaction.after")
+  const marks = createMemo((): Mark[] => {
+    const mine = (runs: ReadonlyArray<OperatorHookRun> | undefined) =>
+      (runs ?? []).filter((run) => run.messageID === props.message.id).toReversed()
+    const by = (run: OperatorHookRun) => ({ hook: run.hook, level: run.level, file: run.file, run: run.id })
+    return [
+      ...mine(before.data?.runs).flatMap((run): Mark[] =>
+        run.context !== undefined ? [{ kind: "context", by: by(run), event: run.event, text: run.context }] : [],
+      ),
+      ...mine(after.data?.runs).flatMap((run): Mark[] =>
+        run.outcome === "denied" ? [{ kind: "no-continue", by: by(run) }] : [],
+      ),
+    ]
+  })
+  return <HookMarkList marks={marks()} testid="compaction-hook-marks" />
 }
 
 function firstLine(text: string) {

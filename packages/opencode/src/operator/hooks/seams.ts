@@ -59,6 +59,8 @@ export type Marks = {
 }
 
 type Turn = { agent?: string; model?: { provider: string; id: string } }
+// A session the store may no longer have (session.deleted): as its event describes it.
+type Known = { id: string; parentID?: string; title?: string; agent?: string }
 type Message = {
   info: Record<string, any> & { id: string; role: string; sessionID: string }
   parts: Array<Record<string, any>>
@@ -84,6 +86,8 @@ function bounded<V>(limit = 2000) {
       return value
     },
     delete: (key: string) => map.delete(key),
+    /** The newest entry that fits. */
+    newest: (fits: (value: V) => boolean) => [...map.values()].findLast(fits),
   }
 }
 
@@ -95,14 +99,22 @@ const started = bounded<number>()
 const pending = bounded<Pick<Marks, "input" | "prompt"> & { context: NonNullable<Marks["context"]> }>()
 // Calls a hook denied: their failure isn't a `tool.after`.
 const denied = bounded<true>()
-// Failed tool parts already seen (a part's updates repeat its state).
-const failed = bounded<true>()
+// Parts already handled: failed tool calls and step finishes (a part's updates repeat its state).
+const seen = bounded<true>()
 // Per fiber: the slash command a prompt comes from (`command.execute.before` runs just before the prompt, in the same
 // fiber), and compaction's own model call (`experimental.session.compacting` runs just before its transform).
 const commands = new WeakMap<object, { command: string; arguments: string }>()
 const compacting = new WeakSet<object>()
 // Per session: the turn its model calls belong to (its last user message), the turn's number and the step reached.
 const steps = bounded<{ user: string; turn: number; step: number }>(1000)
+
+// Running calls of the tools that edit files (`file.edited` names only the file), and the sessions busy since they
+// were last idle (a turn ends when a busy session goes idle; session.idle and session.status idle both come).
+const EDIT_TOOLS = new Set(["write", "edit", "apply_patch"])
+const editing = bounded<{ directory: string; sessionID: string; tool: string; callID: string }>(500)
+const busy = bounded<true>(1000)
+// The tools each step's response asked for, from its tool parts as they come (before its step-finish part).
+const stepTools = bounded<Set<string>>(500)
 
 /** The event `operator.hook.refused`: a hook refused a message, which wasn't saved; the composer gets it back. */
 export const REFUSED = "operator.hook.refused"
@@ -155,19 +167,34 @@ const withContexts = (text: string, contexts: NonNullable<Marks["context"]>) =>
 const deniedText = (by: NonNullable<OperatorHooks.Chained["denied"]>) =>
   by.reason ? `Denied by hook ${by.hook}: ${by.reason}` : `Denied by hook ${by.hook}.`
 
-// The seams the plugin calls, set while the server runs (plugins can't reach Effect services).
-let active:
-  | {
-      toolBefore: (instance: unknown, input: ToolInput, output: { args: unknown }) => Promise<string | undefined>
-      toolAfter: (instance: unknown, input: ToolInput & { args: unknown }, output: unknown) => Promise<void>
-      prompt: (
-        instance: unknown,
-        input: PromptInput,
-        output: { message: unknown; parts: unknown[] },
-      ) => Promise<string | undefined>
-      step: (instance: unknown, output: { messages: unknown[] }) => Promise<string | undefined>
-    }
-  | undefined
+// The seams the plugin calls, while a server runs (plugins can't reach Effect services).
+type Seams = {
+  toolBefore: (instance: unknown, input: ToolInput, output: { args: unknown }) => Promise<string | undefined>
+  toolAfter: (instance: unknown, input: ToolInput & { args: unknown }, output: unknown) => Promise<void>
+  prompt: (
+    instance: unknown,
+    input: PromptInput,
+    output: { message: unknown; parts: unknown[] },
+  ) => Promise<string | undefined>
+  step: (instance: unknown, output: { messages: unknown[] }) => Promise<string | undefined>
+  compacting: (instance: unknown, input: { sessionID: string }, output: { context: string[] }) => Promise<void>
+  autocontinue: (
+    instance: unknown,
+    input: {
+      sessionID: string
+      agent: string
+      model: { providerID: string; id: string }
+      message: { id: string }
+    },
+    output: { enabled: boolean },
+  ) => Promise<void>
+}
+
+// The servers running, newest last: only the newest acts (a test process builds several in turn, and an older one
+// takes over again when a newer one stops).
+const running: Array<{ token: object; seams: Seams }> = []
+const activeSeams = () => running.at(-1)?.seams
+const isCurrent = (token: object) => running.at(-1)?.token === token
 
 type PromptInput = {
   sessionID: string
@@ -191,12 +218,22 @@ export const plugin: Plugin = async () => ({
   "tool.execute.before": async (input, output) => {
     const instance = instanceNow()
     started.set(input.callID, Date.now())
+    if (instance && EDIT_TOOLS.has(input.tool))
+      editing.set(input.callID, {
+        directory: (instance as { directory: string }).directory,
+        sessionID: input.sessionID,
+        tool: input.tool,
+        callID: input.callID,
+      })
+    const active = activeSeams()
     if (!instance || !active) return
     const refused = await active.toolBefore(instance, input, output)
     if (refused !== undefined) throw new Error(refused)
   },
   "tool.execute.after": async (input, output) => {
     const instance = instanceNow()
+    editing.delete(input.callID)
+    const active = activeSeams()
     if (!instance || !active) return
     await active.toolAfter(instance, input, output)
   },
@@ -209,6 +246,7 @@ export const plugin: Plugin = async () => ({
     const command = fiber ? commands.get(fiber) : undefined
     if (fiber) commands.delete(fiber)
     const instance = instanceNow()
+    const active = activeSeams()
     if (!instance || !active) return
     const refused = await active.prompt(
       instance,
@@ -222,9 +260,28 @@ export const plugin: Plugin = async () => ({
     )
     if (refused !== undefined) throw new Error(refused)
   },
-  "experimental.session.compacting": async () => {
+  "experimental.session.compacting": async (input, output) => {
     const fiber = Fiber.getCurrent()
     if (fiber) compacting.add(fiber)
+    const instance = instanceNow()
+    const active = activeSeams()
+    if (!instance || !active) return
+    await active.compacting(instance, input, output)
+  },
+  "experimental.compaction.autocontinue": async (input, output) => {
+    const instance = instanceNow()
+    const active = activeSeams()
+    if (!instance || !active) return
+    await active.autocontinue(
+      instance,
+      {
+        sessionID: input.sessionID,
+        agent: input.agent,
+        model: { providerID: input.model.providerID, id: input.model.id },
+        message: { id: input.message.id },
+      },
+      output,
+    )
   },
   "experimental.chat.messages.transform": async (_input, output) => {
     const fiber = Fiber.getCurrent()
@@ -234,6 +291,7 @@ export const plugin: Plugin = async () => ({
       return
     }
     const instance = instanceNow()
+    const active = activeSeams()
     if (!instance || !active) return
     const stopped = await active.step(instance, output)
     if (stopped !== undefined) throw new Error(stopped)
@@ -289,16 +347,23 @@ const layer = Layer.effect(
     })
 
     // What every event sends (§7.6), for a session of the current project.
-    const describe = Effect.fnUntraced(function* (event: OperatorHookEvents.Name, sessionID: string, turn: Turn) {
+    const describe = Effect.fnUntraced(function* (
+      event: OperatorHookEvents.Name,
+      sessionID: string,
+      turn: Turn,
+      known?: Known,
+    ) {
       const ctx = yield* InstanceState.context
       const info = yield* sessions.get(SessionID.make(sessionID)).pipe(Effect.option)
-      const session = Option.getOrUndefined(info)
+      const session: Known | undefined = Option.getOrUndefined(info) ?? known
       const agent = turn.agent ?? session?.agent
       const place = yield* Effect.promise(() => placeOf(ctx.directory))
       const input: OperatorHooks.EventInput = {
         event,
         time: new Date().toISOString(),
-        ...(session ? { session: { id: session.id, parentID: session.parentID ?? null, title: session.title } } : {}),
+        ...(session
+          ? { session: { id: session.id, parentID: session.parentID ?? null, title: session.title ?? "" } }
+          : {}),
         ...(agent
           ? {
               agent: {
@@ -724,6 +789,176 @@ const layer = Layer.effect(
       return undefined
     })
 
+    // compaction.before: what a hook adds goes to what the compaction is given (no deny in v1, §12.3 item 2).
+    const compactionBefore = Effect.fnUntraced(function* (input: { sessionID: string }, output: { context: string[] }) {
+      const turn = yield* turnOf(input.sessionID)
+      const found = yield* hooks.forEvent({ ...(turn.agent ? { agent: turn.agent } : {}), event: "compaction.before" })
+      if (!found.length) return
+      const sessionID = SessionID.make(input.sessionID)
+      // The request: the newest user message with a compaction part (automatic: the context overflowed).
+      const request = yield* sessions
+        .findMessage(
+          sessionID,
+          (message) => message.info.role === "user" && message.parts.some((part) => part.type === "compaction"),
+        )
+        .pipe(Effect.orElseSucceed(() => Option.none()))
+      const part = Option.isSome(request) ? request.value.parts.find((item) => item.type === "compaction") : undefined
+      const finished = yield* sessions
+        .findMessage(
+          sessionID,
+          (message) => message.info.role === "assistant" && !!message.info.time.completed && !message.info.summary,
+        )
+        .pipe(Effect.orElseSucceed(() => Option.none()))
+      const tokens =
+        Option.isSome(finished) && finished.value.info.role === "assistant"
+          ? (finished.value.info.tokens.total ??
+            finished.value.info.tokens.input +
+              finished.value.info.tokens.output +
+              finished.value.info.tokens.cache.read)
+          : undefined
+      const base = yield* describe("compaction.before", input.sessionID, turn)
+      const result = yield* hooks.chain(
+        found,
+        {
+          ...base.input,
+          reason: part?.type === "compaction" && part.auto ? "overflow" : "requested",
+          ...(tokens !== undefined ? { tokens } : {}),
+        },
+        { ...base.target, ...(Option.isSome(request) ? { messageID: request.value.info.id } : {}) },
+      )
+      for (const item of result.contexts) output.context.push(OperatorHookProtocol.contextBlock(item.hook, item.text))
+    })
+
+    // compaction.after: `continue: false` (or a failed run that fails closed) means no automatic "continue" turn.
+    const compactionAfter = Effect.fnUntraced(function* (
+      input: { sessionID: string; agent: string; model: { providerID: string; id: string }; message: { id: string } },
+      output: { enabled: boolean },
+    ) {
+      const found = yield* hooks.forEvent({ agent: input.agent, event: "compaction.after" })
+      if (!found.length) return
+      const base = yield* describe("compaction.after", input.sessionID, {
+        agent: input.agent,
+        model: { provider: input.model.providerID, id: input.model.id },
+      })
+      const result = yield* hooks.chain(
+        found,
+        { ...base.input, autoContinue: output.enabled },
+        { ...base.target, messageID: input.message.id },
+      )
+      if (result.noContinue || result.denied) output.enabled = false
+    })
+
+    // A watch event of a session: its hooks queue and run alongside (§7.5).
+    const watchSession = Effect.fnUntraced(function* (
+      event: OperatorHookEvents.Name,
+      sessionID: string,
+      fields: Record<string, unknown>,
+      extra: Partial<OperatorHooks.Target> & { known?: Known; subject?: string } = {},
+    ) {
+      const { known, subject, ...target } = extra
+      const turn = yield* turnOf(sessionID)
+      const agent = turn.agent ?? known?.agent
+      const found = yield* hooks.forEvent({
+        ...(agent ? { agent } : {}),
+        event,
+        ...(subject !== undefined ? { subject } : {}),
+      })
+      if (!found.length) return
+      const base = yield* describe(event, sessionID, { ...turn, ...(agent ? { agent } : {}) }, known)
+      hooks.watch(found, { ...base.input, ...fields }, { ...base.target, ...target })
+    })
+
+    // The turn's number, filled in the first time an event needs it.
+    const turnOfSteps = Effect.fnUntraced(function* (sessionID: string) {
+      const known = steps.get(sessionID)
+      if (!known) return { turn: yield* turnNumber(sessionID, ""), step: 0, user: undefined }
+      if (!known.turn) known.turn = yield* turnNumber(sessionID, known.user)
+      return known
+    })
+
+    // step.after: a model response finished (its step-finish part). `at` is the turn and step when it finished
+    // (the next step may have started by now).
+    const stepAfter = Effect.fnUntraced(function* (
+      part: {
+        sessionID: string
+        messageID: string
+        reason?: string
+        cost?: number
+        tokens?: { input?: number; output?: number; cache?: { read?: number } }
+      },
+      at: { turn: number; step: number; user?: string } | undefined,
+      tools: ReadonlyArray<string>,
+    ) {
+      const turn = yield* turnOf(part.sessionID)
+      if (!(yield* hooks.forEvent({ ...(turn.agent ? { agent: turn.agent } : {}), event: "step.after" })).length) return
+      const known = at?.turn ? at : { ...(yield* turnOfSteps(part.sessionID)), ...(at ? { step: at.step } : {}) }
+      yield* watchSession(
+        "step.after",
+        part.sessionID,
+        {
+          turn: known.turn,
+          step: known.step,
+          finish: part.reason ?? "",
+          usage: {
+            input: part.tokens?.input ?? 0,
+            output: part.tokens?.output ?? 0,
+            cached: part.tokens?.cache?.read ?? 0,
+          },
+          cost: part.cost ?? 0,
+          tools: [...tools],
+        },
+        { messageID: part.messageID },
+      )
+    })
+
+    // turn.after: the session went idle after a turn.
+    const turnAfter = Effect.fnUntraced(function* (sessionID: string) {
+      const turn = yield* turnOf(sessionID)
+      if (!(yield* hooks.forEvent({ ...(turn.agent ? { agent: turn.agent } : {}), event: "turn.after" })).length) return
+      const known = yield* turnOfSteps(sessionID)
+      const recent = (yield* sessions
+        .messages({ sessionID: SessionID.make(sessionID), limit: 200 })
+        .pipe(Effect.orElseSucceed(() => [] as SessionV1.WithParts[]))).toSorted((a, b) =>
+        a.info.id.localeCompare(b.info.id),
+      )
+      const user =
+        known.user ?? recent.findLast((item) => item.info.role === "user" && !isContinue(item.parts))?.info.id
+      const answers = recent.flatMap((item) =>
+        item.info.role === "assistant" && item.info.parentID === user && !item.info.summary ? [item.info] : [],
+      )
+      const last = answers.at(-1)
+      const finish = !last
+        ? "none"
+        : last.error
+          ? last.error.name === "MessageAbortedError"
+            ? "aborted"
+            : "error"
+          : (last.finish ?? "stop")
+      yield* watchSession("turn.after", sessionID, {
+        turn: known.turn,
+        steps: answers.length,
+        finish,
+        usage: {
+          input: answers.reduce((sum, item) => sum + item.tokens.input, 0),
+          output: answers.reduce((sum, item) => sum + item.tokens.output, 0),
+          cached: answers.reduce((sum, item) => sum + item.tokens.cache.read, 0),
+        },
+        cost: answers.reduce((sum, item) => sum + item.cost, 0),
+      })
+    })
+
+    // file.edited names only the file: its call is the running edit of the same folder, the newest.
+    const fileEdited = Effect.fnUntraced(function* (directory: string, file: string) {
+      const call = editing.newest((item) => item.directory === directory)
+      if (!call) return
+      yield* watchSession(
+        "file.edited",
+        call.sessionID,
+        { file, tool: call.tool, callID: call.callID },
+        { tool: call.tool, callID: call.callID },
+      )
+    })
+
     const inInstance = <A>(instance: unknown, effect: Effect.Effect<A, unknown, any>) =>
       Effect.runPromise(
         effect.pipe(Effect.provideService(InstanceRef, instance as InstanceContext)) as Effect.Effect<
@@ -732,7 +967,8 @@ const layer = Layer.effect(
           never
         >,
       )
-    const seams: NonNullable<typeof active> = {
+    const token = {}
+    const seams: Seams = {
       toolBefore: (instance, input, output) =>
         inInstance(
           instance,
@@ -754,6 +990,20 @@ const layer = Layer.effect(
             ),
           ),
         ),
+      compacting: (instance, input, output) =>
+        inInstance(
+          instance,
+          compactionBefore(input, output).pipe(
+            Effect.catchCause((cause) => Effect.logError("hooks: compaction.before", { cause })),
+          ),
+        ),
+      autocontinue: (instance, input, output) =>
+        inInstance(
+          instance,
+          compactionAfter(input, output).pipe(
+            Effect.catchCause((cause) => Effect.logError("hooks: compaction.after", { cause })),
+          ),
+        ),
       step: (instance, output) =>
         inInstance(
           instance,
@@ -766,47 +1016,123 @@ const layer = Layer.effect(
     }
     yield* Effect.acquireRelease(
       Effect.sync(() => {
-        active = seams
-      }),
-      () =>
-        Effect.sync(() => {
-          if (active === seams) active = undefined
-        }),
-    )
-
-    // A recorded run is announced for the live views.
-    yield* Effect.acquireRelease(
-      Effect.sync(() => {
+        running.push({ token, seams })
+        // A recorded run is announced for the live views.
         OperatorHookRuns.announce.ran = (run) =>
           GlobalBus.emit("event", { payload: { type: OperatorHookRuns.RAN, properties: run } })
       }),
-      () => Effect.sync(() => void delete OperatorHookRuns.announce.ran),
+      () =>
+        Effect.sync(() => {
+          const at = running.findIndex((item) => item.token === token)
+          if (at >= 0) running.splice(at, 1)
+          if (!running.length) delete OperatorHookRuns.announce.ran
+        }),
     )
 
+    // The watch events, from the bus, in the project the event came from.
+    const inProject = (directory: string, label: string, effect: Effect.Effect<void, unknown, any>) =>
+      void Effect.runPromise(
+        instances
+          .provide({ directory }, effect as Effect.Effect<void>)
+          .pipe(Effect.catchCause((cause) => Effect.logError(`hooks: ${label}`, { cause }))),
+      )
     const onEvent = (event: GlobalEvent) => {
-      const payload = event.payload as { type?: string; properties?: Record<string, unknown> } | undefined
-      // A deleted session's runs go with it.
-      if (payload?.type === "session.deleted") {
-        const id = (payload.properties?.info as { id?: string } | undefined)?.id ?? payload.properties?.sessionID
-        if (typeof id === "string" && id) {
-          turns.delete(id)
-          steps.delete(id)
+      if (!isCurrent(token)) return
+      const payload = event.payload as { type?: string; properties?: Record<string, any> } | undefined
+      const properties = payload?.properties ?? {}
+      const directory = event.directory
+      switch (payload?.type) {
+        case "session.created": {
+          const info = properties.info as Known | undefined
+          if (directory && info?.id)
+            inProject(directory, "session.created", watchSession("session.created", info.id, {}))
+          return
+        }
+        case "session.deleted": {
+          // A deleted session's runs go with it; its own hooks' runs go to the deleted sessions' log.
+          const info = properties.info as Known | undefined
+          const id = info?.id ?? properties.sessionID
+          if (typeof id !== "string" || !id) return
           void OperatorHookRuns.removeSession(id)
+          if (directory)
+            inProject(
+              directory,
+              "session.deleted",
+              watchSession(
+                "session.deleted",
+                id,
+                {},
+                { log: OperatorHookRuns.DELETED, ...(info ? { known: info } : {}) },
+              ).pipe(
+                Effect.ensuring(
+                  Effect.sync(() => {
+                    turns.delete(id)
+                    steps.delete(id)
+                  }),
+                ),
+              ),
+            )
+          return
         }
-        return
-      }
-      if (payload?.type === "message.part.updated" && event.directory) {
-        const part = payload.properties?.part as Parameters<typeof toolFailed>[0] & {
-          type?: string
-          state: { status?: string }
+        case "session.error": {
+          const id = properties.sessionID
+          const error = properties.error as { name?: string; data?: { message?: string } } | undefined
+          if (directory && typeof id === "string")
+            inProject(
+              directory,
+              "session.error",
+              watchSession("session.error", id, {
+                error: { name: error?.name ?? "Error", message: error?.data?.message ?? "" },
+              }),
+            )
+          return
         }
-        if (part?.type !== "tool" || part.state?.status !== "error" || failed.get(part.id)) return
-        failed.set(part.id, true)
-        void Effect.runPromise(
-          instances
-            .provide({ directory: event.directory }, toolFailed(part))
-            .pipe(Effect.catchCause((cause) => Effect.logError("hooks: a failed tool", { cause }))),
-        )
+        case "session.idle":
+        case "session.status": {
+          const id = properties.sessionID
+          if (typeof id !== "string") return
+          if (payload.type === "session.status" && properties.status?.type !== "idle") {
+            busy.set(id, true)
+            return
+          }
+          if (directory && busy.take(id)) inProject(directory, "turn.after", turnAfter(id))
+          return
+        }
+        case "file.edited": {
+          if (directory && typeof properties.file === "string")
+            inProject(directory, "file.edited", fileEdited(directory, properties.file))
+          return
+        }
+        case "message.part.updated": {
+          if (!directory) return
+          const part = properties.part as Parameters<typeof toolFailed>[0] & {
+            type?: string
+            messageID: string
+            state: { status?: string }
+          }
+          if (part?.type === "step-finish") {
+            if (seen.get(part.id)) return
+            seen.set(part.id, true)
+            const at = steps.get((part as { sessionID: string }).sessionID)
+            const tools = stepTools.take(part.messageID) ?? new Set<string>()
+            inProject(
+              directory,
+              "step.after",
+              stepAfter(part as unknown as Parameters<typeof stepAfter>[0], at ? { ...at } : undefined, [...tools]),
+            )
+            return
+          }
+          if (part?.type === "tool") {
+            const tools = stepTools.get(part.messageID) ?? new Set<string>()
+            tools.add(part.tool)
+            stepTools.set(part.messageID, tools)
+          }
+          if (part?.type !== "tool" || part.state?.status !== "error" || seen.get(part.id)) return
+          seen.set(part.id, true)
+          editing.delete(part.callID)
+          inProject(directory, "a failed tool", toolFailed(part))
+          return
+        }
       }
     }
     yield* Effect.acquireRelease(

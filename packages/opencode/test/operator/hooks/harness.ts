@@ -4,6 +4,7 @@ import { Effect, Layer } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { OperatorHooks } from "@/operator/hooks/hooks"
 import { OperatorHookSeams } from "@/operator/hooks/seams"
 import { InstanceBootstrap } from "@/project/bootstrap-service"
 import { InstanceStore } from "@/project/instance-store"
@@ -18,7 +19,7 @@ import { fakeConfig, fakeProvider } from "../fake-provider"
 
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
 export const it = testEffect(
-  LayerNode.compile(LayerNode.group([root, OperatorHookSeams.node]), [
+  LayerNode.compile(LayerNode.group([root, OperatorHooks.node, OperatorHookSeams.node]), [
     ...replacements,
     [InstanceStore.bootstrapNode, noopBootstrap],
   ]),

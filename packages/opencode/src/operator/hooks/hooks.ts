@@ -81,8 +81,10 @@ export type Target = {
   agent?: string
   tool?: string
   callID?: string
-  /** The step's assistant message (step.before). */
+  /** The message a run is about: a step's assistant message (step.*), a compaction's user message. */
   messageID?: string
+  /** The log a run goes to when not its session's: `deleted` for `session.deleted` (its session's goes with it). */
+  log?: typeof OperatorHookRuns.DELETED
   cwd: string
   test?: boolean
 }
@@ -122,6 +124,8 @@ export type Chained = {
   changes: Array<By & { field: Change; before: unknown }>
   /** Each context, in order. */
   contexts: Array<By & { text: string }>
+  /** compaction.after: a hook answered `continue: false` (no automatic "continue" turn); nothing after it ran. */
+  noContinue?: By
 }
 
 const FAILED = new Set<OperatorHookRuns.Outcome>(["failed", "timed out", "stopped by the server"])
@@ -421,7 +425,7 @@ const layer = Layer.effect(
       }
       const kept = changed && read.outcome === "changed" ? changed : undefined
       const record: OperatorHookRuns.Run = {
-        id: OperatorHookRuns.newId(target.test ? undefined : target.sessionID),
+        id: OperatorHookRuns.newId(target.test ? undefined : (target.log ?? target.sessionID)),
         time,
         event: hook.event,
         hook: hook.name,
@@ -479,6 +483,10 @@ const layer = Layer.effect(
             out.input = { ...out.input, [field]: run.answer[field] }
           }
         if (run.answer.context !== undefined) out.contexts.push({ ...by, text: run.answer.context })
+        if (run.answer.continue === false) {
+          out.noContinue = by
+          break
+        }
       }
       return out
     })
@@ -492,7 +500,7 @@ const layer = Layer.effect(
       queues.delete(key)
       if (!queue.dropped) return
       await OperatorHookRuns.record({
-        id: OperatorHookRuns.newId(target.sessionID),
+        id: OperatorHookRuns.newId(target.log ?? target.sessionID),
         time: Date.now(),
         event: hook.event,
         hook: hook.name,

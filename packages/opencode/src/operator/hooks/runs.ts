@@ -7,13 +7,16 @@ import { Global } from "@opencode-ai/core/global"
 import { OperatorHookProtocol } from "./protocol"
 
 // The run log (SPEC-0022 §9): one record per run, in `<data>/operator/hook-runs/<sessionID>.jsonl` (deleted
-// with its session), Test runs in `tests.jsonl` (the last 200). The full stdin isn't stored: the tool input
+// with its session), Test runs in `tests.jsonl` and `session.deleted` runs in `deleted.jsonl` (the last 200 each:
+// their session's own log goes with it). A run's id names its file. The full stdin isn't stored: the tool input
 // it carries may hold secrets and is in the session already; the input is kept only when a hook changed it.
 // Each record is also announced (`operator.hook.ran`, sent by seams.ts) for the live views.
 
 export const RAN = "operator.hook.ran"
 const TESTS = "tests"
-const TESTS_KEPT = 200
+/** Where `session.deleted` runs go. */
+export const DELETED = "deleted"
+const KEPT = 200
 
 export const Outcome = Schema.Literals([
   "allowed",
@@ -41,7 +44,9 @@ export const Run = Schema.Struct({
   agent: Schema.optional(Schema.String),
   tool: Schema.optional(Schema.String),
   callID: Schema.optional(Schema.String),
-  messageID: Schema.optional(Schema.String).annotate({ description: "The step's assistant message (step.before)" }),
+  messageID: Schema.optional(Schema.String).annotate({
+    description: "The message a run is about: a step's assistant message (step.*), a compaction's user message",
+  }),
   durationMs: Schema.optional(Schema.Finite),
   exitCode: Schema.optional(Schema.NullOr(Schema.Finite)),
   outcome: Outcome,
@@ -76,9 +81,9 @@ const folder = () => path.join(Global.Path.data, "operator", "hook-runs")
 const safe = (name: string) => name.replace(/[^\w-]/g, "_")
 const fileOf = (key: string) => path.join(folder(), `${safe(key)}.jsonl`)
 
-/** A run's id names its file: `hr.<sessionID or tests>.<random>`. */
-export function newId(sessionID: string | undefined) {
-  return `hr.${safe(sessionID ?? TESTS)}.${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+/** A run's id names its file: `hr.<sessionID, tests or deleted>.<random>`. */
+export function newId(log: string | undefined) {
+  return `hr.${safe(log ?? TESTS)}.${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
 }
 const keyOf = (id: string) => id.split(".")[1] ?? TESTS
 
@@ -104,13 +109,13 @@ export const announce: { ran?: (run: Run) => void } = {}
 /** Adds a run to its session's log (a Test run to the tests' log) and announces it. */
 export function record(run: Run) {
   const value = trimmed(run)
-  const key = value.test ? TESTS : (value.sessionID ?? TESTS)
+  const key = keyOf(value.id)
   const next = writes.then(async () => {
     await fs.mkdir(folder(), { recursive: true })
     await fs.appendFile(fileOf(key), JSON.stringify(value) + "\n")
-    if (key !== TESTS) return
+    if (key !== TESTS && key !== DELETED) return
     const lines = (await fs.readFile(fileOf(key), "utf8")).split("\n").filter(Boolean)
-    if (lines.length > TESTS_KEPT * 2) await fs.writeFile(fileOf(key), lines.slice(-TESTS_KEPT).join("\n") + "\n")
+    if (lines.length > KEPT * 2) await fs.writeFile(fileOf(key), lines.slice(-KEPT).join("\n") + "\n")
   })
   writes = next.catch(() => undefined)
   announce.ran?.(value)

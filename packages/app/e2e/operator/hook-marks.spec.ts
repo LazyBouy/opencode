@@ -192,3 +192,55 @@ test("the agent's Sys Prompt tab lists the hooks in force that can add text, wit
   await expect(hooks.nth(1)).toContainText("date")
   await expect(hooks.nth(1)).toContainText("Namespace")
 })
+
+test("a compaction shows what compaction.before added and a compaction.after hook that stopped the continue", async ({
+  page,
+}) => {
+  const compactID = "msg_zz_compact"
+  await mockOpenCodeServer(page, {
+    protocol: "v1",
+    sessions: fixture.sessions.map((session) => ({ ...session })),
+    provider: fixture.provider,
+    directory: fixture.directory,
+    project: fixture.project,
+    pageMessages: (id, limit, before) => {
+      const found = withHooks(id, limit, before) as {
+        items: Array<{ info: Record<string, unknown>; parts: unknown[] }>
+      }
+      if (id !== sessionID || before) return found
+      const user = found.items.findLast((message) => message.info.role === "user")!
+      return {
+        ...found,
+        items: [
+          ...found.items,
+          {
+            info: { ...user.info, id: compactID, time: { created: Date.now() } },
+            parts: [{ id: "prt_zz_compact", type: "compaction", auto: true, messageID: compactID, sessionID }],
+          },
+        ],
+      }
+    },
+  })
+  const state = await mockOperator(page)
+  const run = (hook: string, event: string, extra: Record<string, unknown>) => ({
+    id: `hr.${sessionID}.${hook}`,
+    time: 1,
+    event,
+    hook,
+    level: "project",
+    file: "/repo/opencode.json",
+    sessionID,
+    messageID: compactID,
+    ...extra,
+  })
+  state.hooks.runs.push(
+    run("notes", "compaction.before", { outcome: "context", context: "Keep the TODO list." }),
+    run("halt", "compaction.after", { outcome: "denied" }),
+  )
+  await page.goto(`/server/${base64Encode(fixture.serverKey)}/session/${sessionID}`)
+  const marks = page.getByTestId("compaction-hook-marks").getByTestId("hook-mark")
+  await expect(marks).toHaveCount(2)
+  await expect(marks.nth(0)).toContainText("From hook notes")
+  await expect(marks.nth(0)).toContainText("Keep the TODO list.")
+  await expect(marks.nth(1)).toContainText("No automatic continue: hook halt")
+})

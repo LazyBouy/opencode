@@ -9,6 +9,8 @@ export type Mark =
   | { kind: "input" | "prompt" | "output" | "text"; by: By[]; original: string }
   | { kind: "withheld"; by: By; reason: string }
   | { kind: "context"; by: By; event: string; text: string }
+  /** compaction.after answered `continue: false`: no automatic "continue" turn followed. */
+  | { kind: "no-continue"; by: By }
 
 type Part = { type: string; metadata?: unknown; state?: { status?: string; error?: string; metadata?: unknown } }
 
