@@ -1339,6 +1339,7 @@ export const dict = {
   "operator.trash.kind.alert-rule": "Alert rule",
   "operator.trash.kind.telemetry-view": "Saved view",
   "operator.trash.kind.telemetry": "Telemetry store",
+  "operator.trash.kind.hook": "Hook",
   "operator.trash.telemetryTitle": "Replace the telemetry store?",
   "operator.trash.telemetryBody":
     "Restoring this telemetry store replaces the one in use, which moves to Trash so it can be brought back too.",

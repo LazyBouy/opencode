@@ -1,6 +1,9 @@
 import { OperatorHooks } from "@/operator/hooks/hooks"
 import { OperatorHookEvents } from "@/operator/hooks/events"
+import { OperatorHookManage } from "@/operator/hooks/manage"
 import { OperatorHookRuns } from "@/operator/hooks/runs"
+import { OperatorHookTemplates } from "@/operator/hooks/templates"
+import { ConfigForkV1 } from "@opencode-ai/core/v1/config/fork"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "@/server/routes/instance/httpapi/middleware/authorization"
@@ -8,18 +11,31 @@ import { InstanceContextMiddleware } from "@/server/routes/instance/httpapi/midd
 import {
   WorkspaceRoutingMiddleware,
   WorkspaceRoutingQuery,
+  WorkspaceRoutingQueryFields,
 } from "@/server/routes/instance/httpapi/middleware/workspace-routing"
 import { described } from "@/server/routes/instance/httpapi/groups/metadata"
+import { ApiProjectConfigCopyError, ConfirmCopyField } from "./project-config"
 
 // Hooks (SPEC-0022 §11). Under /operator/hook: the console's hooks live on the Capabilities page, and a GET
 // route must not share a page's path.
 export const OperatorHookPaths = {
   list: "/operator/hook",
+  state: "/operator/hook/state",
+  remove: "/operator/hook/remove",
+  test: "/operator/hook/test",
+  sample: "/operator/hook/sample",
+  scripts: "/operator/hook/scripts",
+  script: "/operator/hook/script",
   settings: "/operator/hook/settings",
   runs: "/operator/hook/runs",
   run: "/operator/hook/runs/:id",
   events: "/operator/hook/events",
 } as const
+
+const Namespace = Schema.optional(Schema.String).annotate({
+  description: "Act on this namespace's own layer (Global's id for Global) instead of the project",
+})
+const WriteQuery = Schema.Struct({ ...WorkspaceRoutingQueryFields, ...ConfirmCopyField })
 
 export class ApiHookInvalidError extends Schema.ErrorClass<{
   readonly name: "OperatorHookInvalidError"
@@ -74,14 +90,169 @@ export const OperatorHookApi = HttpApi.make("operator-hooks")
           query: Schema.Struct({
             ...WorkspaceRoutingQuery.fields,
             agent: Schema.optional(Schema.String).annotate({ description: "Include this agent's own hooks" }),
+            namespace: Namespace,
           }),
-          success: described(OperatorHooks.Effective, "The hooks in force"),
+          success: described(
+            Schema.Struct({
+              ...OperatorHooks.Effective.fields,
+              pluginsOff: Schema.Boolean.annotate({
+                description:
+                  "The server runs without its built-in plugins (disableDefaultPlugins): every event but the watch events and a failed tool's tool.after never fires",
+              }),
+            }).annotate({ identifier: "OperatorHooksInForce" }),
+            "The hooks in force",
+          ),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "operator.hook.list",
             summary: "The hooks in force for a project or agent",
             description:
               "Every level's hooks (Global, namespace, project, and the agent's own), each with its level, state (on, off below, disabled, invalid), lock and problems, in run order.",
+          }),
+        ),
+        HttpApiEndpoint.put("save", OperatorHookPaths.list, {
+          query: WriteQuery,
+          payload: Schema.Struct({
+            namespace: Namespace,
+            name: Schema.String.annotate({ description: "Letters, digits, dots, dashes and underscores" }),
+            previous: Schema.optional(Schema.String).annotate({ description: "Its name before, when renamed" }),
+            hook: ConfigForkV1.HookEntry,
+          }),
+          success: described(OperatorHooks.HookView, "The hook as saved, in force"),
+          error: [ApiHookInvalidError, ApiProjectConfigCopyError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.hook.save",
+            summary: "Create or edit a hook",
+            description:
+              "Writes the hook into the scope's config file: a project's is copy-on-write (409 asks for the copy; confirmCopy=true makes it). The same name as an inherited hook replaces it, unless that one is locked.",
+          }),
+        ),
+        HttpApiEndpoint.post("state", OperatorHookPaths.state, {
+          query: WriteQuery,
+          payload: Schema.Struct({ namespace: Namespace, name: Schema.String, off: Schema.Boolean }),
+          success: described(OperatorHooks.HookView, "The hook"),
+          error: [ApiHookInvalidError, ApiProjectConfigCopyError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.hook.state",
+            summary: "Turn an inherited hook off or on here",
+            description: "capabilities.disabled.hooks in the scope's config. Refused for a locked hook.",
+          }),
+        ),
+        HttpApiEndpoint.post("remove", OperatorHookPaths.remove, {
+          query: WriteQuery,
+          payload: Schema.Struct({
+            namespace: Namespace,
+            name: Schema.String,
+            script: Schema.optional(Schema.Boolean).annotate({
+              description: "Its script goes to Trash too (only one in the scope's hooks/ folder)",
+            }),
+          }),
+          success: described(Schema.Boolean, "Moved to Trash"),
+          error: [ApiHookInvalidError, ApiProjectConfigCopyError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.hook.remove",
+            summary: "Delete a hook of the scope",
+            description:
+              "Moves the scope's own hook (and its script, if asked) to Trash; inherited ones are turned off instead.",
+          }),
+        ),
+        HttpApiEndpoint.post("test", OperatorHookPaths.test, {
+          query: WorkspaceRoutingQuery,
+          payload: Schema.Struct({
+            namespace: Namespace,
+            name: Schema.String,
+            input: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)).annotate({
+              description: "The event to send (default: a sample of the hook's event)",
+            }),
+          }),
+          success: described(OperatorHookManage.TestResult, "The run"),
+          error: ApiHookInvalidError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.hook.test",
+            summary: "Test a hook",
+            description:
+              "Runs the hook's script on the event as a real run would, in its level's folder, and records it as a Test run. No session is touched.",
+          }),
+        ),
+        HttpApiEndpoint.get("sample", OperatorHookPaths.sample, {
+          query: Schema.Struct({
+            ...WorkspaceRoutingQuery.fields,
+            event: Schema.Literals(OperatorHookEvents.NAMES),
+            language: Schema.optional(Schema.Literals(OperatorHookTemplates.LANGUAGES)),
+          }),
+          success: described(
+            Schema.Struct({
+              input: Schema.Record(Schema.String, Schema.Unknown).annotate({ description: "What the event sends" }),
+              script: Schema.optional(Schema.String).annotate({ description: "A template script in the language" }),
+            }).annotate({ identifier: "OperatorHookSample" }),
+            "A sample",
+          ),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.hook.sample",
+            summary: "A sample event and a template script",
+            description: "What an event sends (§7.6), and a script that reads it and prints a valid answer.",
+          }),
+        ),
+        HttpApiEndpoint.get("scripts", OperatorHookPaths.scripts, {
+          query: Schema.Struct({ ...WorkspaceRoutingQuery.fields, namespace: Namespace }),
+          success: described(Schema.Array(Schema.String), "The scripts in the scope's hooks/ folder"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.hook.scripts",
+            summary: "The scope's scripts",
+            description: "The files in the hooks/ folder beside the scope's config file.",
+          }),
+        ),
+        HttpApiEndpoint.get("script", OperatorHookPaths.script, {
+          query: Schema.Struct({ ...WorkspaceRoutingQuery.fields, namespace: Namespace, path: Schema.String }),
+          success: described(OperatorHookManage.Script, "The script"),
+          error: ApiHookInvalidError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.hook.script",
+            summary: "A hook's script",
+            description: "One in the scope's hooks/ folder (editable), or the script of a hook in force (read-only).",
+          }),
+        ),
+        HttpApiEndpoint.put("saveScript", OperatorHookPaths.script, {
+          query: WorkspaceRoutingQuery,
+          payload: Schema.Struct({ namespace: Namespace, path: Schema.String, text: Schema.String }),
+          success: described(Schema.Boolean, "Saved"),
+          error: ApiHookInvalidError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.hook.saveScript",
+            summary: "Save a script",
+            description: "Only a script in the scope's hooks/ folder.",
+          }),
+        ),
+        HttpApiEndpoint.post("newScript", OperatorHookPaths.script, {
+          query: WorkspaceRoutingQuery,
+          payload: Schema.Struct({
+            namespace: Namespace,
+            name: Schema.String.annotate({ description: "The file's name; its language's extension is added" }),
+            language: Schema.Literals(OperatorHookTemplates.LANGUAGES),
+            event: Schema.Literals(OperatorHookEvents.NAMES),
+          }),
+          success: described(
+            Schema.Struct({
+              path: Schema.String,
+              command: Schema.String.annotate({ description: "As a hook's command: relative to the config file" }),
+            }).annotate({ identifier: "OperatorHookNewScript" }),
+            "The script written",
+          ),
+          error: ApiHookInvalidError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.hook.newScript",
+            summary: "Write a template script",
+            description:
+              "A script for the event, in the language, in the scope's hooks/ folder, executable. It reads the event and answers nothing until edited.",
           }),
         ),
         HttpApiEndpoint.get("settings", OperatorHookPaths.settings, {

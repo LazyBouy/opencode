@@ -43,6 +43,7 @@ import { OperatorTelemetryAlerting } from "./telemetry/alerting"
 import { OperatorTelemetry } from "./telemetry/telemetry"
 import { OperatorHooks } from "./hooks/hooks"
 import { OperatorHookSeams } from "./hooks/seams"
+import { OperatorHookManage } from "./hooks/manage"
 
 // Services the fork's routes need, added to the server's service graph in one place.
 export const operatorNodes = [
@@ -91,4 +92,5 @@ export const operatorNodes = [
   OperatorTelemetryAlerting.node,
   OperatorHooks.node,
   OperatorHookSeams.node,
+  OperatorHookManage.node,
 ] as const

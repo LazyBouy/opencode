@@ -86,6 +86,21 @@ export function resume() {
   stopping = false
 }
 
+// The servers using the runner (a test process runs several in turn): the graceful stop comes with the last.
+let holders = 0
+/** A server starts using the runner; the function it gets back is its graceful stop. */
+export function hold() {
+  holders++
+  stopping = false
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    holders = Math.max(0, holders - 1)
+    if (!holders) stopAll()
+  }
+}
+
 export const runningCount = () => running.size
 
 export async function run(input: Input): Promise<Result> {

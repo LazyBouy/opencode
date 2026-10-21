@@ -56,11 +56,20 @@ export const HookView = Schema.Struct({
   problems: Schema.Array(Schema.String).annotate({
     description: "What's wrong with the entry, or a lock it conflicts with",
   }),
+  lastRun: Schema.optional(
+    Schema.Struct({ id: Schema.String, time: Schema.Finite, outcome: OperatorHookRuns.Outcome }),
+  ).annotate({ description: "Its last run (Test runs left out)" }),
+  runsToday: Schema.optional(Schema.Finite).annotate({ description: "Its runs in the last 24 hours" }),
 }).annotate({ identifier: "OperatorHook" })
 
 export const Effective = Schema.Struct({
   hooks: Schema.Array(HookView),
   paused: Schema.Boolean.annotate({ description: "Pause all hooks is on: nothing runs" }),
+  level: Schema.Literals(["global", "namespace", "project"]).annotate({
+    description: "The scope's own level: the one its writes go to",
+  }),
+  file: Schema.optional(Schema.String).annotate({ description: "The scope's config file" }),
+  folder: Schema.optional(Schema.String).annotate({ description: "The scope's hooks/ folder, for its scripts" }),
 }).annotate({ identifier: "OperatorHooksEffective" })
 export type Effective = typeof Effective.Type
 
@@ -135,8 +144,15 @@ const FAILED = new Set<OperatorHookRuns.Outcome>(["failed", "timed out", "stoppe
 export const WATCH_WAITING = 20
 
 export interface Interface {
-  /** The hooks in force for this project (and agent), every one with its level and state. */
-  readonly effective: (agent?: string) => Effect.Effect<Effective>
+  /** The hooks in force for this project (and agent), or a namespace's own, every one with its level and state. */
+  readonly effective: (agent?: string, namespace?: string) => Effect.Effect<Effective>
+  /** The scope's own level, config file and hooks/ folder (a namespace's, else the project's). */
+  readonly scopeOf: (namespace?: string) => Effect.Effect<{
+    level: "global" | "namespace" | "project"
+    file?: string
+    folder?: string
+    namespace: string
+  }>
   /** The hooks that run for an event, in order (none while paused). */
   readonly forEvent: (input: {
     agent?: string
@@ -270,9 +286,9 @@ const layer = Layer.effect(
     const operatorConfig = yield* OperatorConfig.Service
     const config = yield* Config.Service
     const agents = yield* OperatorAgents.Service
-    // A new server starts hooks again (a test's earlier server may have stopped them).
-    OperatorHookRunner.resume()
-    yield* Effect.addFinalizer(() => Effect.sync(() => OperatorHookRunner.stopAll()))
+    // The graceful stop kills running hooks, once no other server in this process uses the runner.
+    const release = OperatorHookRunner.hold()
+    yield* Effect.addFinalizer(() => Effect.sync(release))
 
     const cache = new Map<string, { files: string[]; stamps: string[]; hooks: Hook[] }>()
 
@@ -363,6 +379,60 @@ const layer = Layer.effect(
       return { hooks: OperatorHookResolve.resolve(sources), files }
     })
 
+    // A namespace's own hooks (the Capabilities page's namespace scope): Global's when it inherits them, and its file.
+    const readNamespace = Effect.fnUntraced(function* (namespace: string) {
+      const layout = yield* Effect.promise(() => OperatorLayout.snapshot())
+      const global = yield* Effect.promise(() => OperatorLayout.globalConfigFile())
+      const isGlobal = OperatorLayout.isGlobal(namespace, layout)
+      const own = yield* Effect.promise(() => OperatorProjectConfig.namespaceConfig(namespace))
+      const inherit =
+        !isGlobal && (yield* Effect.promise(() => OperatorNamespaceScope.namespaceLayer(namespace))).inherit
+      const sources: OperatorHookResolve.Source[] = []
+      const add = (level: OperatorHookResolve.Level, file: string, text: string | undefined) => {
+        const found = declared(text ?? "{}")
+        sources.push({ level, file, base: baseOf(file), hooks: found.hooks, disabled: found.disabled })
+      }
+      if (inherit) add("global", global, yield* Effect.promise(() => OperatorFileCache.text(global)))
+      add(isGlobal ? "global" : "namespace", own.file, own.text)
+      const files = [global, own.file, ...(yield* Effect.promise(() => OperatorLayout.watched()))].filter(
+        (file, index, list) => list.indexOf(file) === index,
+      )
+      return { hooks: OperatorHookResolve.resolve(sources), files }
+    })
+
+    const resolvedIn = Effect.fnUntraced(function* (namespace: string) {
+      const key = `namespace\u0000${namespace}`
+      const kept = cache.get(key)
+      if (kept) {
+        const now = yield* Effect.promise(() => OperatorFileCache.stamps(kept.files))
+        if (now.every((stamp, index) => stamp === kept.stamps[index])) return kept.hooks
+      }
+      const found = yield* readNamespace(namespace)
+      const stamps = yield* Effect.promise(() => OperatorFileCache.stamps(found.files))
+      cache.set(key, { files: found.files, stamps, hooks: found.hooks })
+      return found.hooks
+    })
+
+    const scopeOf = Effect.fn("OperatorHooks.scopeOf")(function* (namespace?: string) {
+      if (namespace) {
+        const layout = yield* Effect.promise(() => OperatorLayout.snapshot())
+        const own = yield* Effect.promise(() => OperatorProjectConfig.namespaceConfig(namespace))
+        return {
+          level: OperatorLayout.isGlobal(namespace, layout) ? ("global" as const) : ("namespace" as const),
+          file: own.file,
+          folder: path.join(path.dirname(own.file), "hooks"),
+          namespace,
+        }
+      }
+      const layers = yield* operatorConfig.layers()
+      return {
+        level: "project" as const,
+        file: layers.targets.project,
+        folder: path.join(path.dirname(layers.targets.project), "hooks"),
+        namespace: layers.namespace,
+      }
+    })
+
     const resolved = Effect.fnUntraced(function* (agent?: string) {
       const ctx = yield* InstanceState.context
       const key = `${ctx.directory}\u0000${agent ?? ""}`
@@ -378,9 +448,21 @@ const layer = Layer.effect(
       return found.hooks
     })
 
-    const effective = Effect.fn("OperatorHooks.effective")(function* (agent?: string) {
+    const effective = Effect.fn("OperatorHooks.effective")(function* (agent?: string, namespace?: string) {
       const settings = yield* Effect.promise(() => OperatorHookSettings.read())
-      return { hooks: (yield* resolved(agent)).map(view), paused: settings.paused }
+      const hooks = namespace ? yield* resolvedIn(namespace) : yield* resolved(agent)
+      const runs = yield* Effect.promise(() => OperatorHookRuns.summary())
+      const scope = yield* scopeOf(namespace)
+      return {
+        hooks: hooks.map((hook) => {
+          const found = runs.get(OperatorHookRuns.keyOfHook(hook))
+          return { ...view(hook), ...(found ? { lastRun: found.last, runsToday: found.day } : {}) }
+        }),
+        paused: settings.paused,
+        level: scope.level,
+        ...(scope.file ? { file: scope.file } : {}),
+        ...(scope.folder ? { folder: scope.folder } : {}),
+      }
     })
 
     const forEvent = Effect.fn("OperatorHooks.forEvent")(function* (input: {
@@ -541,6 +623,7 @@ const layer = Layer.effect(
 
     return Service.of({
       effective,
+      scopeOf,
       forEvent,
       settings: () => Effect.promise(() => OperatorHookSettings.read()),
       setSettings,

@@ -24605,6 +24605,14 @@
               "type": "string"
             },
             "required": false
+          },
+          {
+            "name": "namespace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -24613,7 +24621,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OperatorHooksEffective"
+                  "$ref": "#/components/schemas/OperatorHooksInForce"
                 }
               }
             }
@@ -24635,6 +24643,853 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.hook.list({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "tags": ["operator hooks"],
+        "operationId": "operator.hook.save",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "confirmCopy",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The hook as saved, in force",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorHook"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorHookInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorHookInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "OperatorProjectConfigCopyNeededError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectConfigCopyNeededError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Writes the hook into the scope's config file: a project's is copy-on-write (409 asks for the copy; confirmCopy=true makes it). The same name as an inherited hook replaces it, unless that one is locked.",
+        "summary": "Create or edit a hook",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "namespace": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "Letters, digits, dots, dashes and underscores"
+                  },
+                  "previous": {
+                    "type": "string"
+                  },
+                  "hook": {
+                    "type": "object",
+                    "properties": {
+                      "event": {
+                        "type": "string"
+                      },
+                      "command": {
+                        "type": "string"
+                      },
+                      "args": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "match": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "timeout": {
+                        "type": "number"
+                      },
+                      "onFailure": {
+                        "type": "string"
+                      },
+                      "locked": {
+                        "type": "boolean"
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "description": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "description": "One hook, by its name: the event it runs at, its script and settings"
+                  }
+                },
+                "required": ["name", "hook"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.hook.save({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/hook/state": {
+      "post": {
+        "tags": ["operator hooks"],
+        "operationId": "operator.hook.state",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "confirmCopy",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The hook",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorHook"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorHookInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorHookInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "OperatorProjectConfigCopyNeededError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectConfigCopyNeededError"
+                }
+              }
+            }
+          }
+        },
+        "description": "capabilities.disabled.hooks in the scope's config. Refused for a locked hook.",
+        "summary": "Turn an inherited hook off or on here",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "namespace": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "off": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["name", "off"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.hook.state({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/hook/remove": {
+      "post": {
+        "tags": ["operator hooks"],
+        "operationId": "operator.hook.remove",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "confirmCopy",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Moved to Trash",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Moved to Trash"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorHookInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorHookInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "OperatorProjectConfigCopyNeededError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectConfigCopyNeededError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Moves the scope's own hook (and its script, if asked) to Trash; inherited ones are turned off instead.",
+        "summary": "Delete a hook of the scope",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "namespace": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "script": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["name"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.hook.remove({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/hook/test": {
+      "post": {
+        "tags": ["operator hooks"],
+        "operationId": "operator.hook.test",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorHookTestResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorHookInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorHookInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Runs the hook's script on the event as a real run would, in its level's folder, and records it as a Test run. No session is touched.",
+        "summary": "Test a hook",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "namespace": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "input": {
+                    "type": "object"
+                  }
+                },
+                "required": ["name"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.hook.test({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/hook/sample": {
+      "get": {
+        "tags": ["operator hooks"],
+        "operationId": "operator.hook.sample",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "event",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "session.created",
+                "prompt.submitted",
+                "turn.before",
+                "step.before",
+                "step.after",
+                "tool.before",
+                "tool.after",
+                "subagent.before",
+                "subagent.after",
+                "permission.asked",
+                "compaction.before",
+                "compaction.after",
+                "turn.after",
+                "session.error",
+                "file.edited",
+                "session.deleted"
+              ]
+            },
+            "required": true
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["shell", "python", "javascript"]
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A sample",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorHookSample"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "What an event sends (§7.6), and a script that reads it and prints a valid answer.",
+        "summary": "A sample event and a template script",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.hook.sample({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/hook/scripts": {
+      "get": {
+        "tags": ["operator hooks"],
+        "operationId": "operator.hook.scripts",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "namespace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The scripts in the scope's hooks/ folder",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "The scripts in the scope's hooks/ folder"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The files in the hooks/ folder beside the scope's config file.",
+        "summary": "The scope's scripts",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.hook.scripts({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/hook/script": {
+      "get": {
+        "tags": ["operator hooks"],
+        "operationId": "operator.hook.script",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "namespace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The script",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorHookScript"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorHookInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorHookInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "One in the scope's hooks/ folder (editable), or the script of a hook in force (read-only).",
+        "summary": "A hook's script",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.hook.script({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "tags": ["operator hooks"],
+        "operationId": "operator.hook.saveScript",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Saved"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorHookInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorHookInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Only a script in the scope's hooks/ folder.",
+        "summary": "Save a script",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "namespace": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": ["path", "text"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.hook.saveScript({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "tags": ["operator hooks"],
+        "operationId": "operator.hook.newScript",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The script written",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorHookNewScript"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorHookInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorHookInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "A script for the event, in the language, in the scope's hooks/ folder, executable. It reads the event and answers nothing until edited.",
+        "summary": "Write a template script",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "namespace": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "The file's name; its language's extension is added"
+                  },
+                  "language": {
+                    "type": "string",
+                    "enum": ["shell", "python", "javascript"]
+                  },
+                  "event": {
+                    "type": "string",
+                    "enum": [
+                      "session.created",
+                      "prompt.submitted",
+                      "turn.before",
+                      "step.before",
+                      "step.after",
+                      "tool.before",
+                      "tool.after",
+                      "subagent.before",
+                      "subagent.after",
+                      "permission.asked",
+                      "compaction.before",
+                      "compaction.after",
+                      "turn.after",
+                      "session.error",
+                      "file.edited",
+                      "session.deleted"
+                    ]
+                  }
+                },
+                "required": ["name", "language", "event"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.hook.newScript({\n  ...\n})"
           }
         ]
       }
@@ -38740,7 +39595,8 @@
           "config",
           "alert-rule",
           "telemetry-view",
-          "telemetry"
+          "telemetry",
+          "hook"
         ]
       },
       "OperatorTrashEntry": {
@@ -49001,6 +49857,21 @@
         "required": ["kind", "name"],
         "additionalProperties": false
       },
+      "OperatorHookOutcome": {
+        "type": "string",
+        "enum": [
+          "allowed",
+          "denied",
+          "changed",
+          "context",
+          "ok",
+          "ok, with ignored fields",
+          "failed",
+          "timed out",
+          "stopped by the server",
+          "dropped"
+        ]
+      },
       "OperatorHook": {
         "type": "object",
         "properties": {
@@ -49083,6 +49954,25 @@
               "type": "string"
             },
             "description": "What's wrong with the entry, or a lock it conflicts with"
+          },
+          "lastRun": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "time": {
+                "type": "number"
+              },
+              "outcome": {
+                "$ref": "#/components/schemas/OperatorHookOutcome"
+              }
+            },
+            "required": ["id", "time", "outcome"],
+            "additionalProperties": false
+          },
+          "runsToday": {
+            "type": "number"
           }
         },
         "required": [
@@ -49102,7 +49992,7 @@
         ],
         "additionalProperties": false
       },
-      "OperatorHooksEffective": {
+      "OperatorHooksInForce": {
         "type": "object",
         "properties": {
           "hooks": {
@@ -49114,24 +50004,24 @@
           "paused": {
             "type": "boolean",
             "description": "Pause all hooks is on: nothing runs"
-          }
-        },
-        "required": ["hooks", "paused"],
-        "additionalProperties": false
-      },
-      "OperatorHookSettings": {
-        "type": "object",
-        "properties": {
-          "timeout": {
-            "type": "number",
-            "description": "Seconds a hook without its own may run (0.1 to 600)"
           },
-          "paused": {
+          "level": {
+            "type": "string",
+            "enum": ["global", "namespace", "project"],
+            "description": "The scope's own level: the one its writes go to"
+          },
+          "file": {
+            "type": "string"
+          },
+          "folder": {
+            "type": "string"
+          },
+          "pluginsOff": {
             "type": "boolean",
-            "description": "Pause all hooks: nothing runs and nothing is recorded"
+            "description": "The server runs without its built-in plugins (disableDefaultPlugins): every event but the watch events and a failed tool's tool.after never fires"
           }
         },
-        "required": ["timeout", "paused"],
+        "required": ["hooks", "paused", "level", "pluginsOff"],
         "additionalProperties": false
       },
       "OperatorHookInvalidError": {
@@ -49154,21 +50044,6 @@
         },
         "required": ["name", "data"],
         "additionalProperties": false
-      },
-      "OperatorHookOutcome": {
-        "type": "string",
-        "enum": [
-          "allowed",
-          "denied",
-          "changed",
-          "context",
-          "ok",
-          "ok, with ignored fields",
-          "failed",
-          "timed out",
-          "stopped by the server",
-          "dropped"
-        ]
       },
       "OperatorHookRun": {
         "type": "object",
@@ -49252,6 +50127,86 @@
           }
         },
         "required": ["id", "time", "event", "hook", "level", "file", "outcome"],
+        "additionalProperties": false
+      },
+      "OperatorHookTestResult": {
+        "type": "object",
+        "properties": {
+          "run": {
+            "$ref": "#/components/schemas/OperatorHookRun"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/OperatorHookOutcome"
+          },
+          "answer": {
+            "type": "object",
+            "description": "The answer the event uses"
+          },
+          "cause": {
+            "type": "string"
+          }
+        },
+        "required": ["run", "outcome", "answer"],
+        "additionalProperties": false
+      },
+      "OperatorHookSample": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "object",
+            "description": "What the event sends"
+          },
+          "script": {
+            "type": "string"
+          }
+        },
+        "required": ["input"],
+        "additionalProperties": false
+      },
+      "OperatorHookScript": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "editable": {
+            "type": "boolean",
+            "description": "It's in the scope's hooks/ folder"
+          }
+        },
+        "required": ["path", "text", "editable"],
+        "additionalProperties": false
+      },
+      "OperatorHookNewScript": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string",
+            "description": "As a hook's command: relative to the config file"
+          }
+        },
+        "required": ["path", "command"],
+        "additionalProperties": false
+      },
+      "OperatorHookSettings": {
+        "type": "object",
+        "properties": {
+          "timeout": {
+            "type": "number",
+            "description": "Seconds a hook without its own may run (0.1 to 600)"
+          },
+          "paused": {
+            "type": "boolean",
+            "description": "Pause all hooks: nothing runs and nothing is recorded"
+          }
+        },
+        "required": ["timeout", "paused"],
         "additionalProperties": false
       },
       "OperatorHookNotFoundError": {

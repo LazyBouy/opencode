@@ -157,6 +157,28 @@ export async function list(filter: Filter): Promise<{ runs: Run[]; total: number
   return { runs: all.slice(offset, offset + Math.min(500, Math.max(1, filter.limit ?? 100))), total: all.length }
 }
 
+/** A hook's key in the run log: its level, file and name. */
+export const keyOfHook = (hook: { level: string; file: string; name: string }) =>
+  `${hook.level}\u0000${hook.file}\u0000${hook.name}`
+
+/** Each hook's last run (Test runs left out) and how many runs it had in the last 24 hours, by `keyOfHook`. */
+export async function summary(): Promise<Map<string, { last: Pick<Run, "id" | "time" | "outcome">; day: number }>> {
+  await writes
+  const files = (await fs.readdir(folder()).catch(() => [] as string[]))
+    .filter((name) => name.endsWith(".jsonl") && name !== `${TESTS}.jsonl`)
+    .map((name) => path.join(folder(), name))
+  const since = Date.now() - 24 * 60 * 60 * 1000
+  const out = new Map<string, { last: Pick<Run, "id" | "time" | "outcome">; day: number }>()
+  for (const run of (await Promise.all(files.map(readFile))).flat()) {
+    const key = keyOfHook({ level: run.level, file: run.file, name: run.hook })
+    const kept = out.get(key) ?? { last: { id: run.id, time: run.time, outcome: run.outcome }, day: 0 }
+    if (run.time > kept.last.time) kept.last = { id: run.id, time: run.time, outcome: run.outcome }
+    if (run.time >= since) kept.day++
+    out.set(key, kept)
+  }
+  return out
+}
+
 export async function get(id: string): Promise<Run | undefined> {
   await writes
   return (await readFile(fileOf(keyOf(id)))).find((run) => run.id === id)

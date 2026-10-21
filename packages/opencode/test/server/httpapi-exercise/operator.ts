@@ -849,6 +849,54 @@ export const operatorScenarios: Scenario[] = [
     array(body)
     check(body.length === 16, "sixteen events")
   }),
+  // Writes would outlive the scenario: their refusals are exercised.
+  http.protected
+    .put("/operator/hook", "operator.hook.save")
+    .at((ctx) => ({
+      path: "/operator/hook",
+      headers: ctx.headers(),
+      body: { name: "not a name", hook: { event: "tool.before", command: "x.sh" } },
+    }))
+    .status(400),
+  http.protected
+    .post("/operator/hook/state", "operator.hook.state")
+    .at((ctx) => ({ path: "/operator/hook/state", headers: ctx.headers(), body: { name: "no-such-hook", off: true } }))
+    .status(400),
+  http.protected
+    .post("/operator/hook/remove", "operator.hook.remove")
+    .at((ctx) => ({ path: "/operator/hook/remove", headers: ctx.headers(), body: { name: "no-such-hook" } }))
+    .status(400),
+  http.protected
+    .post("/operator/hook/test", "operator.hook.test")
+    .at((ctx) => ({ path: "/operator/hook/test", headers: ctx.headers(), body: { name: "no-such-hook" } }))
+    .status(400),
+  http.protected
+    .get("/operator/hook/sample", "operator.hook.sample")
+    .at((ctx) => ({ path: "/operator/hook/sample?event=tool.before&language=shell", headers: ctx.headers() }))
+    .json(200, (body) => {
+      object(body)
+      object(body.input)
+      check(body.input.event === "tool.before" && typeof body.script === "string", "a sample event and a script")
+    }),
+  http.protected.get("/operator/hook/scripts", "operator.hook.scripts").json(200, (body) => {
+    array(body)
+  }),
+  http.protected
+    .get("/operator/hook/script", "operator.hook.script")
+    .at((ctx) => ({ path: "/operator/hook/script?path=%2Fetc%2Fhostname", headers: ctx.headers() }))
+    .status(400),
+  http.protected
+    .put("/operator/hook/script", "operator.hook.saveScript")
+    .at((ctx) => ({ path: "/operator/hook/script", headers: ctx.headers(), body: { path: "/tmp/x.sh", text: "" } }))
+    .status(400),
+  http.protected
+    .post("/operator/hook/script", "operator.hook.newScript")
+    .at((ctx) => ({
+      path: "/operator/hook/script",
+      headers: ctx.headers(),
+      body: { name: "not a name", language: "shell", event: "tool.before" },
+    }))
+    .status(400),
   http.protected.get("/operator/layout", "operator.layout.get").json(200, (body) => {
     object(body)
     array(body.namespaces)

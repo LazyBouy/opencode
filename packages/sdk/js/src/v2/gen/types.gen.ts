@@ -2815,6 +2815,7 @@ export type OperatorTrashKind =
   | "alert-rule"
   | "telemetry-view"
   | "telemetry"
+  | "hook"
 
 export type OperatorTrashEntry = {
   id: string
@@ -7006,6 +7007,18 @@ export type OperatorCapabilityCreate = {
   }
 }
 
+export type OperatorHookOutcome =
+  | "allowed"
+  | "denied"
+  | "changed"
+  | "context"
+  | "ok"
+  | "ok, with ignored fields"
+  | "failed"
+  | "timed out"
+  | "stopped by the server"
+  | "dropped"
+
 export type OperatorHook = {
   name: string
   event: string
@@ -7042,25 +7055,30 @@ export type OperatorHook = {
    * What's wrong with the entry, or a lock it conflicts with
    */
   problems: Array<string>
+  lastRun?: {
+    id: string
+    time: number
+    outcome: OperatorHookOutcome
+  }
+  runsToday?: number
 }
 
-export type OperatorHooksEffective = {
+export type OperatorHooksInForce = {
   hooks: Array<OperatorHook>
   /**
    * Pause all hooks is on: nothing runs
    */
   paused: boolean
-}
-
-export type OperatorHookSettings = {
   /**
-   * Seconds a hook without its own may run (0.1 to 600)
+   * The scope's own level: the one its writes go to
    */
-  timeout: number
+  level: "global" | "namespace" | "project"
+  file?: string
+  folder?: string
   /**
-   * Pause all hooks: nothing runs and nothing is recorded
+   * The server runs without its built-in plugins (disableDefaultPlugins): every event but the watch events and a failed tool's tool.after never fires
    */
-  paused: boolean
+  pluginsOff: boolean
 }
 
 export type OperatorHookInvalidError = {
@@ -7069,18 +7087,6 @@ export type OperatorHookInvalidError = {
     message: string
   }
 }
-
-export type OperatorHookOutcome =
-  | "allowed"
-  | "denied"
-  | "changed"
-  | "context"
-  | "ok"
-  | "ok, with ignored fields"
-  | "failed"
-  | "timed out"
-  | "stopped by the server"
-  | "dropped"
 
 export type OperatorHookRun = {
   id: string
@@ -7113,6 +7119,56 @@ export type OperatorHookRun = {
   stderr?: string
   dropped?: number
   test?: boolean
+}
+
+export type OperatorHookTestResult = {
+  run: OperatorHookRun
+  outcome: OperatorHookOutcome
+  /**
+   * The answer the event uses
+   */
+  answer: {
+    [key: string]: unknown
+  }
+  cause?: string
+}
+
+export type OperatorHookSample = {
+  /**
+   * What the event sends
+   */
+  input: {
+    [key: string]: unknown
+  }
+  script?: string
+}
+
+export type OperatorHookScript = {
+  path: string
+  text: string
+  /**
+   * It's in the scope's hooks/ folder
+   */
+  editable: boolean
+}
+
+export type OperatorHookNewScript = {
+  path: string
+  /**
+   * As a hook's command: relative to the config file
+   */
+  command: string
+}
+
+export type OperatorHookSettings = {
+  /**
+   * Seconds a hook without its own may run (0.1 to 600)
+   */
+  timeout: number
+  /**
+   * Pause all hooks: nothing runs and nothing is recorded
+   */
+  paused: boolean
 }
 
 export type OperatorHookNotFoundError = {
@@ -21980,6 +22036,7 @@ export type OperatorHookListData = {
     directory?: string
     workspace?: string
     agent?: string
+    namespace?: string
   }
   url: "/operator/hook"
 }
@@ -21997,10 +22054,361 @@ export type OperatorHookListResponses = {
   /**
    * The hooks in force
    */
-  200: OperatorHooksEffective
+  200: OperatorHooksInForce
 }
 
 export type OperatorHookListResponse = OperatorHookListResponses[keyof OperatorHookListResponses]
+
+export type OperatorHookSaveData = {
+  body?: {
+    namespace?: string
+    /**
+     * Letters, digits, dots, dashes and underscores
+     */
+    name: string
+    previous?: string
+    /**
+     * One hook, by its name: the event it runs at, its script and settings
+     */
+    hook: {
+      event?: string
+      command?: string
+      args?: Array<string>
+      match?: Array<string>
+      timeout?: number
+      onFailure?: string
+      locked?: boolean
+      enabled?: boolean
+      description?: string
+    }
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    confirmCopy?: "true" | "false"
+  }
+  url: "/operator/hook"
+}
+
+export type OperatorHookSaveErrors = {
+  /**
+   * OperatorHookInvalidError | InvalidRequestError
+   */
+  400: OperatorHookInvalidError | InvalidRequestError
+  /**
+   * OperatorProjectConfigCopyNeededError
+   */
+  409: OperatorProjectConfigCopyNeededError
+}
+
+export type OperatorHookSaveError = OperatorHookSaveErrors[keyof OperatorHookSaveErrors]
+
+export type OperatorHookSaveResponses = {
+  /**
+   * The hook as saved, in force
+   */
+  200: OperatorHook
+}
+
+export type OperatorHookSaveResponse = OperatorHookSaveResponses[keyof OperatorHookSaveResponses]
+
+export type OperatorHookStateData = {
+  body?: {
+    namespace?: string
+    name: string
+    off: boolean
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    confirmCopy?: "true" | "false"
+  }
+  url: "/operator/hook/state"
+}
+
+export type OperatorHookStateErrors = {
+  /**
+   * OperatorHookInvalidError | InvalidRequestError
+   */
+  400: OperatorHookInvalidError | InvalidRequestError
+  /**
+   * OperatorProjectConfigCopyNeededError
+   */
+  409: OperatorProjectConfigCopyNeededError
+}
+
+export type OperatorHookStateError = OperatorHookStateErrors[keyof OperatorHookStateErrors]
+
+export type OperatorHookStateResponses = {
+  /**
+   * The hook
+   */
+  200: OperatorHook
+}
+
+export type OperatorHookStateResponse = OperatorHookStateResponses[keyof OperatorHookStateResponses]
+
+export type OperatorHookRemoveData = {
+  body?: {
+    namespace?: string
+    name: string
+    script?: boolean
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    confirmCopy?: "true" | "false"
+  }
+  url: "/operator/hook/remove"
+}
+
+export type OperatorHookRemoveErrors = {
+  /**
+   * OperatorHookInvalidError | InvalidRequestError
+   */
+  400: OperatorHookInvalidError | InvalidRequestError
+  /**
+   * OperatorProjectConfigCopyNeededError
+   */
+  409: OperatorProjectConfigCopyNeededError
+}
+
+export type OperatorHookRemoveError = OperatorHookRemoveErrors[keyof OperatorHookRemoveErrors]
+
+export type OperatorHookRemoveResponses = {
+  /**
+   * Moved to Trash
+   */
+  200: boolean
+}
+
+export type OperatorHookRemoveResponse = OperatorHookRemoveResponses[keyof OperatorHookRemoveResponses]
+
+export type OperatorHookTestData = {
+  body?: {
+    namespace?: string
+    name: string
+    input?: {
+      [key: string]: unknown
+    }
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/hook/test"
+}
+
+export type OperatorHookTestErrors = {
+  /**
+   * OperatorHookInvalidError | InvalidRequestError
+   */
+  400: OperatorHookInvalidError | InvalidRequestError
+}
+
+export type OperatorHookTestError = OperatorHookTestErrors[keyof OperatorHookTestErrors]
+
+export type OperatorHookTestResponses = {
+  /**
+   * The run
+   */
+  200: OperatorHookTestResult
+}
+
+export type OperatorHookTestResponse = OperatorHookTestResponses[keyof OperatorHookTestResponses]
+
+export type OperatorHookSampleData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    event:
+      | "session.created"
+      | "prompt.submitted"
+      | "turn.before"
+      | "step.before"
+      | "step.after"
+      | "tool.before"
+      | "tool.after"
+      | "subagent.before"
+      | "subagent.after"
+      | "permission.asked"
+      | "compaction.before"
+      | "compaction.after"
+      | "turn.after"
+      | "session.error"
+      | "file.edited"
+      | "session.deleted"
+    language?: "shell" | "python" | "javascript"
+  }
+  url: "/operator/hook/sample"
+}
+
+export type OperatorHookSampleErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorHookSampleError = OperatorHookSampleErrors[keyof OperatorHookSampleErrors]
+
+export type OperatorHookSampleResponses = {
+  /**
+   * A sample
+   */
+  200: OperatorHookSample
+}
+
+export type OperatorHookSampleResponse = OperatorHookSampleResponses[keyof OperatorHookSampleResponses]
+
+export type OperatorHookScriptsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    namespace?: string
+  }
+  url: "/operator/hook/scripts"
+}
+
+export type OperatorHookScriptsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorHookScriptsError = OperatorHookScriptsErrors[keyof OperatorHookScriptsErrors]
+
+export type OperatorHookScriptsResponses = {
+  /**
+   * The scripts in the scope's hooks/ folder
+   */
+  200: Array<string>
+}
+
+export type OperatorHookScriptsResponse = OperatorHookScriptsResponses[keyof OperatorHookScriptsResponses]
+
+export type OperatorHookScriptData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    namespace?: string
+    path: string
+  }
+  url: "/operator/hook/script"
+}
+
+export type OperatorHookScriptErrors = {
+  /**
+   * OperatorHookInvalidError | InvalidRequestError
+   */
+  400: OperatorHookInvalidError | InvalidRequestError
+}
+
+export type OperatorHookScriptError = OperatorHookScriptErrors[keyof OperatorHookScriptErrors]
+
+export type OperatorHookScriptResponses = {
+  /**
+   * The script
+   */
+  200: OperatorHookScript
+}
+
+export type OperatorHookScriptResponse = OperatorHookScriptResponses[keyof OperatorHookScriptResponses]
+
+export type OperatorHookNewScriptData = {
+  body?: {
+    namespace?: string
+    /**
+     * The file's name; its language's extension is added
+     */
+    name: string
+    language: "shell" | "python" | "javascript"
+    event:
+      | "session.created"
+      | "prompt.submitted"
+      | "turn.before"
+      | "step.before"
+      | "step.after"
+      | "tool.before"
+      | "tool.after"
+      | "subagent.before"
+      | "subagent.after"
+      | "permission.asked"
+      | "compaction.before"
+      | "compaction.after"
+      | "turn.after"
+      | "session.error"
+      | "file.edited"
+      | "session.deleted"
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/hook/script"
+}
+
+export type OperatorHookNewScriptErrors = {
+  /**
+   * OperatorHookInvalidError | InvalidRequestError
+   */
+  400: OperatorHookInvalidError | InvalidRequestError
+}
+
+export type OperatorHookNewScriptError = OperatorHookNewScriptErrors[keyof OperatorHookNewScriptErrors]
+
+export type OperatorHookNewScriptResponses = {
+  /**
+   * The script written
+   */
+  200: OperatorHookNewScript
+}
+
+export type OperatorHookNewScriptResponse = OperatorHookNewScriptResponses[keyof OperatorHookNewScriptResponses]
+
+export type OperatorHookSaveScriptData = {
+  body?: {
+    namespace?: string
+    path: string
+    text: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/hook/script"
+}
+
+export type OperatorHookSaveScriptErrors = {
+  /**
+   * OperatorHookInvalidError | InvalidRequestError
+   */
+  400: OperatorHookInvalidError | InvalidRequestError
+}
+
+export type OperatorHookSaveScriptError = OperatorHookSaveScriptErrors[keyof OperatorHookSaveScriptErrors]
+
+export type OperatorHookSaveScriptResponses = {
+  /**
+   * Saved
+   */
+  200: boolean
+}
+
+export type OperatorHookSaveScriptResponse = OperatorHookSaveScriptResponses[keyof OperatorHookSaveScriptResponses]
 
 export type OperatorHookSettingsData = {
   body?: never

@@ -244,14 +244,32 @@ import type {
   OperatorHookEventsResponses,
   OperatorHookListErrors,
   OperatorHookListResponses,
+  OperatorHookNewScriptErrors,
+  OperatorHookNewScriptResponses,
+  OperatorHookRemoveErrors,
+  OperatorHookRemoveResponses,
   OperatorHookRunErrors,
   OperatorHookRunResponses,
   OperatorHookRunsErrors,
   OperatorHookRunsResponses,
+  OperatorHookSampleErrors,
+  OperatorHookSampleResponses,
+  OperatorHookSaveErrors,
+  OperatorHookSaveResponses,
+  OperatorHookSaveScriptErrors,
+  OperatorHookSaveScriptResponses,
   OperatorHookSaveSettingsErrors,
   OperatorHookSaveSettingsResponses,
+  OperatorHookScriptErrors,
+  OperatorHookScriptResponses,
+  OperatorHookScriptsErrors,
+  OperatorHookScriptsResponses,
   OperatorHookSettingsErrors,
   OperatorHookSettingsResponses,
+  OperatorHookStateErrors,
+  OperatorHookStateResponses,
+  OperatorHookTestErrors,
+  OperatorHookTestResponses,
   OperatorLayoutGetErrors,
   OperatorLayoutGetResponses,
   OperatorLayoutLaterErrors,
@@ -8473,6 +8491,7 @@ export class Hook extends HeyApiClient {
       directory?: string
       workspace?: string
       agent?: string
+      namespace?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -8484,6 +8503,7 @@ export class Hook extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "query", key: "agent" },
+            { in: "query", key: "namespace" },
           ],
         },
       ],
@@ -8492,6 +8512,414 @@ export class Hook extends HeyApiClient {
       url: "/operator/hook",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Create or edit a hook
+   *
+   * Writes the hook into the scope's config file: a project's is copy-on-write (409 asks for the copy; confirmCopy=true makes it). The same name as an inherited hook replaces it, unless that one is locked.
+   */
+  public save<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      confirmCopy?: "true" | "false"
+      namespace?: string
+      name?: string
+      previous?: string
+      hook?: {
+        event?: string
+        command?: string
+        args?: Array<string>
+        match?: Array<string>
+        timeout?: number
+        onFailure?: string
+        locked?: boolean
+        enabled?: boolean
+        description?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "confirmCopy" },
+            { in: "body", key: "namespace" },
+            { in: "body", key: "name" },
+            { in: "body", key: "previous" },
+            { in: "body", key: "hook" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<OperatorHookSaveResponses, OperatorHookSaveErrors, ThrowOnError>({
+      url: "/operator/hook",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Turn an inherited hook off or on here
+   *
+   * capabilities.disabled.hooks in the scope's config. Refused for a locked hook.
+   */
+  public state<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      confirmCopy?: "true" | "false"
+      namespace?: string
+      name?: string
+      off?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "confirmCopy" },
+            { in: "body", key: "namespace" },
+            { in: "body", key: "name" },
+            { in: "body", key: "off" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<OperatorHookStateResponses, OperatorHookStateErrors, ThrowOnError>({
+      url: "/operator/hook/state",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Delete a hook of the scope
+   *
+   * Moves the scope's own hook (and its script, if asked) to Trash; inherited ones are turned off instead.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      confirmCopy?: "true" | "false"
+      namespace?: string
+      name?: string
+      script?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "confirmCopy" },
+            { in: "body", key: "namespace" },
+            { in: "body", key: "name" },
+            { in: "body", key: "script" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<OperatorHookRemoveResponses, OperatorHookRemoveErrors, ThrowOnError>({
+      url: "/operator/hook/remove",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Test a hook
+   *
+   * Runs the hook's script on the event as a real run would, in its level's folder, and records it as a Test run. No session is touched.
+   */
+  public test<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      namespace?: string
+      name?: string
+      input?: {
+        [key: string]: unknown
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "namespace" },
+            { in: "body", key: "name" },
+            { in: "body", key: "input" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<OperatorHookTestResponses, OperatorHookTestErrors, ThrowOnError>({
+      url: "/operator/hook/test",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * A sample event and a template script
+   *
+   * What an event sends (§7.6), and a script that reads it and prints a valid answer.
+   */
+  public sample<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      event:
+        | "session.created"
+        | "prompt.submitted"
+        | "turn.before"
+        | "step.before"
+        | "step.after"
+        | "tool.before"
+        | "tool.after"
+        | "subagent.before"
+        | "subagent.after"
+        | "permission.asked"
+        | "compaction.before"
+        | "compaction.after"
+        | "turn.after"
+        | "session.error"
+        | "file.edited"
+        | "session.deleted"
+      language?: "shell" | "python" | "javascript"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "event" },
+            { in: "query", key: "language" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<OperatorHookSampleResponses, OperatorHookSampleErrors, ThrowOnError>({
+      url: "/operator/hook/sample",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * The scope's scripts
+   *
+   * The files in the hooks/ folder beside the scope's config file.
+   */
+  public scripts<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      namespace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "namespace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<OperatorHookScriptsResponses, OperatorHookScriptsErrors, ThrowOnError>({
+      url: "/operator/hook/scripts",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * A hook's script
+   *
+   * One in the scope's hooks/ folder (editable), or the script of a hook in force (read-only).
+   */
+  public script<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      namespace?: string
+      path: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "namespace" },
+            { in: "query", key: "path" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<OperatorHookScriptResponses, OperatorHookScriptErrors, ThrowOnError>({
+      url: "/operator/hook/script",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Write a template script
+   *
+   * A script for the event, in the language, in the scope's hooks/ folder, executable. It reads the event and answers nothing until edited.
+   */
+  public newScript<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      namespace?: string
+      name?: string
+      language?: "shell" | "python" | "javascript"
+      event?:
+        | "session.created"
+        | "prompt.submitted"
+        | "turn.before"
+        | "step.before"
+        | "step.after"
+        | "tool.before"
+        | "tool.after"
+        | "subagent.before"
+        | "subagent.after"
+        | "permission.asked"
+        | "compaction.before"
+        | "compaction.after"
+        | "turn.after"
+        | "session.error"
+        | "file.edited"
+        | "session.deleted"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "namespace" },
+            { in: "body", key: "name" },
+            { in: "body", key: "language" },
+            { in: "body", key: "event" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorHookNewScriptResponses,
+      OperatorHookNewScriptErrors,
+      ThrowOnError
+    >({
+      url: "/operator/hook/script",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Save a script
+   *
+   * Only a script in the scope's hooks/ folder.
+   */
+  public saveScript<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      namespace?: string
+      path?: string
+      text?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "namespace" },
+            { in: "body", key: "path" },
+            { in: "body", key: "text" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorHookSaveScriptResponses,
+      OperatorHookSaveScriptErrors,
+      ThrowOnError
+    >({
+      url: "/operator/hook/script",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 
