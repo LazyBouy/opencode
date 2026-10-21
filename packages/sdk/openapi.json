@@ -24577,6 +24577,471 @@
         ]
       }
     },
+    "/operator/hook": {
+      "get": {
+        "tags": ["operator hooks"],
+        "operationId": "operator.hook.list",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The hooks in force",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorHooksEffective"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Every level's hooks (Global, namespace, project, and the agent's own), each with its level, state (on, off below, disabled, invalid), lock and problems, in run order.",
+        "summary": "The hooks in force for a project or agent",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.hook.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/hook/settings": {
+      "get": {
+        "tags": ["operator hooks"],
+        "operationId": "operator.hook.settings",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Settings → Hooks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorHookSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The default timeout for hooks without their own, and Pause all hooks. Server-wide.",
+        "summary": "Settings → Hooks",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.hook.settings({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "tags": ["operator hooks"],
+        "operationId": "operator.hook.saveSettings",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The settings after the save",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorHookSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorHookInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorHookInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Sets the default timeout or Pause all hooks; what isn't given stays.",
+        "summary": "Change Settings → Hooks",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "timeout": {
+                    "type": "number"
+                  },
+                  "paused": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.hook.saveSettings({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/hook/runs": {
+      "get": {
+        "tags": ["operator hooks"],
+        "operationId": "operator.hook.runs",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "session",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "hook",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "event",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "outcome",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "test",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            },
+            "required": false
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["project", "all"]
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Runs, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "runs": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/OperatorHookRun"
+                      }
+                    },
+                    "total": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["runs", "total"],
+                  "additionalProperties": false,
+                  "description": "Runs, newest first"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The run log, newest first: one session's runs, or a project's (or every project's), filtered by agent, hook, event, outcome or Test runs; paged with limit and offset.",
+        "summary": "Hook runs",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.hook.runs({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/hook/runs/{id}": {
+      "get": {
+        "tags": ["operator hooks"],
+        "operationId": "operator.hook.run",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorHookRun"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorHookNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorHookNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Everything the run log keeps of one run.",
+        "summary": "One hook run",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.hook.run({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/hook/events": {
+      "get": {
+        "tags": ["operator hooks"],
+        "operationId": "operator.hook.events",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorHookEvent"
+                  },
+                  "description": "The events"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Each event, whether the session waits for the answer, the answer fields it uses, and what `match` checks.",
+        "summary": "The events a hook can be attached to",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.hook.events({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "tags": ["opencode HttpApi"],
@@ -35579,6 +36044,55 @@
             "type": "string",
             "enum": ["incognito", "retentive"]
           },
+          "hooks": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "event": {
+                  "type": "string"
+                },
+                "command": {
+                  "type": "string"
+                },
+                "args": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "match": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "timeout": {
+                  "type": "number"
+                },
+                "onFailure": {
+                  "type": "string"
+                },
+                "locked": {
+                  "type": "boolean"
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "description": "One hook, by its name: the event it runs at, its script and settings"
+            }
+          },
+          "hooksDisabled": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "modelSource": {
             "type": "string",
             "enum": ["small", "fixed"]
@@ -36440,6 +36954,49 @@
             },
             "additionalProperties": false
           },
+          "hooks": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "event": {
+                  "type": "string"
+                },
+                "command": {
+                  "type": "string"
+                },
+                "args": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "match": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "timeout": {
+                  "type": "number"
+                },
+                "onFailure": {
+                  "type": "string"
+                },
+                "locked": {
+                  "type": "boolean"
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "description": "One hook, by its name: the event it runs at, its script and settings"
+            }
+          },
           "prompts": {
             "type": "object",
             "properties": {
@@ -36486,6 +37043,12 @@
                     }
                   },
                   "plugins": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "hooks": {
                     "type": "array",
                     "items": {
                       "type": "string"
@@ -48435,6 +48998,326 @@
           }
         },
         "required": ["kind", "name"],
+        "additionalProperties": false
+      },
+      "OperatorHook": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "event": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string",
+            "description": "The script's absolute path"
+          },
+          "script": {
+            "type": "string",
+            "description": "As written in the config file"
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "match": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "timeout": {
+            "type": "number"
+          },
+          "onFailure": {
+            "type": "string",
+            "enum": ["deny", "allow"]
+          },
+          "locked": {
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "level": {
+            "type": "string",
+            "enum": ["global", "namespace", "project", "agent"]
+          },
+          "file": {
+            "type": "string",
+            "description": "The file that declares it"
+          },
+          "state": {
+            "type": "string",
+            "enum": ["on", "off", "disabled", "invalid"],
+            "description": "on; off (turned off at a lower level); disabled (enabled: false); invalid (see problems)"
+          },
+          "offAt": {
+            "type": "string",
+            "enum": ["global", "namespace", "project", "agent"]
+          },
+          "replaces": {
+            "type": "object",
+            "properties": {
+              "level": {
+                "type": "string",
+                "enum": ["global", "namespace", "project", "agent"]
+              },
+              "file": {
+                "type": "string"
+              }
+            },
+            "required": ["level", "file"],
+            "additionalProperties": false
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What's wrong with the entry, or a lock it conflicts with"
+          }
+        },
+        "required": [
+          "name",
+          "event",
+          "command",
+          "script",
+          "args",
+          "match",
+          "onFailure",
+          "locked",
+          "enabled",
+          "level",
+          "file",
+          "state",
+          "problems"
+        ],
+        "additionalProperties": false
+      },
+      "OperatorHooksEffective": {
+        "type": "object",
+        "properties": {
+          "hooks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorHook"
+            }
+          },
+          "paused": {
+            "type": "boolean",
+            "description": "Pause all hooks is on: nothing runs"
+          }
+        },
+        "required": ["hooks", "paused"],
+        "additionalProperties": false
+      },
+      "OperatorHookSettings": {
+        "type": "object",
+        "properties": {
+          "timeout": {
+            "type": "number",
+            "description": "Seconds a hook without its own may run (0.1 to 600)"
+          },
+          "paused": {
+            "type": "boolean",
+            "description": "Pause all hooks: nothing runs and nothing is recorded"
+          }
+        },
+        "required": ["timeout", "paused"],
+        "additionalProperties": false
+      },
+      "OperatorHookInvalidError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorHookInvalidError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorHookOutcome": {
+        "type": "string",
+        "enum": [
+          "allowed",
+          "denied",
+          "changed",
+          "context",
+          "ok",
+          "ok, with ignored fields",
+          "failed",
+          "timed out",
+          "stopped by the server",
+          "dropped"
+        ]
+      },
+      "OperatorHookRun": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "time": {
+            "type": "number",
+            "description": "When the run started (ms)"
+          },
+          "event": {
+            "type": "string"
+          },
+          "hook": {
+            "type": "string"
+          },
+          "level": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string",
+            "description": "The config file that declares the hook"
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "tool": {
+            "type": "string"
+          },
+          "callID": {
+            "type": "string"
+          },
+          "durationMs": {
+            "type": "number"
+          },
+          "exitCode": {
+            "type": "number"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/OperatorHookOutcome"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "ignored": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "before": {
+            "type": "string"
+          },
+          "after": {
+            "type": "string"
+          },
+          "context": {
+            "type": "string"
+          },
+          "stdout": {
+            "type": "string"
+          },
+          "stderr": {
+            "type": "string"
+          },
+          "dropped": {
+            "type": "number"
+          },
+          "test": {
+            "type": "boolean"
+          }
+        },
+        "required": ["id", "time", "event", "hook", "level", "file", "outcome"],
+        "additionalProperties": false
+      },
+      "OperatorHookNotFoundError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorHookNotFoundError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorHookEvent": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "session.created",
+              "prompt.submitted",
+              "turn.before",
+              "step.before",
+              "step.after",
+              "tool.before",
+              "tool.after",
+              "subagent.before",
+              "subagent.after",
+              "permission.asked",
+              "compaction.before",
+              "compaction.after",
+              "turn.after",
+              "session.error",
+              "file.edited",
+              "session.deleted"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["blocking", "watch"],
+            "description": "blocking: the session waits for the answer; watch: it goes on"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["allow", "reason", "input", "prompt", "output", "context", "continue"]
+            },
+            "description": "Answer fields the event uses; others are ignored"
+          },
+          "subject": {
+            "type": "string",
+            "enum": ["tool", "permission", "agent"]
+          },
+          "group": {
+            "type": "string",
+            "enum": ["session", "prompt", "step", "tool", "permission", "compaction", "watch"]
+          }
+        },
+        "required": ["name", "kind", "fields", "group"],
         "additionalProperties": false
       },
       "UnauthorizedError": {
@@ -62169,6 +63052,10 @@
     {
       "name": "operator capabilities",
       "description": "Capability routes."
+    },
+    {
+      "name": "operator hooks",
+      "description": "Hook routes."
     },
     {
       "name": "opencode HttpApi",

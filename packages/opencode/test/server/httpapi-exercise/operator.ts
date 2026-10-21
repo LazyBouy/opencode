@@ -822,6 +822,33 @@ export const operatorScenarios: Scenario[] = [
       body: { tool: "bash", permission: "bash", verbs: [], text: "*", examples: [] },
     }))
     .status(400),
+  http.protected.get("/operator/hook", "operator.hook.list").json(200, (body) => {
+    object(body)
+    array(body.hooks)
+    check(typeof body.paused === "boolean", "the hooks say whether they are paused")
+  }),
+  http.protected.get("/operator/hook/settings", "operator.hook.settings").json(200, (body) => {
+    object(body)
+    check(typeof body.timeout === "number" && typeof body.paused === "boolean", "a timeout and the pause")
+  }),
+  // A valid change would outlive the scenario (server-wide): only the refusal is exercised.
+  http.protected
+    .put("/operator/hook/settings", "operator.hook.saveSettings")
+    .at((ctx) => ({ path: "/operator/hook/settings", headers: ctx.headers(), body: { timeout: 0 } }))
+    .status(400),
+  http.protected.get("/operator/hook/runs", "operator.hook.runs").json(200, (body) => {
+    object(body)
+    array(body.runs)
+    check(typeof body.total === "number", "runs and their total")
+  }),
+  http.protected
+    .get("/operator/hook/runs/{id}", "operator.hook.run")
+    .at((ctx) => ({ path: route("/operator/hook/runs/{id}", { id: "hr.tests.none" }), headers: ctx.headers() }))
+    .status(404),
+  http.protected.get("/operator/hook/events", "operator.hook.events").json(200, (body) => {
+    array(body)
+    check(body.length === 16, "sixteen events")
+  }),
   http.protected.get("/operator/layout", "operator.layout.get").json(200, (body) => {
     object(body)
     array(body.namespaces)

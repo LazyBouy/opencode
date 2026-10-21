@@ -240,6 +240,18 @@ import type {
   OperatorHelperTriggersResponses,
   OperatorHelperUpdateErrors,
   OperatorHelperUpdateResponses,
+  OperatorHookEventsErrors,
+  OperatorHookEventsResponses,
+  OperatorHookListErrors,
+  OperatorHookListResponses,
+  OperatorHookRunErrors,
+  OperatorHookRunResponses,
+  OperatorHookRunsErrors,
+  OperatorHookRunsResponses,
+  OperatorHookSaveSettingsErrors,
+  OperatorHookSaveSettingsResponses,
+  OperatorHookSettingsErrors,
+  OperatorHookSettingsResponses,
   OperatorLayoutGetErrors,
   OperatorLayoutGetResponses,
   OperatorLayoutLaterErrors,
@@ -8450,6 +8462,227 @@ export class Capability extends HeyApiClient {
   }
 }
 
+export class Hook extends HeyApiClient {
+  /**
+   * The hooks in force for a project or agent
+   *
+   * Every level's hooks (Global, namespace, project, and the agent's own), each with its level, state (on, off below, disabled, invalid), lock and problems, in run order.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      agent?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "agent" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<OperatorHookListResponses, OperatorHookListErrors, ThrowOnError>({
+      url: "/operator/hook",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Settings → Hooks
+   *
+   * The default timeout for hooks without their own, and Pause all hooks. Server-wide.
+   */
+  public settings<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorHookSettingsResponses,
+      OperatorHookSettingsErrors,
+      ThrowOnError
+    >({
+      url: "/operator/hook/settings",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Change Settings → Hooks
+   *
+   * Sets the default timeout or Pause all hooks; what isn't given stays.
+   */
+  public saveSettings<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      timeout?: number
+      paused?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "timeout" },
+            { in: "body", key: "paused" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorHookSaveSettingsResponses,
+      OperatorHookSaveSettingsErrors,
+      ThrowOnError
+    >({
+      url: "/operator/hook/settings",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Hook runs
+   *
+   * The run log, newest first: one session's runs, or a project's (or every project's), filtered by agent, hook, event, outcome or Test runs; paged with limit and offset.
+   */
+  public runs<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      session?: string
+      agent?: string
+      hook?: string
+      event?: string
+      outcome?: string
+      test?: "true" | "false"
+      limit?: string
+      offset?: string
+      scope?: "project" | "all"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "session" },
+            { in: "query", key: "agent" },
+            { in: "query", key: "hook" },
+            { in: "query", key: "event" },
+            { in: "query", key: "outcome" },
+            { in: "query", key: "test" },
+            { in: "query", key: "limit" },
+            { in: "query", key: "offset" },
+            { in: "query", key: "scope" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<OperatorHookRunsResponses, OperatorHookRunsErrors, ThrowOnError>({
+      url: "/operator/hook/runs",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * One hook run
+   *
+   * Everything the run log keeps of one run.
+   */
+  public run<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<OperatorHookRunResponses, OperatorHookRunErrors, ThrowOnError>({
+      url: "/operator/hook/runs/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * The events a hook can be attached to
+   *
+   * Each event, whether the session waits for the answer, the answer fields it uses, and what `match` checks.
+   */
+  public events<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<OperatorHookEventsResponses, OperatorHookEventsErrors, ThrowOnError>({
+      url: "/operator/hook/events",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Operator extends HeyApiClient {
   /**
    * Get server status
@@ -8641,6 +8874,11 @@ export class Operator extends HeyApiClient {
   private _capability?: Capability
   get capability(): Capability {
     return (this._capability ??= new Capability({ client: this.client }))
+  }
+
+  private _hook?: Hook
+  get hook(): Hook {
+    return (this._hook ??= new Hook({ client: this.client }))
   }
 }
 

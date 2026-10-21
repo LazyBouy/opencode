@@ -167,6 +167,25 @@ export function withoutLocked(text: string, locks: ReadonlyArray<OperatorPermiss
 }
 
 /**
+ * A copy leaves out the namespace's locked hooks (SPEC-0022 §6.3): they keep running from its file. From
+ * Global (`all`), it leaves out every hook: Global's level keeps running them for the project anyway.
+ */
+export function withoutLockedHooks(text: string, all = false) {
+  const value = parse(text) as { hooks?: unknown } | undefined
+  const hooks = value?.hooks
+  if (!hooks || typeof hooks !== "object" || Array.isArray(hooks)) return text
+  const gone = Object.entries(hooks as Record<string, unknown>)
+    .filter(
+      ([, entry]) => all || (!!entry && typeof entry === "object" && (entry as { locked?: unknown }).locked === true),
+    )
+    .map(([name]) => name)
+  const options = { formattingOptions: { insertSpaces: true, tabSize: 2 } }
+  if (gone.length && gone.length === Object.keys(hooks).length)
+    return applyEdits(text, modify(text, ["hooks"], undefined, options))
+  return gone.reduce((result, name) => applyEdits(result, modify(result, ["hooks", name], undefined, options)), text)
+}
+
+/**
  * A copy leaves out the namespace's default and small model (default_models_spec.md §6.3): the project keeps
  * following them (namespace-scope.ts configFiles) until it sets its own. With `all` false, only a key whose
  * value is still the namespace's (`from`) goes: a whole text saved from the Config page keeps a model the
@@ -230,7 +249,7 @@ export const prepare = Effect.fnUntraced(function* (ctx: { directory: string; wo
     file,
     // The editor shows `emptyText` for a namespace without a config; a copy of none starts empty. The copy
     // has neither the namespace's locked lines nor its default and small model.
-    text: withoutModels(withoutLocked(source.text ?? "{}\n", locks)),
+    text: withoutModels(withoutLockedHooks(withoutLocked(source.text ?? "{}\n", locks), source.global)),
     own: false,
     copy: { namespace: source.id, namespaceHash: hash(source.text ?? ""), locks, models },
   } satisfies Prepared

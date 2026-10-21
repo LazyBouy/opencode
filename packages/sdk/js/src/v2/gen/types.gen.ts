@@ -1729,6 +1729,20 @@ export type AgentConfig = {
   permission?: PermissionConfig
   home?: string
   subagentMemory?: "incognito" | "retentive"
+  hooks?: {
+    [key: string]: {
+      event?: string
+      command?: string
+      args?: Array<string>
+      match?: Array<string>
+      timeout?: number
+      onFailure?: string
+      locked?: boolean
+      enabled?: boolean
+      description?: string
+    }
+  }
+  hooksDisabled?: Array<string>
   modelSource?: "small" | "fixed"
   [key: string]:
     | unknown
@@ -1756,6 +1770,20 @@ export type AgentConfig = {
     | PermissionConfig
     | "incognito"
     | "retentive"
+    | {
+        [key: string]: {
+          event?: string
+          command?: string
+          args?: Array<string>
+          match?: Array<string>
+          timeout?: number
+          onFailure?: string
+          locked?: boolean
+          enabled?: boolean
+          description?: string
+        }
+      }
+    | Array<string>
     | "small"
     | "fixed"
     | undefined
@@ -2058,6 +2086,19 @@ export type Config = {
     mcp_timeout?: number
     policies?: Array<ConfigV2ExperimentalPolicy>
   }
+  hooks?: {
+    [key: string]: {
+      event?: string
+      command?: string
+      args?: Array<string>
+      match?: Array<string>
+      timeout?: number
+      onFailure?: string
+      locked?: boolean
+      enabled?: boolean
+      description?: string
+    }
+  }
   prompts?: {
     environment?: boolean
     skills?: boolean
@@ -2074,6 +2115,7 @@ export type Config = {
     disabled?: {
       commands?: Array<string>
       plugins?: Array<string>
+      hooks?: Array<string>
     }
   }
   operatorRecordCalls?: boolean
@@ -6959,6 +7001,151 @@ export type OperatorCapabilityCreate = {
   mcp?: {
     [key: string]: unknown
   }
+}
+
+export type OperatorHook = {
+  name: string
+  event: string
+  /**
+   * The script's absolute path
+   */
+  command: string
+  /**
+   * As written in the config file
+   */
+  script: string
+  args: Array<string>
+  match: Array<string>
+  timeout?: number
+  onFailure: "deny" | "allow"
+  locked: boolean
+  enabled: boolean
+  description?: string
+  level: "global" | "namespace" | "project" | "agent"
+  /**
+   * The file that declares it
+   */
+  file: string
+  /**
+   * on; off (turned off at a lower level); disabled (enabled: false); invalid (see problems)
+   */
+  state: "on" | "off" | "disabled" | "invalid"
+  offAt?: "global" | "namespace" | "project" | "agent"
+  replaces?: {
+    level: "global" | "namespace" | "project" | "agent"
+    file: string
+  }
+  /**
+   * What's wrong with the entry, or a lock it conflicts with
+   */
+  problems: Array<string>
+}
+
+export type OperatorHooksEffective = {
+  hooks: Array<OperatorHook>
+  /**
+   * Pause all hooks is on: nothing runs
+   */
+  paused: boolean
+}
+
+export type OperatorHookSettings = {
+  /**
+   * Seconds a hook without its own may run (0.1 to 600)
+   */
+  timeout: number
+  /**
+   * Pause all hooks: nothing runs and nothing is recorded
+   */
+  paused: boolean
+}
+
+export type OperatorHookInvalidError = {
+  name: "OperatorHookInvalidError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorHookOutcome =
+  | "allowed"
+  | "denied"
+  | "changed"
+  | "context"
+  | "ok"
+  | "ok, with ignored fields"
+  | "failed"
+  | "timed out"
+  | "stopped by the server"
+  | "dropped"
+
+export type OperatorHookRun = {
+  id: string
+  /**
+   * When the run started (ms)
+   */
+  time: number
+  event: string
+  hook: string
+  level: string
+  /**
+   * The config file that declares the hook
+   */
+  file: string
+  sessionID?: string
+  project?: string
+  agent?: string
+  tool?: string
+  callID?: string
+  durationMs?: number
+  exitCode?: number
+  outcome: OperatorHookOutcome
+  reason?: string
+  ignored?: Array<string>
+  before?: string
+  after?: string
+  context?: string
+  stdout?: string
+  stderr?: string
+  dropped?: number
+  test?: boolean
+}
+
+export type OperatorHookNotFoundError = {
+  name: "OperatorHookNotFoundError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorHookEvent = {
+  name:
+    | "session.created"
+    | "prompt.submitted"
+    | "turn.before"
+    | "step.before"
+    | "step.after"
+    | "tool.before"
+    | "tool.after"
+    | "subagent.before"
+    | "subagent.after"
+    | "permission.asked"
+    | "compaction.before"
+    | "compaction.after"
+    | "turn.after"
+    | "session.error"
+    | "file.edited"
+    | "session.deleted"
+  /**
+   * blocking: the session waits for the answer; watch: it goes on
+   */
+  kind: "blocking" | "watch"
+  /**
+   * Answer fields the event uses; others are ignored
+   */
+  fields: Array<"allow" | "reason" | "input" | "prompt" | "output" | "context" | "continue">
+  subject?: "tool" | "permission" | "agent"
+  group: "session" | "prompt" | "step" | "tool" | "permission" | "compaction" | "watch"
 }
 
 export type UnauthorizedError = {
@@ -21781,6 +21968,197 @@ export type OperatorCapabilityCreateResponses = {
 
 export type OperatorCapabilityCreateResponse =
   OperatorCapabilityCreateResponses[keyof OperatorCapabilityCreateResponses]
+
+export type OperatorHookListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    agent?: string
+  }
+  url: "/operator/hook"
+}
+
+export type OperatorHookListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorHookListError = OperatorHookListErrors[keyof OperatorHookListErrors]
+
+export type OperatorHookListResponses = {
+  /**
+   * The hooks in force
+   */
+  200: OperatorHooksEffective
+}
+
+export type OperatorHookListResponse = OperatorHookListResponses[keyof OperatorHookListResponses]
+
+export type OperatorHookSettingsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/hook/settings"
+}
+
+export type OperatorHookSettingsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorHookSettingsError = OperatorHookSettingsErrors[keyof OperatorHookSettingsErrors]
+
+export type OperatorHookSettingsResponses = {
+  /**
+   * Settings → Hooks
+   */
+  200: OperatorHookSettings
+}
+
+export type OperatorHookSettingsResponse = OperatorHookSettingsResponses[keyof OperatorHookSettingsResponses]
+
+export type OperatorHookSaveSettingsData = {
+  body?: {
+    timeout?: number
+    paused?: boolean
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/hook/settings"
+}
+
+export type OperatorHookSaveSettingsErrors = {
+  /**
+   * OperatorHookInvalidError | InvalidRequestError
+   */
+  400: OperatorHookInvalidError | InvalidRequestError
+}
+
+export type OperatorHookSaveSettingsError = OperatorHookSaveSettingsErrors[keyof OperatorHookSaveSettingsErrors]
+
+export type OperatorHookSaveSettingsResponses = {
+  /**
+   * The settings after the save
+   */
+  200: OperatorHookSettings
+}
+
+export type OperatorHookSaveSettingsResponse =
+  OperatorHookSaveSettingsResponses[keyof OperatorHookSaveSettingsResponses]
+
+export type OperatorHookRunsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    session?: string
+    agent?: string
+    hook?: string
+    event?: string
+    outcome?: string
+    test?: "true" | "false"
+    limit?: string
+    offset?: string
+    scope?: "project" | "all"
+  }
+  url: "/operator/hook/runs"
+}
+
+export type OperatorHookRunsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorHookRunsError = OperatorHookRunsErrors[keyof OperatorHookRunsErrors]
+
+export type OperatorHookRunsResponses = {
+  /**
+   * Runs, newest first
+   */
+  200: {
+    runs: Array<OperatorHookRun>
+    total: number
+  }
+}
+
+export type OperatorHookRunsResponse = OperatorHookRunsResponses[keyof OperatorHookRunsResponses]
+
+export type OperatorHookRunData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/hook/runs/{id}"
+}
+
+export type OperatorHookRunErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * OperatorHookNotFoundError
+   */
+  404: OperatorHookNotFoundError
+}
+
+export type OperatorHookRunError = OperatorHookRunErrors[keyof OperatorHookRunErrors]
+
+export type OperatorHookRunResponses = {
+  /**
+   * One run
+   */
+  200: OperatorHookRun
+}
+
+export type OperatorHookRunResponse = OperatorHookRunResponses[keyof OperatorHookRunResponses]
+
+export type OperatorHookEventsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/hook/events"
+}
+
+export type OperatorHookEventsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorHookEventsError = OperatorHookEventsErrors[keyof OperatorHookEventsErrors]
+
+export type OperatorHookEventsResponses = {
+  /**
+   * The events
+   */
+  200: Array<OperatorHookEvent>
+}
+
+export type OperatorHookEventsResponse = OperatorHookEventsResponses[keyof OperatorHookEventsResponses]
 
 export type V2HealthGetData = {
   body?: never

@@ -14,6 +14,7 @@ import { OperatorAgentSessionApi } from "./groups/agent-sessions"
 import { OperatorQueueApi } from "./groups/queue"
 import { OperatorTrashItemApi } from "./groups/trash"
 import { OperatorCapabilityApi } from "./groups/capabilities"
+import { OperatorHookApi } from "./groups/hooks"
 
 export { OperatorRootApi } from "./groups/overview"
 
@@ -37,3 +38,4 @@ export const OperatorApi = HttpApi.make("operator")
   .addHttpApi(OperatorAgentSessionApi)
   .addHttpApi(OperatorQueueApi)
   .addHttpApi(OperatorCapabilityApi)
+  .addHttpApi(OperatorHookApi)

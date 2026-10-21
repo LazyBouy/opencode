@@ -62,6 +62,7 @@ export const CAPABILITY_KEYS: ReadonlyArray<string> = [
   "tools",
   "permission",
   "references",
+  "hooks",
 ]
 
 // The global folders that hold capability files.

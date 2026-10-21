@@ -3,9 +3,51 @@ export * as ConfigForkV1 from "./fork"
 import { Schema } from "effect"
 import { ConfigMergeV1 } from "./merge"
 
+// One hook (SPEC-0022 §6.1): a script the server runs at a point in a session. The event and the
+// strings are checked when the hooks are resolved, not here, so a mistyped entry is skipped with a
+// warning instead of stopping the config from loading.
+export const HookEntry = Schema.Struct({
+  event: Schema.optional(Schema.String).annotate({
+    description:
+      "When it runs: session.created, prompt.submitted, turn.before, step.before, step.after, tool.before, tool.after, subagent.before, subagent.after, permission.asked, compaction.before, compaction.after, turn.after, session.error, file.edited or session.deleted",
+  }),
+  command: Schema.optional(Schema.String).annotate({
+    description:
+      "The script, by its path: relative to the folder of the config file that declares the hook, or `~` and absolute paths. Never parsed by a shell",
+  }),
+  args: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+    description: "Extra arguments for the script",
+  }),
+  match: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+    description:
+      "Tool names (tool.*), permission names (permission.asked) or agent names (subagent.*) it runs for; `*` wildcards allowed (default: all)",
+  }),
+  timeout: Schema.optional(Schema.Finite).annotate({
+    description: "Seconds before the run is stopped, 0.1 to 600 (default: Settings → Hooks, 5 s)",
+  }),
+  onFailure: Schema.optional(Schema.String).annotate({
+    description: "deny (default) or allow: what a failed run means for an event that waits for the answer",
+  }),
+  locked: Schema.optional(Schema.Boolean).annotate({
+    description: "Levels below can't turn this hook off or replace it (default: false)",
+  }),
+  enabled: Schema.optional(Schema.Boolean).annotate({
+    description: "false keeps the entry but doesn't run it (default: true)",
+  }),
+  description: Schema.optional(Schema.String).annotate({ description: "Shown in the console" }),
+}).annotate({
+  description: "One hook, by its name: the event it runs at, its script and settings",
+})
+
+const hooks = Schema.optional(Schema.Record(Schema.String, HookEntry)).annotate({
+  description:
+    "Hooks: scripts the server runs at points in a session, keyed by name. Every level's run, the highest first; a lower level replaces one by its name unless it is locked",
+})
+
 // Top-level config keys this fork adds. ConfigV1.Info spreads these fields once, so new fork
 // settings are added here without editing upstream's schema.
 export const fields = {
+  hooks,
   prompts: Schema.optional(
     Schema.Struct({
       environment: Schema.optional(Schema.Boolean).annotate({
@@ -35,6 +77,9 @@ export const fields = {
           }),
           plugins: Schema.optional(Schema.Array(Schema.String)).annotate({
             description: "Plugins (package names or file names) left out here, though a farther scope adds them",
+          }),
+          hooks: Schema.optional(Schema.Array(Schema.String)).annotate({
+            description: "Hooks turned off here, though a farther scope declares them (not a locked one)",
           }),
         }),
       ),
@@ -111,6 +156,10 @@ export const agentFields = {
   subagentMemory: Schema.optional(Schema.Literals(["incognito", "retentive"])).annotate({
     description:
       "A subagent's Flavor: incognito (default) reads namespace and project memory, has no agent memory and stores nothing; retentive keeps its own agent memory like a usual agent",
+  }),
+  hooks,
+  hooksDisabled: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+    description: "Inherited hooks this agent turns off (not a locked one)",
   }),
   modelSource: Schema.optional(Schema.Literals(["small", "fixed"])).annotate({
     description:

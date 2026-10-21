@@ -24,6 +24,7 @@ import { operatorPermissionDecisionHandlers } from "./handlers/permission-decisi
 import { operatorTelemetryHandlers } from "./handlers/telemetry"
 import { operatorCapabilityHandlers } from "./handlers/capabilities"
 import { operatorHelperHandlers } from "./handlers/helpers"
+import { operatorHookHandlers } from "./handlers/hooks"
 
 // Handler layers for OperatorApi (per project) and OperatorRootApi (server-wide), provided by
 // upstream's route assembly in one place each.
@@ -43,6 +44,7 @@ export const operatorHandlers = [
   operatorAgentSessionsHandlers,
   operatorQueueHandlers,
   operatorCapabilityHandlers,
+  operatorHookHandlers,
 ] as const
 export const operatorRootHandlers = [
   operatorOverviewHandlers,
