@@ -1,15 +1,16 @@
-// What hooks did to a tool call (SPEC-0022 §10.6), read from its part: `metadata.hook`, which the server's
-// hooks/seams.ts writes when the call completes, and for a deny, the error text the model got ("Denied by hook
-// <name>: <reason>"). A changed value keeps its original; a context is the text the model got after the result.
+// What hooks did (SPEC-0022 §10.6), read from the parts the server's hooks/seams.ts marks (`metadata.hook`): to a
+// tool call, when it completes, and for a deny, from the error text the model got ("Denied by hook <name>:
+// <reason>"); to a user message, its text a hook changed and the context hooks added to it. A changed value keeps
+// its original; a context is the text the model got.
 
 export type By = { hook: string; level: string; file: string; run: string }
 export type Mark =
   | { kind: "denied"; hook: string; reason?: string }
-  | { kind: "input" | "prompt" | "output"; by: By[]; original: string }
+  | { kind: "input" | "prompt" | "output" | "text"; by: By[]; original: string }
   | { kind: "withheld"; by: By; reason: string }
   | { kind: "context"; by: By; event: string; text: string }
 
-type Part = { type: string; state?: { status?: string; error?: string; metadata?: unknown } }
+type Part = { type: string; metadata?: unknown; state?: { status?: string; error?: string; metadata?: unknown } }
 
 const DENIED = /^Denied by hook (\S+?)(?:: ([\s\S]+)|\.)$/
 
@@ -25,6 +26,33 @@ const byOf = (value: By): By => ({
 })
 const shown = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value, null, 2))
 
+/** What hooks did to a user message: its text changed (prompt.submitted), context added to it. */
+export function messageMarks(parts: ReadonlyArray<Part & { text?: string }>): Mark[] {
+  const out: Mark[] = []
+  for (const part of parts) {
+    if (part.type !== "text") continue
+    const metadata = isRecord(part.metadata) ? part.metadata : {}
+    const marks = isRecord(metadata.hook) ? metadata.hook : {}
+    const change = marks.prompt
+    if (isRecord(change) && Array.isArray(change.by)) {
+      const by = change.by.filter(isBy).map(byOf)
+      if (by.length) out.push({ kind: "text", by, original: shown(change.original) })
+    }
+    out.push(...contexts(marks))
+  }
+  return out
+}
+
+function contexts(marks: Record<string, unknown>): Mark[] {
+  if (!Array.isArray(marks.context)) return []
+  return marks.context.flatMap((item): Mark[] =>
+    isBy(item)
+      ? [{ kind: "context", by: byOf(item), event: String(item.event ?? ""), text: String(item.text ?? "") }]
+      : [],
+  )
+}
+
+/** What hooks did to a tool call. */
 export function hookMarks(part: Part): Mark[] {
   if (part.type !== "tool" || !part.state) return []
   const out: Mark[] = []
@@ -42,10 +70,7 @@ export function hookMarks(part: Part): Mark[] {
   }
   if (isBy(marks.withheld))
     out.push({ kind: "withheld", by: byOf(marks.withheld), reason: String(marks.withheld.reason ?? "") })
-  if (Array.isArray(marks.context))
-    for (const item of marks.context)
-      if (isBy(item))
-        out.push({ kind: "context", by: byOf(item), event: String(item.event ?? ""), text: String(item.text ?? "") })
+  out.push(...contexts(marks))
   // A withheld output's mark says so; its "changed" line would repeat it.
   return out.some((mark) => mark.kind === "withheld") ? out.filter((mark) => mark.kind !== "output") : out
 }

@@ -609,6 +609,15 @@ html[data-theme="iphi"]
   color: var(--v2-text-text-base);
 }
 
+[data-component="operator-panel"] [data-slot="operator-plain-list"] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
 :is([data-slot="operator-note"], [data-slot="operator-panel-empty"]) {
   margin: 0;
   font-size: 12px;

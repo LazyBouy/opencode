@@ -286,6 +286,57 @@ describe("token accounting", () => {
     expect(sumOf(accounting!)).toBe(9000)
   })
 
+  test("text a hook added is flagged: saved with the message, sent for one request, or after a tool's result", () => {
+    const list = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Fix it" },
+          { type: "text", text: "From hook date:\nToday is 2026-10-21." },
+          { type: "text", text: "From hook ci:\nCI is green." },
+        ],
+      },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [{ id: "c1", type: "function", function: { name: "edit", arguments: "{}" } }],
+      },
+      { role: "tool", tool_call_id: "c1", content: "Edit applied.\n\nFrom hook lint:\n0 problems" },
+    ]
+    const stored = [
+      {
+        info: { id: "msg_u", role: "user" },
+        parts: [
+          { type: "text", text: "Fix it" },
+          { type: "text", text: "From hook date:\nToday is 2026-10-21.", synthetic: true },
+        ],
+      },
+    ]
+    const [accounting] = OperatorCallAccounting.account(
+      [
+        recorded({
+          index: 1,
+          list,
+          usage: { input: 9000, output: 1 },
+          blocks: [{ type: "text", text: "x" }],
+          exchange: 1,
+          user: "msg_u",
+          assistant: "msg_a",
+        }),
+      ],
+      { messages: stored },
+    )
+    const items = accounting!.input.items.filter((item) => item.kind !== "system" && item.kind !== "tools")
+    expect(items.map((item) => [item.kind, item.flags])).toEqual([
+      ["user", []],
+      ["added-saved", ["hook"]],
+      ["user", ["hook"]],
+      ["tool-call", []],
+      ["tool-result", ["hook"]],
+      ["parameters", []],
+    ])
+  })
+
   test("Anthropic reports input without the cache; Google reports output without its thoughts", () => {
     const anthropic = recorded({
       index: 1,

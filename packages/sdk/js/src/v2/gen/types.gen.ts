@@ -6285,7 +6285,10 @@ export type OperatorInputItem = {
   method: OperatorTokenMethod
   cache: OperatorTokenCache
   since?: number
-  flags: Array<"cleared" | "shortened" | "encrypted" | "not-estimated">
+  /**
+   * hook: it carries text a hook added (under "From hook <name>:", SPEC-0022 §8.3)
+   */
+  flags: Array<"cleared" | "shortened" | "encrypted" | "not-estimated" | "hook">
   parts?: Array<OperatorInputItemPart>
   attachment?: {
     type: "image" | "file"
@@ -7097,6 +7100,7 @@ export type OperatorHookRun = {
   agent?: string
   tool?: string
   callID?: string
+  messageID?: string
   durationMs?: number
   exitCode?: number
   outcome: OperatorHookOutcome

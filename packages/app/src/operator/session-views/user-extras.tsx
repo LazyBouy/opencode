@@ -4,22 +4,27 @@ import { useQuery } from "@tanstack/solid-query"
 import { createMemo, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useOperatorClient } from "../data"
+import { MessageHookMarks } from "./hook-marks-view"
 import { useSessionView } from "./view"
 
 type Key = Parameters<ReturnType<typeof useLanguage>["t"]>[0]
 type UserMessage = { id: string; sessionID: string }
-type Part = { id: string; type: string; text?: string; synthetic?: boolean }
+type Part = { id: string; type: string; text?: string; synthetic?: boolean; metadata?: Record<string, unknown> }
 
 // The Detailed view, under a user message: what the chat hides about that exchange. OpenCode's own texts
 // saved with the message (synthetic parts), the texts it added to the exchange's requests in memory (not
 // saved; from the call records), and its side calls, retries and errors, each linked to the Transcript.
 // Nothing in the other views.
+// In every view, what hooks did to the message (hook-marks-view.tsx).
 export function UserExtras(props: { message: UserMessage; parts: () => ReadonlyArray<Part> }) {
   const view = useSessionView()
   return (
-    <Show when={view.view() === "detailed"}>
-      <Extras message={props.message} parts={props.parts} />
-    </Show>
+    <>
+      <MessageHookMarks parts={props.parts} />
+      <Show when={view.view() === "detailed"}>
+        <Extras message={props.message} parts={props.parts} />
+      </Show>
+    </>
   )
 }
 
@@ -28,7 +33,8 @@ function Extras(props: { message: UserMessage; parts: () => ReadonlyArray<Part> 
   const api = useOperatorClient()
   const view = useSessionView()
   const synthetic = createMemo(() =>
-    props.parts().filter((part) => part.type === "text" && part.synthetic && part.text?.trim()),
+    // A hook's context is marked as the hook's (above), not as OpenCode's.
+    props.parts().filter((part) => part.type === "text" && part.synthetic && part.text?.trim() && !part.metadata?.hook),
   )
   const session = useQuery(() => ({
     queryKey: api.key("session", props.message.sessionID),

@@ -1,115 +1,17 @@
 import fs from "fs/promises"
 import path from "path"
 import { expect } from "bun:test"
-import { Effect, Layer, Schedule } from "effect"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Effect, Schedule } from "effect"
 import { OperatorHookRuns } from "@/operator/hooks/runs"
-import { OperatorHookSeams } from "@/operator/hooks/seams"
 import { OperatorHookSettings } from "@/operator/hooks/settings"
-import { InstanceBootstrap } from "@/project/bootstrap-service"
-import { InstanceStore } from "@/project/instance-store"
-import { Session } from "@/session/session"
 import { SessionPrompt } from "@/session/prompt"
-import { TestInstance } from "../../fixture/fixture"
-import { testEffect } from "../../lib/effect"
-import { replacements, root } from "../../merge/harness"
-import { fakeConfig, fakeProvider } from "../fake-provider"
+import { agentBodies, ask, MODEL, runsOf, setup, toolParts, unix } from "./harness"
 
 // SPEC-0022 §5, §7.5, §8 for tool and subagent calls, in sessions with a fake provider: a deny keeps the tool
 // from running and the model gets the reason; a changed input is what the tool and its permission check see
-// (checked against the tool's schema); a changed output and context reach the model after the tool's result
-// and are marked on the part; hooks run in order and changes chain; parallel calls run their hooks in
-// parallel; a failed tool's tool.after is a watch run; Pause all runs nothing.
-
-const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
-const it = testEffect(
-  LayerNode.compile(LayerNode.group([root, OperatorHookSeams.node]), [
-    ...replacements,
-    [InstanceStore.bootstrapNode, noopBootstrap],
-  ]),
-)
-const unix = process.platform !== "win32" ? it.instance : it.instance.skip
-
-type Hook = { event: string; answer?: unknown; match?: string[]; onFailure?: string; sleep?: number }
-
-// Each hook is a sh script that logs its session id, folder and stdin (one line each run) and prints its answer.
-const setup = (hooks: Record<string, Hook>, extra: Record<string, unknown> = {}) =>
-  Effect.gen(function* () {
-    const { directory } = yield* TestInstance
-    const fake = yield* Effect.acquireRelease(
-      Effect.sync(() => fakeProvider()),
-      (item) => Effect.sync(() => item.stop()),
-    )
-    yield* Effect.promise(async () => {
-      await fs.mkdir(path.join(directory, "hooks"), { recursive: true })
-      for (const [name, hook] of Object.entries(hooks))
-        await fs.writeFile(
-          path.join(directory, "hooks", `${name}.sh`),
-          [
-            "#!/bin/sh",
-            "input=$(cat)",
-            ...(hook.sleep ? [`sleep ${hook.sleep}`] : []),
-            `printf '%s\\t%s\\t%s\\n' "$OPENCODE_SESSION_ID" "$(pwd)" "$input" >> "${path.join(directory, "hooks", `${name}.log`)}"`,
-            ...(hook.answer === undefined ? [] : ["cat <<'EOF'", JSON.stringify(hook.answer), "EOF"]),
-          ].join("\n"),
-        )
-      await fs.writeFile(path.join(directory, "a.md"), "# a\n")
-      await fs.writeFile(path.join(directory, "b.ts"), "export {}\n")
-      await fs.writeFile(
-        path.join(directory, "opencode.json"),
-        JSON.stringify(
-          fakeConfig(fake.url, {
-            hooks: Object.fromEntries(
-              Object.entries(hooks).map(([name, hook]) => [
-                name,
-                {
-                  event: hook.event,
-                  command: `hooks/${name}.sh`,
-                  ...(hook.match ? { match: hook.match } : {}),
-                  ...(hook.onFailure ? { onFailure: hook.onFailure } : {}),
-                },
-              ]),
-            ),
-            ...extra,
-          }),
-        ),
-      )
-    })
-    return { directory, fake, sessions: yield* Session.Service }
-  })
-
-const ask = (sessionID: Session.Info["id"], text: string, agent = "build") =>
-  Effect.gen(function* () {
-    return yield* (yield* SessionPrompt.Service).prompt({
-      sessionID,
-      agent,
-      model: { providerID: ProviderV2.ID.make("fakechat"), modelID: ModelV2.ID.make("chat-model") },
-      parts: [{ type: "text", text }],
-    })
-  })
-
-// What each run of a hook was given: its session, its folder and its stdin.
-const runsOf = (directory: string, name: string) =>
-  Effect.promise(async () =>
-    (await fs.readFile(path.join(directory, "hooks", `${name}.log`), "utf8").catch(() => ""))
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => {
-        const [session, cwd, input] = line.split("\t")
-        return { session, cwd, input: JSON.parse(input!) as Record<string, any> }
-      }),
-  )
-
-const toolParts = (sessions: Session.Interface, sessionID: Session.Info["id"]) =>
-  sessions
-    .messages({ sessionID })
-    .pipe(Effect.map((messages) => messages.flatMap((message) => message.parts).filter((part) => part.type === "tool")))
-
-// The requests the agent made (not the title call), as sent.
-const agentBodies = (fake: ReturnType<typeof fakeProvider>) =>
-  fake.hits.map((hit) => hit.body).filter((body) => !body.includes("Generate a title for this conversation"))
+// (checked against the tool's schema); a changed output and context reach the model after the result and
+// are marked on the part; hooks run in order and changes chain; parallel calls run their hooks in parallel; a
+// failed tool's tool.after is a watch run; Pause all runs nothing.
 
 unix("tool.before deny: the tool doesn't run, the model gets the reason, and the run is recorded", () =>
   Effect.gen(function* () {
@@ -362,7 +264,7 @@ unix("an @agent subtask a hook denies ends as an error with the hook's reason", 
       .prompt({
         sessionID: session.id,
         agent: "build",
-        model: { providerID: ProviderV2.ID.make("fakechat"), modelID: ModelV2.ID.make("chat-model") },
+        model: MODEL,
         parts: [{ type: "subtask", prompt: "Look around", description: "Look", agent: "general" }],
       })
       .pipe(Effect.exit)

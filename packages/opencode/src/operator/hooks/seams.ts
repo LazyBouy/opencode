@@ -9,7 +9,9 @@ import { InstanceRef } from "@/effect/instance-ref"
 import { InstanceState } from "@/effect/instance-state"
 import type { InstanceContext } from "@/project/instance-context"
 import { InstanceStore } from "@/project/instance-store"
-import { SessionID } from "@/session/schema"
+import { NamedError } from "@opencode-ai/core/util/error"
+import type { SessionV1 } from "@opencode-ai/core/v1/session"
+import { MessageID, PartID, SessionID } from "@/session/schema"
 import { Session } from "@/session/session"
 import { ToolRegistry } from "@/tool/registry"
 import { OperatorFileCache } from "../file-cache"
@@ -57,6 +59,10 @@ export type Marks = {
 }
 
 type Turn = { agent?: string; model?: { provider: string; id: string } }
+type Message = {
+  info: Record<string, any> & { id: string; role: string; sessionID: string }
+  parts: Array<Record<string, any>>
+}
 type ToolInput = { tool: string; sessionID: string; callID: string }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -91,6 +97,15 @@ const pending = bounded<Pick<Marks, "input" | "prompt"> & { context: NonNullable
 const denied = bounded<true>()
 // Failed tool parts already seen (a part's updates repeat its state).
 const failed = bounded<true>()
+// Per fiber: the slash command a prompt comes from (`command.execute.before` runs just before the prompt, in the same
+// fiber), and compaction's own model call (`experimental.session.compacting` runs just before its transform).
+const commands = new WeakMap<object, { command: string; arguments: string }>()
+const compacting = new WeakSet<object>()
+// Per session: the turn its model calls belong to (its last user message), the turn's number and the step reached.
+const steps = bounded<{ user: string; turn: number; step: number }>(1000)
+
+/** The event `operator.hook.refused`: a hook refused a message, which wasn't saved; the composer gets it back. */
+export const REFUSED = "operator.hook.refused"
 
 // The project and namespace of a folder, for every event's input (§7.6); kept for two seconds.
 type Place = Pick<OperatorHookProtocol.Base, "project" | "namespace">
@@ -145,8 +160,21 @@ let active:
   | {
       toolBefore: (instance: unknown, input: ToolInput, output: { args: unknown }) => Promise<string | undefined>
       toolAfter: (instance: unknown, input: ToolInput & { args: unknown }, output: unknown) => Promise<void>
+      prompt: (
+        instance: unknown,
+        input: PromptInput,
+        output: { message: unknown; parts: unknown[] },
+      ) => Promise<string | undefined>
+      step: (instance: unknown, output: { messages: unknown[] }) => Promise<string | undefined>
     }
   | undefined
+
+type PromptInput = {
+  sessionID: string
+  agent?: string
+  model?: { providerID: string; modelID: string }
+  command?: { command: string; arguments: string }
+}
 
 // The request's project instance, from the fiber the plugin hook runs in (before anything is awaited).
 function instanceNow() {
@@ -172,7 +200,71 @@ export const plugin: Plugin = async () => ({
     if (!instance || !active) return
     await active.toolAfter(instance, input, output)
   },
+  "command.execute.before": async (input) => {
+    const fiber = Fiber.getCurrent()
+    if (fiber) commands.set(fiber, { command: input.command, arguments: input.arguments })
+  },
+  "chat.message": async (input, output) => {
+    const fiber = Fiber.getCurrent()
+    const command = fiber ? commands.get(fiber) : undefined
+    if (fiber) commands.delete(fiber)
+    const instance = instanceNow()
+    if (!instance || !active) return
+    const refused = await active.prompt(
+      instance,
+      {
+        sessionID: input.sessionID,
+        ...(input.agent ? { agent: input.agent } : {}),
+        ...(input.model ? { model: input.model } : {}),
+        ...(command ? { command } : {}),
+      },
+      output,
+    )
+    if (refused !== undefined) throw new Error(refused)
+  },
+  "experimental.session.compacting": async () => {
+    const fiber = Fiber.getCurrent()
+    if (fiber) compacting.add(fiber)
+  },
+  "experimental.chat.messages.transform": async (_input, output) => {
+    const fiber = Fiber.getCurrent()
+    // Compaction's own model call isn't a step: its hooks are compaction.*.
+    if (fiber && compacting.has(fiber)) {
+      compacting.delete(fiber)
+      return
+    }
+    const instance = instanceNow()
+    if (!instance || !active) return
+    const stopped = await active.step(instance, output)
+    if (stopped !== undefined) throw new Error(stopped)
+  },
 })
+
+// A message's own text: its text parts that aren't OpenCode's.
+const messageText = (parts: ReadonlyArray<Record<string, any>>) =>
+  parts
+    .filter((part) => part.type === "text" && !part.synthetic && !part.ignored)
+    .map((part) => String(part.text))
+    .join("\n")
+
+// Compaction's automatic "continue" message isn't a turn of its own (§5).
+const isContinue = (parts: ReadonlyArray<Record<string, any>>) =>
+  parts.length > 0 && parts.some((part) => part.type === "text" && part.metadata?.compaction_continue === true)
+
+// A rough size of what a request sends, for `step.before` (four characters a token).
+const estimate = (messages: ReadonlyArray<Message>) =>
+  Math.round(
+    messages
+      .flatMap((message) => message.parts)
+      .reduce((sum, part) => {
+        if (part.type === "text" || part.type === "reasoning") return sum + String(part.text ?? "").length
+        if (part.type === "tool")
+          return sum + JSON.stringify(part.state?.input ?? {}).length + String(part.state?.output ?? "").length
+        return sum
+      }, 0) / 4,
+  )
+
+const byOf = ({ hook, level, file, run }: OperatorHooks.By): OperatorHooks.By => ({ hook, level, file, run })
 
 export class Service extends Context.Service<Service, {}>()("@opencode/OperatorHookSeams") {}
 
@@ -294,7 +386,7 @@ const layer = Layer.effect(
         const changes = result.changes.filter((item) => item.field === field)
         if (!changes.length) continue
         marks[field] = {
-          by: changes.map(({ hook, level, file, run }) => ({ hook, level, file, run })),
+          by: changes.map(byOf),
           original: changes[0]!.before,
         }
       }
@@ -353,7 +445,7 @@ const layer = Layer.effect(
         )
         const changes = result.changes.filter((item) => item.field === "output")
         if (changes.length) {
-          marks.output = { by: changes.map(({ hook, level, file, run }) => ({ hook, level, file, run })), original }
+          marks.output = { by: changes.map(byOf), original }
           text = String(result.input.output)
         }
         marks.context!.push(...result.contexts.map((item) => ({ ...item, event })))
@@ -428,6 +520,210 @@ const layer = Layer.effect(
       )
     })
 
+    // A context a hook added to a message, as a part of it (OpenCode's own text, marked as the hook's).
+    const contextPart = (
+      sessionID: string,
+      messageID: string,
+      item: OperatorHooks.Chained["contexts"][number],
+      event: OperatorHookEvents.Name,
+    ) => ({
+      id: PartID.ascending(),
+      messageID,
+      sessionID,
+      type: "text" as const,
+      synthetic: true,
+      text: OperatorHookProtocol.contextBlock(item.hook, item.text),
+      metadata: { hook: { context: [{ ...byOf(item), event, text: item.text }] } satisfies Marks },
+    })
+
+    // prompt.submitted, before the message is saved: a deny refuses it, a change replaces its text (attachments
+    // stay), a context is added to it.
+    const prompt = Effect.fnUntraced(function* (input: PromptInput, output: { message: unknown; parts: unknown[] }) {
+      const message = output.message as Record<string, any> & { id: string }
+      const parts = output.parts as Array<Record<string, any>>
+      const agent = input.agent ?? (typeof message.agent === "string" ? message.agent : undefined)
+      const found = yield* hooks.forEvent({ ...(agent ? { agent } : {}), event: "prompt.submitted" })
+      if (!found.length) return undefined
+      const model = input.model ?? message.model
+      const base = yield* describe("prompt.submitted", input.sessionID, {
+        ...(agent ? { agent } : {}),
+        ...(model ? { model: { provider: model.providerID, id: model.modelID } } : {}),
+      })
+      const text = messageText(parts)
+      const result = yield* hooks.chain(
+        found,
+        {
+          ...base.input,
+          prompt: text,
+          files: parts
+            .filter((part) => part.type === "file")
+            .map((part) => String(part.filename ?? path.basename(String(part.url ?? "")))),
+          ...(input.command ? { command: { name: input.command.command, arguments: input.command.arguments } } : {}),
+        },
+        base.target,
+      )
+      if (result.denied) {
+        const reason = result.denied.reason
+        const refused = reason
+          ? `Refused by hook ${result.denied.hook}: ${reason}`
+          : `Refused by hook ${result.denied.hook}.`
+        // The message isn't saved: the app puts its text back in the composer.
+        GlobalBus.emit("event", {
+          directory: base.input.cwd,
+          payload: {
+            type: REFUSED,
+            properties: {
+              sessionID: input.sessionID,
+              messageID: message.id,
+              hook: result.denied.hook,
+              ...(reason ? { reason } : {}),
+              run: result.denied.run,
+              message: refused,
+              text,
+            },
+          },
+        })
+        return refused
+      }
+      const changes = result.changes.filter((item) => item.field === "prompt")
+      if (changes.length) {
+        const at = Math.max(
+          0,
+          parts.findIndex((part) => part.type === "text" && !part.synthetic && !part.ignored),
+        )
+        const kept = parts.filter((part) => !(part.type === "text" && !part.synthetic && !part.ignored))
+        kept.splice(Math.min(at, kept.length), 0, {
+          id: PartID.ascending(),
+          messageID: message.id,
+          sessionID: input.sessionID,
+          type: "text",
+          text: String(result.input.prompt),
+          metadata: { hook: { prompt: { by: changes.map(byOf), original: text } } satisfies Marks },
+        })
+        parts.splice(0, parts.length, ...kept)
+      }
+      for (const item of result.contexts) parts.push(contextPart(input.sessionID, message.id, item, "prompt.submitted"))
+      return undefined
+    })
+
+    // The turn's number in the session: its user messages, compaction's own left out.
+    const turnNumber = Effect.fnUntraced(function* (sessionID: string, userID: string) {
+      const all = yield* sessions
+        .messages({ sessionID: SessionID.make(sessionID) })
+        .pipe(Effect.orElseSucceed(() => [] as SessionV1.WithParts[]))
+      let count = 0
+      for (const message of all) {
+        if (message.info.role !== "user") continue
+        const own = !isContinue(message.parts) && !message.parts.some((part) => part.type === "compaction")
+        if (own) count++
+        if (message.info.id === userID) break
+      }
+      return Math.max(1, count)
+    })
+
+    // The step's assistant message (created before its request is prepared).
+    const stepMessage = Effect.fnUntraced(function* (sessionID: string, userID: string) {
+      const found = yield* sessions
+        .findMessage(
+          SessionID.make(sessionID),
+          (message) =>
+            message.info.role === "assistant" && message.info.parentID === userID && !message.info.time.completed,
+        )
+        .pipe(Effect.orElseSucceed(() => Option.none()))
+      return Option.isSome(found) && found.value.info.role === "assistant" ? found.value.info : undefined
+    })
+
+    // A deny before a model call ends the turn as an error whose message is the hook's reason (the clean stop of
+    // §12.3, item 1, needs an upstream edit): its step's message ends with it, as a failed request's does.
+    const stop = Effect.fnUntraced(function* (
+      sessionID: string,
+      userID: string,
+      denied: NonNullable<OperatorHooks.Chained["denied"]>,
+    ) {
+      const text = denied.reason
+        ? `Stopped by hook ${denied.hook}: ${denied.reason}`
+        : `Stopped by hook ${denied.hook}.`
+      const info = yield* stepMessage(sessionID, userID)
+      if (info)
+        yield* sessions.updateMessage({
+          ...info,
+          error: new NamedError.Unknown({ message: text }).toObject() as SessionV1.Assistant["error"],
+          time: { ...info.time, completed: Date.now() },
+        })
+      return text
+    })
+
+    // turn.before and step.before, as a request is prepared (the messages it sends, before they're converted).
+    const step = Effect.fnUntraced(function* (output: { messages: unknown[] }) {
+      const messages = output.messages as Message[]
+      const index = messages.findLastIndex((message) => message.info.role === "user")
+      const last = messages[index]
+      if (!last) return undefined
+      const sessionID = last.info.sessionID
+      const known = steps.get(sessionID)
+      const first = known?.user !== last.info.id
+      const now = { user: last.info.id, turn: first ? 0 : known!.turn, step: first ? 1 : known!.step + 1 }
+      steps.set(sessionID, now)
+      const agent = typeof last.info.agent === "string" ? last.info.agent : undefined
+      const turnHooks =
+        first && !isContinue(last.parts)
+          ? yield* hooks.forEvent({ ...(agent ? { agent } : {}), event: "turn.before" })
+          : []
+      const stepHooks = yield* hooks.forEvent({ ...(agent ? { agent } : {}), event: "step.before" })
+      if (!turnHooks.length && !stepHooks.length) return undefined
+      if (!now.turn) now.turn = yield* turnNumber(sessionID, last.info.id)
+      const model = last.info.model as { providerID: string; modelID: string } | undefined
+      const turn: Turn = {
+        ...(agent ? { agent } : {}),
+        ...(model ? { model: { provider: model.providerID, id: model.modelID } } : {}),
+      }
+      if (turnHooks.length) {
+        const base = yield* describe("turn.before", sessionID, turn)
+        const result = yield* hooks.chain(
+          turnHooks,
+          { ...base.input, turn: now.turn, prompt: messageText(last.parts) },
+          base.target,
+        )
+        if (result.denied) return yield* stop(sessionID, last.info.id, result.denied)
+        // Saved with the user message, so every later request has it too.
+        for (const item of result.contexts) {
+          const part = contextPart(sessionID, last.info.id, item, "turn.before")
+          yield* sessions.updatePart(part as unknown as SessionV1.TextPart)
+          last.parts.push(part)
+        }
+      }
+      if (stepHooks.length) {
+        const base = yield* describe("step.before", sessionID, turn)
+        const assistant = yield* stepMessage(sessionID, last.info.id)
+        const result = yield* hooks.chain(
+          stepHooks,
+          {
+            ...base.input,
+            turn: now.turn,
+            step: now.step,
+            messages: messages.length,
+            tokensEstimate: estimate(messages),
+          },
+          { ...base.target, ...(assistant ? { messageID: assistant.id } : {}) },
+        )
+        if (result.denied) return yield* stop(sessionID, last.info.id, result.denied)
+        // At the end of this one request, never saved, so the next request doesn't repeat it; the run log keeps it,
+        // with its step's message.
+        if (result.contexts.length) {
+          if (index === messages.length - 1)
+            last.parts.push(...result.contexts.map((item) => contextPart(sessionID, last.info.id, item, "step.before")))
+          else {
+            const id = MessageID.ascending()
+            messages.push({
+              info: { ...last.info, id },
+              parts: result.contexts.map((item) => contextPart(sessionID, id, item, "step.before")),
+            })
+          }
+        }
+      }
+      return undefined
+    })
+
     const inInstance = <A>(instance: unknown, effect: Effect.Effect<A, unknown, any>) =>
       Effect.runPromise(
         effect.pipe(Effect.provideService(InstanceRef, instance as InstanceContext)) as Effect.Effect<
@@ -448,6 +744,24 @@ const layer = Layer.effect(
         inInstance(
           instance,
           toolAfter(input, output).pipe(Effect.catchCause((cause) => Effect.logError("hooks: tool.after", { cause }))),
+        ),
+      prompt: (instance, input, output) =>
+        inInstance(
+          instance,
+          prompt(input, output).pipe(
+            Effect.catchCause((cause) =>
+              Effect.logError("hooks: prompt.submitted", { cause }).pipe(Effect.as(undefined)),
+            ),
+          ),
+        ),
+      step: (instance, output) =>
+        inInstance(
+          instance,
+          step(output).pipe(
+            Effect.catchCause((cause) =>
+              Effect.logError("hooks: turn.before / step.before", { cause }).pipe(Effect.as(undefined)),
+            ),
+          ),
         ),
     }
     yield* Effect.acquireRelease(
@@ -476,6 +790,7 @@ const layer = Layer.effect(
         const id = (payload.properties?.info as { id?: string } | undefined)?.id ?? payload.properties?.sessionID
         if (typeof id === "string" && id) {
           turns.delete(id)
+          steps.delete(id)
           void OperatorHookRuns.removeSession(id)
         }
         return

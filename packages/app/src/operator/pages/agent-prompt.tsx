@@ -30,6 +30,7 @@ import {
 } from "./profile-model"
 import { exceptionsFor } from "./prompt-exceptions"
 import { AGENT_LOCAL, tidy } from "./agent-form-text"
+import { AgentPromptHooks } from "./agent-prompt-hooks"
 
 // The model option that means "whatever the agent uses".
 const AGENT_MODEL = "agent"
@@ -152,6 +153,7 @@ export function AgentPrompt(props: { agent: string; directory: string; modelSour
             />
           </Show>
           <Preview agent={props.agent} directory={props.directory} override={draft()} modelSource={props.modelSource} />
+          <AgentPromptHooks agent={props.agent} directory={props.directory} />
         </>
       )}
     </Show>

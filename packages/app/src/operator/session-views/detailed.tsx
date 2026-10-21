@@ -4,7 +4,9 @@ import { useQuery } from "@tanstack/solid-query"
 import { createMemo, onCleanup, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useOperatorClient } from "../data"
-import { HookMarks } from "./hook-marks-view"
+import type { Mark } from "./hook-marks"
+import { HookMarkList, HookMarks } from "./hook-marks-view"
+import { useSessionHookRuns } from "./hook-runs"
 import { useSessionView } from "./view"
 
 // The Detailed view: the chat as it is, plus what it hides. The fork seam in session-ui's
@@ -112,15 +114,40 @@ function StepMarker(props: { message: Assistant }) {
     return out.join(" · ")
   }
   return (
-    <div data-component="operator-step-marker" data-testid="step-marker">
-      <span>{text()}</span>
-      <Show when={call()}>
-        {(found) => (
-          <button type="button" data-slot="operator-link" onClick={() => view.set("transcript", found().callID)}>
-            {language.t("operator.detailed.openTranscript")}
-          </button>
-        )}
-      </Show>
-    </div>
+    <>
+      <div data-component="operator-step-marker" data-testid="step-marker">
+        <span>{text()}</span>
+        <Show when={call()}>
+          {(found) => (
+            <button type="button" data-slot="operator-link" onClick={() => view.set("transcript", found().callID)}>
+              {language.t("operator.detailed.openTranscript")}
+            </button>
+          )}
+        </Show>
+      </div>
+      <StepHookContext message={props.message} directory={session.data?.directory} />
+    </>
   )
+}
+
+// What step.before hooks added at the end of this step's request (never saved with a message): from the run log,
+// which keeps each run with its step's message.
+function StepHookContext(props: { message: Assistant; directory: string | undefined }) {
+  const runs = useSessionHookRuns(
+    () => props.message.sessionID,
+    () => props.directory,
+    "step.before",
+  )
+  const marks = createMemo((): Mark[] =>
+    (runs.data?.runs ?? [])
+      .filter((run) => run.messageID === props.message.id && run.context !== undefined)
+      .toReversed()
+      .map((run) => ({
+        kind: "context",
+        by: { hook: run.hook, level: run.level, file: run.file, run: run.id },
+        event: run.event,
+        text: run.context!,
+      })),
+  )
+  return <HookMarkList marks={marks()} testid="step-hook-marks" />
 }

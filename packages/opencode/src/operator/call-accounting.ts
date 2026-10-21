@@ -75,7 +75,9 @@ export const InputItem = Schema.Struct({
   method: Method,
   cache: Cache,
   since: Schema.optional(Schema.Finite).annotate({ description: "Sent before: the first call that sent it" }),
-  flags: Schema.Array(Schema.Literals(["cleared", "shortened", "encrypted", "not-estimated"])),
+  flags: Schema.Array(Schema.Literals(["cleared", "shortened", "encrypted", "not-estimated", "hook"])).annotate({
+    description: 'hook: it carries text a hook added (under "From hook <name>:", SPEC-0022 §8.3)',
+  }),
   parts: Schema.optional(Schema.Array(Part)).annotate({ description: "Tools: each tool; system: its sections" }),
   attachment: Schema.optional(
     Schema.Struct({
@@ -87,6 +89,10 @@ export const InputItem = Schema.Struct({
   content: Schema.optional(Schema.String).annotate({ description: "What was sent (call details only)" }),
 }).annotate({ identifier: "OperatorInputItem" })
 export type InputItem = typeof InputItem.Type
+
+// Text a hook added comes under a line naming it (SPEC-0022 §8.3).
+const HOOK_TEXT = /(^|\n)From hook [^\s:]+:\n/
+const fromHook = (payload: string): { flags?: ["hook"] } => (HOOK_TEXT.test(payload) ? { flags: ["hook"] } : {})
 
 export const OutputItem = Schema.Struct({
   id: Schema.String,
@@ -630,8 +636,8 @@ function one(
             const by = returnedBy("text", piece.payload)
             push({ kind: "assistant", ...(by !== undefined ? { call: by } : {}), preview: preview(piece.payload) })
           } else if (ctx.syntheticTexts.some((text) => text.trim() === piece.payload.trim()))
-            push({ kind: "added-saved", preview: preview(piece.payload) })
-          else push({ kind: "user", preview: preview(piece.payload) })
+            push({ kind: "added-saved", ...fromHook(piece.payload), preview: preview(piece.payload) })
+          else push({ kind: "user", ...fromHook(piece.payload), preview: preview(piece.payload) })
           return
         }
         case "reasoning": {
@@ -660,6 +666,7 @@ function one(
           const flags: InputItem["flags"][number][] = []
           if (piece.payload.includes(OperatorCallPieces.CLEARED)) flags.push("cleared")
           if (piece.payload.includes(OperatorCallPieces.TRUNCATED)) flags.push("shortened")
+          if (HOOK_TEXT.test(piece.payload)) flags.push("hook")
           push({ kind: "tool-result", ...(name ? { name } : {}), flags, preview: preview(piece.payload) })
           return
         }

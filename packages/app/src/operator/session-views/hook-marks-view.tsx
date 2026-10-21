@@ -2,15 +2,26 @@ import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import type { MessagePartProps } from "@opencode-ai/session-ui/message-part"
 import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { useLanguage } from "@/context/language"
-import { type By, hookMarks } from "./hook-marks"
+import { type By, hookMarks, type Mark, messageMarks } from "./hook-marks"
 
 type Key = Parameters<ReturnType<typeof useLanguage>["t"]>[0]
 
-// Under a tool call, in every view: what hooks did to it (hook-marks.ts). Each mark names its hooks; hovering
-// one shows its level, file and run.
+// Under a tool call, in every view: what hooks did to it (hook-marks.ts).
 export function HookMarks(props: { part: MessagePartProps["part"] }) {
-  const language = useLanguage()
   const marks = createMemo(() => hookMarks(props.part))
+  return <HookMarkList marks={marks()} />
+}
+
+// Under a user message, in every view: its text a hook changed, and the context hooks added to it.
+export function MessageHookMarks(props: { parts: () => ReadonlyArray<{ type: string; metadata?: unknown }> }) {
+  const marks = createMemo(() => messageMarks(props.parts()))
+  return <HookMarkList marks={marks()} testid="message-hook-marks" />
+}
+
+// Each mark names its hooks; hovering one shows its level, file and run.
+export function HookMarkList(props: { marks: Mark[]; testid?: string }) {
+  const language = useLanguage()
+  const marks = () => props.marks
   const names = (by: By[]) => by.map((item) => item.hook).join(", ")
   const origin = (by: By[]) =>
     by
@@ -25,7 +36,7 @@ export function HookMarks(props: { part: MessagePartProps["part"] }) {
       .join("\n")
   return (
     <Show when={marks().length}>
-      <div data-component="operator-hook-marks" data-testid="hook-marks">
+      <div data-component="operator-hook-marks" data-testid={props.testid ?? "hook-marks"}>
         <For each={marks()}>
           {(mark) => (
             <Switch>
@@ -54,7 +65,12 @@ export function HookMarks(props: { part: MessagePartProps["part"] }) {
                   </div>
                 )}
               </Match>
-              <Match when={(mark.kind === "input" || mark.kind === "prompt" || mark.kind === "output") && mark}>
+              <Match
+                when={
+                  (mark.kind === "input" || mark.kind === "prompt" || mark.kind === "output" || mark.kind === "text") &&
+                  mark
+                }
+              >
                 {(change) => (
                   <details
                     data-slot="operator-extra"

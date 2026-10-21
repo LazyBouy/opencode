@@ -47286,8 +47286,9 @@
             "type": "array",
             "items": {
               "type": "string",
-              "enum": ["cleared", "shortened", "encrypted", "not-estimated"]
-            }
+              "enum": ["cleared", "shortened", "encrypted", "not-estimated", "hook"]
+            },
+            "description": "hook: it carries text a hook added (under \"From hook <name>:\", SPEC-0022 §8.3)"
           },
           "parts": {
             "type": "array",
@@ -49205,6 +49206,9 @@
             "type": "string"
           },
           "callID": {
+            "type": "string"
+          },
+          "messageID": {
             "type": "string"
           },
           "durationMs": {

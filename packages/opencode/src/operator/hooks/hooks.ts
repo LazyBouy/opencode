@@ -81,6 +81,8 @@ export type Target = {
   agent?: string
   tool?: string
   callID?: string
+  /** The step's assistant message (step.before). */
+  messageID?: string
   cwd: string
   test?: boolean
 }
@@ -430,6 +432,7 @@ const layer = Layer.effect(
         ...(target.agent ? { agent: target.agent } : {}),
         ...(target.tool ? { tool: target.tool } : {}),
         ...(target.callID ? { callID: target.callID } : {}),
+        ...(target.messageID ? { messageID: target.messageID } : {}),
         durationMs: result.durationMs,
         exitCode: result.exitCode,
         outcome: read.outcome,

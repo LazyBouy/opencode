@@ -41,6 +41,7 @@ export const Run = Schema.Struct({
   agent: Schema.optional(Schema.String),
   tool: Schema.optional(Schema.String),
   callID: Schema.optional(Schema.String),
+  messageID: Schema.optional(Schema.String).annotate({ description: "The step's assistant message (step.before)" }),
   durationMs: Schema.optional(Schema.Finite),
   exitCode: Schema.optional(Schema.NullOr(Schema.Finite)),
   outcome: Outcome,
