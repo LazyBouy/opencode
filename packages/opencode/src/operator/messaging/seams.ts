@@ -279,11 +279,21 @@ const pingTool = (description: string, limits: typeof OperatorPing.LIMITS) => {
         .describe("discover: who you may message; send: a message; forward, drop, rule: the project's manager only"),
       target: tool.schema
         .object({
-          type: tool.schema.enum(["agent", "session", "group", "project_inbox"]),
+          type: tool.schema.enum([
+            "agent",
+            "session",
+            "group",
+            "project_inbox",
+            "project.agent",
+            "projects.groups",
+            "*",
+          ]),
           id: tool.schema
             .string()
             .optional()
-            .describe("The agent's name, the session's id or the group's name; blank: every agent, or every group"),
+            .describe(
+              "The agent's name, the session's id or the group's name (blank: every agent, or every group); another project's: <projectID>/<agent> or <projectID>/<group>",
+            ),
           session: tool.schema
             .string()
             .optional()

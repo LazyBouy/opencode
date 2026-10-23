@@ -129,11 +129,15 @@ const senderName = (sender: OperatorQueueStore.Sender) =>
  * correlation c_19 · id msg_…:", so the recipient can answer it (`ping send` with `replyTo`) or write to that session.
  * The part carries the mark.
  */
-export function delivered(item: OperatorQueueStore.Item): { text: string; metadata?: { message: Mark } } {
+export function delivered(
+  item: OperatorQueueStore.Item,
+  /** The sender's project's name, when it isn't the recipient's. */
+  senderProject?: string,
+): { text: string; metadata?: { message: Mark } } {
   if (item.sender.kind === "user") return { text: item.text }
   const correlationID = item.correlationID ?? item.id
   const head = [
-    `${item.replyTo ? "Reply" : "Message"} from ${senderName(item.sender)} (project ${path.basename(item.project)}${item.sender.sessionID ? `, session ${item.sender.sessionID}` : ""})`,
+    `${item.replyTo ? "Reply" : "Message"} from ${senderName(item.sender)} (project ${senderProject ?? path.basename(item.project)}${item.sender.sessionID ? `, session ${item.sender.sessionID}` : ""})`,
     ...(item.priority === "normal" ? [] : [item.priority]),
     `correlation ${correlationID}`,
     `id ${item.id}`,

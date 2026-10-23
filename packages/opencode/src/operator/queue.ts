@@ -9,8 +9,8 @@ import { InstanceStore } from "@/project/instance-store"
 import { OperatorMessageLanes } from "./messaging/lanes"
 import { OperatorMessageLog } from "./messaging/log"
 import { OperatorMessage } from "./messaging/message"
+import { OperatorMessagePlaces } from "./messaging/places"
 import { OperatorMessagingSeams } from "./messaging/seams"
-import { OperatorProfileStore } from "./profile-store"
 import { OperatorProjectRecords } from "./project-records"
 import { OperatorProjects } from "./projects"
 import { OperatorQueueStore } from "./queue-store"
@@ -60,6 +60,8 @@ export type SendOptions = {
   to?: OperatorMessage.To
   body?: OperatorMessage.Body["type"]
   via?: NonNullable<OperatorQueueStore.Item["via"]>
+  /** Inboxes the message passed through before it was queued here (a routed copy keeps its original's). */
+  hops?: number
 }
 
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("OperatorQueueNotFound", {
@@ -133,7 +135,12 @@ export function recover() {
   return count
 }
 // A project's unique id for the message log (its folder until it has one).
-const projectIdOf = async (key: string) => (await OperatorProfileStore.readProjects())[key]?.id ?? key
+const projectIdOf = OperatorMessagePlaces.idOf
+// The name of the project a message came from, when it isn't the one it went to.
+const senderProjectName = async (item: OperatorQueueStore.Item) => {
+  if (!item.sender.project) return undefined
+  return OperatorMessagePlaces.nameOf((await OperatorMessagePlaces.keyOf(item.sender.project)) ?? item.sender.project)
+}
 
 const layer = Layer.effect(
   Service,
@@ -193,8 +200,11 @@ const layer = Layer.effect(
     const start = (item: OperatorQueueStore.Item, destination: OperatorMessagingSeams.Destination) => {
       const token = {}
       if (!running.has(destination.id)) running.set(destination.id, token)
-      const read = OperatorMessage.delivered(item)
-      return seams.prompt(destination, item.agent, read.text, read.metadata).pipe(
+      return Effect.promise(() => senderProjectName(item)).pipe(
+        Effect.flatMap((name) => {
+          const read = OperatorMessage.delivered(item, name)
+          return seams.prompt(destination, item.agent, read.text, read.metadata)
+        }),
         Effect.catchCause((cause) => Effect.logError("operator queue: the session's turn failed", { cause })),
         Effect.ensuring(
           Effect.suspend(() => {
@@ -360,7 +370,7 @@ const layer = Layer.effect(
         correlationID: base.correlationID!,
         ...(input.replyTo ? { replyTo: input.replyTo } : {}),
         ...(options.via ? { via: options.via.id } : {}),
-        hops: 0,
+        hops: options.hops ?? 0,
         status: "queued",
         agent,
         createdAt,

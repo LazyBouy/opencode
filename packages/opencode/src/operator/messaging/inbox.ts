@@ -6,12 +6,12 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { GlobalBus } from "@/bus/global"
 import { InstanceStore } from "@/project/instance-store"
-import { OperatorProfileStore } from "../profile-store"
 import { OperatorProjectRecords } from "../project-records"
 import { OperatorQueue } from "../queue"
 import type { OperatorQueueStore } from "../queue-store"
 import { OperatorTrashFiles } from "../trash-files"
 import { OperatorMessageLog } from "./log"
+import { OperatorMessagePlaces } from "./places"
 import { OperatorMessage } from "./message"
 import { OperatorInboxRules as Rules } from "./rules"
 import { OperatorMessagingSeams } from "./seams"
@@ -51,8 +51,8 @@ export type Entry = {
   /** The project's folder (its key). */
   project: string
   from: OperatorMessage.From
-  /** The recipient it asks for, if any. */
-  to?: Target
+  /** The recipient it asks for, if any: here, or (from another project) one of this project's. */
+  to?: OperatorMessage.To
   body: OperatorMessage.Body
   priority?: OperatorQueueStore.Priority
   steer?: boolean
@@ -60,6 +60,8 @@ export type Entry = {
   replyTo?: string
   /** Inboxes it passed through before this one. */
   hops?: number
+  /** Its id, when the sender made it up already (its correlation id is the first message's id). */
+  id?: string
 }
 
 export const Sample = Schema.Struct({
@@ -142,14 +144,9 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorProjectInbox") {}
 
-/** A project's unique id (its folder until it has one), and the folder of one. */
-export const projectIdOf = async (key: string) => (await OperatorProfileStore.readProjects())[key]?.id ?? key
-export async function projectKeyOf(id: string) {
-  const projects = await OperatorProfileStore.readProjects()
-  const found = Object.entries(projects).find(([, setting]) => setting.id === id)?.[0]
-  // A project without a unique id yet goes by its folder (projectIdOf).
-  return found ?? (projects[id] || path.isAbsolute(id) ? id : undefined)
-}
+/** A project's unique id (its folder until it has one), and the folder of one (places.ts). */
+export const projectIdOf = OperatorMessagePlaces.idOf
+export const projectKeyOf = OperatorMessagePlaces.keyOf
 
 type Recipient = { agent: string; sessionID?: string; label: string }
 type Outcome = { status: OperatorMessage.Status; step: OperatorMessage.Step; routedBy?: string; routedTo?: string[] }
@@ -163,12 +160,12 @@ const layer = Layer.effect(
     const log = () => OperatorMessageLog.log()
 
     // The message an inbox message answers, when an agent of this project sent it (for "Replies go to their
-    // sender"): by replyTo, else by correlation id. Routed copies keep their original's sender, so they're skipped.
+    // sender"): by replyTo, else by correlation id. A routed copy keeps its original's sender, so it counts too: a
+    // reply from another project names the copy its sender got.
     const originalOf = (message: Pick<Message, "id" | "replyTo" | "correlationID">, project: string) => {
       const sentHere = (found: Message | undefined): found is Message =>
         !!found &&
         found.id !== message.id &&
-        !found.via &&
         found.from.kind === "agent" &&
         !!found.from.agent &&
         !!found.from.session &&
@@ -272,6 +269,7 @@ const layer = Layer.effect(
                   to: message.to,
                   body: message.body.type,
                   via: { id: message.id, ...(options.manager ? { manager: true } : {}) },
+                  hops: message.hops,
                 },
               ),
             )
@@ -405,7 +403,7 @@ const layer = Layer.effect(
       const text = entry.body.text.trim()
       if (!text) return yield* new InvalidError({ message: "The message is empty" })
       const project = yield* Effect.promise(() => projectIdOf(entry.project))
-      const id = OperatorMessage.newId()
+      const id = entry.id ?? OperatorMessage.newId()
       const at = Date.now()
       const hops = (entry.hops ?? 0) + 1
       const who =

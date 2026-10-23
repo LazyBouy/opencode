@@ -114,6 +114,7 @@ export const BUILTINS: Readonly<Record<string, Entry>> = {
       { pattern: "SEND(agent/*)", action: "allow" },
       { pattern: "SEND(group/reviewers)", action: "ask" },
       { pattern: "SEND(inbox)", action: "allow" },
+      { pattern: "SEND(project/app02/*)", action: "ask" },
       { pattern: "FORWARD(agent/*)", action: "allow" },
       { pattern: "RULE(*)", action: "ask" },
     ],

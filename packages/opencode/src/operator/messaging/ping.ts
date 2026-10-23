@@ -14,6 +14,7 @@ import { OperatorPingDefaults } from "./defaults"
 import { OperatorProjectInbox } from "./inbox"
 import { OperatorMessageLanes } from "./lanes"
 import { OperatorMessageLog } from "./log"
+import { OperatorMessagePlaces } from "./places"
 import { OperatorMessage } from "./message"
 import { OperatorInboxRules as Rules } from "./rules"
 import { OperatorMessagingSeams } from "./seams"
@@ -43,7 +44,7 @@ export const LIMITS = {
 
 /** The manager's verbs (§8.3): offered only to the project's manager. */
 export const MANAGER_VERBS = OperatorPingVerbs.MANAGER
-export const TARGETS = ["agent", "session", "group", "project_inbox"] as const
+export const TARGETS = ["agent", "session", "group", "project_inbox", "project.agent", "projects.groups", "*"] as const
 export type Target = { type: (typeof TARGETS)[number]; id?: string; session?: string }
 
 /** The `rule` verb's input: what to do with the inbox's rules. */
@@ -103,10 +104,11 @@ export type Result = { title: string; output: string; card: Card }
 
 export const DESCRIPTION = [
   "Send messages to the other agents of this project, to its Project inbox, and to your own other sessions.",
-  "- discover: lists the agents (whether each is running, and its main and active sessions), the groups and the Project inbox you may send to.",
+  "- discover: lists the agents (whether each is running, and its main and active sessions), the groups and the Project inbox you may send to, and the namespace's other projects.",
   '- send: sends message.body to target: an agent ({type: agent, id: name}: its main or active session; with session: an id, one of its sessions; session: "new", a new session of its own for this conversation), a session ({type: session, id: ses_…}), a group ({type: group, id: name}: one message per member) or the Project inbox ({type: project_inbox}: its rules, else its manager, decide where it goes). A blank id sends to every agent, or every group.',
   "The recipient sees who sent the message and from which session, with its id and correlation id. A message for a session that is running reads at its turn's end, unless steer is true (read at its next step); one for an idle session starts its next turn, so each message costs the recipient a model turn.",
-  "To answer a message you received, send with replyTo set to its id: the reply goes to the sender's session, whatever target says.",
+  '- Another project: {type: "project.agent", id: "<projectID>/<agent>"} or {type: "projects.groups", id: "<projectID>/<group>"} enters that project\'s Project inbox, whose rules or manager decide where it goes; {type: "*"} enters every other project\'s.',
+  "To answer a message you received, send with replyTo set to its id: the reply goes to the sender's session, whatever target says (from another project, through its inbox).",
   `wait: true keeps this call waiting for the reply (same correlation id), up to timeout seconds (at most ${LIMITS.waitMax}); you spend that time waiting. Never wait on your own session.`,
   `Sends are rate-limited per agent; a group send counts as one, with at most ${LIMITS.recipients} recipients.`,
   "Only the project's manager: forward (messageID, to: agents, sessions or groups) and drop (messageID, reason) a message the Project inbox gave you to route; rule (rule.op: list, add, change, on, off, remove) changes the inbox's rules.",
@@ -209,6 +211,17 @@ const layer = Layer.effect(
       }
       const inboxShown = shown("inbox")
       if (inboxShown === "ask") asks.push("DISCOVER(inbox)")
+      // Other projects of this namespace: their id, name and goal, not their agents or groups (§7.2).
+      const projects: string[] = []
+      const namespace = yield* Effect.promise(() => OperatorMessagePlaces.namespaceOf(project))
+      for (const other of namespace ? yield* Effect.promise(() => OperatorMessagePlaces.inNamespace(namespace)) : []) {
+        if (other.key === project) continue
+        const action = shown(`project/${other.id}`)
+        if (!action) continue
+        if (action === "ask") asks.push(`DISCOVER(project/${other.id})`)
+        const goal = (yield* Effect.promise(() => OperatorProjectRecords.get(other.key))).description
+        projects.push(`- ${other.name} (${other.id})${goal ? ` — ${goal.replace(/\s+/g, " ").slice(0, 200)}` : ""}`)
+      }
       if (asks.length)
         yield* Effect.promise(() =>
           call.ask({
@@ -227,9 +240,15 @@ const layer = Layer.effect(
               `The Project inbox ({type: project_inbox}): ${record.manager ? `its rules, else the manager ${record.manager}` : "its rules"} route what it gets.`,
             ]
           : []),
+        ...(projects.length
+          ? [
+              'Other projects (a message enters its Project inbox, whose rules or manager decide: {type: "project.agent", id: "<projectID>/<agent>"} or {type: "projects.groups", id: "<projectID>/<group>"}):',
+              ...projects,
+            ]
+          : []),
       ].join("\n")
       return {
-        title: `${agents.length} agents, ${groups.length} groups`,
+        title: `${agents.length} agents, ${groups.length} groups${projects.length ? `, ${projects.length} other projects` : ""}`,
         output,
         card: { verb: "discover", status: "listed" },
       } satisfies Result
@@ -251,7 +270,11 @@ const layer = Layer.effect(
       let label: string
       let correlationID = args.correlationID
       let anyone = false
-      let toInbox = false
+      // The Project inboxes it enters instead of sessions (§8.1, §9.1): this project's, or other projects'.
+      const inboxes: Array<{ key: string; id: string; to: OperatorMessage.To; label: string }> = []
+      let always: string | undefined
+      let hops = 0
+      const here = yield* Effect.promise(() => OperatorMessagePlaces.idOf(project))
       if (args.replyTo) {
         // A reply goes to the original sender's session, with its correlation id (§7.4, §9.2).
         const original = OperatorMessageLog.log().get(args.replyTo)
@@ -260,8 +283,23 @@ const layer = Layer.effect(
         if (original.agent !== call.agent) return refused("send", `${args.replyTo} was not sent to you`, label)
         if (original.from.kind !== "agent" || !original.from.agent || !original.from.session)
           return refused("send", `${args.replyTo} didn't come from an agent's session; answer in your reply`, label)
-        recipients = [{ agent: original.from.agent, sessionID: original.from.session, to: original.from.agent }]
-        pattern = `agent/${original.from.agent}`
+        if (original.from.project && original.from.project !== here) {
+          // From another project: into its inbox, where "Replies go to their sender" delivers it (§9.2).
+          const key = yield* Effect.promise(() => OperatorMessagePlaces.keyOf(original.from.project!))
+          if (!key) return refused("send", `${args.replyTo}'s project isn't known here any more`, label)
+          inboxes.push({
+            key,
+            id: original.from.project,
+            to: { type: "project-agent", project: original.from.project, id: original.from.agent },
+            label: `${original.from.agent} (project ${OperatorMessagePlaces.nameOf(key)})`,
+          })
+          pattern = `project/${original.from.project}/agent/${original.from.agent}`
+          always = `project/${original.from.project}/*`
+          hops = original.hops
+        } else {
+          recipients = [{ agent: original.from.agent, sessionID: original.from.session, to: original.from.agent }]
+          pattern = `agent/${original.from.agent}`
+        }
         correlationID = original.correlationID
       } else {
         const target = args.target
@@ -270,7 +308,54 @@ const layer = Layer.effect(
         if (target.type === "project_inbox") {
           label = "the Project inbox"
           pattern = "inbox"
-          toInbox = true
+          inboxes.push({ key: project, id: here, to: { type: "inbox" }, label })
+          anyone = true
+        } else if (target.type === "project.agent" || target.type === "projects.groups" || target.type === "*") {
+          // Other projects of this namespace: their inboxes, whose rules or manager decide (§9.1).
+          const namespace = yield* Effect.promise(() => OperatorMessagePlaces.namespaceOf(project))
+          if (!namespace) return refused("send", "this project isn't in a namespace, so it reaches no other project")
+          if (target.type === "*") {
+            label = "every other project"
+            pattern = "*"
+            always = "*"
+            const others = (yield* Effect.promise(() => OperatorMessagePlaces.inNamespace(namespace))).filter(
+              (item) => item.key !== project,
+            )
+            if (!others.length) return refused("send", "no other project in this namespace", label)
+            for (const other of others)
+              inboxes.push({
+                key: other.key,
+                id: other.id,
+                to: { type: "all-projects" },
+                label: `project ${other.name}`,
+              })
+          } else {
+            const kind = target.type === "project.agent" ? "agent" : "group"
+            const cut = id?.lastIndexOf("/") ?? -1
+            label = `${kind} ${id ?? ""}`.trim()
+            if (!id || cut <= 0 || cut === id.length - 1)
+              return refused("send", `name it as <projectID>/<${kind}> (target.id)`, label)
+            const projectID = id.slice(0, cut)
+            const name = id.slice(cut + 1)
+            const key = yield* Effect.promise(() => OperatorMessagePlaces.keyOf(projectID))
+            if (!key) return refused("send", `no project ${projectID}`, label)
+            if (key === project) return refused("send", `${projectID} is this project: send to {type: ${kind}}`, label)
+            if ((yield* Effect.promise(() => OperatorMessagePlaces.namespaceOf(key))) !== namespace)
+              return refused(
+                "send",
+                `project ${projectID} is in another namespace; only this namespace's are reached`,
+                label,
+              )
+            label = `${kind} ${name} (project ${OperatorMessagePlaces.nameOf(key)})`
+            pattern = `project/${projectID}/${kind}/${name}`
+            always = `project/${projectID}/*`
+            inboxes.push({
+              key,
+              id: projectID,
+              to: { type: kind === "agent" ? "project-agent" : "project-group", project: projectID, id: name },
+              label,
+            })
+          }
           anyone = true
         } else if (target.type === "session") {
           label = `session ${id ?? ""}`.trim()
@@ -324,9 +409,9 @@ const layer = Layer.effect(
       }
       if (decide(`SEND(${pattern})`) === "deny")
         return refused("send", `the ping permission denies SEND(${pattern})`, label)
-      if (!recipients.length && !toInbox) return refused("send", "nobody to send it to", label)
-      if (recipients.length > LIMITS.recipients)
-        return refused("send", `${recipients.length} recipients; at most ${LIMITS.recipients}`, label)
+      if (!recipients.length && !inboxes.length) return refused("send", "nobody to send it to", label)
+      if (recipients.length + inboxes.length > LIMITS.recipients)
+        return refused("send", `${recipients.length + inboxes.length} recipients; at most ${LIMITS.recipients}`, label)
 
       // Waiting on its own session could never be answered (§7.4).
       const waits = !!args.wait
@@ -347,7 +432,7 @@ const layer = Layer.effect(
       yield* Effect.promise(() =>
         call.ask({
           patterns: [`SEND(${pattern})`],
-          always: [`SEND(${pattern.includes("/") ? `${pattern.split("/")[0]}/*` : pattern})`],
+          always: [`SEND(${always ?? (pattern.includes("/") ? `${pattern.split("/")[0]}/*` : pattern)})`],
           metadata: { description: `Message ${label}`, text: body.slice(0, 2000) },
         }),
       )
@@ -368,32 +453,32 @@ const layer = Layer.effect(
         : undefined
 
       const messages: NonNullable<Card["messages"]> = []
-      if (toInbox) {
-        // The inbox routes it now (§8.1): routed, with the manager, a dead letter or dropped.
+      // Each inbox routes it now (§8.1, §9.1): routed, with the manager, a dead letter or dropped.
+      for (const [at, target] of inboxes.entries()) {
         const entered = yield* inbox
           .enter({
-            project,
-            from: {
-              kind: "agent",
-              agent: call.agent,
-              session: call.sessionID,
-              project: yield* Effect.promise(() => OperatorProjectInbox.projectIdOf(project)),
-            },
+            ...(at === 0 && !recipients.length ? { id: firstID } : {}),
+            project: target.key,
+            from: { kind: "agent", agent: call.agent, session: call.sessionID, project: here },
+            to: target.to,
             body: { type: args.message?.type ?? "text", text: body },
             priority: args.priority ?? "normal",
             steer: args.steer ?? false,
             correlationID,
+            ...(args.replyTo ? { replyTo: args.replyTo } : {}),
+            hops,
           })
           .pipe(
-            Effect.map((message) => ({ id: message.id, to: label, status: message.status })),
-            Effect.catch((error) => Effect.succeed({ to: label, status: "refused", reason: error.message })),
+            Effect.map((message) => ({ id: message.id, to: target.label, status: message.status })),
+            Effect.catch((error) => Effect.succeed({ to: target.label, status: "refused", reason: error.message })),
           )
         messages.push(entered)
-        // Nobody will answer a dead letter or a dropped message.
-        if (entered.status !== "routed" && entered.status !== "with manager") waiting?.cancel()
       }
+      // Nobody will answer a dead letter or a dropped message.
+      const answerable = (status: string) => status === "routed" || status === "with manager"
+      if (inboxes.length && !messages.some((item) => answerable(item.status))) waiting?.cancel()
       const to: OperatorMessage.To = args.replyTo
-        ? { type: "session", id: recipients[0].sessionID! }
+        ? { type: "session", id: recipients[0]?.sessionID ?? "" }
         : args.target!.type === "group"
           ? { type: "group", ...(args.target!.id ? { id: args.target!.id } : {}) }
           : args.target!.type === "session"
@@ -438,7 +523,7 @@ const layer = Layer.effect(
         item.id ? `${item.id} → ${item.to}: ${item.status}` : `${item.to}: refused (${item.reason})`,
       )
       const sentCard: Card = { verb: "send", target: label, status: "sent", messages, correlationID }
-      if (!waiting || (toInbox && messages[0]?.status !== "routed" && messages[0]?.status !== "with manager"))
+      if (!waiting || (inboxes.length && !messages.some((item) => answerable(item.status))))
         return {
           title: `${label}: ${delivered.length === 1 ? delivered[0].status : `${delivered.length} sent`}`,
           output: [...lines, `correlation ${correlationID}`].join("\n"),
