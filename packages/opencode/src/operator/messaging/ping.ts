@@ -475,7 +475,8 @@ const layer = Layer.effect(
         messages.push(entered)
       }
       // Nobody will answer a dead letter or a dropped message.
-      const answerable = (status: string) => status === "routed" || status === "with manager"
+      // (queued: on its way to another project's inbox through RabbitMQ.)
+      const answerable = (status: string) => status === "routed" || status === "with manager" || status === "queued"
       if (inboxes.length && !messages.some((item) => answerable(item.status))) waiting?.cancel()
       const to: OperatorMessage.To = args.replyTo
         ? { type: "session", id: recipients[0]?.sessionID ?? "" }

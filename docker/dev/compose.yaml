@@ -33,6 +33,11 @@ services:
       # lives there, at <working folder>/<namespace>, OpenCode at <working folder>/opencode, with a default
       # project made in it. Set OPENCODE_WORKING_DIR to set it on first start instead (no onboarding).
       OPENCODE_OPERATOR_WORKING_DIR: ${OPENCODE_WORKING_DIR:-}
+      # Messaging's optional backends (SPEC-0023 §6.5, §9.4): set these, and start the services below with
+      # --profile messaging, to carry messages between projects over RabbitMQ and keep the memory lane in Redis.
+      # Empty (the default): SQLite and the server's memory.
+      OPENCODE_OPERATOR_RABBITMQ_URL: ${OPENCODE_OPERATOR_RABBITMQ_URL:-}
+      OPENCODE_OPERATOR_REDIS_URL: ${OPENCODE_OPERATOR_REDIS_URL:-}
     volumes:
       # Your whole home folder, at the same path as on the host (the production model; README.md): Global's
       # folder (~/.config/opencode), OpenCode's data and state, Claude Code's ~/.claude and the workspace
@@ -127,6 +132,43 @@ services:
     cpus: ${E2E_CPUS:-4}
     mem_limit: ${E2E_MEMORY:-6g}
 
-# The one-off services' Claude Code login and transcripts. (Isolated mode declares the server's volumes.)
+  # RabbitMQ for messages between projects' inboxes (SPEC-0023 §9.4), with --profile messaging. The server uses it
+  # when OPENCODE_OPERATOR_RABBITMQ_URL=amqp://opencode:opencode@rabbitmq:5672 (tests read the same variable).
+  rabbitmq:
+    image: rabbitmq:4.1.4-alpine
+    profiles: ["messaging"]
+    environment:
+      RABBITMQ_DEFAULT_USER: opencode
+      RABBITMQ_DEFAULT_PASS: opencode
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    cpus: ${RABBITMQ_CPUS:-1}
+    mem_limit: ${RABBITMQ_MEMORY:-1g}
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # Redis for the memory lane (SPEC-0023 §6.5), with --profile messaging. The server uses it when
+  # OPENCODE_OPERATOR_REDIS_URL=redis://redis:6379.
+  redis:
+    image: redis:7.4.6-alpine
+    profiles: ["messaging"]
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    cpus: ${REDIS_CPUS:-0.5}
+    mem_limit: ${REDIS_MEMORY:-512m}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+# The one-off services' Claude Code login and transcripts, and the messaging backends' data (never pruned).
+# (Isolated mode declares the server's volumes.)
 volumes:
   claude-config:
+  rabbitmq-data:
+  redis-data:

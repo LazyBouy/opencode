@@ -109,6 +109,24 @@ docker compose -f docker/dev/compose.yaml --profile e2e build e2e
 docker compose -f docker/dev/compose.yaml run --rm e2e npx playwright test e2e/operator e2e/regression e2e/smoke
 ```
 
+## Messaging backends (optional)
+
+Agent messaging (SPEC-0023) runs on SQLite and the server's memory by default. RabbitMQ (messages between projects'
+inboxes) and Redis (the memory lane) are optional services behind the `messaging` profile, with resource limits and
+data volumes (`rabbitmq-data`, `redis-data`; never pruned):
+
+```sh
+docker compose -f docker/dev/compose.yaml --profile messaging up -d rabbitmq redis
+# The server uses them when given their addresses:
+OPENCODE_OPERATOR_RABBITMQ_URL=amqp://opencode:opencode@rabbitmq:5672 \
+OPENCODE_OPERATOR_REDIS_URL=redis://redis:6379 \
+  docker compose -f docker/dev/compose.yaml up -d server web
+# Tests against them (they're skipped without these):
+docker compose -f docker/dev/compose.yaml run --rm \
+  -e OPENCODE_TEST_RABBITMQ_URL=amqp://opencode:opencode@rabbitmq:5672 -e OPENCODE_TEST_REDIS_URL=redis://redis:6379 \
+  tools bun run --cwd packages/opencode test test/operator/messaging-rabbitmq.test.ts
+```
+
 ## Merging upstream releases
 
 `script/fork/upstream-merge.sh` merges upstream OpenCode and runs the fork's checks in these

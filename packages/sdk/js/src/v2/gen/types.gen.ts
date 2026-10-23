@@ -7386,7 +7386,10 @@ export type OperatorInboxTestResult = {
 export type OperatorProjectInboxSettings = {
   unmatched: OperatorInboxUnmatched
   manager?: string
-  transport: "sqlite"
+  /**
+   * How messages from other projects reach the inbox: sqlite (routed as they arrive), or rabbitmq (published, and routed when the server consumes them)
+   */
+  transport: "sqlite" | "rabbitmq"
 }
 
 export type OperatorMessagingStatus = {
@@ -7401,11 +7404,12 @@ export type OperatorMessagingStatus = {
      */
     cap: number
   }
-  inboxTransport: "sqlite"
-  rabbitmq: "not configured"
+  inboxTransport: "sqlite" | "rabbitmq"
+  rabbitmq: "not configured" | "connected" | "down"
+  rabbitmqHost?: string
   redis: "not configured"
   /**
-   * Messages waiting to be published (RabbitMQ only)
+   * Messages waiting to be published while RabbitMQ is down
    */
   outbox: number
 }

@@ -32,7 +32,7 @@ export const operatorProjectInboxHandlers = HttpApiBuilder.group(InstanceHttpApi
         return {
           unmatched: found.unmatched,
           ...(record.manager ? { manager: record.manager } : {}),
-          transport: "sqlite" as const,
+          transport: inbox.transport().kind,
         }
       })
     return handlers
@@ -88,17 +88,21 @@ export const operatorProjectInboxHandlers = HttpApiBuilder.group(InstanceHttpApi
       .handle("routeAgain", (ctx) => inbox.routeAgain(ctx.params.id).pipe(Effect.mapError(mapError)))
       .handle("broadcast", (ctx) => inbox.broadcast(ctx.params.id, ME).pipe(Effect.mapError(mapError)))
       .handle("status", () =>
-        Effect.sync(() => ({
-          memoryLane: {
-            backend: "in-process" as const,
-            held: OperatorMessageLanes.lane().list({}).length,
-            cap: OperatorMessageLanes.CAP,
-          },
-          inboxTransport: "sqlite" as const,
-          rabbitmq: "not configured" as const,
-          redis: "not configured" as const,
-          outbox: 0,
-        })),
+        Effect.sync(() => {
+          const transport = inbox.transport()
+          return {
+            memoryLane: {
+              backend: "in-process" as const,
+              held: OperatorMessageLanes.lane().list({}).length,
+              cap: OperatorMessageLanes.CAP,
+            },
+            inboxTransport: transport.kind,
+            ...(transport.kind === "rabbitmq"
+              ? { rabbitmq: transport.connection, rabbitmqHost: transport.host, outbox: transport.outbox }
+              : { rabbitmq: "not configured" as const, outbox: 0 }),
+            redis: "not configured" as const,
+          }
+        }),
       )
       .handle("messagingSettings", () => Effect.promise(() => OperatorMessagingSettings.read()))
       .handle("setMessagingSettings", (ctx) =>

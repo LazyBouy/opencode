@@ -874,13 +874,20 @@ function MessagingSettingsOverlay(props: InboxPlace) {
                   label={language.t("operator.messaging.rabbitmq")}
                   help={language.t("operator.messaging.help.rabbitmq")}
                 >
-                  {language.t("operator.messaging.notConfigured")}
+                  <span data-testid="messaging-rabbitmq">
+                    {found().rabbitmq === "not configured"
+                      ? language.t("operator.messaging.notConfigured")
+                      : language.t(`operator.messaging.rabbitmq.${found().rabbitmq}` as Key, {
+                          host: found().rabbitmqHost ?? "",
+                          outbox: String(found().outbox),
+                        })}
+                  </span>
                 </RecordField>
                 <RecordField
                   label={language.t("operator.inbox.transport")}
                   help={language.t("operator.inbox.help.transport")}
                 >
-                  {language.t("operator.inbox.transport.sqlite")}
+                  {language.t(`operator.inbox.transport.${found().inboxTransport}` as Key)}
                 </RecordField>
               </dl>
             )}

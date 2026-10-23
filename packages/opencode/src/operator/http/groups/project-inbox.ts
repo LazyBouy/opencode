@@ -62,8 +62,9 @@ export const InboxView = Schema.Struct({
 export const InboxSettings = Schema.Struct({
   unmatched: OperatorInboxRules.Unmatched,
   manager: Schema.optional(Schema.String).annotate({ description: "The project's manager (its record's)" }),
-  transport: Schema.Literals(["sqlite"]).annotate({
-    description: "How messages reach the inbox: sqlite (routed as they arrive); RabbitMQ when configured (later)",
+  transport: Schema.Literals(["sqlite", "rabbitmq"]).annotate({
+    description:
+      "How messages from other projects reach the inbox: sqlite (routed as they arrive), or rabbitmq (published, and routed when the server consumes them)",
   }),
 }).annotate({ identifier: "OperatorProjectInboxSettings" })
 
@@ -73,10 +74,11 @@ export const MessagingStatus = Schema.Struct({
     held: Schema.Finite.annotate({ description: "Messages held now for running sessions" }),
     cap: Schema.Finite.annotate({ description: "At most this many a session" }),
   }),
-  inboxTransport: Schema.Literals(["sqlite"]),
-  rabbitmq: Schema.Literals(["not configured"]),
+  inboxTransport: Schema.Literals(["sqlite", "rabbitmq"]),
+  rabbitmq: Schema.Literals(["not configured", "connected", "down"]),
+  rabbitmqHost: Schema.optional(Schema.String).annotate({ description: "The broker's host (never the whole URL)" }),
   redis: Schema.Literals(["not configured"]),
-  outbox: Schema.Finite.annotate({ description: "Messages waiting to be published (RabbitMQ only)" }),
+  outbox: Schema.Finite.annotate({ description: "Messages waiting to be published while RabbitMQ is down" }),
 }).annotate({ identifier: "OperatorMessagingStatus" })
 
 const Counts = Schema.Record(

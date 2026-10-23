@@ -135,6 +135,14 @@ test("Settings: unmatched messages; Settings → Messaging's limits and backends
   await expect.poll(() => state.inbox.settings.perMinute).toBe(10)
 })
 
+test("Settings → Messaging shows RabbitMQ's state, host and outbox when it's configured", async ({ page }) => {
+  const state = await mockOperator(page)
+  state.inbox.rabbitmq = { connection: "down", outbox: 3 }
+  await page.goto(`${inboxPage}&msettings=1`)
+  await expect(page.getByTestId("messaging-rabbitmq")).toHaveText("Down (rabbitmq:5672) · 3 waiting in the outbox")
+  await expect(page.getByTestId("messaging-status")).toContainText("RabbitMQ")
+})
+
 test("the project's overlay shows its inbox's counts and opens the page; New message goes to the inbox", async ({
   page,
 }) => {

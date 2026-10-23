@@ -2973,6 +2973,7 @@ export const dict = {
   "operator.inbox.help.transport":
     "How messages reach the inbox. On SQLite each is routed as it arrives; RabbitMQ, once configured, carries messages between projects.",
   "operator.inbox.transport.sqlite": "SQLite",
+  "operator.inbox.transport.rabbitmq": "RabbitMQ",
   "operator.inbox.help.waitingColumn": "Messages no rule routed, waiting for the project's manager.",
   "operator.inbox.help.deadColumn": "Messages nothing could deliver, kept on the Project inbox page until handled.",
   "operator.inbox.rules.saveFailed": "The rules weren't saved",
@@ -3108,7 +3109,9 @@ export const dict = {
     "An optional backend for the memory lane (OPENCODE_OPERATOR_REDIS_URL); not built yet.",
   "operator.messaging.rabbitmq": "RabbitMQ",
   "operator.messaging.help.rabbitmq":
-    "Carries messages into other projects' inboxes when configured (OPENCODE_OPERATOR_RABBITMQ_URL); not built yet.",
+    "Carries messages into other projects' inboxes when the server is given OPENCODE_OPERATOR_RABBITMQ_URL. While it's down, messages wait in an outbox and are published when it's back; a message the server fails to route 5 times goes to its project's .failed queue.",
+  "operator.messaging.rabbitmq.connected": "Connected to {{host}} · {{outbox}} waiting in the outbox",
+  "operator.messaging.rabbitmq.down": "Down ({{host}}) · {{outbox}} waiting in the outbox",
   "operator.messaging.notConfigured": "Not configured",
   "operator.projects.section.inbox": "Project inbox",
   "operator.conversation.title": "Conversation",

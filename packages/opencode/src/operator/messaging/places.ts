@@ -44,3 +44,6 @@ export async function inNamespace(namespace: string) {
     .filter(([, setting]) => setting.namespace === namespace)
     .map(([key, setting]) => ({ key, id: setting.id ?? key, name: nameOf(key) }))
 }
+
+/** Every project's unique id (the inbox transport consumes each one's queue). */
+export const allIds = async () => Object.entries(await all()).map(([key, setting]) => setting.id ?? key)

@@ -8,13 +8,14 @@ import { GlobalBus } from "@/bus/global"
 import { InstanceStore } from "@/project/instance-store"
 import { OperatorProjectRecords } from "../project-records"
 import { OperatorQueue } from "../queue"
-import type { OperatorQueueStore } from "../queue-store"
+import { OperatorQueueStore } from "../queue-store"
 import { OperatorTrashFiles } from "../trash-files"
 import { OperatorMessageLog } from "./log"
 import { OperatorMessagePlaces } from "./places"
 import { OperatorMessage } from "./message"
 import { OperatorInboxRules as Rules } from "./rules"
 import { OperatorMessagingSeams } from "./seams"
+import { OperatorInboxTransport } from "./transport"
 
 // The Project inbox (SPEC-0023 §8): a project's way in for messages that don't come from its own agents' sessions
 // directly: `ping` to the inbox, the user ("New message"), the API, and later other projects (phase 4). On SQLite
@@ -140,6 +141,8 @@ export interface Interface {
   readonly counts: () => Effect.Effect<Record<string, { waiting: number; deadLetters: number }>>
   /** Every message with this correlation id (at most 500), and the sessions involved. */
   readonly conversation: (correlationID: string) => Effect.Effect<Conversation>
+  /** How messages from other projects reach inboxes: SQLite (routed as they arrive), or RabbitMQ and its state. */
+  readonly transport: () => { kind: "sqlite" } | ({ kind: "rabbitmq" } & OperatorInboxTransport.State)
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorProjectInbox") {}
@@ -379,6 +382,15 @@ const layer = Layer.effect(
         return deadLetter("no rule matched, the project has no manager, and it names no recipient")
       })
 
+    // RabbitMQ, when configured, carries messages from other projects (and from outside) into inboxes (§9.4): they're
+    // published, and routed here when consumed; their result is in the log before the broker hears they're done.
+    const brokerURL = process.env.OPENCODE_OPERATOR_RABBITMQ_URL?.trim()
+    const broker = brokerURL
+      ? OperatorInboxTransport.rabbitmq(brokerURL, () => OperatorQueueStore.store().file)
+      : undefined
+    const crossing = (entry: Entry, project: string) =>
+      entry.from.kind === "external" || (!!entry.from.project && entry.from.project !== project)
+
     // An outcome written to the log and announced; the message as it is now.
     const apply = (message: Message, outcome: Outcome, key: string): Message => {
       GlobalBus.emit("event", {
@@ -432,6 +444,16 @@ const layer = Layer.effect(
       log().write(message)
       if (hops > MAX_HOPS)
         return apply(message, deadLetter(`routing loop: more than ${MAX_HOPS} inboxes`), entry.project)
+      if (broker && crossing(entry, project)) {
+        const sent = yield* Effect.promise(() => broker.send(project, message))
+        const step = {
+          at: Date.now(),
+          kind: sent === "published" ? "published" : "in the outbox",
+          detail: sent === "published" ? "to RabbitMQ" : "RabbitMQ can't be reached: published when it's back",
+        }
+        log().step(message.id, step)
+        return { ...message, trail: [...message.trail, step] }
+      }
       return apply(message, yield* route(message, entry.project), entry.project)
     })
 
@@ -644,7 +666,33 @@ const layer = Layer.effect(
       return { correlationID, messages, sessions }
     })
 
+    // A message RabbitMQ delivered: routed (once: a redelivery of one already routed is only acknowledged), with
+    // its result written to the log before this resolves.
+    const arrived: OperatorInboxTransport.Router = (message) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const current = log().get(message.id)
+          if (current && current.status !== "queued") return
+          const key = yield* Effect.promise(() => projectKeyOf(message.inbox ?? ""))
+          if (!key) return yield* Effect.die(new Error(`No project ${message.inbox} here`))
+          if (!current) log().write(message)
+          const outcome = yield* route(message, key)
+          apply(
+            message,
+            { ...outcome, step: { ...outcome.step, detail: `from RabbitMQ: ${outcome.step.detail ?? ""}` } },
+            key,
+          )
+          log().flush()
+        }),
+      )
+    if (broker)
+      yield* Effect.acquireRelease(
+        Effect.promise(async () => broker.start(await OperatorMessagePlaces.allIds(), arrived)),
+        () => Effect.promise(() => broker.close()),
+      )
+
     return Service.of({
+      transport: () => (broker ? { kind: "rabbitmq" as const, ...broker.state() } : { kind: "sqlite" as const }),
       conversation,
       enter,
       messages,

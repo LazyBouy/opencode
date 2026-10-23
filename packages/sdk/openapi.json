@@ -52385,7 +52385,8 @@
           },
           "transport": {
             "type": "string",
-            "enum": ["sqlite"]
+            "enum": ["sqlite", "rabbitmq"],
+            "description": "How messages from other projects reach the inbox: sqlite (routed as they arrive), or rabbitmq (published, and routed when the server consumes them)"
           }
         },
         "required": ["unmatched", "transport"],
@@ -52415,11 +52416,14 @@
           },
           "inboxTransport": {
             "type": "string",
-            "enum": ["sqlite"]
+            "enum": ["sqlite", "rabbitmq"]
           },
           "rabbitmq": {
             "type": "string",
-            "enum": ["not configured"]
+            "enum": ["not configured", "connected", "down"]
+          },
+          "rabbitmqHost": {
+            "type": "string"
           },
           "redis": {
             "type": "string",
@@ -52427,7 +52431,7 @@
           },
           "outbox": {
             "type": "number",
-            "description": "Messages waiting to be published (RabbitMQ only)"
+            "description": "Messages waiting to be published while RabbitMQ is down"
           }
         },
         "required": ["memoryLane", "inboxTransport", "rabbitmq", "redis", "outbox"],
