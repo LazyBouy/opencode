@@ -38,6 +38,8 @@ export type InboxMockState = {
   settings: { perMinute: number; perHour: number; wait: number }
   /** RabbitMQ, when the test configures it. */
   rabbitmq?: { connection: "connected" | "down"; outbox: number }
+  /** Redis for the memory lane, when the test configures it. */
+  redis?: "connected" | "down"
   /** Every write: the action and its body. */
   writes: Array<{ action: string; id?: string; body?: unknown }>
 }
@@ -122,11 +124,13 @@ export function createInboxMock() {
     const path = url.pathname
     if (path === "/operator/messaging/status")
       return json(route, {
-        memoryLane: { backend: "in-process", held: 2, cap: 200 },
+        memoryLane: state.redis
+          ? { backend: "redis", connection: state.redis, host: "redis:6379", held: 2, cap: 200 }
+          : { backend: "in-process", held: 2, cap: 200 },
         inboxTransport: state.rabbitmq ? "rabbitmq" : "sqlite",
         rabbitmq: state.rabbitmq?.connection ?? "not configured",
         ...(state.rabbitmq ? { rabbitmqHost: "rabbitmq:5672" } : {}),
-        redis: "not configured",
+        redis: state.redis ?? "not configured",
         outbox: state.rabbitmq?.outbox ?? 0,
       })
     if (path === "/operator/messaging/settings") {

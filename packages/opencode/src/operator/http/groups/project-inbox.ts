@@ -70,14 +70,18 @@ export const InboxSettings = Schema.Struct({
 
 export const MessagingStatus = Schema.Struct({
   memoryLane: Schema.Struct({
-    backend: Schema.Literals(["in-process"]).annotate({ description: "in-process (the server's memory); Redis later" }),
+    backend: Schema.Literals(["in-process", "redis"]).annotate({
+      description: "in-process (the server's memory), or redis (OPENCODE_OPERATOR_REDIS_URL)",
+    }),
+    connection: Schema.optional(Schema.Literals(["connected", "down"])),
+    host: Schema.optional(Schema.String).annotate({ description: "Redis's host (never the whole URL)" }),
     held: Schema.Finite.annotate({ description: "Messages held now for running sessions" }),
     cap: Schema.Finite.annotate({ description: "At most this many a session" }),
   }),
   inboxTransport: Schema.Literals(["sqlite", "rabbitmq"]),
   rabbitmq: Schema.Literals(["not configured", "connected", "down"]),
   rabbitmqHost: Schema.optional(Schema.String).annotate({ description: "The broker's host (never the whole URL)" }),
-  redis: Schema.Literals(["not configured"]),
+  redis: Schema.Literals(["not configured", "connected", "down"]),
   outbox: Schema.Finite.annotate({ description: "Messages waiting to be published while RabbitMQ is down" }),
 }).annotate({ identifier: "OperatorMessagingStatus" })
 

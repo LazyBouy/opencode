@@ -171,7 +171,7 @@ unix("held messages move to the SQLite lane in their order when the turn ends; p
     // The turn ends (the session isn't released, so nothing is delivered yet): the lane is empty, the SQLite lane
     // holds them with their times, and delivery order is unchanged.
     yield* queue.endTurn(main)
-    expect(OperatorMessageLanes.lane().list({})).toEqual([])
+    expect(yield* Effect.promise(() => OperatorMessageLanes.lane().list({}))).toEqual([])
     expect((yield* queue.list({ agent: "build", status: "queued" })).map((item) => item.text)).toEqual([
       "high",
       "normal",
@@ -213,8 +213,8 @@ unix("after a crash mid-turn, the messages the log shows held in memory are in t
     OperatorMessageLog.log().flush()
     expect(OperatorQueueStore.store().get("msg_crashed1")).toBeUndefined()
     // What the queue service does at start.
-    expect(OperatorQueue.recover()).toBe(1)
-    expect(OperatorQueue.recover()).toBe(0)
+    expect(yield* Effect.promise(() => OperatorQueue.recover())).toBe(1)
+    expect(yield* Effect.promise(() => OperatorQueue.recover())).toBe(0)
     const recovered = OperatorQueueStore.store().get("msg_crashed1")
     expect(recovered).toMatchObject({ lane: "sqlite", priority: "high", text: "held when it stopped" })
     expect(

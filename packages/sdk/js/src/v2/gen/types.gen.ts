@@ -7394,7 +7394,12 @@ export type OperatorProjectInboxSettings = {
 
 export type OperatorMessagingStatus = {
   memoryLane: {
-    backend: "in-process"
+    /**
+     * in-process (the server's memory), or redis (OPENCODE_OPERATOR_REDIS_URL)
+     */
+    backend: "in-process" | "redis"
+    connection?: "connected" | "down"
+    host?: string
     /**
      * Messages held now for running sessions
      */
@@ -7407,7 +7412,7 @@ export type OperatorMessagingStatus = {
   inboxTransport: "sqlite" | "rabbitmq"
   rabbitmq: "not configured" | "connected" | "down"
   rabbitmqHost?: string
-  redis: "not configured"
+  redis: "not configured" | "connected" | "down"
   /**
    * Messages waiting to be published while RabbitMQ is down
    */

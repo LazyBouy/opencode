@@ -859,16 +859,29 @@ function MessagingSettingsOverlay(props: InboxPlace) {
                   label={language.t("operator.messaging.memoryLane")}
                   help={language.t("operator.messaging.help.memoryLane")}
                 >
-                  {language.t("operator.messaging.memoryLane.state", {
-                    held: String(found().memoryLane.held),
-                    cap: String(found().memoryLane.cap),
-                  })}
+                  <span data-testid="messaging-memory-lane">
+                    {language.t(
+                      found().memoryLane.backend === "redis"
+                        ? "operator.messaging.memoryLane.redis"
+                        : "operator.messaging.memoryLane.state",
+                      {
+                        held: String(found().memoryLane.held),
+                        cap: String(found().memoryLane.cap),
+                      },
+                    )}
+                  </span>
                 </RecordField>
                 <RecordField
                   label={language.t("operator.messaging.redis")}
                   help={language.t("operator.messaging.help.redis")}
                 >
-                  {language.t("operator.messaging.notConfigured")}
+                  <span data-testid="messaging-redis">
+                    {found().redis === "not configured"
+                      ? language.t("operator.messaging.notConfigured")
+                      : language.t(`operator.messaging.redis.${found().redis}` as Key, {
+                          host: found().memoryLane.host ?? "",
+                        })}
+                  </span>
                 </RecordField>
                 <RecordField
                   label={language.t("operator.messaging.rabbitmq")}

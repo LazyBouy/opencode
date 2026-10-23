@@ -88,19 +88,23 @@ export const operatorProjectInboxHandlers = HttpApiBuilder.group(InstanceHttpApi
       .handle("routeAgain", (ctx) => inbox.routeAgain(ctx.params.id).pipe(Effect.mapError(mapError)))
       .handle("broadcast", (ctx) => inbox.broadcast(ctx.params.id, ME).pipe(Effect.mapError(mapError)))
       .handle("status", () =>
-        Effect.sync(() => {
+        Effect.promise(async () => {
           const transport = inbox.transport()
+          const lane = OperatorMessageLanes.lane()
+          const state = lane.state()
           return {
             memoryLane: {
-              backend: "in-process" as const,
-              held: OperatorMessageLanes.lane().list({}).length,
+              backend: state.backend,
+              ...(state.connection ? { connection: state.connection } : {}),
+              ...(state.host ? { host: state.host } : {}),
+              held: (await lane.list({}).catch(() => [])).length,
               cap: OperatorMessageLanes.CAP,
             },
             inboxTransport: transport.kind,
             ...(transport.kind === "rabbitmq"
               ? { rabbitmq: transport.connection, rabbitmqHost: transport.host, outbox: transport.outbox }
               : { rabbitmq: "not configured" as const, outbox: 0 }),
-            redis: "not configured" as const,
+            redis: state.backend === "redis" ? (state.connection ?? ("down" as const)) : ("not configured" as const),
           }
         }),
       )

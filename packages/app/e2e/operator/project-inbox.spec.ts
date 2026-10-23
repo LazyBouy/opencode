@@ -143,6 +143,14 @@ test("Settings → Messaging shows RabbitMQ's state, host and outbox when it's c
   await expect(page.getByTestId("messaging-status")).toContainText("RabbitMQ")
 })
 
+test("Settings → Messaging shows the memory lane in Redis, and Redis's state", async ({ page }) => {
+  const state = await mockOperator(page)
+  state.inbox.redis = "connected"
+  await page.goto(`${inboxPage}&msettings=1`)
+  await expect(page.getByTestId("messaging-memory-lane")).toHaveText("In Redis · 2 held now · at most 200 a session")
+  await expect(page.getByTestId("messaging-redis")).toHaveText("Connected to redis:6379")
+})
+
 test("the project's overlay shows its inbox's counts and opens the page; New message goes to the inbox", async ({
   page,
 }) => {

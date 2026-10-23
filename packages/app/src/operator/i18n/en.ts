@@ -3104,9 +3104,12 @@ export const dict = {
   "operator.messaging.help.memoryLane":
     "Messages for sessions running a turn are held in the server's memory, read at the turn's end (or at once when steering, or by a ping waiting for them).",
   "operator.messaging.memoryLane.state": "In-process · {{held}} held now · at most {{cap}} a session",
+  "operator.messaging.memoryLane.redis": "In Redis · {{held}} held now · at most {{cap}} a session",
+  "operator.messaging.redis.connected": "Connected to {{host}}",
+  "operator.messaging.redis.down": "Down ({{host}}): messages for running sessions go to their SQLite lane",
   "operator.messaging.redis": "Redis",
   "operator.messaging.help.redis":
-    "An optional backend for the memory lane (OPENCODE_OPERATOR_REDIS_URL); not built yet.",
+    "Keeps the memory lane in Redis when the server is given OPENCODE_OPERATOR_REDIS_URL, so messages held for running sessions survive a restart of the server.",
   "operator.messaging.rabbitmq": "RabbitMQ",
   "operator.messaging.help.rabbitmq":
     "Carries messages into other projects' inboxes when the server is given OPENCODE_OPERATOR_RABBITMQ_URL. While it's down, messages wait in an outbox and are published when it's back; a message the server fails to route 5 times goes to its project's .failed queue.",

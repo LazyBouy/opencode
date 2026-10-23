@@ -52400,7 +52400,15 @@
             "properties": {
               "backend": {
                 "type": "string",
-                "enum": ["in-process"]
+                "enum": ["in-process", "redis"],
+                "description": "in-process (the server's memory), or redis (OPENCODE_OPERATOR_REDIS_URL)"
+              },
+              "connection": {
+                "type": "string",
+                "enum": ["connected", "down"]
+              },
+              "host": {
+                "type": "string"
               },
               "held": {
                 "type": "number",
@@ -52427,7 +52435,7 @@
           },
           "redis": {
             "type": "string",
-            "enum": ["not configured"]
+            "enum": ["not configured", "connected", "down"]
           },
           "outbox": {
             "type": "number",

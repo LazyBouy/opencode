@@ -100,11 +100,15 @@ const keyOf = (project: string, agent: string) => `${project}\n${agent}`
  * What the message log shows held in memory, but no lane holds (the server stopped mid-turn), goes to its session's
  * SQLite lane, as it was. Returns how many. Run at start.
  */
-export function recover() {
+export async function recover() {
   const store = OperatorQueueStore.store()
   let count = 0
   for (const message of OperatorMessageLog.log().list({ status: "in memory", limit: 100_000 })) {
-    if (OperatorMessageLanes.lane().get(message.id) || !message.folder || !message.agent) continue
+    // Still held (Redis keeps what it holds through a restart): it moves when its session's turn ends.
+    const held = await OperatorMessageLanes.lane()
+      .get(message.id)
+      .catch(() => undefined)
+    if (held || !message.folder || !message.agent) continue
     if (!store.get(message.id))
       store.enqueue({
         id: message.id,
@@ -286,20 +290,22 @@ const layer = Layer.effect(
     // A turn ended: the session's unread messages in memory go to its SQLite lane, keeping their ids, priorities and
     // times, before the delivery pass that gives it the first.
     const endTurn = (sessionID: string) =>
-      Effect.sync(() => {
-        for (const held of OperatorMessageLanes.lane().take(sessionID)) {
-          const item = OperatorQueueStore.store().enqueue({ ...held.item, status: "queued", lane: "sqlite" })
-          log(item.id, "moved", { status: "queued", lane: "sqlite" }, "the turn ended: to the SQLite lane")
-          announce(item)
-        }
-      })
+      Effect.promise(() => OperatorMessageLanes.lane().take(sessionID)).pipe(
+        Effect.map((taken) => {
+          for (const held of taken) {
+            const item = OperatorQueueStore.store().enqueue({ ...held.item, status: "queued", lane: "sqlite" })
+            log(item.id, "moved", { status: "queued", lane: "sqlite" }, "the turn ended: to the SQLite lane")
+            announce(item)
+          }
+        }),
+      )
 
     // A session going idle may let a waiting message in.
     const bridge = yield* EffectBridge.make()
     yield* seams.onIdle((sessionID) => bridge.fork(endTurn(sessionID).pipe(Effect.andThen(kickAll), Effect.ignore)))
 
     // At start: what the log shows held in memory when the server stopped goes to its SQLite lane.
-    yield* Effect.sync(recover).pipe(
+    yield* Effect.promise(recover).pipe(
       Effect.catchCause((cause) => Effect.logError("operator queue: recovering held messages failed", { cause })),
     )
 
@@ -356,6 +362,7 @@ const layer = Layer.effect(
         false,
       )
       const runningNow = typeof destination !== "string" && (yield* busy(destination))
+      let laneTrouble: string | undefined
       const message: OperatorMessage.Message = {
         id,
         project: yield* Effect.promise(() => projectIdOf(projectKey)),
@@ -430,9 +437,14 @@ const layer = Layer.effect(
           return item
         }
         const held: OperatorQueueStore.Item = { ...base, id, createdAt, status: "in memory", lane: "memory" }
-        if (
-          OperatorMessageLanes.lane().put({ item: held, sessionID: destination.id, directory: destination.directory })
-        ) {
+        // A lane that can't be reached (Redis down) sends it to the SQLite lane, as a full one does.
+        const kept = yield* Effect.promise(() =>
+          OperatorMessageLanes.lane()
+            .put({ item: held, sessionID: destination.id, directory: destination.directory })
+            .catch(() => "unavailable" as const),
+        )
+        if (kept === "unavailable") laneTrouble = "the memory lane can't be reached"
+        if (kept === true) {
           OperatorMessageLog.log().write({
             ...message,
             status: "in memory",
@@ -450,9 +462,11 @@ const layer = Layer.effect(
         ...message,
         lane: "sqlite",
         trail: [
-          ...(full
-            ? [{ at: createdAt, kind: "memory lane full", detail: `${OperatorMessageLanes.CAP} held already` }]
-            : []),
+          ...(laneTrouble
+            ? [{ at: createdAt, kind: "memory lane unavailable", detail: laneTrouble }]
+            : full
+              ? [{ at: createdAt, kind: "memory lane full", detail: `${OperatorMessageLanes.CAP} held already` }]
+              : []),
           { at: createdAt, kind: "queued" },
         ],
       })
@@ -465,9 +479,11 @@ const layer = Layer.effect(
       const projectKey = yield* project()
       const held =
         !input.status || input.status === "in memory"
-          ? OperatorMessageLanes.lane()
-              .list({ project: projectKey, ...(input.agent ? { agent: input.agent } : {}) })
-              .map((entry) => entry.item)
+          ? (yield* Effect.promise(() =>
+              OperatorMessageLanes.lane()
+                .list({ project: projectKey, ...(input.agent ? { agent: input.agent } : {}) })
+                .catch(() => []),
+            )).map((entry) => entry.item)
           : []
       const stored =
         input.status === "in memory"
@@ -483,9 +499,13 @@ const layer = Layer.effect(
 
     const cancel = Effect.fn("OperatorQueue.cancel")(function* (id: string) {
       const projectKey = yield* project()
-      const held = OperatorMessageLanes.lane().get(id)
+      const held = yield* Effect.promise(() =>
+        OperatorMessageLanes.lane()
+          .get(id)
+          .catch(() => undefined),
+      )
       if (held && held.item.project === projectKey) {
-        OperatorMessageLanes.lane().remove(id)
+        yield* Effect.promise(() => OperatorMessageLanes.lane().remove(id))
         const item = OperatorQueueStore.store().enqueue({ ...held.item, status: "cancelled" })
         log(id, "cancelled", { status: "cancelled" })
         announce(item)
