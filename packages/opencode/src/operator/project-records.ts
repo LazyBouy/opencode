@@ -3,7 +3,9 @@ export * as OperatorProjectRecords from "./project-records"
 import fs from "fs/promises"
 import path from "path"
 import { Schema } from "effect"
+import { OperatorFileCache } from "./file-cache"
 import { OperatorProfileStore } from "./profile-store"
+import { OperatorInboxRules } from "./messaging/rules"
 
 // A project's record (project/agent specification §2): its description, status, optional manager
 // agent, members (its project-roles: the agents that may participate) and groups of members. Its goal
@@ -46,7 +48,7 @@ export const Patch = Schema.Struct({
 }).annotate({ identifier: "OperatorProjectRecordPatch" })
 export type Patch = typeof Patch.Type
 
-type Stored = Omit<Record, "key">
+type Stored = Omit<Record, "key"> & { inbox?: OperatorInboxRules.Inbox }
 const file = () => path.join(OperatorProfileStore.root(), "project-records.json")
 
 const empty = (key: string): Record => ({ key, description: "", status: "active", members: [], groups: [] })
@@ -84,6 +86,12 @@ async function readAll(): Promise<globalThis.Record<string, Stored>> {
     .json()
     .catch(() => ({}))
 }
+// Readers go through the file cache (a record is read for every queued message, ping and model request with ping);
+// a write changes the file's stamp, so the next read sees it. Writers read the file themselves.
+async function readCached(): Promise<Readonly<globalThis.Record<string, Stored>>> {
+  const value = await OperatorFileCache.json(file())
+  return value && typeof value === "object" ? (value as globalThis.Record<string, Stored>) : {}
+}
 
 let queue: Promise<unknown> = Promise.resolve()
 // Writes happen one at a time.
@@ -100,11 +108,11 @@ function change<T>(work: (all: globalThis.Record<string, Stored>) => T) {
 }
 
 export async function list(): Promise<Record[]> {
-  return Object.entries(await readAll()).map(([key, value]) => clean(key, value))
+  return Object.entries(await readCached()).map(([key, value]) => clean(key, value))
 }
 
 export async function get(key: string): Promise<Record> {
-  const found = (await readAll())[key]
+  const found = (await readCached())[key]
   return found ? clean(key, found) : empty(key)
 }
 
@@ -142,9 +150,35 @@ export async function update(key: string, patch: Patch): Promise<Record | Invali
   const saved = { ...next, updatedAt: Date.now() }
   await change((all) => {
     const { key: _, ...stored } = saved
-    all[key] = stored
+    // The Project inbox's rules and settings stay (inboxOf).
+    const inbox = (all[key] as { inbox?: unknown } | undefined)?.inbox
+    all[key] = { ...stored, ...(inbox ? { inbox } : {}) } as Stored
   })
   return saved
+}
+
+/**
+ * A project's Project inbox: its ordered rules and its unmatched setting (SPEC-0023 §8.2), kept in its record's
+ * entry, so they're copied and moved with it. A project that never saved them has a new inbox's.
+ */
+export async function inboxOf(key: string): Promise<OperatorInboxRules.Inbox> {
+  const stored = ((await readCached())[key] as { inbox?: Partial<OperatorInboxRules.Inbox> } | undefined)?.inbox
+  const fresh = OperatorInboxRules.fresh()
+  if (!stored || typeof stored !== "object") return fresh
+  return {
+    rules: Array.isArray(stored.rules) ? stored.rules : fresh.rules,
+    unmatched: stored.unmatched === "broadcast" ? "broadcast" : "dead-letter",
+  }
+}
+
+/** Saves a project's inbox (what isn't given stays). */
+export async function setInbox(key: string, patch: Partial<OperatorInboxRules.Inbox>) {
+  const next = { ...(await inboxOf(key)), ...patch }
+  const { key: _, ...base } = empty(key)
+  await change((all) => {
+    all[key] = { ...(all[key] ?? base), inbox: next }
+  })
+  return next
 }
 
 // A copy of a project gets its record (Copy project); a project moved to Trash keeps it for restore.

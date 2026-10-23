@@ -34,6 +34,7 @@ import { ProjectModels } from "../ui/model-defaults"
 import {
   PROJECT_SECTIONS,
   ProjectAgents,
+  ProjectInboxSection,
   ProjectMembers,
   ProjectPromptSection,
   type ProjectSection,
@@ -245,6 +246,16 @@ export default function ProjectsPage() {
   const data = useProjectRows()
   const locale = () => language.intl()
   const [params, setParams] = useSearchParams<Params>()
+  // Waiting for the manager and dead letters, by project id (or folder, for a project without one).
+  const counts = useQuery(() => ({
+    queryKey: api.key("project-inbox", "counts"),
+    queryFn: () =>
+      api
+        .client()
+        .operator.messaging.counts()
+        .then((result) => result.data ?? {}),
+  }))
+  const inboxCount = (key: string) => counts.data?.[data.settingOf(key).id ?? key]
   useRecordOverlay(
     () => !!(params.project || params.block),
     () => <ProjectOverlay />,
@@ -398,6 +409,27 @@ export default function ProjectsPage() {
             align: "end",
             value: (row) => row.lastActivity,
             cell: (row) => formatAgo(row.lastActivity, locale()),
+          },
+          // The Project inbox's counts (SPEC-0023 §10.3).
+          {
+            id: "inboxWaiting",
+            optional: true,
+            hidden: true,
+            header: language.t("operator.column.inboxWaiting"),
+            help: language.t("operator.inbox.help.waitingColumn"),
+            align: "end",
+            value: (row) => inboxCount(row.key)?.waiting ?? 0,
+            cell: (row) => formatCount(inboxCount(row.key)?.waiting ?? 0, locale()),
+          },
+          {
+            id: "deadLetters",
+            optional: true,
+            hidden: true,
+            header: language.t("operator.column.deadLetters"),
+            help: language.t("operator.inbox.help.deadColumn"),
+            align: "end",
+            value: (row) => inboxCount(row.key)?.deadLetters ?? 0,
+            cell: (row) => formatCount(inboxCount(row.key)?.deadLetters ?? 0, locale()),
           },
         ]}
       />
@@ -553,6 +585,12 @@ function ProjectOverlay() {
                 <Match when={section() === "requests"}>
                   <PermissionRequests filter={{ project: found().key }} via="project" />
                 </Match>
+                <Match when={section() === "inbox"}>
+                  <ProjectInboxSection
+                    project={data.settingOf(found().key).id ?? found().key}
+                    directory={found().key}
+                  />
+                </Match>
                 <Match when={section() === "members"}>
                   <ProjectMembers
                     setting={data.settingOf(found().key)}
@@ -580,6 +618,7 @@ const SECTION_ICONS: Record<ProjectSection, DetailSection["icon"]> = {
   models: "providers",
   permissions: "shield",
   requests: "warning",
+  inbox: "bubble-5",
 }
 
 // One project: its details, Edit for its prompt settings (Cancel or Save then), and what can be done

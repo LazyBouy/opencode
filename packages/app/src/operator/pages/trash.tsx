@@ -110,6 +110,8 @@ const kinds = [
   "alert-rule",
   "telemetry-view",
   "telemetry",
+  "hook",
+  "message",
 ] as const
 
 // Trash: everything deleted in the operator pages, newest first. An entry opens in the overlay, with

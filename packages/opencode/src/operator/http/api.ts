@@ -15,6 +15,7 @@ import { OperatorQueueApi } from "./groups/queue"
 import { OperatorTrashItemApi } from "./groups/trash"
 import { OperatorCapabilityApi } from "./groups/capabilities"
 import { OperatorHookApi } from "./groups/hooks"
+import { OperatorProjectInboxApi } from "./groups/project-inbox"
 
 export { OperatorRootApi } from "./groups/overview"
 
@@ -39,3 +40,4 @@ export const OperatorApi = HttpApi.make("operator")
   .addHttpApi(OperatorQueueApi)
   .addHttpApi(OperatorCapabilityApi)
   .addHttpApi(OperatorHookApi)
+  .addHttpApi(OperatorProjectInboxApi)

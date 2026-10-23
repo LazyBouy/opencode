@@ -29,6 +29,7 @@ import { OperatorSessionPermissions } from "./session-permissions"
 import { OperatorAgentSessions } from "./agent-sessions"
 import { OperatorQueue } from "./queue"
 import { OperatorMessagingSeams } from "./messaging/seams"
+import { OperatorProjectInbox } from "./messaging/inbox"
 import { OperatorPing } from "./messaging/ping"
 import { OperatorPermissionLive } from "./permission-live"
 import { OperatorPermissionDecisions } from "./permission-decisions"
@@ -66,6 +67,7 @@ export const operatorNodes = [
   OperatorAgentSessions.node,
   OperatorMessagingSeams.node,
   OperatorQueue.node,
+  OperatorProjectInbox.node,
   OperatorPing.node,
   OperatorPermissionLive.node,
   OperatorPermissionDecisions.node,

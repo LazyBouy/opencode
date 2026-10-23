@@ -1755,3 +1755,63 @@ details[data-slot="operator-as-sent"] [data-component="operator-code"][data-mode
   flex-direction: column;
   gap: 4px;
 }
+
+/* The Project inbox's rules (project-inbox-rules.tsx): an ordered list, dragged or moved with the arrows. */
+[data-component="operator-inbox-rule-list"] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+[data-component="operator-inbox-rule-list"] > li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--v2-border-border-base);
+  border-radius: 6px;
+  background: var(--v2-background-bg-base);
+  cursor: grab;
+}
+
+[data-component="operator-inbox-rule-list"] > li[data-off] {
+  opacity: 0.6;
+}
+
+[data-slot="operator-inbox-rule-order"] {
+  min-width: 1.5em;
+  color: var(--v2-text-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-slot="operator-inbox-rule-body"] {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+[data-component="operator-inbox-rule-list"] [data-slot="operator-rules-actions"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* Overlays whose content is panels and facts (the Project inbox's record, forms and Settings → Messaging; the
+   hooks console's run and settings): padded, scrolling inside the frame. */
+:is(
+    [data-component="operator-inbox-overlay"],
+    [data-component="operator-hook-run"],
+    [data-component="operator-hook-settings"]
+  ) {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 24px;
+  overflow: auto;
+  max-height: 100%;
+}

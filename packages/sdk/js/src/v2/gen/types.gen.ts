@@ -2816,6 +2816,7 @@ export type OperatorTrashKind =
   | "telemetry-view"
   | "telemetry"
   | "hook"
+  | "message"
 
 export type OperatorTrashEntry = {
   id: string
@@ -6843,6 +6844,14 @@ export type OperatorQueueSender = {
 
 export type OperatorQueueLane = "memory" | "sqlite"
 
+export type OperatorQueueVia = {
+  /**
+   * The Project inbox message
+   */
+  id: string
+  manager?: boolean
+}
+
 export type OperatorQueueStatus = "queued" | "in memory" | "delivered" | "failed" | "cancelled"
 
 export type OperatorQueueItem = {
@@ -6861,6 +6870,7 @@ export type OperatorQueueItem = {
   correlationID?: string
   replyTo?: string
   lane?: OperatorQueueLane
+  via?: OperatorQueueVia
   status: OperatorQueueStatus
   createdAt: number
   deliveredAt?: number
@@ -7211,6 +7221,217 @@ export type OperatorHookEvent = {
   fields: Array<"allow" | "reason" | "input" | "prompt" | "output" | "context" | "continue">
   subject?: "tool" | "permission" | "agent"
   group: "session" | "prompt" | "step" | "tool" | "permission" | "compaction" | "watch"
+}
+
+export type OperatorInboxTarget = {
+  type: "agent" | "session" | "group"
+  id: string
+}
+
+export type OperatorMessageFrom = {
+  kind: "user" | "agent" | "system" | "external"
+  project?: string
+  agent?: string
+  session?: string
+}
+
+export type OperatorMessageTo = {
+  type: "session" | "agent" | "group" | "inbox" | "project-agent" | "project-group" | "all-projects"
+  project?: string
+  id?: string
+}
+
+export type OperatorMessageBody = {
+  type: "text" | "file-location"
+  text: string
+}
+
+export type OperatorMessageStatus =
+  | "queued"
+  | "in memory"
+  | "delivered"
+  | "routed"
+  | "with manager"
+  | "dead letter"
+  | "dropped"
+  | "failed"
+  | "cancelled"
+
+export type OperatorMessageStep = {
+  at: number
+  kind: string
+  detail?: string
+}
+
+export type OperatorMessageCopy = {
+  id: string
+  agent?: string
+  sessionID?: string
+  status: OperatorMessageStatus
+}
+
+export type OperatorMessage = {
+  id: string
+  /**
+   * The source project's unique id
+   */
+  project: string
+  folder?: string
+  from: OperatorMessageFrom
+  to: OperatorMessageTo
+  body: OperatorMessageBody
+  priority: OperatorQueuePriority
+  steer: boolean
+  correlationID: string
+  replyTo?: string
+  hops: number
+  status: OperatorMessageStatus
+  agent?: string
+  sessionID?: string
+  lane?: OperatorQueueLane
+  createdAt: number
+  deliveredAt?: number
+  inbox?: string
+  via?: string
+  routedBy?: string
+  routedTo?: Array<string>
+  trail: Array<OperatorMessageStep>
+  copies?: Array<OperatorMessageCopy>
+}
+
+export type OperatorProjectInboxInvalidError = {
+  name: "OperatorProjectInboxInvalidError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorProjectInboxNotFoundError = {
+  name: "OperatorProjectInboxNotFoundError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorInboxRecipient = {
+  /**
+   * agent, group, session: the message names one (id: which); none: it names none; any: it names one
+   */
+  type: "agent" | "group" | "session" | "none" | "any"
+  id?: string
+}
+
+export type OperatorInboxMatch = {
+  /**
+   * this: from this project; a list: from those projects (their ids); left out: from anywhere
+   */
+  fromProject?: "this" | Array<string>
+  fromAgent?: Array<string>
+  recipient?: OperatorInboxRecipient
+  priority?: OperatorQueuePriority
+  type?: "text" | "file-location"
+  contains?: string
+  pattern?: string
+  correlationPrefix?: string
+  reply?: boolean
+}
+
+export type OperatorInboxAction = {
+  /**
+   * as-addressed: to the recipient it names; forward: to `to`; manager: to the manager; dead-letter; drop (logged); broadcast: to every member; to-sender: to the session of the message it answers
+   */
+  kind: "as-addressed" | "forward" | "manager" | "dead-letter" | "drop" | "broadcast" | "to-sender"
+  to?: Array<OperatorInboxTarget>
+  steer?: boolean
+  priority?: OperatorQueuePriority
+}
+
+export type OperatorInboxRule = {
+  id: string
+  name: string
+  enabled: boolean
+  match: OperatorInboxMatch
+  action: OperatorInboxAction
+  preset?: "replies" | "as-addressed"
+}
+
+export type OperatorInboxUnmatched = "dead-letter" | "broadcast"
+
+export type OperatorProjectInbox = {
+  rules: Array<OperatorInboxRule>
+  unmatched: OperatorInboxUnmatched
+}
+
+export type OperatorInboxSample = {
+  text: string
+  type?: "text" | "file-location"
+  fromProject?: string
+  fromAgent?: string
+  fromKind?: "user" | "agent" | "system" | "external"
+  to?: OperatorInboxTarget
+  priority?: OperatorQueuePriority
+  correlationID?: string
+  replyTo?: string
+}
+
+export type OperatorInboxTestResult = {
+  by: "rule" | "manager" | "as addressed" | "broadcast" | "dead letter"
+  rule?: {
+    id: string
+    name: string
+  }
+  detail: string
+}
+
+export type OperatorProjectInboxSettings = {
+  unmatched: OperatorInboxUnmatched
+  manager?: string
+  transport: "sqlite"
+}
+
+export type OperatorMessagingStatus = {
+  memoryLane: {
+    backend: "in-process"
+    /**
+     * Messages held now for running sessions
+     */
+    held: number
+    /**
+     * At most this many a session
+     */
+    cap: number
+  }
+  inboxTransport: "sqlite"
+  rabbitmq: "not configured"
+  redis: "not configured"
+  /**
+   * Messages waiting to be published (RabbitMQ only)
+   */
+  outbox: number
+}
+
+export type OperatorMessagingSettings = {
+  /**
+   * Sends a minute per sending agent: 1 to 1000 (default 30)
+   */
+  perMinute: number
+  /**
+   * Sends an hour per sending agent: 1 to 10000 (default 300)
+   */
+  perHour: number
+  /**
+   * Seconds a ping that waits waits when it gives no timeout: 1 to 1800 (default 120)
+   */
+  wait: number
+}
+
+export type OperatorProjectInboxCount = {
+  waiting: number
+  deadLetters: number
+}
+
+export type OperatorProjectInboxCounts = {
+  [key: string]: OperatorProjectInboxCount
 }
 
 export type UnauthorizedError = {
@@ -22612,6 +22833,642 @@ export type OperatorHookEventsResponses = {
 }
 
 export type OperatorHookEventsResponse = OperatorHookEventsResponses[keyof OperatorHookEventsResponses]
+
+export type OperatorProjectInboxEnterData = {
+  body?: {
+    text: string
+    type?: "text" | "file-location"
+    to?: OperatorInboxTarget
+    priority?: OperatorQueuePriority
+    steer?: boolean
+    correlationID?: string
+    replyTo?: string
+    from?: "user" | "external"
+  }
+  path: {
+    /**
+     * The project's unique id
+     */
+    project: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/project-inbox/{project}"
+}
+
+export type OperatorProjectInboxEnterErrors = {
+  /**
+   * OperatorProjectInboxInvalidError | InvalidRequestError
+   */
+  400: OperatorProjectInboxInvalidError | InvalidRequestError
+  /**
+   * OperatorProjectInboxNotFoundError
+   */
+  404: OperatorProjectInboxNotFoundError
+}
+
+export type OperatorProjectInboxEnterError = OperatorProjectInboxEnterErrors[keyof OperatorProjectInboxEnterErrors]
+
+export type OperatorProjectInboxEnterResponses = {
+  /**
+   * The message as routed
+   */
+  200: OperatorMessage
+}
+
+export type OperatorProjectInboxEnterResponse =
+  OperatorProjectInboxEnterResponses[keyof OperatorProjectInboxEnterResponses]
+
+export type OperatorProjectInboxMessagesData = {
+  body?: never
+  path: {
+    /**
+     * The project's unique id
+     */
+    project: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+    status?: OperatorMessageStatus
+    from?: string
+    limit?: string
+  }
+  url: "/operator/project-inbox/{project}/messages"
+}
+
+export type OperatorProjectInboxMessagesErrors = {
+  /**
+   * OperatorProjectInboxInvalidError | InvalidRequestError
+   */
+  400: OperatorProjectInboxInvalidError | InvalidRequestError
+  /**
+   * OperatorProjectInboxNotFoundError
+   */
+  404: OperatorProjectInboxNotFoundError
+}
+
+export type OperatorProjectInboxMessagesError =
+  OperatorProjectInboxMessagesErrors[keyof OperatorProjectInboxMessagesErrors]
+
+export type OperatorProjectInboxMessagesResponses = {
+  /**
+   * Newest first
+   */
+  200: Array<OperatorMessage>
+}
+
+export type OperatorProjectInboxMessagesResponse =
+  OperatorProjectInboxMessagesResponses[keyof OperatorProjectInboxMessagesResponses]
+
+export type OperatorProjectInboxRulesData = {
+  body?: never
+  path: {
+    /**
+     * The project's unique id
+     */
+    project: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/project-inbox/{project}/rules"
+}
+
+export type OperatorProjectInboxRulesErrors = {
+  /**
+   * OperatorProjectInboxInvalidError | InvalidRequestError
+   */
+  400: OperatorProjectInboxInvalidError | InvalidRequestError
+  /**
+   * OperatorProjectInboxNotFoundError
+   */
+  404: OperatorProjectInboxNotFoundError
+}
+
+export type OperatorProjectInboxRulesError = OperatorProjectInboxRulesErrors[keyof OperatorProjectInboxRulesErrors]
+
+export type OperatorProjectInboxRulesResponses = {
+  /**
+   * The rules, in order, and the unmatched setting
+   */
+  200: OperatorProjectInbox
+}
+
+export type OperatorProjectInboxRulesResponse =
+  OperatorProjectInboxRulesResponses[keyof OperatorProjectInboxRulesResponses]
+
+export type OperatorProjectInboxSetRulesData = {
+  body?: {
+    rules: Array<OperatorInboxRule>
+  }
+  path: {
+    /**
+     * The project's unique id
+     */
+    project: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/project-inbox/{project}/rules"
+}
+
+export type OperatorProjectInboxSetRulesErrors = {
+  /**
+   * OperatorProjectInboxInvalidError | InvalidRequestError
+   */
+  400: OperatorProjectInboxInvalidError | InvalidRequestError
+  /**
+   * OperatorProjectInboxNotFoundError
+   */
+  404: OperatorProjectInboxNotFoundError
+}
+
+export type OperatorProjectInboxSetRulesError =
+  OperatorProjectInboxSetRulesErrors[keyof OperatorProjectInboxSetRulesErrors]
+
+export type OperatorProjectInboxSetRulesResponses = {
+  /**
+   * As saved
+   */
+  200: OperatorProjectInbox
+}
+
+export type OperatorProjectInboxSetRulesResponse =
+  OperatorProjectInboxSetRulesResponses[keyof OperatorProjectInboxSetRulesResponses]
+
+export type OperatorProjectInboxTestData = {
+  body?: {
+    sample: OperatorInboxSample
+    rules?: Array<OperatorInboxRule>
+  }
+  path: {
+    /**
+     * The project's unique id
+     */
+    project: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/project-inbox/{project}/rules/test"
+}
+
+export type OperatorProjectInboxTestErrors = {
+  /**
+   * OperatorProjectInboxInvalidError | InvalidRequestError
+   */
+  400: OperatorProjectInboxInvalidError | InvalidRequestError
+  /**
+   * OperatorProjectInboxNotFoundError
+   */
+  404: OperatorProjectInboxNotFoundError
+}
+
+export type OperatorProjectInboxTestError = OperatorProjectInboxTestErrors[keyof OperatorProjectInboxTestErrors]
+
+export type OperatorProjectInboxTestResponses = {
+  /**
+   * What would take it
+   */
+  200: OperatorInboxTestResult
+}
+
+export type OperatorProjectInboxTestResponse =
+  OperatorProjectInboxTestResponses[keyof OperatorProjectInboxTestResponses]
+
+export type OperatorProjectInboxSettingsData = {
+  body?: never
+  path: {
+    /**
+     * The project's unique id
+     */
+    project: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/project-inbox/{project}/settings"
+}
+
+export type OperatorProjectInboxSettingsErrors = {
+  /**
+   * OperatorProjectInboxInvalidError | InvalidRequestError
+   */
+  400: OperatorProjectInboxInvalidError | InvalidRequestError
+  /**
+   * OperatorProjectInboxNotFoundError
+   */
+  404: OperatorProjectInboxNotFoundError
+}
+
+export type OperatorProjectInboxSettingsError =
+  OperatorProjectInboxSettingsErrors[keyof OperatorProjectInboxSettingsErrors]
+
+export type OperatorProjectInboxSettingsResponses = {
+  /**
+   * The inbox's settings
+   */
+  200: OperatorProjectInboxSettings
+}
+
+export type OperatorProjectInboxSettingsResponse =
+  OperatorProjectInboxSettingsResponses[keyof OperatorProjectInboxSettingsResponses]
+
+export type OperatorProjectInboxSetSettingsData = {
+  body?: {
+    unmatched: OperatorInboxUnmatched
+  }
+  path: {
+    /**
+     * The project's unique id
+     */
+    project: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/project-inbox/{project}/settings"
+}
+
+export type OperatorProjectInboxSetSettingsErrors = {
+  /**
+   * OperatorProjectInboxInvalidError | InvalidRequestError
+   */
+  400: OperatorProjectInboxInvalidError | InvalidRequestError
+  /**
+   * OperatorProjectInboxNotFoundError
+   */
+  404: OperatorProjectInboxNotFoundError
+}
+
+export type OperatorProjectInboxSetSettingsError =
+  OperatorProjectInboxSetSettingsErrors[keyof OperatorProjectInboxSetSettingsErrors]
+
+export type OperatorProjectInboxSetSettingsResponses = {
+  /**
+   * As saved
+   */
+  200: OperatorProjectInboxSettings
+}
+
+export type OperatorProjectInboxSetSettingsResponse =
+  OperatorProjectInboxSetSettingsResponses[keyof OperatorProjectInboxSetSettingsResponses]
+
+export type OperatorMessageRemoveData = {
+  body?: never
+  path: {
+    /**
+     * The message's id (msg_…)
+     */
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/messages/{id}"
+}
+
+export type OperatorMessageRemoveErrors = {
+  /**
+   * OperatorProjectInboxInvalidError | InvalidRequestError
+   */
+  400: OperatorProjectInboxInvalidError | InvalidRequestError
+  /**
+   * OperatorProjectInboxNotFoundError
+   */
+  404: OperatorProjectInboxNotFoundError
+}
+
+export type OperatorMessageRemoveError = OperatorMessageRemoveErrors[keyof OperatorMessageRemoveErrors]
+
+export type OperatorMessageRemoveResponses = {
+  /**
+   * Moved to Trash
+   */
+  200: boolean
+}
+
+export type OperatorMessageRemoveResponse = OperatorMessageRemoveResponses[keyof OperatorMessageRemoveResponses]
+
+export type OperatorMessageGetData = {
+  body?: never
+  path: {
+    /**
+     * The message's id (msg_…)
+     */
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/messages/{id}"
+}
+
+export type OperatorMessageGetErrors = {
+  /**
+   * OperatorProjectInboxInvalidError | InvalidRequestError
+   */
+  400: OperatorProjectInboxInvalidError | InvalidRequestError
+  /**
+   * OperatorProjectInboxNotFoundError
+   */
+  404: OperatorProjectInboxNotFoundError
+}
+
+export type OperatorMessageGetError = OperatorMessageGetErrors[keyof OperatorMessageGetErrors]
+
+export type OperatorMessageGetResponses = {
+  /**
+   * The message, with its trail
+   */
+  200: OperatorMessage
+}
+
+export type OperatorMessageGetResponse = OperatorMessageGetResponses[keyof OperatorMessageGetResponses]
+
+export type OperatorMessageForwardData = {
+  body?: {
+    to: Array<OperatorInboxTarget>
+  }
+  path: {
+    /**
+     * The message's id (msg_…)
+     */
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/messages/{id}/forward"
+}
+
+export type OperatorMessageForwardErrors = {
+  /**
+   * OperatorProjectInboxInvalidError | InvalidRequestError
+   */
+  400: OperatorProjectInboxInvalidError | InvalidRequestError
+  /**
+   * OperatorProjectInboxNotFoundError
+   */
+  404: OperatorProjectInboxNotFoundError
+}
+
+export type OperatorMessageForwardError = OperatorMessageForwardErrors[keyof OperatorMessageForwardErrors]
+
+export type OperatorMessageForwardResponses = {
+  /**
+   * As routed
+   */
+  200: OperatorMessage
+}
+
+export type OperatorMessageForwardResponse = OperatorMessageForwardResponses[keyof OperatorMessageForwardResponses]
+
+export type OperatorMessageDropData = {
+  body?: {
+    reason?: string
+  }
+  path: {
+    /**
+     * The message's id (msg_…)
+     */
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/messages/{id}/drop"
+}
+
+export type OperatorMessageDropErrors = {
+  /**
+   * OperatorProjectInboxInvalidError | InvalidRequestError
+   */
+  400: OperatorProjectInboxInvalidError | InvalidRequestError
+  /**
+   * OperatorProjectInboxNotFoundError
+   */
+  404: OperatorProjectInboxNotFoundError
+}
+
+export type OperatorMessageDropError = OperatorMessageDropErrors[keyof OperatorMessageDropErrors]
+
+export type OperatorMessageDropResponses = {
+  /**
+   * Dropped
+   */
+  200: OperatorMessage
+}
+
+export type OperatorMessageDropResponse = OperatorMessageDropResponses[keyof OperatorMessageDropResponses]
+
+export type OperatorMessageRouteAgainData = {
+  body?: never
+  path: {
+    /**
+     * The message's id (msg_…)
+     */
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/messages/{id}/route-again"
+}
+
+export type OperatorMessageRouteAgainErrors = {
+  /**
+   * OperatorProjectInboxInvalidError | InvalidRequestError
+   */
+  400: OperatorProjectInboxInvalidError | InvalidRequestError
+  /**
+   * OperatorProjectInboxNotFoundError
+   */
+  404: OperatorProjectInboxNotFoundError
+}
+
+export type OperatorMessageRouteAgainError = OperatorMessageRouteAgainErrors[keyof OperatorMessageRouteAgainErrors]
+
+export type OperatorMessageRouteAgainResponses = {
+  /**
+   * As routed now
+   */
+  200: OperatorMessage
+}
+
+export type OperatorMessageRouteAgainResponse =
+  OperatorMessageRouteAgainResponses[keyof OperatorMessageRouteAgainResponses]
+
+export type OperatorMessageBroadcastData = {
+  body?: never
+  path: {
+    /**
+     * The message's id (msg_…)
+     */
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/messages/{id}/broadcast"
+}
+
+export type OperatorMessageBroadcastErrors = {
+  /**
+   * OperatorProjectInboxInvalidError | InvalidRequestError
+   */
+  400: OperatorProjectInboxInvalidError | InvalidRequestError
+  /**
+   * OperatorProjectInboxNotFoundError
+   */
+  404: OperatorProjectInboxNotFoundError
+}
+
+export type OperatorMessageBroadcastError = OperatorMessageBroadcastErrors[keyof OperatorMessageBroadcastErrors]
+
+export type OperatorMessageBroadcastResponses = {
+  /**
+   * Broadcast
+   */
+  200: OperatorMessage
+}
+
+export type OperatorMessageBroadcastResponse =
+  OperatorMessageBroadcastResponses[keyof OperatorMessageBroadcastResponses]
+
+export type OperatorMessagingStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/messaging/status"
+}
+
+export type OperatorMessagingStatusErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorMessagingStatusError = OperatorMessagingStatusErrors[keyof OperatorMessagingStatusErrors]
+
+export type OperatorMessagingStatusResponses = {
+  /**
+   * Messaging's state
+   */
+  200: OperatorMessagingStatus
+}
+
+export type OperatorMessagingStatusResponse = OperatorMessagingStatusResponses[keyof OperatorMessagingStatusResponses]
+
+export type OperatorMessagingSettingsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/messaging/settings"
+}
+
+export type OperatorMessagingSettingsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorMessagingSettingsError = OperatorMessagingSettingsErrors[keyof OperatorMessagingSettingsErrors]
+
+export type OperatorMessagingSettingsResponses = {
+  /**
+   * Settings → Messaging
+   */
+  200: OperatorMessagingSettings
+}
+
+export type OperatorMessagingSettingsResponse =
+  OperatorMessagingSettingsResponses[keyof OperatorMessagingSettingsResponses]
+
+export type OperatorMessagingSetSettingsData = {
+  body?: {
+    perMinute?: number
+    perHour?: number
+    wait?: number
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/messaging/settings"
+}
+
+export type OperatorMessagingSetSettingsErrors = {
+  /**
+   * OperatorProjectInboxInvalidError | InvalidRequestError
+   */
+  400: OperatorProjectInboxInvalidError | InvalidRequestError
+}
+
+export type OperatorMessagingSetSettingsError =
+  OperatorMessagingSetSettingsErrors[keyof OperatorMessagingSetSettingsErrors]
+
+export type OperatorMessagingSetSettingsResponses = {
+  /**
+   * The settings after the save
+   */
+  200: OperatorMessagingSettings
+}
+
+export type OperatorMessagingSetSettingsResponse =
+  OperatorMessagingSetSettingsResponses[keyof OperatorMessagingSetSettingsResponses]
+
+export type OperatorMessagingCountsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/messaging/counts"
+}
+
+export type OperatorMessagingCountsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorMessagingCountsError = OperatorMessagingCountsErrors[keyof OperatorMessagingCountsErrors]
+
+export type OperatorMessagingCountsResponses = {
+  /**
+   * By project id
+   */
+  200: OperatorProjectInboxCounts
+}
+
+export type OperatorMessagingCountsResponse = OperatorMessagingCountsResponses[keyof OperatorMessagingCountsResponses]
 
 export type V2HealthGetData = {
   body?: never

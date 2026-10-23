@@ -25,6 +25,7 @@ export const PROJECT_SECTIONS = [
   "models",
   "permissions",
   "requests",
+  "inbox",
 ] as const
 export type ProjectSection = (typeof PROJECT_SECTIONS)[number]
 
@@ -210,6 +211,67 @@ export function ProjectMembers(props: {
           <ProjectRecordFields setting={props.setting} />
         </dl>
       </Show>
+    </RecordView>
+  )
+}
+
+// The project's Project inbox (SPEC-0023 §10.1): what waits for its manager and its dead letters, what happens to
+// unmatched messages, and the page with everything else.
+export function ProjectInboxSection(props: { project: string; directory: string }) {
+  const language = useLanguage()
+  const api = useOperatorClient()
+  const navigate = useNavigate()
+  const settings = useQuery(() => ({
+    queryKey: api.key("project-inbox", props.project, "settings"),
+    queryFn: () =>
+      api
+        .client()
+        .operator.projectInbox.settings({ project: props.project, directory: props.directory }, { throwOnError: true })
+        .then((result) => result.data!),
+  }))
+  const counts = useQuery(() => ({
+    queryKey: api.key("project-inbox", "counts"),
+    queryFn: () =>
+      api
+        .client()
+        .operator.messaging.counts()
+        .then((result) => result.data ?? {}),
+  }))
+  const count = () => ready(counts)?.[props.project]
+  const open = (tab?: string) =>
+    navigate(
+      `/operator/project-inbox?project=${encodeURIComponent(props.project)}&dir=${folderOf(props.directory)}${tab ? `&itab=${tab}` : ""}`,
+    )
+  return (
+    <RecordView
+      title={language.t("operator.projects.section.inbox")}
+      actions={
+        <ButtonV2 size="small" variant="contrast" onClick={() => open()} data-testid="project-inbox-open">
+          {language.t("operator.inbox.open")}
+        </ButtonV2>
+      }
+    >
+      <dl data-component="operator-facts" data-layout="stacked" data-testid="project-inbox-section">
+        <RecordField
+          label={language.t("operator.inbox.tab.waiting")}
+          help={language.t("operator.inbox.help.waitingColumn")}
+        >
+          <button type="button" data-slot="operator-link" onClick={() => open("waiting")}>
+            {String(count()?.waiting ?? 0)}
+          </button>
+        </RecordField>
+        <RecordField label={language.t("operator.inbox.tab.dead")} help={language.t("operator.inbox.help.deadColumn")}>
+          <button type="button" data-slot="operator-link" onClick={() => open("dead")}>
+            {String(count()?.deadLetters ?? 0)}
+          </button>
+        </RecordField>
+        <RecordField label={language.t("operator.inbox.manager")} help={language.t("operator.inbox.help.manager")}>
+          {ready(settings)?.manager ?? language.t("operator.inbox.noManager")}
+        </RecordField>
+        <RecordField label={language.t("operator.inbox.unmatched")} help={language.t("operator.inbox.help.unmatched")}>
+          {ready(settings) ? language.t(`operator.inbox.unmatched.${ready(settings)!.unmatched}`) : "—"}
+        </RecordField>
+      </dl>
     </RecordView>
   )
 }

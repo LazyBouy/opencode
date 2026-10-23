@@ -8,6 +8,7 @@ import { OperatorLayout } from "@/operator/layout"
 import { OperatorPingDefaults } from "@/operator/messaging/defaults"
 import { OperatorMessageLog } from "@/operator/messaging/log"
 import { OperatorPing } from "@/operator/messaging/ping"
+import { OperatorMessagingSettings } from "@/operator/messaging/settings"
 import { OperatorPermissionLive } from "@/operator/permission-live"
 import { OperatorPermissionLocks } from "@/operator/permission-locks"
 import { OperatorProjectRecords } from "@/operator/project-records"
@@ -312,7 +313,7 @@ unix("the rate limits: 30 sends a minute per agent, a group counting as one", ()
   Effect.gen(function* () {
     const { ping, call, record } = yield* setup()
     yield* record({ status: "paused", groups: [{ id: "g1", name: "team", members: ["plan", "general"] }] })
-    for (let count = 0; count < OperatorPing.LIMITS.perMinute - 1; count++) {
+    for (let count = 0; count < OperatorMessagingSettings.DEFAULTS.perMinute - 1; count++) {
       const sent = yield* ping.run(
         call({ verb: "send", target: { type: "agent", id: "plan" }, message: { body: "n" } }),
       )

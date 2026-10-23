@@ -11,39 +11,54 @@ import { OperatorProjects } from "../projects"
 import { OperatorQueue } from "../queue"
 import type { OperatorQueueStore } from "../queue-store"
 import { OperatorPingDefaults } from "./defaults"
+import { OperatorProjectInbox } from "./inbox"
 import { OperatorMessageLanes } from "./lanes"
 import { OperatorMessageLog } from "./log"
 import { OperatorMessage } from "./message"
+import { OperatorInboxRules as Rules } from "./rules"
 import { OperatorMessagingSeams } from "./seams"
+import { OperatorMessagingSettings } from "./settings"
+import { OperatorPingVerbs } from "./verbs"
 
-// What the `ping` tool does (SPEC-0023 §7), inside a project: `discover` what the agent may send to, and `send` to
-// an agent, a session or a group, through the queue's lanes (queue.ts), optionally waiting for the reply. The tool
-// itself, its permission asks and its offer are in seams.ts; this module never imports session code. Permissions
-// are the `ping` lines with verbs (`SEND(agent/writer)`), decided from the session's effective lines (cached,
-// permission-live.ts); on top of them the sender and the recipients must be members of the project. A send counts
-// against the sending agent's rate limits, a group as one.
+// What the `ping` tool does (SPEC-0023 §7, §8.3), inside a project: `discover` what the agent may send to, and
+// `send` to an agent, a session, a group or the Project inbox (inbox.ts), through the queue's lanes (queue.ts),
+// optionally waiting for the reply; the project's manager also `forward`s and `drop`s what its inbox gave it, and
+// changes the inbox's `rule`s. The tool itself, its permission asks and its offer are in seams.ts; this module
+// never imports session code. Permissions are the `ping` lines with verbs (`SEND(agent/writer)`), decided from the
+// session's effective lines (cached, permission-live.ts); on top of them the sender and the recipients must be
+// members of the project. A send counts against the sending agent's rate limits (Settings → Messaging), a group
+// as one.
 
-export const VERBS = ["DISCOVER", "SEND"] as const
+export const VERBS = ["DISCOVER", "SEND", "FORWARD", "DROP", "RULE"] as const
 OperatorPermissionEffective.declareVerbs("ping", VERBS)
 // Offered only where a line allows it (seams.ts): the OpenCode namespace has none (ADR-0005).
 OperatorPermissionEffective.declareOptIn("ping")
 
 export const LIMITS = {
-  /** Sends per sending agent and project (§9.3). */
-  perMinute: 30,
-  perHour: 300,
   /** Recipients of one group send or broadcast (§8.4). */
-  recipients: 50,
-  /** `wait`, in seconds (§7.4). */
-  wait: 120,
-  waitMax: 1800,
+  recipients: OperatorProjectInbox.MAX_RECIPIENTS,
+  /** The longest `wait`, in seconds (§7.4); the default is in Settings → Messaging. */
+  waitMax: OperatorMessagingSettings.WAIT_MAX,
 } as const
 
-export const TARGETS = ["agent", "session", "group"] as const
+/** The manager's verbs (§8.3): offered only to the project's manager. */
+export const MANAGER_VERBS = OperatorPingVerbs.MANAGER
+export const TARGETS = ["agent", "session", "group", "project_inbox"] as const
 export type Target = { type: (typeof TARGETS)[number]; id?: string; session?: string }
 
+/** The `rule` verb's input: what to do with the inbox's rules. */
+export type RuleArgs = {
+  op: "list" | "add" | "change" | "on" | "off" | "remove"
+  id?: string
+  name?: string
+  /** add: where in the list (0 is first; default: last). */
+  position?: number
+  match?: Rules.Match
+  action?: Rules.Action
+}
+
 export type Args = {
-  verb: "discover" | "send"
+  verb: "discover" | "send" | (typeof MANAGER_VERBS)[number]
   target?: Target
   message?: { type?: OperatorMessage.Body["type"]; body: string }
   priority?: OperatorQueueStore.Priority
@@ -52,6 +67,13 @@ export type Args = {
   replyTo?: string
   wait?: boolean
   timeout?: number
+  /** forward, drop: the Project inbox message (or the copy the manager got). */
+  messageID?: string
+  /** forward: where to. */
+  to?: Rules.Target[]
+  /** drop: why. */
+  reason?: string
+  rule?: RuleArgs
 }
 
 /** What a `ping` call's part carries (`metadata.ping`), for its card in the session views. */
@@ -59,7 +81,7 @@ export type Card = {
   verb: Args["verb"]
   /** What was asked for, e.g. `agent writer`, `group reviewers`, `reply to msg_…`. */
   target?: string
-  status: "listed" | "sent" | "refused" | "waiting" | "replied" | "no reply"
+  status: "listed" | "sent" | "done" | "refused" | "waiting" | "replied" | "no reply"
   reason?: string
   messages?: Array<{ id?: string; to: string; status: string; reason?: string }>
   correlationID?: string
@@ -80,22 +102,24 @@ export type Call = {
 export type Result = { title: string; output: string; card: Card }
 
 export const DESCRIPTION = [
-  "Send messages to the other agents of this project, and to your own other sessions.",
-  "- discover: lists the agents (and whether each is running) and groups you may send to.",
-  "- send: sends message.body to target: an agent ({type: agent, id: name}, optionally its session), a session ({type: session, id: ses_…}) or a group ({type: group, id: name}: one message per member). A blank id sends to every agent, or every group.",
+  "Send messages to the other agents of this project, to its Project inbox, and to your own other sessions.",
+  "- discover: lists the agents (and whether each is running), the groups and the Project inbox you may send to.",
+  "- send: sends message.body to target: an agent ({type: agent, id: name}, optionally its session), a session ({type: session, id: ses_…}), a group ({type: group, id: name}: one message per member) or the Project inbox ({type: project_inbox}: its rules, else its manager, decide where it goes). A blank id sends to every agent, or every group.",
   "The recipient sees who sent the message, with its id and correlation id. A message for a session that is running reads at its turn's end, unless steer is true (read at its next step); one for an idle session starts its next turn, so each message costs the recipient a model turn.",
   "To answer a message you received, send with replyTo set to its id: the reply goes to the sender's session, whatever target says.",
-  `wait: true keeps this call waiting for the reply (same correlation id), up to timeout seconds (default ${LIMITS.wait}, at most ${LIMITS.waitMax}); you spend that time waiting. Never wait on your own session.`,
-  `At most ${LIMITS.perMinute} sends a minute and ${LIMITS.perHour} an hour; a group send counts as one, with at most ${LIMITS.recipients} recipients.`,
+  `wait: true keeps this call waiting for the reply (same correlation id), up to timeout seconds (at most ${LIMITS.waitMax}); you spend that time waiting. Never wait on your own session.`,
+  `Sends are rate-limited per agent; a group send counts as one, with at most ${LIMITS.recipients} recipients.`,
+  "Only the project's manager: forward (messageID, to: agents, sessions or groups) and drop (messageID, reason) a message the Project inbox gave you to route; rule (rule.op: list, add, change, on, off, remove) changes the inbox's rules.",
 ].join("\n")
 
 // Sends by sending agent and project, for the rate limits (times, the last hour's).
 const sends = new Map<string, number[]>()
-function limited(key: string, now: number) {
+function limited(key: string, now: number, settings: OperatorMessagingSettings.Settings) {
   const recent = (sends.get(key) ?? []).filter((at) => now - at < 3_600_000)
   sends.set(key, recent)
-  if (recent.length >= LIMITS.perHour) return `${LIMITS.perHour} sends an hour`
-  if (recent.filter((at) => now - at < 60_000).length >= LIMITS.perMinute) return `${LIMITS.perMinute} sends a minute`
+  if (recent.length >= settings.perHour) return `${settings.perHour} sends an hour`
+  if (recent.filter((at) => now - at < 60_000).length >= settings.perMinute)
+    return `${settings.perMinute} sends a minute`
   return undefined
 }
 const counted = (key: string, now: number) => sends.set(key, [...(sends.get(key) ?? []), now])
@@ -121,6 +145,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const seams = yield* OperatorMessagingSeams.Service
     const queue = yield* OperatorQueue.Service
+    const inbox = yield* OperatorProjectInbox.Service
 
     yield* Effect.promise(() => OperatorPingDefaults.ensure().catch(() => false))
 
@@ -173,6 +198,8 @@ const layer = Layer.effect(
         if (action === "ask") asks.push(`DISCOVER(group/${group.name})`)
         groups.push(`- ${group.name}: ${group.members.join(", ") || "no members"}`)
       }
+      const inboxShown = shown("inbox")
+      if (inboxShown === "ask") asks.push("DISCOVER(inbox)")
       if (asks.length)
         yield* Effect.promise(() =>
           call.ask({
@@ -186,6 +213,11 @@ const layer = Layer.effect(
         `Agents of project ${name} you may message:`,
         ...(agents.length ? agents : ["(none)"]),
         ...(groups.length ? ["Groups:", ...groups] : []),
+        ...(inboxShown
+          ? [
+              `The Project inbox ({type: project_inbox}): ${record.manager ? `its rules, else the manager ${record.manager}` : "its rules"} route what it gets.`,
+            ]
+          : []),
       ].join("\n")
       return {
         title: `${agents.length} agents, ${groups.length} groups`,
@@ -199,7 +231,8 @@ const layer = Layer.effect(
       const body = args.message?.body?.trim() ?? ""
       if (!body) return refused("send", "the message is empty (message.body)")
       const limitKey = `${project}\n${call.agent}`
-      const over = limited(limitKey, Date.now())
+      const settings = yield* Effect.promise(() => OperatorMessagingSettings.read())
+      const over = limited(limitKey, Date.now(), settings)
       if (over) return refused("send", `the rate limit: at most ${over}`)
       const decide = yield* decider(call.sessionID, call.agent)
 
@@ -209,6 +242,7 @@ const layer = Layer.effect(
       let label: string
       let correlationID = args.correlationID
       let anyone = false
+      let toInbox = false
       if (args.replyTo) {
         // A reply goes to the original sender's session, with its correlation id (§7.4, §9.2).
         const original = OperatorMessageLog.log().get(args.replyTo)
@@ -224,7 +258,12 @@ const layer = Layer.effect(
         const target = args.target
         if (!target) return refused("send", "say who it's for (target)")
         const id = target.id?.trim()
-        if (target.type === "session") {
+        if (target.type === "project_inbox") {
+          label = "the Project inbox"
+          pattern = "inbox"
+          toInbox = true
+          anyone = true
+        } else if (target.type === "session") {
           label = `session ${id ?? ""}`.trim()
           if (!id) return refused("send", "name the session (target.id)", label)
           const found = yield* seams.session(id)
@@ -271,7 +310,7 @@ const layer = Layer.effect(
       }
       if (decide(`SEND(${pattern})`) === "deny")
         return refused("send", `the ping permission denies SEND(${pattern})`, label)
-      if (!recipients.length) return refused("send", "nobody to send it to", label)
+      if (!recipients.length && !toInbox) return refused("send", "nobody to send it to", label)
       if (recipients.length > LIMITS.recipients)
         return refused("send", `${recipients.length} recipients; at most ${LIMITS.recipients}`, label)
 
@@ -301,7 +340,7 @@ const layer = Layer.effect(
 
       const firstID = OperatorMessage.newId()
       correlationID ??= firstID
-      const timeout = Math.min(Math.max(Math.round(args.timeout ?? LIMITS.wait), 1), LIMITS.waitMax)
+      const timeout = Math.min(Math.max(Math.round(args.timeout ?? settings.wait), 1), LIMITS.waitMax)
       // Registered before anything is sent, so a quick reply can't pass it by.
       const from = recipients.length === 1 && !anyone ? recipients[0].agent : undefined
       const waiting = waits
@@ -314,6 +353,31 @@ const layer = Layer.effect(
           })
         : undefined
 
+      const messages: NonNullable<Card["messages"]> = []
+      if (toInbox) {
+        // The inbox routes it now (§8.1): routed, with the manager, a dead letter or dropped.
+        const entered = yield* inbox
+          .enter({
+            project,
+            from: {
+              kind: "agent",
+              agent: call.agent,
+              session: call.sessionID,
+              project: yield* Effect.promise(() => OperatorProjectInbox.projectIdOf(project)),
+            },
+            body: { type: args.message?.type ?? "text", text: body },
+            priority: args.priority ?? "normal",
+            steer: args.steer ?? false,
+            correlationID,
+          })
+          .pipe(
+            Effect.map((message) => ({ id: message.id, to: label, status: message.status })),
+            Effect.catch((error) => Effect.succeed({ to: label, status: "refused", reason: error.message })),
+          )
+        messages.push(entered)
+        // Nobody will answer a dead letter or a dropped message.
+        if (entered.status !== "routed" && entered.status !== "with manager") waiting?.cancel()
+      }
       const to: OperatorMessage.To = args.replyTo
         ? { type: "session", id: recipients[0].sessionID! }
         : args.target!.type === "group"
@@ -321,7 +385,6 @@ const layer = Layer.effect(
           : args.target!.type === "session"
             ? { type: "session", id: args.target!.id! }
             : { type: "agent", ...(args.target!.id ? { id: args.target!.id } : {}) }
-      const messages: NonNullable<Card["messages"]> = []
       for (const [at, recipient] of recipients.entries()) {
         const sent = yield* queue
           .send(
@@ -357,7 +420,7 @@ const layer = Layer.effect(
         item.id ? `${item.id} → ${item.to}: ${item.status}` : `${item.to}: refused (${item.reason})`,
       )
       const sentCard: Card = { verb: "send", target: label, status: "sent", messages, correlationID }
-      if (!waiting)
+      if (!waiting || (toInbox && messages[0]?.status !== "routed" && messages[0]?.status !== "with manager"))
         return {
           title: `${label}: ${delivered.length === 1 ? delivered[0].status : `${delivered.length} sent`}`,
           output: [...lines, `correlation ${correlationID}`].join("\n"),
@@ -405,15 +468,144 @@ const layer = Layer.effect(
       } satisfies Result
     })
 
+    // The manager's verbs (§8.3): refused for any other agent; each asks its permission line first.
+    const asked = (call: Call, verb: "FORWARD" | "DROP" | "RULE", targets: string[], description: string) =>
+      Effect.gen(function* () {
+        const decide = yield* decider(call.sessionID, call.agent)
+        const patterns = targets.map((target) => `${verb}(${target})`)
+        const denied = patterns.find((pattern) => decide(pattern) === "deny")
+        if (denied) return `the ping permission denies ${denied}`
+        const always = [
+          ...new Set(targets.map((target) => `${verb}(${target.includes("/") ? `${target.split("/")[0]}/*` : "*"})`)),
+        ]
+        yield* Effect.promise(() => call.ask({ patterns, always, metadata: { description } }))
+        return undefined
+      })
+
+    const forward = Effect.fnUntraced(function* (call: Call, project: string) {
+      const id = call.args.messageID?.trim()
+      if (!id) return refused("forward", "name the message (messageID)")
+      const to = call.args.to ?? []
+      if (!to.length) return refused("forward", "say where to forward it (to)", id)
+      const no = yield* asked(
+        call,
+        "FORWARD",
+        to.map((target) => `${target.type}/${target.id}`),
+        `Forward ${id}`,
+      )
+      if (no) return refused("forward", no, id)
+      const outcome = yield* inbox.forward(id, to, { kind: "agent", agent: call.agent }, project).pipe(
+        Effect.map((message) => ({ message })),
+        Effect.catch((error) => Effect.succeed({ error: error.message })),
+      )
+      if ("error" in outcome) return refused("forward", outcome.error, id)
+      const where = outcome.message.routedTo?.join(", ") ?? ""
+      return {
+        title: `forwarded ${outcome.message.id}`,
+        output: `${outcome.message.id}: ${outcome.message.status}, to ${where}`,
+        card: {
+          verb: "forward",
+          target: id,
+          status: "sent",
+          messages: [{ id: outcome.message.id, to: where, status: outcome.message.status }],
+        },
+      } satisfies Result
+    })
+
+    const drop = Effect.fnUntraced(function* (call: Call, project: string) {
+      const id = call.args.messageID?.trim()
+      if (!id) return refused("drop", "name the message (messageID)")
+      const no = yield* asked(call, "DROP", [id], `Drop ${id}`)
+      if (no) return refused("drop", no, id)
+      const outcome = yield* inbox.drop(id, call.args.reason ?? "", { kind: "agent", agent: call.agent }, project).pipe(
+        Effect.map((message) => ({ message })),
+        Effect.catch((error) => Effect.succeed({ error: error.message })),
+      )
+      if ("error" in outcome) return refused("drop", outcome.error, id)
+      return {
+        title: `dropped ${outcome.message.id}`,
+        output: `${outcome.message.id}: dropped`,
+        card: { verb: "drop", target: id, status: "done" },
+      } satisfies Result
+    })
+
+    const rule = Effect.fnUntraced(function* (call: Call, project: string) {
+      const input = call.args.rule
+      if (!input) return refused("rule", "say what to do (rule.op: list, add, change, on, off, remove)")
+      const current = (yield* inbox.inbox(project)).rules
+      const listed = (rules: ReadonlyArray<Rules.Rule>) =>
+        rules.length ? rules.map((item, at) => `${at + 1}. ${Rules.describe(item)}`).join("\n") : "No rules."
+      if (input.op === "list")
+        return {
+          title: `${current.length} rules`,
+          output: listed(current),
+          card: { verb: "rule", status: "listed" },
+        } satisfies Result
+      const found = input.id ? current.find((item) => item.id === input.id) : undefined
+      if (input.op !== "add" && !found)
+        return refused("rule", input.id ? `no rule ${input.id}` : "name the rule (rule.id)")
+      const no = yield* asked(call, "RULE", [input.op], `${input.op} a Project inbox rule`)
+      if (no) return refused("rule", no)
+      const next: Rules.Rule[] = (() => {
+        if (input.op === "add") {
+          const made: Rules.Rule = {
+            id: input.id?.trim() || `r_${Date.now().toString(36)}`,
+            name: input.name?.trim() || "Rule",
+            enabled: true,
+            match: input.match ?? {},
+            action: input.action ?? { kind: "manager" },
+          }
+          const at = Math.min(Math.max(input.position ?? current.length, 0), current.length)
+          return [...current.slice(0, at), made, ...current.slice(at)]
+        }
+        if (input.op === "remove") return current.filter((item) => item.id !== found!.id)
+        return current.map((item) =>
+          item.id !== found!.id
+            ? item
+            : input.op === "change"
+              ? {
+                  ...item,
+                  ...(input.name ? { name: input.name } : {}),
+                  ...(input.match ? { match: input.match } : {}),
+                  ...(input.action ? { action: input.action } : {}),
+                }
+              : { ...item, enabled: input.op === "on" },
+        )
+      })()
+      const saved = yield* inbox.setRules(project, next).pipe(
+        Effect.map((value) => ({ value })),
+        Effect.catch((error) => Effect.succeed({ error: error.message })),
+      )
+      if ("error" in saved) return refused("rule", saved.error)
+      return {
+        title: `rule ${input.op}`,
+        output: listed(saved.value.rules),
+        card: { verb: "rule", target: input.op, status: "done" },
+      } satisfies Result
+    })
+
     const run = Effect.fn("OperatorPing.run")(function* (call: Call) {
       const ctx = yield* InstanceState.context
       const project = yield* Effect.promise(() => OperatorProjects.keyOf(ctx))
       const record = yield* Effect.promise(() => OperatorProjectRecords.get(project))
       if (record.members.length && !record.members.includes(call.agent))
         return refused(call.args.verb, `${call.agent} is not a member of this project`)
-      if (call.args.verb === "discover") return yield* discover(call, project, record)
-      if (call.args.verb === "send") return yield* send(call, project, record)
-      return refused(call.args.verb, `unknown verb ${String(call.args.verb)}`)
+      const verb = call.args.verb
+      if (verb === "discover") return yield* discover(call, project, record)
+      if (verb === "send") return yield* send(call, project, record)
+      if (verb === "forward" || verb === "drop" || verb === "rule") {
+        if (record.manager !== call.agent)
+          return refused(
+            verb,
+            record.manager
+              ? `only the project's manager, ${record.manager}, may ${verb}`
+              : `this project has no manager; only a manager may ${verb}`,
+          )
+        if (verb === "forward") return yield* forward(call, project)
+        if (verb === "drop") return yield* drop(call, project)
+        return yield* rule(call, project)
+      }
+      return refused(verb, `unknown verb ${String(verb)}`)
     })
 
     yield* OperatorMessagingSeams.servePing(run)
@@ -424,5 +616,5 @@ const layer = Layer.effect(
 export const node = LayerNode.make({
   service: Service,
   layer,
-  deps: [OperatorMessagingSeams.node, OperatorQueue.node],
+  deps: [OperatorMessagingSeams.node, OperatorQueue.node, OperatorProjectInbox.node],
 })

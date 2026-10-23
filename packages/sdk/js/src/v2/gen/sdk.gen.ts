@@ -270,6 +270,10 @@ import type {
   OperatorHookStateResponses,
   OperatorHookTestErrors,
   OperatorHookTestResponses,
+  OperatorInboxRule,
+  OperatorInboxSample,
+  OperatorInboxTarget,
+  OperatorInboxUnmatched,
   OperatorLayoutGetErrors,
   OperatorLayoutGetResponses,
   OperatorLayoutLaterErrors,
@@ -305,6 +309,27 @@ import type {
   OperatorMemoryWriteIndexErrors,
   OperatorMemoryWriteIndexResponses,
   OperatorMemoryWriteResponses,
+  OperatorMessageBroadcastErrors,
+  OperatorMessageBroadcastResponses,
+  OperatorMessageDropErrors,
+  OperatorMessageDropResponses,
+  OperatorMessageForwardErrors,
+  OperatorMessageForwardResponses,
+  OperatorMessageGetErrors,
+  OperatorMessageGetResponses,
+  OperatorMessageRemoveErrors,
+  OperatorMessageRemoveResponses,
+  OperatorMessageRouteAgainErrors,
+  OperatorMessageRouteAgainResponses,
+  OperatorMessageStatus,
+  OperatorMessagingCountsErrors,
+  OperatorMessagingCountsResponses,
+  OperatorMessagingSetSettingsErrors,
+  OperatorMessagingSetSettingsResponses,
+  OperatorMessagingSettingsErrors,
+  OperatorMessagingSettingsResponses,
+  OperatorMessagingStatusErrors,
+  OperatorMessagingStatusResponses,
   OperatorModelDefaultForErrors,
   OperatorModelDefaultForResponses,
   OperatorModelDefaultsErrors,
@@ -390,6 +415,20 @@ import type {
   OperatorPermissionPendingErrors,
   OperatorPermissionPendingResponses,
   OperatorProjectGroup,
+  OperatorProjectInboxEnterErrors,
+  OperatorProjectInboxEnterResponses,
+  OperatorProjectInboxMessagesErrors,
+  OperatorProjectInboxMessagesResponses,
+  OperatorProjectInboxRulesErrors,
+  OperatorProjectInboxRulesResponses,
+  OperatorProjectInboxSetRulesErrors,
+  OperatorProjectInboxSetRulesResponses,
+  OperatorProjectInboxSetSettingsErrors,
+  OperatorProjectInboxSetSettingsResponses,
+  OperatorProjectInboxSettingsErrors,
+  OperatorProjectInboxSettingsResponses,
+  OperatorProjectInboxTestErrors,
+  OperatorProjectInboxTestResponses,
   OperatorProjectListErrors,
   OperatorProjectListResponses,
   OperatorProjectRecordListErrors,
@@ -9155,6 +9194,685 @@ export class Hook extends HeyApiClient {
   }
 }
 
+export class ProjectInbox extends HeyApiClient {
+  /**
+   * Put a message into a project's inbox
+   *
+   * From the user (the Project inbox page's New message) or from outside. It's routed at once: the rules, else the manager, else as addressed, else dead letter or broadcast.
+   */
+  public enter<ThrowOnError extends boolean = false>(
+    parameters: {
+      project: string
+      directory?: string
+      workspace?: string
+      text?: string
+      type?: "text" | "file-location"
+      to?: OperatorInboxTarget
+      priority?: OperatorQueuePriority
+      steer?: boolean
+      correlationID?: string
+      replyTo?: string
+      from?: "user" | "external"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "project" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "text" },
+            { in: "body", key: "type" },
+            { in: "body", key: "to" },
+            { in: "body", key: "priority" },
+            { in: "body", key: "steer" },
+            { in: "body", key: "correlationID" },
+            { in: "body", key: "replyTo" },
+            { in: "body", key: "from" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorProjectInboxEnterResponses,
+      OperatorProjectInboxEnterErrors,
+      ThrowOnError
+    >({
+      url: "/operator/project-inbox/{project}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * A project's inbox messages
+   *
+   * Everything that entered the project's inbox, filtered by status and sender; at most 500.
+   */
+  public messages<ThrowOnError extends boolean = false>(
+    parameters: {
+      project: string
+      directory?: string
+      workspace?: string
+      status?: OperatorMessageStatus
+      from?: string
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "project" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "status" },
+            { in: "query", key: "from" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorProjectInboxMessagesResponses,
+      OperatorProjectInboxMessagesErrors,
+      ThrowOnError
+    >({
+      url: "/operator/project-inbox/{project}/messages",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * A project's inbox rules
+   *
+   * The ordered rules (the first that matches decides) and what happens to unmatched messages.
+   */
+  public rules<ThrowOnError extends boolean = false>(
+    parameters: {
+      project: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "project" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorProjectInboxRulesResponses,
+      OperatorProjectInboxRulesErrors,
+      ThrowOnError
+    >({
+      url: "/operator/project-inbox/{project}/rules",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Save a project's inbox rules
+   *
+   * The whole ordered list. Refused when a rule has no name, a regular expression doesn't compile or a forward names nobody.
+   */
+  public setRules<ThrowOnError extends boolean = false>(
+    parameters: {
+      project: string
+      directory?: string
+      workspace?: string
+      rules?: Array<OperatorInboxRule>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "project" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "rules" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorProjectInboxSetRulesResponses,
+      OperatorProjectInboxSetRulesErrors,
+      ThrowOnError
+    >({
+      url: "/operator/project-inbox/{project}/rules",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Test the rules on a sample message
+   *
+   * Which rule would take it, or the manager, as addressed, broadcast or dead letter. Nothing is sent.
+   */
+  public test<ThrowOnError extends boolean = false>(
+    parameters: {
+      project: string
+      directory?: string
+      workspace?: string
+      sample?: OperatorInboxSample
+      rules?: Array<OperatorInboxRule>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "project" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "sample" },
+            { in: "body", key: "rules" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorProjectInboxTestResponses,
+      OperatorProjectInboxTestErrors,
+      ThrowOnError
+    >({
+      url: "/operator/project-inbox/{project}/rules/test",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * A project's inbox settings
+   *
+   * What happens to unmatched messages, the manager, and the transport.
+   */
+  public settings<ThrowOnError extends boolean = false>(
+    parameters: {
+      project: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "project" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorProjectInboxSettingsResponses,
+      OperatorProjectInboxSettingsErrors,
+      ThrowOnError
+    >({
+      url: "/operator/project-inbox/{project}/settings",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Change what happens to unmatched messages
+   *
+   * Dead letter (the default) or broadcast: one message, and one model turn, per member.
+   */
+  public setSettings<ThrowOnError extends boolean = false>(
+    parameters: {
+      project: string
+      directory?: string
+      workspace?: string
+      unmatched?: OperatorInboxUnmatched
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "project" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "unmatched" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorProjectInboxSetSettingsResponses,
+      OperatorProjectInboxSetSettingsErrors,
+      ThrowOnError
+    >({
+      url: "/operator/project-inbox/{project}/settings",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Message extends HeyApiClient {
+  /**
+   * Delete a dead letter
+   *
+   * Moves a dead letter (or a dropped message) to Trash; restoring it puts it back.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      OperatorMessageRemoveResponses,
+      OperatorMessageRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/operator/messages/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * A message's record
+   *
+   * Any message in the message log: who sent it, what it asked for, where it went and when.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<OperatorMessageGetResponses, OperatorMessageGetErrors, ThrowOnError>({
+      url: "/operator/messages/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Forward a waiting message or a dead letter
+   *
+   * To agents, sessions or groups of its project; its sender and correlation id stay.
+   */
+  public forward<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+      to?: Array<OperatorInboxTarget>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "to" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorMessageForwardResponses,
+      OperatorMessageForwardErrors,
+      ThrowOnError
+    >({
+      url: "/operator/messages/{id}/forward",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Drop a waiting message or a dead letter
+   *
+   * It stays in the log, dropped, with the reason.
+   */
+  public drop<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+      reason?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "reason" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<OperatorMessageDropResponses, OperatorMessageDropErrors, ThrowOnError>(
+      {
+        url: "/operator/messages/{id}/drop",
+        ...options,
+        ...params,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+          ...params.headers,
+        },
+      },
+    )
+  }
+
+  /**
+   * Route a message again
+   *
+   * A dead letter (or a waiting message) through the inbox's routing again, e.g. after adding a rule.
+   */
+  public routeAgain<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorMessageRouteAgainResponses,
+      OperatorMessageRouteAgainErrors,
+      ThrowOnError
+    >({
+      url: "/operator/messages/{id}/route-again",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Broadcast a dead letter
+   *
+   * One message per member of its project (at most 50): each starts a model turn for an idle member.
+   */
+  public broadcast<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      OperatorMessageBroadcastResponses,
+      OperatorMessageBroadcastErrors,
+      ThrowOnError
+    >({
+      url: "/operator/messages/{id}/broadcast",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Messaging extends HeyApiClient {
+  /**
+   * Messaging's state
+   *
+   * The memory lane's backend and what it holds, the inbox transport, RabbitMQ, Redis and the outbox.
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorMessagingStatusResponses,
+      OperatorMessagingStatusErrors,
+      ThrowOnError
+    >({
+      url: "/operator/messaging/status",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Settings → Messaging
+   *
+   * The rate limits per sending agent and the default wait of a ping that waits. Server-wide.
+   */
+  public settings<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorMessagingSettingsResponses,
+      OperatorMessagingSettingsErrors,
+      ThrowOnError
+    >({
+      url: "/operator/messaging/settings",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Change Settings → Messaging
+   *
+   * What isn't given stays.
+   */
+  public setSettings<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      perMinute?: number
+      perHour?: number
+      wait?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "perMinute" },
+            { in: "body", key: "perHour" },
+            { in: "body", key: "wait" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      OperatorMessagingSetSettingsResponses,
+      OperatorMessagingSetSettingsErrors,
+      ThrowOnError
+    >({
+      url: "/operator/messaging/settings",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Waiting and dead-letter counts
+   *
+   * Per project: messages waiting for the manager, and dead letters (the Projects list's columns).
+   */
+  public counts<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorMessagingCountsResponses,
+      OperatorMessagingCountsErrors,
+      ThrowOnError
+    >({
+      url: "/operator/messaging/counts",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Operator extends HeyApiClient {
   /**
    * Get server status
@@ -9351,6 +10069,21 @@ export class Operator extends HeyApiClient {
   private _hook?: Hook
   get hook(): Hook {
     return (this._hook ??= new Hook({ client: this.client }))
+  }
+
+  private _projectInbox?: ProjectInbox
+  get projectInbox(): ProjectInbox {
+    return (this._projectInbox ??= new ProjectInbox({ client: this.client }))
+  }
+
+  private _message?: Message
+  get message(): Message {
+    return (this._message ??= new Message({ client: this.client }))
+  }
+
+  private _messaging?: Messaging
+  get messaging(): Messaging {
+    return (this._messaging ??= new Messaging({ client: this.client }))
   }
 }
 

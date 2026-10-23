@@ -18,6 +18,7 @@ import { OperatorConfig } from "./config"
 import { OperatorProfileStore } from "./profile-store"
 import { OperatorRegistry } from "./registry"
 import { OperatorTrashFiles } from "./trash-files"
+import { OperatorMessageLog } from "./messaging/log"
 
 export const Kind = OperatorTrashFiles.Kind
 export type Kind = OperatorTrashFiles.Kind
@@ -186,6 +187,8 @@ const layer = Layer.effect(
         // A project's own config back from Trash: its copy record and copied deletions with it.
         if (entry.kind === "config" && entry.project && entry.copy)
           await OperatorProjectConfig.giveBack(entry.project, entry.copy)
+        // A Project inbox message: its file is back; the message goes into the log again (SPEC-0023 §8.4).
+        if (entry.kind === "message") for (const file of entry.files) await OperatorMessageLog.restoreFile(file.path)
       })
       if (entry.kind === "config" && entry.project)
         yield* Effect.forEach(

@@ -26011,6 +26011,1441 @@
         ]
       }
     },
+    "/operator/project-inbox/{project}": {
+      "post": {
+        "tags": ["operator project inbox"],
+        "operationId": "operator.projectInbox.enter",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "description": "The project's unique id"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The message as routed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorMessage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProjectInboxInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProjectInboxInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProjectInboxNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectInboxNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "From the user (the Project inbox page's New message) or from outside. It's routed at once: the rules, else the manager, else as addressed, else dead letter or broadcast.",
+        "summary": "Put a message into a project's inbox",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["text", "file-location"]
+                  },
+                  "to": {
+                    "$ref": "#/components/schemas/OperatorInboxTarget"
+                  },
+                  "priority": {
+                    "$ref": "#/components/schemas/OperatorQueuePriority"
+                  },
+                  "steer": {
+                    "type": "boolean"
+                  },
+                  "correlationID": {
+                    "type": "string"
+                  },
+                  "replyTo": {
+                    "type": "string"
+                  },
+                  "from": {
+                    "type": "string",
+                    "enum": ["user", "external"]
+                  }
+                },
+                "required": ["text"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.projectInbox.enter({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/project-inbox/{project}/messages": {
+      "get": {
+        "tags": ["operator project inbox"],
+        "operationId": "operator.projectInbox.messages",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "description": "The project's unique id"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/OperatorMessageStatus"
+            },
+            "required": false
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorMessage"
+                  },
+                  "description": "Newest first"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProjectInboxInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProjectInboxInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProjectInboxNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectInboxNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Everything that entered the project's inbox, filtered by status and sender; at most 500.",
+        "summary": "A project's inbox messages",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.projectInbox.messages({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/project-inbox/{project}/rules": {
+      "get": {
+        "tags": ["operator project inbox"],
+        "operationId": "operator.projectInbox.rules",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "description": "The project's unique id"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The rules, in order, and the unmatched setting",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectInbox"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProjectInboxInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProjectInboxInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProjectInboxNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectInboxNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The ordered rules (the first that matches decides) and what happens to unmatched messages.",
+        "summary": "A project's inbox rules",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.projectInbox.rules({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "tags": ["operator project inbox"],
+        "operationId": "operator.projectInbox.setRules",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "description": "The project's unique id"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "As saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectInbox"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProjectInboxInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProjectInboxInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProjectInboxNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectInboxNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The whole ordered list. Refused when a rule has no name, a regular expression doesn't compile or a forward names nobody.",
+        "summary": "Save a project's inbox rules",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "rules": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/OperatorInboxRule"
+                    }
+                  }
+                },
+                "required": ["rules"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.projectInbox.setRules({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/project-inbox/{project}/rules/test": {
+      "post": {
+        "tags": ["operator project inbox"],
+        "operationId": "operator.projectInbox.test",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "description": "The project's unique id"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "What would take it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorInboxTestResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProjectInboxInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProjectInboxInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProjectInboxNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectInboxNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Which rule would take it, or the manager, as addressed, broadcast or dead letter. Nothing is sent.",
+        "summary": "Test the rules on a sample message",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sample": {
+                    "$ref": "#/components/schemas/OperatorInboxSample"
+                  },
+                  "rules": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/OperatorInboxRule"
+                    }
+                  }
+                },
+                "required": ["sample"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.projectInbox.test({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/project-inbox/{project}/settings": {
+      "get": {
+        "tags": ["operator project inbox"],
+        "operationId": "operator.projectInbox.settings",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "description": "The project's unique id"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The inbox's settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectInboxSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProjectInboxInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProjectInboxInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProjectInboxNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectInboxNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "What happens to unmatched messages, the manager, and the transport.",
+        "summary": "A project's inbox settings",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.projectInbox.settings({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "tags": ["operator project inbox"],
+        "operationId": "operator.projectInbox.setSettings",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "description": "The project's unique id"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "As saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectInboxSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProjectInboxInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProjectInboxInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProjectInboxNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectInboxNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Dead letter (the default) or broadcast: one message, and one model turn, per member.",
+        "summary": "Change what happens to unmatched messages",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "unmatched": {
+                    "$ref": "#/components/schemas/OperatorInboxUnmatched"
+                  }
+                },
+                "required": ["unmatched"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.projectInbox.setSettings({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/messages/{id}": {
+      "get": {
+        "tags": ["operator project inbox"],
+        "operationId": "operator.message.get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "description": "The message's id (msg_…)"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The message, with its trail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorMessage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProjectInboxInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProjectInboxInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProjectInboxNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectInboxNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Any message in the message log: who sent it, what it asked for, where it went and when.",
+        "summary": "A message's record",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.message.get({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "tags": ["operator project inbox"],
+        "operationId": "operator.message.remove",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "description": "The message's id (msg_…)"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Moved to Trash",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Moved to Trash"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProjectInboxInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProjectInboxInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProjectInboxNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectInboxNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Moves a dead letter (or a dropped message) to Trash; restoring it puts it back.",
+        "summary": "Delete a dead letter",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.message.remove({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/messages/{id}/forward": {
+      "post": {
+        "tags": ["operator project inbox"],
+        "operationId": "operator.message.forward",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "description": "The message's id (msg_…)"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "As routed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorMessage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProjectInboxInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProjectInboxInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProjectInboxNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectInboxNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "To agents, sessions or groups of its project; its sender and correlation id stay.",
+        "summary": "Forward a waiting message or a dead letter",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "to": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/OperatorInboxTarget"
+                    }
+                  }
+                },
+                "required": ["to"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.message.forward({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/messages/{id}/drop": {
+      "post": {
+        "tags": ["operator project inbox"],
+        "operationId": "operator.message.drop",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "description": "The message's id (msg_…)"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dropped",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorMessage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProjectInboxInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProjectInboxInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProjectInboxNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectInboxNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "It stays in the log, dropped, with the reason.",
+        "summary": "Drop a waiting message or a dead letter",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.message.drop({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/messages/{id}/route-again": {
+      "post": {
+        "tags": ["operator project inbox"],
+        "operationId": "operator.message.routeAgain",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "description": "The message's id (msg_…)"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "As routed now",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorMessage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProjectInboxInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProjectInboxInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProjectInboxNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectInboxNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "A dead letter (or a waiting message) through the inbox's routing again, e.g. after adding a rule.",
+        "summary": "Route a message again",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.message.routeAgain({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/messages/{id}/broadcast": {
+      "post": {
+        "tags": ["operator project inbox"],
+        "operationId": "operator.message.broadcast",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "description": "The message's id (msg_…)"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Broadcast",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorMessage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProjectInboxInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProjectInboxInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OperatorProjectInboxNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectInboxNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "One message per member of its project (at most 50): each starts a model turn for an idle member.",
+        "summary": "Broadcast a dead letter",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.message.broadcast({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/messaging/status": {
+      "get": {
+        "tags": ["operator project inbox"],
+        "operationId": "operator.messaging.status",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Messaging's state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorMessagingStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The memory lane's backend and what it holds, the inbox transport, RabbitMQ, Redis and the outbox.",
+        "summary": "Messaging's state",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.messaging.status({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/messaging/settings": {
+      "get": {
+        "tags": ["operator project inbox"],
+        "operationId": "operator.messaging.settings",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Settings → Messaging",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorMessagingSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "The rate limits per sending agent and the default wait of a ping that waits. Server-wide.",
+        "summary": "Settings → Messaging",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.messaging.settings({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "tags": ["operator project inbox"],
+        "operationId": "operator.messaging.setSettings",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The settings after the save",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorMessagingSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OperatorProjectInboxInvalidError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OperatorProjectInboxInvalidError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "What isn't given stays.",
+        "summary": "Change Settings → Messaging",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "perMinute": {
+                    "type": "number"
+                  },
+                  "perHour": {
+                    "type": "number"
+                  },
+                  "wait": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.messaging.setSettings({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/operator/messaging/counts": {
+      "get": {
+        "tags": ["operator project inbox"],
+        "operationId": "operator.messaging.counts",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "By project id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProjectInboxCounts"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Per project: messages waiting for the manager, and dead letters (the Projects list's columns).",
+        "summary": "Waiting and dead-letter counts",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.messaging.counts({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "tags": ["opencode HttpApi"],
@@ -39710,7 +41145,8 @@
           "alert-rule",
           "telemetry-view",
           "telemetry",
-          "hook"
+          "hook",
+          "message"
         ]
       },
       "OperatorTrashEntry": {
@@ -49589,6 +51025,20 @@
         "type": "string",
         "enum": ["memory", "sqlite"]
       },
+      "OperatorQueueVia": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The Project inbox message"
+          },
+          "manager": {
+            "type": "boolean"
+          }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
       "OperatorQueueStatus": {
         "type": "string",
         "enum": ["queued", "in memory", "delivered", "failed", "cancelled"]
@@ -49632,6 +51082,9 @@
           },
           "lane": {
             "$ref": "#/components/schemas/OperatorQueueLane"
+          },
+          "via": {
+            "$ref": "#/components/schemas/OperatorQueueVia"
           },
           "status": {
             "$ref": "#/components/schemas/OperatorQueueStatus"
@@ -50405,6 +51858,555 @@
         },
         "required": ["name", "kind", "fields", "group"],
         "additionalProperties": false
+      },
+      "OperatorInboxTarget": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["agent", "session", "group"]
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "id"],
+        "additionalProperties": false
+      },
+      "OperatorMessageFrom": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["user", "agent", "system", "external"]
+          },
+          "project": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "session": {
+            "type": "string"
+          }
+        },
+        "required": ["kind"],
+        "additionalProperties": false
+      },
+      "OperatorMessageTo": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["session", "agent", "group", "inbox", "project-agent", "project-group", "all-projects"]
+          },
+          "project": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": ["type"],
+        "additionalProperties": false
+      },
+      "OperatorMessageBody": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["text", "file-location"]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "text"],
+        "additionalProperties": false
+      },
+      "OperatorMessageStatus": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "in memory",
+          "delivered",
+          "routed",
+          "with manager",
+          "dead letter",
+          "dropped",
+          "failed",
+          "cancelled"
+        ]
+      },
+      "OperatorMessageStep": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "number"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": ["at", "kind"],
+        "additionalProperties": false
+      },
+      "OperatorMessageCopy": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OperatorMessageStatus"
+          }
+        },
+        "required": ["id", "status"],
+        "additionalProperties": false
+      },
+      "OperatorMessage": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string",
+            "description": "The source project's unique id"
+          },
+          "folder": {
+            "type": "string"
+          },
+          "from": {
+            "$ref": "#/components/schemas/OperatorMessageFrom"
+          },
+          "to": {
+            "$ref": "#/components/schemas/OperatorMessageTo"
+          },
+          "body": {
+            "$ref": "#/components/schemas/OperatorMessageBody"
+          },
+          "priority": {
+            "$ref": "#/components/schemas/OperatorQueuePriority"
+          },
+          "steer": {
+            "type": "boolean"
+          },
+          "correlationID": {
+            "type": "string"
+          },
+          "replyTo": {
+            "type": "string"
+          },
+          "hops": {
+            "type": "number"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OperatorMessageStatus"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "lane": {
+            "$ref": "#/components/schemas/OperatorQueueLane"
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "deliveredAt": {
+            "type": "number"
+          },
+          "inbox": {
+            "type": "string"
+          },
+          "via": {
+            "type": "string"
+          },
+          "routedBy": {
+            "type": "string"
+          },
+          "routedTo": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "trail": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorMessageStep"
+            }
+          },
+          "copies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorMessageCopy"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "project",
+          "from",
+          "to",
+          "body",
+          "priority",
+          "steer",
+          "correlationID",
+          "hops",
+          "status",
+          "createdAt",
+          "trail"
+        ],
+        "additionalProperties": false
+      },
+      "OperatorProjectInboxInvalidError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorProjectInboxInvalidError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorProjectInboxNotFoundError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["OperatorProjectInboxNotFoundError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "OperatorInboxRecipient": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["agent", "group", "session", "none", "any"],
+            "description": "agent, group, session: the message names one (id: which); none: it names none; any: it names one"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": ["type"],
+        "additionalProperties": false
+      },
+      "OperatorInboxMatch": {
+        "type": "object",
+        "properties": {
+          "fromProject": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["this"]
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ],
+            "description": "this: from this project; a list: from those projects (their ids); left out: from anywhere"
+          },
+          "fromAgent": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "recipient": {
+            "$ref": "#/components/schemas/OperatorInboxRecipient"
+          },
+          "priority": {
+            "$ref": "#/components/schemas/OperatorQueuePriority"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["text", "file-location"]
+          },
+          "contains": {
+            "type": "string"
+          },
+          "pattern": {
+            "type": "string"
+          },
+          "correlationPrefix": {
+            "type": "string"
+          },
+          "reply": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OperatorInboxAction": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["as-addressed", "forward", "manager", "dead-letter", "drop", "broadcast", "to-sender"],
+            "description": "as-addressed: to the recipient it names; forward: to `to`; manager: to the manager; dead-letter; drop (logged); broadcast: to every member; to-sender: to the session of the message it answers"
+          },
+          "to": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorInboxTarget"
+            }
+          },
+          "steer": {
+            "type": "boolean"
+          },
+          "priority": {
+            "$ref": "#/components/schemas/OperatorQueuePriority"
+          }
+        },
+        "required": ["kind"],
+        "additionalProperties": false
+      },
+      "OperatorInboxRule": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "match": {
+            "$ref": "#/components/schemas/OperatorInboxMatch"
+          },
+          "action": {
+            "$ref": "#/components/schemas/OperatorInboxAction"
+          },
+          "preset": {
+            "type": "string",
+            "enum": ["replies", "as-addressed"]
+          }
+        },
+        "required": ["id", "name", "enabled", "match", "action"],
+        "additionalProperties": false
+      },
+      "OperatorInboxUnmatched": {
+        "type": "string",
+        "enum": ["dead-letter", "broadcast"]
+      },
+      "OperatorProjectInbox": {
+        "type": "object",
+        "properties": {
+          "rules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorInboxRule"
+            }
+          },
+          "unmatched": {
+            "$ref": "#/components/schemas/OperatorInboxUnmatched"
+          }
+        },
+        "required": ["rules", "unmatched"],
+        "additionalProperties": false
+      },
+      "OperatorInboxSample": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["text", "file-location"]
+          },
+          "fromProject": {
+            "type": "string"
+          },
+          "fromAgent": {
+            "type": "string"
+          },
+          "fromKind": {
+            "type": "string",
+            "enum": ["user", "agent", "system", "external"]
+          },
+          "to": {
+            "$ref": "#/components/schemas/OperatorInboxTarget"
+          },
+          "priority": {
+            "$ref": "#/components/schemas/OperatorQueuePriority"
+          },
+          "correlationID": {
+            "type": "string"
+          },
+          "replyTo": {
+            "type": "string"
+          }
+        },
+        "required": ["text"],
+        "additionalProperties": false
+      },
+      "OperatorInboxTestResult": {
+        "type": "object",
+        "properties": {
+          "by": {
+            "type": "string",
+            "enum": ["rule", "manager", "as addressed", "broadcast", "dead letter"]
+          },
+          "rule": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": ["id", "name"],
+            "additionalProperties": false
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": ["by", "detail"],
+        "additionalProperties": false
+      },
+      "OperatorProjectInboxSettings": {
+        "type": "object",
+        "properties": {
+          "unmatched": {
+            "$ref": "#/components/schemas/OperatorInboxUnmatched"
+          },
+          "manager": {
+            "type": "string"
+          },
+          "transport": {
+            "type": "string",
+            "enum": ["sqlite"]
+          }
+        },
+        "required": ["unmatched", "transport"],
+        "additionalProperties": false
+      },
+      "OperatorMessagingStatus": {
+        "type": "object",
+        "properties": {
+          "memoryLane": {
+            "type": "object",
+            "properties": {
+              "backend": {
+                "type": "string",
+                "enum": ["in-process"]
+              },
+              "held": {
+                "type": "number",
+                "description": "Messages held now for running sessions"
+              },
+              "cap": {
+                "type": "number",
+                "description": "At most this many a session"
+              }
+            },
+            "required": ["backend", "held", "cap"],
+            "additionalProperties": false
+          },
+          "inboxTransport": {
+            "type": "string",
+            "enum": ["sqlite"]
+          },
+          "rabbitmq": {
+            "type": "string",
+            "enum": ["not configured"]
+          },
+          "redis": {
+            "type": "string",
+            "enum": ["not configured"]
+          },
+          "outbox": {
+            "type": "number",
+            "description": "Messages waiting to be published (RabbitMQ only)"
+          }
+        },
+        "required": ["memoryLane", "inboxTransport", "rabbitmq", "redis", "outbox"],
+        "additionalProperties": false
+      },
+      "OperatorMessagingSettings": {
+        "type": "object",
+        "properties": {
+          "perMinute": {
+            "type": "number",
+            "description": "Sends a minute per sending agent: 1 to 1000 (default 30)"
+          },
+          "perHour": {
+            "type": "number",
+            "description": "Sends an hour per sending agent: 1 to 10000 (default 300)"
+          },
+          "wait": {
+            "type": "number",
+            "description": "Seconds a ping that waits waits when it gives no timeout: 1 to 1800 (default 120)"
+          }
+        },
+        "required": ["perMinute", "perHour", "wait"],
+        "additionalProperties": false
+      },
+      "OperatorProjectInboxCount": {
+        "type": "object",
+        "properties": {
+          "waiting": {
+            "type": "number"
+          },
+          "deadLetters": {
+            "type": "number"
+          }
+        },
+        "required": ["waiting", "deadLetters"],
+        "additionalProperties": false
+      },
+      "OperatorProjectInboxCounts": {
+        "type": "object",
+        "additionalProperties": {
+          "$ref": "#/components/schemas/OperatorProjectInboxCount"
+        }
       },
       "UnauthorizedError": {
         "type": "object",
@@ -64142,6 +66144,10 @@
     {
       "name": "operator hooks",
       "description": "Hook routes."
+    },
+    {
+      "name": "operator project inbox",
+      "description": "Project inbox routes."
     },
     {
       "name": "opencode HttpApi",

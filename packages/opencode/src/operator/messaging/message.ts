@@ -67,7 +67,29 @@ export const Message = Schema.Struct({
   lane: Schema.optional(OperatorQueueStore.Lane),
   createdAt: Schema.Finite,
   deliveredAt: Schema.optional(Schema.Finite),
+  inbox: Schema.optional(Schema.String).annotate({
+    description: "The Project inbox it entered (that project's unique id), when it went through one",
+  }),
+  via: Schema.optional(Schema.String).annotate({
+    description: "The Project inbox message it was delivered for (a routed copy's original)",
+  }),
+  routedBy: Schema.optional(Schema.String).annotate({
+    description: "What routed it: a rule's name, the manager, as addressed, broadcast, or who forwarded it",
+  }),
+  routedTo: Schema.optional(Schema.Array(Schema.String)).annotate({ description: "Where it was routed" }),
   trail: Schema.Array(Step),
+  copies: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        id: Schema.String,
+        agent: Schema.optional(Schema.String),
+        sessionID: Schema.optional(Schema.String),
+        status: Status,
+      }).annotate({ identifier: "OperatorMessageCopy" }),
+    ),
+  ).annotate({
+    description: "A Project inbox message's routed copies, and the sessions they went to (its record only)",
+  }),
 }).annotate({ identifier: "OperatorMessage" })
 export type Message = typeof Message.Type
 
@@ -93,6 +115,8 @@ export type Mark = {
   from: From
   correlationID: string
   replyTo?: string
+  /** The Project inbox message it was routed from. */
+  via?: string
   priority: OperatorQueueStore.Priority
 }
 
@@ -113,6 +137,8 @@ export function delivered(item: OperatorQueueStore.Item): { text: string; metada
     `correlation ${correlationID}`,
     `id ${item.id}`,
     ...(item.replyTo ? [`answers ${item.replyTo}`] : []),
+    // The manager routes what no rule did (§8.3).
+    ...(item.via?.manager ? [`no rule routed it: route it with ping forward or drop, messageID ${item.via.id}`] : []),
   ].join(" · ")
   return {
     text: `${head}:\n${item.text}`,
@@ -124,6 +150,7 @@ export function delivered(item: OperatorQueueStore.Item): { text: string; metada
         from: fromSender(item.sender, item.sender.project ?? item.project),
         correlationID,
         ...(item.replyTo ? { replyTo: item.replyTo } : {}),
+        ...(item.via ? { via: item.via.id } : {}),
         priority: item.priority,
       },
     },

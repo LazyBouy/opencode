@@ -2,6 +2,7 @@ import type { Page, Route } from "@playwright/test"
 import { createPromptMock, type PromptMock } from "./mock-namespaces"
 import { createTelemetryMock, type TelemetryMock } from "./mock-telemetry"
 import { createHooksMock, type HooksMockState } from "./mock-hooks"
+import { createInboxMock, type InboxMockState } from "./mock-inbox"
 import { callFor, callsFor, rawFor } from "./mock-calls"
 import { draftFor, lastFor, permissionsFor, sessionPermissionsFor, toolPromptFor } from "./mock-tool-prompt"
 import { type ModelDefaultsMock, modelRoute } from "./mock-models"
@@ -516,6 +517,7 @@ function memoryRoute(memory: MemoryMock, url: URL, method: string, body: () => u
 
 export interface OperatorMock {
   readonly hooks: HooksMockState
+  readonly inbox: InboxMockState
   readonly replies: Array<{ url: string; body: unknown }>
   readonly writes: Array<{ url: string; body: unknown }>
   readonly connects: string[]
@@ -712,8 +714,10 @@ export async function mockOperator(page: Page) {
   // A deleted alert rule goes to the console's Trash.
   const telemetry = createTelemetryMock(now, { trash: (entry) => state.trash.push(entry) })
   const hooks = createHooksMock()
+  const inbox = createInboxMock()
   const state: OperatorMock = {
     hooks: hooks.state,
+    inbox: inbox.state,
     telemetry: telemetry.state,
     replies: [],
     writes: [],
@@ -944,6 +948,10 @@ export async function mockOperator(page: Page) {
     if (url.pathname.startsWith("/operator/telemetry/")) return telemetry.handle(route, url, method)
     if (url.pathname === "/operator/hook" || url.pathname.startsWith("/operator/hook/"))
       return hooks.handle(route, url, method)
+    if (/^\/operator\/(project-inbox|messages|messaging)\//.test(url.pathname)) {
+      const answered = inbox.handle(route, url, method)
+      if (answered) return answered
+    }
     if (url.pathname === "/operator/status")
       return json(route, { version: "1.18.34-fork", startedAt: now - 7_200_000, platform: "linux", arch: "x64" })
     if (url.pathname === "/operator/stats") return json(route, stats)

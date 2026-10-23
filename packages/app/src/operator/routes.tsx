@@ -21,6 +21,8 @@ const built: Partial<Record<OperatorPage["id"], Component>> = {
 }
 const AgentPage = lazy(() => import("./pages/agent"))
 const AgentFormPage = lazy(() => import("./pages/agent-form"))
+// A project's Project inbox (SPEC-0023 §10.1): opened from the project's overlay, not in the sidebar.
+const ProjectInboxPage = lazy(() => import("./pages/project-inbox"))
 // The first start of a new installation (onboarding.tsx): not in the sidebar.
 const WelcomePage = lazy(() => import("./pages/welcome"))
 
@@ -37,6 +39,7 @@ export function OperatorRoutes() {
       <Route path="/agents/new" component={AgentFormPage} />
       <Route path="/agents/:name/edit" component={AgentFormPage} />
       <Route path="/agents/:name" component={AgentPage} />
+      <Route path="/project-inbox" component={ProjectInboxPage} />
       <Route path="/welcome" component={WelcomePage} />
       <Route path="*" component={() => <Navigate href="/operator" />} />
     </Route>

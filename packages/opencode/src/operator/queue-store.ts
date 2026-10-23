@@ -58,6 +58,12 @@ export const Item = Schema.Struct({
   correlationID: Schema.optional(Schema.String),
   replyTo: Schema.optional(Schema.String).annotate({ description: "The message this one answers" }),
   lane: Schema.optional(Lane),
+  via: Schema.optional(
+    Schema.Struct({
+      id: Schema.String.annotate({ description: "The Project inbox message" }),
+      manager: Schema.optional(Schema.Boolean).annotate({ description: "Given to the manager to route" }),
+    }).annotate({ identifier: "OperatorQueueVia" }),
+  ).annotate({ description: "The Project inbox message it was routed from" }),
   status: Status,
   createdAt: Schema.Finite,
   deliveredAt: Schema.optional(Schema.Finite),
@@ -108,6 +114,7 @@ type Row = {
   error: string | null
   lane: string | null
   reply_to: string | null
+  via: string | null
 }
 
 function itemOf(row: Row): Item {
@@ -124,6 +131,7 @@ function itemOf(row: Row): Item {
     ...(row.correlation_id ? { correlationID: row.correlation_id } : {}),
     ...(row.reply_to ? { replyTo: row.reply_to } : {}),
     ...(row.lane ? { lane: row.lane as Lane } : {}),
+    ...(row.via ? { via: JSON.parse(row.via) as NonNullable<Item["via"]> } : {}),
     status: row.status as Status,
     createdAt: row.created_at,
     ...(row.delivered_at ? { deliveredAt: row.delivered_at } : {}),
@@ -164,6 +172,7 @@ export function sqlite(file: string): Backend {
   )
   if (!columns.has("lane")) db.exec("ALTER TABLE queue_item ADD COLUMN lane TEXT")
   if (!columns.has("reply_to")) db.exec("ALTER TABLE queue_item ADD COLUMN reply_to TEXT")
+  if (!columns.has("via")) db.exec("ALTER TABLE queue_item ADD COLUMN via TEXT")
   db.exec("CREATE INDEX IF NOT EXISTS queue_item_agent ON queue_item (project, agent, status)")
   db.exec("CREATE INDEX IF NOT EXISTS queue_item_status ON queue_item (status)")
   const order = "ORDER BY priority DESC, created_at ASC, id ASC"
@@ -188,6 +197,7 @@ export function sqlite(file: string): Backend {
         error: null,
         lane: item.lane ?? null,
         reply_to: item.replyTo ?? null,
+        via: item.via ? JSON.stringify(item.via) : null,
       }
       const names = Object.keys(row)
       db.query(

@@ -25,6 +25,7 @@ import { operatorTelemetryHandlers } from "./handlers/telemetry"
 import { operatorCapabilityHandlers } from "./handlers/capabilities"
 import { operatorHelperHandlers } from "./handlers/helpers"
 import { operatorHookHandlers } from "./handlers/hooks"
+import { operatorProjectInboxHandlers } from "./handlers/project-inbox"
 
 // Handler layers for OperatorApi (per project) and OperatorRootApi (server-wide), provided by
 // upstream's route assembly in one place each.
@@ -45,6 +46,7 @@ export const operatorHandlers = [
   operatorQueueHandlers,
   operatorCapabilityHandlers,
   operatorHookHandlers,
+  operatorProjectInboxHandlers,
 ] as const
 export const operatorRootHandlers = [
   operatorOverviewHandlers,

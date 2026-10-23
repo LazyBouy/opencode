@@ -1742,4 +1742,150 @@ export const operatorScenarios: Scenario[] = [
     check(body.eventsDays === 30, "the default retention")
     check(typeof body.logPath === "string" && body.logLevel === "warn", "the log it keeps lines from, and the level")
   }),
+  // The Project inbox (SPEC-0023 §11). The project is named by its folder (it has no unique id here).
+  http.protected
+    .post("/operator/project-inbox/{project}", "operator.projectInbox.enter")
+    .at((ctx) => ({
+      path: route("/operator/project-inbox/{project}", { project: encodeURIComponent(ctx.directory ?? "/tmp/x") }),
+      headers: ctx.headers(),
+      body: { text: "for whoever handles it" },
+    }))
+    .json(200, (body) => {
+      object(body)
+      check(
+        String(body.id).startsWith("msg_") && (body.from as { kind?: string } | undefined)?.kind === "user",
+        "the message, from the user",
+      )
+      check(["dead letter", "with manager", "routed"].includes(String(body.status)), "routed at once")
+    }),
+  http.protected
+    .post("/operator/project-inbox/{project}", "operator.projectInbox.enter.empty")
+    .at((ctx) => ({
+      path: route("/operator/project-inbox/{project}", { project: encodeURIComponent(ctx.directory ?? "/tmp/x") }),
+      headers: ctx.headers(),
+      body: { text: " " },
+    }))
+    .status(400),
+  http.protected
+    .get("/operator/project-inbox/{project}/messages", "operator.projectInbox.messages")
+    .at((ctx) => ({
+      path: `${route("/operator/project-inbox/{project}/messages", { project: encodeURIComponent(ctx.directory ?? "/tmp/x") })}?limit=10`,
+      headers: ctx.headers(),
+    }))
+    .json(200, array),
+  http.protected
+    .get("/operator/project-inbox/{project}/rules", "operator.projectInbox.rules")
+    .at((ctx) => ({
+      path: route("/operator/project-inbox/{project}/rules", {
+        project: encodeURIComponent(ctx.directory ?? "/tmp/x"),
+      }),
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => {
+      object(body)
+      array(body.rules)
+      check(body.unmatched === "dead-letter" || body.unmatched === "broadcast", "the unmatched setting")
+    }),
+  // A valid save would outlive the scenario: the refusal is exercised.
+  http.protected
+    .put("/operator/project-inbox/{project}/rules", "operator.projectInbox.setRules")
+    .at((ctx) => ({
+      path: route("/operator/project-inbox/{project}/rules", {
+        project: encodeURIComponent(ctx.directory ?? "/tmp/x"),
+      }),
+      headers: ctx.headers(),
+      body: { rules: [{ id: "bad", name: "Bad", enabled: true, match: { pattern: "(" }, action: { kind: "drop" } }] },
+    }))
+    .status(400),
+  http.protected
+    .post("/operator/project-inbox/{project}/rules/test", "operator.projectInbox.test")
+    .at((ctx) => ({
+      path: route("/operator/project-inbox/{project}/rules/test", {
+        project: encodeURIComponent(ctx.directory ?? "/tmp/x"),
+      }),
+      headers: ctx.headers(),
+      body: { sample: { text: "hello" }, rules: [] },
+    }))
+    .json(200, (body) => {
+      object(body)
+      check(typeof body.by === "string" && typeof body.detail === "string", "what would take it")
+    }),
+  http.protected
+    .get("/operator/project-inbox/{project}/settings", "operator.projectInbox.settings")
+    .at((ctx) => ({
+      path: route("/operator/project-inbox/{project}/settings", {
+        project: encodeURIComponent(ctx.directory ?? "/tmp/x"),
+      }),
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => {
+      object(body)
+      check(body.transport === "sqlite", "the transport")
+    }),
+  http.protected
+    .put("/operator/project-inbox/{project}/settings", "operator.projectInbox.setSettings")
+    .at((ctx) => ({
+      path: route("/operator/project-inbox/{project}/settings", {
+        project: encodeURIComponent(ctx.directory ?? "/tmp/x"),
+      }),
+      headers: ctx.headers(),
+      body: { unmatched: "dead-letter" },
+    }))
+    .json(200, (body) => {
+      object(body)
+      check(body.unmatched === "dead-letter", "saved")
+    }),
+  http.protected
+    .get("/operator/messages/{id}", "operator.message.get")
+    .at((ctx) => ({ path: route("/operator/messages/{id}", { id: "msg_missing" }), headers: ctx.headers() }))
+    .status(404),
+  http.protected
+    .delete("/operator/messages/{id}", "operator.message.remove")
+    .at((ctx) => ({ path: route("/operator/messages/{id}", { id: "msg_missing" }), headers: ctx.headers() }))
+    .status(404),
+  http.protected
+    .post("/operator/messages/{id}/forward", "operator.message.forward")
+    .at((ctx) => ({
+      path: route("/operator/messages/{id}/forward", { id: "msg_missing" }),
+      headers: ctx.headers(),
+      body: { to: [{ type: "agent", id: "build" }] },
+    }))
+    .status(404),
+  http.protected
+    .post("/operator/messages/{id}/drop", "operator.message.drop")
+    .at((ctx) => ({
+      path: route("/operator/messages/{id}/drop", { id: "msg_missing" }),
+      headers: ctx.headers(),
+      body: {},
+    }))
+    .status(404),
+  http.protected
+    .post("/operator/messages/{id}/route-again", "operator.message.routeAgain")
+    .at((ctx) => ({
+      path: route("/operator/messages/{id}/route-again", { id: "msg_missing" }),
+      headers: ctx.headers(),
+    }))
+    .status(404),
+  http.protected
+    .post("/operator/messages/{id}/broadcast", "operator.message.broadcast")
+    .at((ctx) => ({ path: route("/operator/messages/{id}/broadcast", { id: "msg_missing" }), headers: ctx.headers() }))
+    .status(404),
+  http.protected.get("/operator/messaging/status", "operator.messaging.status").json(200, (body) => {
+    object(body)
+    check(
+      (body.memoryLane as { backend?: string } | undefined)?.backend === "in-process" &&
+        body.inboxTransport === "sqlite",
+      "the backends",
+    )
+  }),
+  http.protected.get("/operator/messaging/settings", "operator.messaging.settings").json(200, (body) => {
+    object(body)
+    check(typeof body.perMinute === "number" && typeof body.wait === "number", "the limits and the wait")
+  }),
+  // A valid change would outlive the scenario (server-wide): only the refusal is exercised.
+  http.protected
+    .put("/operator/messaging/settings", "operator.messaging.setSettings")
+    .at((ctx) => ({ path: "/operator/messaging/settings", headers: ctx.headers(), body: { perMinute: 0 } }))
+    .status(400),
+  http.protected.get("/operator/messaging/counts", "operator.messaging.counts").json(200, object),
 ]

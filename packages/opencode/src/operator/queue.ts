@@ -51,8 +51,16 @@ export const ListInput = Schema.Struct({
 })
 export type ListInput = typeof ListInput.Type
 
-/** What a sender inside the server (`ping`, the inbox) gives besides the input: the message's id, what it asked for. */
-export type SendOptions = { id?: string; to?: OperatorMessage.To; body?: OperatorMessage.Body["type"] }
+/**
+ * What a sender inside the server (`ping`, the Project inbox) gives besides the input: the message's id, what it
+ * asked for, and the inbox message it was routed from.
+ */
+export type SendOptions = {
+  id?: string
+  to?: OperatorMessage.To
+  body?: OperatorMessage.Body["type"]
+  via?: NonNullable<OperatorQueueStore.Item["via"]>
+}
 
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("OperatorQueueNotFound", {
   message: Schema.String,
@@ -329,6 +337,7 @@ const layer = Layer.effect(
         sender,
         correlationID: input.correlationID ?? id,
         ...(input.replyTo ? { replyTo: input.replyTo } : {}),
+        ...(options.via ? { via: options.via } : {}),
         createdAt,
       }
       // The lane: memory when its session is running a turn now (read from memory, never the database).
@@ -350,6 +359,7 @@ const layer = Layer.effect(
         steer: base.steer,
         correlationID: base.correlationID!,
         ...(input.replyTo ? { replyTo: input.replyTo } : {}),
+        ...(options.via ? { via: options.via.id } : {}),
         hops: 0,
         status: "queued",
         agent,

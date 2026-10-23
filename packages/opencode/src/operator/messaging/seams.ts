@@ -13,7 +13,10 @@ import { SessionStatus } from "@/session/status"
 import { SessionID } from "@/session/schema"
 import { OperatorAgentSessions } from "../agent-sessions"
 import { OperatorPermissionEffective } from "../permission-effective"
+import { OperatorProjectRecords } from "../project-records"
+import { OperatorProjects } from "../projects"
 import type { OperatorPing } from "./ping"
+import { OperatorPingVerbs } from "./verbs"
 
 // Every tie between messaging and OpenCode's sessions (SPEC-0023 §12, "Keeping the V2 port cheap"), in this one
 // module, so moving to upstream's V2 replaces it and nothing else. The lanes, the message log, the queue's
@@ -207,14 +210,48 @@ export const servePing = (serve: Serve) =>
       }),
   ).pipe(Effect.asVoid)
 
-const pingTool = (description: string, limits: typeof OperatorPing.LIMITS) =>
-  tool({
+const pingTool = (description: string, limits: typeof OperatorPing.LIMITS) => {
+  const target = tool.schema.object({
+    type: tool.schema.enum(["agent", "session", "group"]),
+    id: tool.schema.string().describe("The agent's name, the session's id or the group's name"),
+  })
+  const match = tool.schema
+    .object({
+      fromProject: tool.schema
+        .union([tool.schema.literal("this"), tool.schema.array(tool.schema.string())])
+        .optional()
+        .describe('"this", or projects\' ids; left out: any'),
+      fromAgent: tool.schema.array(tool.schema.string()).optional(),
+      recipient: tool.schema
+        .object({
+          type: tool.schema.enum(["agent", "group", "session", "none", "any"]),
+          id: tool.schema.string().optional(),
+        })
+        .optional()
+        .describe("The recipient it asks for (none: it names none; any: it names one)"),
+      priority: tool.schema.enum(["low", "normal", "high", "urgent"]).optional().describe("At least this"),
+      type: tool.schema.enum(["text", "file-location"]).optional(),
+      contains: tool.schema.string().optional(),
+      pattern: tool.schema.string().optional().describe("A regular expression the text matches"),
+      correlationPrefix: tool.schema.string().optional(),
+      reply: tool.schema.boolean().optional().describe("A reply to a message this project's agents sent"),
+    })
+    .describe("Every part given must hold")
+  const action = tool.schema.object({
+    kind: tool.schema.enum(["as-addressed", "forward", "manager", "dead-letter", "drop", "broadcast", "to-sender"]),
+    to: tool.schema.array(target).optional().describe("forward: where to"),
+    steer: tool.schema.boolean().optional(),
+    priority: tool.schema.enum(["low", "normal", "high", "urgent"]).optional().describe("Raise it to at least this"),
+  })
+  return tool({
     description,
     args: {
-      verb: tool.schema.enum(["discover", "send"]).describe("discover: who you may message; send: a message"),
+      verb: tool.schema
+        .enum(["discover", "send", ...OperatorPingVerbs.MANAGER])
+        .describe("discover: who you may message; send: a message; forward, drop, rule: the project's manager only"),
       target: tool.schema
         .object({
-          type: tool.schema.enum(["agent", "session", "group"]),
+          type: tool.schema.enum(["agent", "session", "group", "project_inbox"]),
           id: tool.schema
             .string()
             .optional()
@@ -252,7 +289,22 @@ const pingTool = (description: string, limits: typeof OperatorPing.LIMITS) =>
       timeout: tool.schema
         .number()
         .optional()
-        .describe(`With wait: seconds (default ${limits.wait}, at most ${limits.waitMax})`),
+        .describe(`With wait: seconds (default: the server's, 120 unless changed; at most ${limits.waitMax})`),
+      messageID: tool.schema.string().optional().describe("forward, drop: the Project inbox message"),
+      to: tool.schema.array(target).optional().describe("forward: agents, sessions or groups of this project"),
+      reason: tool.schema.string().optional().describe("drop: why (logged)"),
+      rule: tool.schema
+        .object({
+          op: tool.schema.enum(["list", "add", "change", "on", "off", "remove"]),
+          id: tool.schema.string().optional().describe("The rule (change, on, off, remove; add: optional)"),
+          name: tool.schema.string().optional(),
+          position: tool.schema.number().optional().describe("add: where in the list, 0 first (default: last)"),
+          match,
+          action,
+        })
+        .partial({ match: true, action: true })
+        .optional()
+        .describe("rule: the Project inbox's rules, in order; the first that matches a message decides"),
     },
     async execute(args, ctx) {
       // The request's project instance, taken before anything is awaited.
@@ -275,9 +327,39 @@ const pingTool = (description: string, limits: typeof OperatorPing.LIMITS) =>
       return { title: exit.value.title, output: exit.value.output, metadata: { ping: exit.value.card } }
     },
   })
+}
+
+// The manager's verbs and their fields are sent only to the project's manager (§8.3); anyone else's request gets
+// the tool without them. The call refuses them anyway.
+const MANAGER_FIELDS = ["messageID", "to", "reason", "rule"]
+function withoutManagerVerbs(schema: unknown) {
+  if (!schema || typeof schema !== "object") return schema
+  const copy = structuredClone(schema) as {
+    properties?: Record<string, { enum?: string[] } | undefined>
+    required?: string[]
+  }
+  const verb = copy.properties?.verb
+  if (verb?.enum) verb.enum = verb.enum.filter((name) => !OperatorPingVerbs.MANAGER.includes(name as never))
+  for (const field of MANAGER_FIELDS) delete copy.properties?.[field]
+  if (copy.required) copy.required = copy.required.filter((field) => !MANAGER_FIELDS.includes(field))
+  return copy
+}
+const isManager = async (instance: { directory: string; worktree: string }, agent: string) =>
+  (await OperatorProjectRecords.get(await OperatorProjects.keyOf(instance))).manager === agent
 
 /** The fork's built-in plugin for messaging: the `ping` tool. */
 export const plugin: Plugin = async () => {
   const { OperatorPing: Ping } = await import("./ping")
-  return { tool: { ping: pingTool(Ping.DESCRIPTION, Ping.LIMITS) } }
+  return {
+    tool: { ping: pingTool(Ping.DESCRIPTION, Ping.LIMITS) },
+    "tool.definition": async (hook, output) => {
+      if (hook.toolID !== "ping" || !hook.agent) return
+      // The request's project instance, taken before anything is awaited.
+      const fiber = Fiber.getCurrent()
+      const instance = fiber ? Context.getReferenceUnsafe(fiber.context, InstanceRef) : undefined
+      if (instance && (await isManager(instance, hook.agent).catch(() => false))) return
+      const sent = output as { jsonSchema?: unknown }
+      sent.jsonSchema = withoutManagerVerbs(sent.jsonSchema)
+    },
+  }
 }
