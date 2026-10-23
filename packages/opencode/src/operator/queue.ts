@@ -51,6 +51,9 @@ export const ListInput = Schema.Struct({
 })
 export type ListInput = typeof ListInput.Type
 
+/** What a sender inside the server (`ping`, the inbox) gives besides the input: the message's id, what it asked for. */
+export type SendOptions = { id?: string; to?: OperatorMessage.To; body?: OperatorMessage.Body["type"] }
+
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("OperatorQueueNotFound", {
   message: Schema.String,
 }) {}
@@ -67,6 +70,7 @@ export interface Interface {
     agent: string,
     input: SendInput,
     sender?: OperatorQueueStore.Sender,
+    options?: SendOptions,
   ) => Effect.Effect<OperatorQueueStore.Item, NotFoundError | InvalidError>
   /** This project's messages: held in memory and queued ones in delivery order, the others newest first. */
   readonly list: (input: ListInput) => Effect.Effect<ReadonlyArray<OperatorQueueStore.Item>>
@@ -181,7 +185,8 @@ const layer = Layer.effect(
     const start = (item: OperatorQueueStore.Item, destination: OperatorMessagingSeams.Destination) => {
       const token = {}
       if (!running.has(destination.id)) running.set(destination.id, token)
-      return seams.prompt(destination, item.agent, item.text).pipe(
+      const read = OperatorMessage.delivered(item)
+      return seams.prompt(destination, item.agent, read.text, read.metadata).pipe(
         Effect.catchCause((cause) => Effect.logError("operator queue: the session's turn failed", { cause })),
         Effect.ensuring(
           Effect.suspend(() => {
@@ -291,6 +296,7 @@ const layer = Layer.effect(
       agent: string,
       input: SendInput,
       sender: OperatorQueueStore.Sender = { kind: "user" },
+      options: SendOptions = {},
     ) {
       const defaultTarget = yield* seams
         .defaultTarget(agent)
@@ -309,7 +315,7 @@ const layer = Layer.effect(
         if (found.directory !== projectKey && !found.directory.startsWith(`${projectKey}/`))
           return yield* new InvalidError({ message: `Session ${input.sessionID} is not in this project` })
       }
-      const id = OperatorMessage.newId()
+      const id = options.id ?? OperatorMessage.newId()
       const createdAt = Date.now()
       const base: OperatorQueueStore.NewItem = {
         id,
@@ -336,8 +342,10 @@ const layer = Layer.effect(
         project: yield* Effect.promise(() => projectIdOf(projectKey)),
         folder: projectKey,
         from: OperatorMessage.fromSender(sender, yield* Effect.promise(() => projectIdOf(projectKey))),
-        to: target === "session" ? { type: "session", id: input.sessionID! } : { type: "agent", id: agent },
-        body: { type: "text", text },
+        to:
+          options.to ??
+          (target === "session" ? { type: "session", id: input.sessionID! } : { type: "agent", id: agent }),
+        body: { type: options.body ?? "text", text },
         priority: base.priority,
         steer: base.steer,
         correlationID: base.correlationID!,
@@ -347,6 +355,37 @@ const layer = Layer.effect(
         agent,
         createdAt,
         trail: [],
+      }
+      // A reply a `ping` in that session waits for is handed to it at once (§6.2, §7.4).
+      if (typeof destination !== "string") {
+        const handed = {
+          ...base,
+          id,
+          createdAt,
+          status: "delivered" as const,
+          lane: "memory" as const,
+          deliveredAt: Date.now(),
+          deliveredTo: destination.id,
+        }
+        if (
+          OperatorMessageLanes.lane().handoff({
+            item: handed,
+            sessionID: destination.id,
+            directory: destination.directory,
+          })
+        ) {
+          const item = OperatorQueueStore.store().enqueue(handed)
+          OperatorMessageLog.log().write({
+            ...message,
+            status: "delivered",
+            lane: "memory",
+            sessionID: destination.id,
+            deliveredAt: handed.deliveredAt,
+            trail: [{ at: createdAt, kind: "delivered", detail: "handed to the waiting ping" }],
+          })
+          announce(item)
+          return item
+        }
       }
       if (runningNow && typeof destination !== "string") {
         // A steering message is read at the running session's next step.

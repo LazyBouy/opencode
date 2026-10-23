@@ -6,6 +6,7 @@ import { useLanguage } from "@/context/language"
 import { useOperatorClient } from "../data"
 import type { Mark } from "./hook-marks"
 import { HookMarkList, HookMarks } from "./hook-marks-view"
+import { PingCardView } from "./messages-view"
 import { useSessionHookRuns } from "./hook-runs"
 import { useSessionView } from "./view"
 
@@ -19,9 +20,11 @@ import { useSessionView } from "./view"
 export function useDetailedParts() {
   const view = useSessionView()
   const detailed = () => view.view() === "detailed"
-  // What hooks did to a tool call shows in every view (hook-marks-view.tsx); the step marker in Detailed only.
+  // What hooks did to a tool call shows in every view (hook-marks-view.tsx), and a ping call's card
+  // (messages-view.tsx); the step marker in Detailed only.
   const after = (props: MessagePartProps) => [
     <HookMarks part={props.part} />,
+    <PingCardView part={props.part} />,
     <StepMarkerAfter part={props.part} message={props.message} />,
   ]
   // Calls of a context group (read, glob, grep, list) don't pass through `after`: their marks come here.

@@ -1,5 +1,6 @@
 export * as OperatorMessage from "./message"
 
+import path from "path"
 import { Schema } from "effect"
 import { OperatorQueueStore } from "../queue-store"
 
@@ -82,3 +83,49 @@ export const fromSender = (sender: OperatorQueueStore.Sender, project: string): 
   ...(sender.agent ? { agent: sender.agent } : {}),
   ...(sender.sessionID ? { session: sender.sessionID } : {}),
 })
+
+/** What the part a delivered message becomes carries (`metadata.message`), for the chat views' marker. */
+export type Mark = {
+  id: string
+  /** The agent it was for, and its project's folder: where its record is (the agent's queue). */
+  agent: string
+  folder: string
+  from: From
+  correlationID: string
+  replyTo?: string
+  priority: OperatorQueueStore.Priority
+}
+
+const senderName = (sender: OperatorQueueStore.Sender) =>
+  sender.kind === "agent" ? (sender.agent ?? "an agent") : sender.kind === "system" ? "the system" : "outside"
+
+/**
+ * What a session reads for a queued message (§5). The user's own words as they are; anyone else's headed with who
+ * sent it, for example "Message from researcher (project web) · high · correlation c_19 · id msg_…:", so the
+ * recipient can answer it (`ping send` with `replyTo`). The part carries the mark.
+ */
+export function delivered(item: OperatorQueueStore.Item): { text: string; metadata?: { message: Mark } } {
+  if (item.sender.kind === "user") return { text: item.text }
+  const correlationID = item.correlationID ?? item.id
+  const head = [
+    `${item.replyTo ? "Reply" : "Message"} from ${senderName(item.sender)} (project ${path.basename(item.project)})`,
+    ...(item.priority === "normal" ? [] : [item.priority]),
+    `correlation ${correlationID}`,
+    `id ${item.id}`,
+    ...(item.replyTo ? [`answers ${item.replyTo}`] : []),
+  ].join(" · ")
+  return {
+    text: `${head}:\n${item.text}`,
+    metadata: {
+      message: {
+        id: item.id,
+        agent: item.agent,
+        folder: item.project,
+        from: fromSender(item.sender, item.sender.project ?? item.project),
+        correlationID,
+        ...(item.replyTo ? { replyTo: item.replyTo } : {}),
+        priority: item.priority,
+      },
+    },
+  }
+}

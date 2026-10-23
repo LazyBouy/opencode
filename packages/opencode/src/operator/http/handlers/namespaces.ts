@@ -5,6 +5,7 @@ import { OperatorNamespaceScope } from "@/operator/namespace-scope"
 import { OperatorProfile } from "@/operator/profile"
 import { OperatorLayout } from "@/operator/layout"
 import { OperatorMemoryDefaults } from "@/operator/memory-defaults"
+import { OperatorPingDefaults } from "@/operator/messaging/defaults"
 import { OperatorProfileStore } from "@/operator/profile-store"
 import { OperatorProjectCopy } from "@/operator/project-copy"
 import { OperatorProjectSessions } from "@/operator/project-sessions"
@@ -49,7 +50,11 @@ export const operatorNamespaceHandlers = HttpApiBuilder.group(OperatorRootApi, "
           Effect.tap((created) =>
             ctx.payload.adopt
               ? Effect.void
-              : Effect.promise(() => OperatorMemoryDefaults.forNamespace(created.id).catch(() => false)),
+              : Effect.promise(async () => {
+                  await OperatorMemoryDefaults.forNamespace(created.id).catch(() => false)
+                  // Its `ping` lines too (SPEC-0023 §7.3).
+                  await OperatorPingDefaults.forNamespace(created.id).catch(() => false)
+                }),
           ),
           Effect.mapError(apiError),
         ),

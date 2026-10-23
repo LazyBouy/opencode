@@ -107,6 +107,16 @@ export const BUILTINS: Readonly<Record<string, Entry>> = {
     ],
     ["READ", "WRITE", "FORGET"],
   ),
+  ping: entry(
+    "ping",
+    "verbs",
+    [
+      { pattern: "SEND(agent/*)", action: "allow" },
+      { pattern: "SEND(group/reviewers)", action: "ask" },
+      { pattern: "DISCOVER(*)", action: "allow" },
+    ],
+    ["DISCOVER", "SEND"],
+  ),
 }
 
 const storeFile = () => path.join(Global.Path.config, "namespaces", "tool-patterns.json")

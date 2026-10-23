@@ -6,6 +6,7 @@ import { useLanguage } from "@/context/language"
 import { useOperatorClient } from "../data"
 import type { Mark } from "./hook-marks"
 import { HookMarkList, MessageHookMarks } from "./hook-marks-view"
+import { MessageMarkView } from "./messages-view"
 import { useSessionHookRuns } from "./hook-runs"
 import { useSessionView } from "./view"
 
@@ -17,11 +18,13 @@ type Part = { id: string; type: string; text?: string; synthetic?: boolean; meta
 // saved with the message (synthetic parts), the texts it added to the exchange's requests in memory (not
 // saved; from the call records), and its side calls, retries and errors, each linked to the Transcript.
 // Nothing in the other views.
-// In every view, what hooks did to the message (hook-marks-view.tsx).
+// In every view, what hooks did to the message (hook-marks-view.tsx), and who sent it when another agent did
+// (messages-view.tsx).
 export function UserExtras(props: { message: UserMessage; parts: () => ReadonlyArray<Part> }) {
   const view = useSessionView()
   return (
     <>
+      <MessageMarkView parts={props.parts} />
       <MessageHookMarks parts={props.parts} />
       <Show when={props.parts().some((part) => part.type === "compaction")}>
         <CompactionHookMarks message={props.message} />

@@ -9,7 +9,7 @@ import { SelectV2 } from "../ui/select"
 import { TextareaV2 } from "@opencode-ai/ui/v2/textarea-v2"
 import type { OperatorQueueItem, OperatorQueuePriority } from "@opencode-ai/sdk/v2/client"
 import { useQuery } from "@tanstack/solid-query"
-import { onCleanup, Show } from "solid-js"
+import { createSignal, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
@@ -368,6 +368,52 @@ function QueueStatus(props: { item: OperatorQueueItem }) {
         <Tag>{language.t("operator.queue.steerTag")}</Tag>
       </Show>
     </span>
+  )
+}
+
+/** One message's record, by id, for links from elsewhere (a delivered message's mark in the chat). */
+export function QueueRecordById(props: { agent: string; directory: string; id: string }) {
+  const language = useLanguage()
+  const api = useOperatorClient()
+  const dialog = useDialog()
+  const items = useQuery(() => ({
+    queryKey: api.key("agent-queue", props.directory, props.agent),
+    queryFn: () =>
+      api
+        .client()
+        .operator.queue.agent({ name: props.agent, directory: props.directory, limit: "200" })
+        .then((result) => result.data ?? []),
+  }))
+  const [shown, setShown] = createSignal(props.id)
+  const item = () => items.data?.find((found) => found.id === shown())
+  const cancel = (id: string) =>
+    api
+      .client()
+      .operator.queue.cancel({ id, directory: props.directory }, { throwOnError: true })
+      .then(() => items.refetch())
+      .then(() => dialog.close())
+      .catch((error: unknown) =>
+        showToast({ title: language.t("operator.agent.actionFailed"), description: requestError(error) }),
+      )
+  return (
+    <Show
+      when={item()}
+      fallback={
+        <p data-slot="operator-note">
+          {items.isLoading ? language.t("operator.queue.loading") : language.t("operator.queue.notListed")}
+        </p>
+      }
+    >
+      {(found) => (
+        <QueueRecord
+          item={found()}
+          sessionTitle={(id) => id ?? "—"}
+          onCancel={cancel}
+          answered={items.data?.find((other) => other.id === found().replyTo)}
+          onOpen={(other) => setShown(other.id)}
+        />
+      )}
+    </Show>
   )
 }
 

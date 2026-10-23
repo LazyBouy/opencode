@@ -34,21 +34,23 @@ export const NAMESPACE = {
   "FORGET(namespace/*)": "deny",
 } as const
 
-const CONFIGS = ["opencode.jsonc", "opencode.json"]
+export const CONFIGS = ["opencode.jsonc", "opencode.json"]
 
-// Adds `permission.memory` to a config file that has none (created when missing).
-async function addTo(file: string, lines: Record<string, string>) {
+/** Adds `permission.<tool>` to a config file that has none for it (the file is created when missing). */
+export async function addLines(file: string, tool: string, lines: Record<string, string>) {
   const text = await fs.readFile(file, "utf8").catch(() => "")
   const value = (text.trim() ? parse(text) : {}) as { permission?: unknown } | undefined
   const permission = value?.permission
   if (typeof permission === "string") return false
-  if (permission && typeof permission === "object" && "memory" in permission) return false
+  if (permission && typeof permission === "object" && tool in permission) return false
   await fs.mkdir(path.dirname(file), { recursive: true })
-  await fs.writeFile(file, OperatorConfig.patchText(text, { permission: { memory: OperatorConfig.whole(lines) } }))
+  await fs.writeFile(file, OperatorConfig.patchText(text, { permission: { [tool]: OperatorConfig.whole(lines) } }))
   return true
 }
+const addTo = (file: string, lines: Record<string, string>) => addLines(file, "memory", lines)
 
-async function existing(folder: string, names: ReadonlyArray<string>) {
+/** A folder's config file: the one it has, else the first name. */
+export async function existing(folder: string, names: ReadonlyArray<string>) {
   for (const name of names) {
     const file = path.join(folder, name)
     if (await Bun.file(file).exists()) return file

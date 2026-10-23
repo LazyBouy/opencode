@@ -34,6 +34,8 @@ export type Settings = {
   upgradeDone?: boolean
   /** The `memory` permission's default lines were written once (memory-defaults.ts). */
   memoryDefaults?: boolean
+  /** The `ping` permission's default lines were written once (messaging/defaults.ts). */
+  pingDefaults?: boolean
 }
 
 // Read on every permission ask: through the file cache (a file is read again only when it changed).
@@ -50,6 +52,7 @@ export async function readSettings(): Promise<Settings> {
     ...(data.mcpLoginsCopied === true ? { mcpLoginsCopied: true } : {}),
     ...(data.upgradeDone === true ? { upgradeDone: true } : {}),
     ...(data.memoryDefaults === true ? { memoryDefaults: true } : {}),
+    ...(data.pingDefaults === true ? { pingDefaults: true } : {}),
   }
 }
 

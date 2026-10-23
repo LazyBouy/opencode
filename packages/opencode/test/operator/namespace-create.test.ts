@@ -3,7 +3,9 @@ import fs from "fs/promises"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
 import { parse } from "jsonc-parser"
+import { OperatorLayout } from "@/operator/layout"
 import { OperatorMemoryDefaults } from "@/operator/memory-defaults"
+import { OperatorPingDefaults } from "@/operator/messaging/defaults"
 import { OperatorProfileStore } from "@/operator/profile-store"
 import { Server } from "../../src/server/server"
 import { resetDatabase } from "../fixture/db"
@@ -77,12 +79,19 @@ describe("a new namespace", () => {
     })
   })
 
-  test("gets its memory lines at its level (memory_spec.md §6.1)", async () => {
+  test("gets its memory and ping lines at its level (memory_spec.md §6.1, SPEC-0023 §7.3)", async () => {
     const made = await request<{ id: string }>("POST", "/operator/namespaces", { name: "Acme" })
     expect(made.status).toBe(200)
     created.push(made.body.id)
-    const text = await fs.readFile(path.join(work, "acme", ".opencode", "opencode.jsonc"), "utf8")
+    const file = path.join(work, "acme", ".opencode", "opencode.jsonc")
+    const text = await fs.readFile(file, "utf8")
     expect(parse(text).permission.memory).toEqual(OperatorMemoryDefaults.NAMESPACE)
+    expect(parse(text).permission.ping).toEqual(OperatorPingDefaults.NAMESPACE)
+    // Lines it has are never written again; OpenCode's namespace and Global get none.
+    expect(await OperatorPingDefaults.forNamespace("acme")).toBe(false)
+    expect(await fs.readFile(file, "utf8")).toBe(text)
+    expect(await OperatorPingDefaults.forNamespace(OperatorLayout.OPENCODE)).toBe(false)
+    expect(await OperatorPingDefaults.forNamespace(OperatorLayout.GLOBAL)).toBe(false)
   })
 
   test("an existing folder that isn't empty is used only when asked", async () => {
