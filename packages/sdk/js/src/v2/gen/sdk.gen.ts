@@ -7836,6 +7836,7 @@ export class Queue extends HeyApiClient {
       priority?: OperatorQueuePriority
       steer?: boolean
       correlationID?: string
+      replyTo?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7853,6 +7854,7 @@ export class Queue extends HeyApiClient {
             { in: "body", key: "priority" },
             { in: "body", key: "steer" },
             { in: "body", key: "correlationID" },
+            { in: "body", key: "replyTo" },
           ],
         },
       ],

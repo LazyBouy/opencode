@@ -6835,12 +6835,15 @@ export type OperatorQueueTarget = "session" | "main" | "active"
 export type OperatorQueuePriority = "low" | "normal" | "high" | "urgent"
 
 export type OperatorQueueSender = {
-  kind: "user" | "agent" | "system"
+  kind: "user" | "agent" | "system" | "external"
   agent?: string
   sessionID?: string
+  project?: string
 }
 
-export type OperatorQueueStatus = "queued" | "delivered" | "failed" | "cancelled"
+export type OperatorQueueLane = "memory" | "sqlite"
+
+export type OperatorQueueStatus = "queued" | "in memory" | "delivered" | "failed" | "cancelled"
 
 export type OperatorQueueItem = {
   id: string
@@ -6856,6 +6859,8 @@ export type OperatorQueueItem = {
   steer: boolean
   sender: OperatorQueueSender
   correlationID?: string
+  replyTo?: string
+  lane?: OperatorQueueLane
   status: OperatorQueueStatus
   createdAt: number
   deliveredAt?: number
@@ -21507,6 +21512,7 @@ export type OperatorQueueSendData = {
     priority?: OperatorQueuePriority
     steer?: boolean
     correlationID?: string
+    replyTo?: string
   }
   path: {
     name: string

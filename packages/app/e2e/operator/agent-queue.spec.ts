@@ -57,3 +57,58 @@ test("an agent's queue: where its messages go, queueing and steering a message, 
   await expect(waiting).toContainText("Cancelled")
   expect(state.queue[0]?.status).toBe("cancelled")
 })
+
+test("the queue shows each message's lane, sender and correlation; a reply links to the message it answers", async ({
+  page,
+}) => {
+  const state = await mockOperator(page)
+  const asked = {
+    id: "msg_asked",
+    project: directory,
+    agent: "build",
+    target: "main",
+    text: "Can you review section 2?",
+    priority: "normal",
+    steer: false,
+    sender: { kind: "user" },
+    correlationID: "c_19",
+    status: "delivered",
+    lane: "sqlite",
+    createdAt: Date.now() - 120_000,
+    deliveredAt: Date.now() - 110_000,
+    deliveredTo: "ses_op_1",
+  }
+  const reply = {
+    id: "msg_reply",
+    project: directory,
+    agent: "build",
+    target: "main",
+    text: "Section 2 is ready.",
+    priority: "high",
+    steer: false,
+    sender: { kind: "agent", agent: "writer", project: "web01" },
+    correlationID: "c_19",
+    replyTo: "msg_asked",
+    status: "in memory",
+    lane: "memory",
+    createdAt: Date.now() - 5_000,
+  }
+  state.queue.push(asked, reply)
+  await page.goto(`/operator/agents/build${dir}&tab=queue`)
+  const table = page.getByRole("table", { name: "Queue" })
+  const row = table.getByRole("row", { name: /Section 2 is ready/ })
+  await expect(row).toContainText("Held in memory")
+  await expect(row).toContainText("Memory")
+  await expect(row).toContainText("writer (project web01)")
+  await expect(row).toContainText("c_19")
+  await expect(row).toContainText("Reply")
+  await expect(table.getByRole("row", { name: /Can you review/ })).toContainText("SQLite")
+
+  // The reply's record links to the message it answers; a held message can be cancelled.
+  await row.click()
+  const record = page.getByTestId("queue-record")
+  await expect(record).toContainText("Memory")
+  await expect(page.getByRole("dialog").getByRole("button", { name: "Cancel" })).toBeVisible()
+  await record.getByRole("button", { name: /Can you review section 2/ }).click()
+  await expect(page.getByTestId("queue-record")).toContainText("Can you review section 2?")
+})

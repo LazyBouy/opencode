@@ -23255,6 +23255,9 @@
                   },
                   "correlationID": {
                     "type": "string"
+                  },
+                  "replyTo": {
+                    "type": "string"
                   }
                 },
                 "required": ["text"],
@@ -49567,21 +49570,28 @@
         "properties": {
           "kind": {
             "type": "string",
-            "enum": ["user", "agent", "system"]
+            "enum": ["user", "agent", "system", "external"]
           },
           "agent": {
             "type": "string"
           },
           "sessionID": {
             "type": "string"
+          },
+          "project": {
+            "type": "string"
           }
         },
         "required": ["kind"],
         "additionalProperties": false
       },
+      "OperatorQueueLane": {
+        "type": "string",
+        "enum": ["memory", "sqlite"]
+      },
       "OperatorQueueStatus": {
         "type": "string",
-        "enum": ["queued", "delivered", "failed", "cancelled"]
+        "enum": ["queued", "in memory", "delivered", "failed", "cancelled"]
       },
       "OperatorQueueItem": {
         "type": "object",
@@ -49616,6 +49626,12 @@
           },
           "correlationID": {
             "type": "string"
+          },
+          "replyTo": {
+            "type": "string"
+          },
+          "lane": {
+            "$ref": "#/components/schemas/OperatorQueueLane"
           },
           "status": {
             "$ref": "#/components/schemas/OperatorQueueStatus"

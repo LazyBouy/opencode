@@ -144,6 +144,11 @@ export function AgentQueue(props: { agent: string; directory: string }) {
             item={items.data?.find((found) => found.id === item.id) ?? item}
             sessionTitle={sessionTitle}
             onCancel={(id) => cancel(id).then(() => dialog.close())}
+            answered={items.data?.find((found) => found.id === item.replyTo)}
+            onOpen={(other) => {
+              dialog.close()
+              open(other)
+            }}
           />
         </DialogBody>
       </Dialog>
@@ -262,6 +267,36 @@ export function AgentQueue(props: { agent: string; directory: string }) {
             cell: (item) => (item.deliveredTo ? sessionTitle(item.deliveredTo) : targetText(language, item)),
           },
           {
+            id: "lane",
+            optional: true,
+            header: language.t("operator.queue.lane"),
+            help: language.t("operator.help.queueLane"),
+            value: (item) => item.lane ?? "",
+            cell: (item) => (item.lane ? language.t(`operator.queue.lane.${item.lane}`) : "—"),
+          },
+          {
+            id: "from",
+            optional: true,
+            header: language.t("operator.queue.from"),
+            help: language.t("operator.help.queueFrom"),
+            value: (item) => item.sender.kind,
+            cell: (item) => senderText(language, item),
+          },
+          {
+            id: "correlation",
+            optional: true,
+            header: language.t("operator.queue.correlation"),
+            help: language.t("operator.help.queueCorrelation"),
+            cell: (item) => (
+              <span class="inline-flex items-center gap-1">
+                <code data-slot="operator-cell-clamp">{item.correlationID ?? "—"}</code>
+                <Show when={item.replyTo}>
+                  <Tag>{language.t("operator.queue.replyTag")}</Tag>
+                </Show>
+              </span>
+            ),
+          },
+          {
             id: "priority",
             optional: true,
             header: language.t("operator.queue.priority"),
@@ -281,7 +316,7 @@ export function AgentQueue(props: { agent: string; directory: string }) {
             header: "",
             align: "end",
             cell: (item) => (
-              <Show when={item.status === "queued"}>
+              <Show when={item.status === "queued" || item.status === "in memory"}>
                 <ButtonV2
                   size="small"
                   variant="ghost"
@@ -301,6 +336,20 @@ export function AgentQueue(props: { agent: string; directory: string }) {
   )
 }
 
+// Who sent it: you, an agent (of another project), OpenCode, or outside.
+const senderText = (language: ReturnType<typeof useLanguage>, item: OperatorQueueItem) =>
+  item.sender.kind === "agent"
+    ? item.sender.project
+      ? language.t("operator.queue.sender.otherProject", {
+          agent: item.sender.agent ?? "",
+          project: item.sender.project,
+        })
+      : language.t("operator.queue.sender.agent", { agent: item.sender.agent ?? "" })
+    : language.t(`operator.queue.sender.${item.sender.kind}`)
+
+const statusKey = (status: OperatorQueueItem["status"]) =>
+  `operator.queue.status.${status === "in memory" ? "in-memory" : status}` as const
+
 const targetText = (language: ReturnType<typeof useLanguage>, item: OperatorQueueItem) =>
   item.target === "session" ? (item.sessionID ?? "—") : language.t(`operator.queue.target.${item.target}`)
 
@@ -313,7 +362,7 @@ function QueueStatus(props: { item: OperatorQueueItem }) {
         data-warning={props.item.status === "failed" ? "" : undefined}
         title={props.item.error}
       >
-        {language.t(`operator.queue.status.${props.item.status}`)}
+        {language.t(statusKey(props.item.status))}
       </Tag>
       <Show when={props.item.steer}>
         <Tag>{language.t("operator.queue.steerTag")}</Tag>
@@ -327,16 +376,16 @@ function QueueRecord(props: {
   item: OperatorQueueItem
   sessionTitle: (id: string | undefined) => string
   onCancel: (id: string) => void
+  /** The message this one answers, when it's in the list. */
+  answered?: OperatorQueueItem
+  onOpen: (item: OperatorQueueItem) => void
 }) {
   const language = useLanguage()
   const openSession = useOpenSession()
   const navigate = useNavigate()
   const dialog = useDialog()
   const locale = () => language.intl()
-  const sender = () =>
-    props.item.sender.kind === "agent"
-      ? language.t("operator.queue.sender.agent", { agent: props.item.sender.agent ?? "" })
-      : language.t(`operator.queue.sender.${props.item.sender.kind}`)
+  const sender = () => senderText(language, props.item)
   return (
     <RecordView
       title={<QueueStatus item={props.item} />}
@@ -368,7 +417,7 @@ function QueueRecord(props: {
               </>
             )}
           </Show>
-          <Show when={props.item.status === "queued"}>
+          <Show when={props.item.status === "queued" || props.item.status === "in memory"}>
             <ButtonV2 size="small" variant="danger" onClick={() => props.onCancel(props.item.id)}>
               {language.t("operator.queue.cancel")}
             </ButtonV2>
@@ -407,6 +456,26 @@ function QueueRecord(props: {
         <RecordField label={language.t("operator.queue.queued")} help={language.t("operator.help.queueQueued")}>
           {formatDateTime(props.item.createdAt, locale())}
         </RecordField>
+        <Show when={props.item.lane}>
+          {(lane) => (
+            <RecordField label={language.t("operator.queue.lane")} help={language.t("operator.help.queueLane")}>
+              {language.t(`operator.queue.lane.${lane()}`)}
+            </RecordField>
+          )}
+        </Show>
+        <Show when={props.item.replyTo}>
+          {(id) => (
+            <RecordField label={language.t("operator.queue.replyTo")} help={language.t("operator.help.queueReplyTo")}>
+              <Show when={props.answered} fallback={<code>{id()}</code>}>
+                {(answered) => (
+                  <button type="button" data-slot="operator-link" onClick={() => props.onOpen(answered())}>
+                    {answered().text.slice(0, 80)}
+                  </button>
+                )}
+              </Show>
+            </RecordField>
+          )}
+        </Show>
         <Show when={props.item.correlationID}>
           <RecordField
             label={language.t("operator.queue.correlation")}

@@ -28,6 +28,7 @@ import { OperatorPermissionLevels } from "./permission-levels"
 import { OperatorSessionPermissions } from "./session-permissions"
 import { OperatorAgentSessions } from "./agent-sessions"
 import { OperatorQueue } from "./queue"
+import { OperatorMessagingSeams } from "./messaging/seams"
 import { OperatorPermissionLive } from "./permission-live"
 import { OperatorPermissionDecisions } from "./permission-decisions"
 import { OperatorPermissionDecide } from "./permission-decide"
@@ -62,6 +63,7 @@ export const operatorNodes = [
   OperatorPermissionLevels.node,
   OperatorSessionPermissions.node,
   OperatorAgentSessions.node,
+  OperatorMessagingSeams.node,
   OperatorQueue.node,
   OperatorPermissionLive.node,
   OperatorPermissionDecisions.node,

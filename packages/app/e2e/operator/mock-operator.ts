@@ -1285,6 +1285,8 @@ export async function mockOperator(page: Page) {
           steer: !!body.steer,
           sender: { kind: "user" },
           status: body.steer ? "delivered" : "queued",
+          lane: body.steer ? "memory" : "sqlite",
+          correlationID: `qm_mock_${state.queue.length + 1}`,
           createdAt: now + state.queue.length,
           ...(body.steer ? { deliveredAt: now, deliveredTo: body.sessionID ?? "ses_op_1" } : {}),
         }

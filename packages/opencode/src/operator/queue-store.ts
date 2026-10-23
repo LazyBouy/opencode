@@ -8,10 +8,11 @@ import { Global } from "@opencode-ai/core/global"
 
 // The agents' input queues (project/agent specification §1.6): messages for an agent, each delivered to
 // a session (the one it names, else the agent's main or active session). This is the store behind
-// them, an interface with one backend for now: a SQLite file the fork owns,
-// `<data>/operator/queue.sqlite`, durable across restarts. A broker (RabbitMQ) can be another backend
-// later; when a message is delivered stays OpenCode's business (operator/queue.ts), since it depends on
-// whether its session is running.
+// them, the session queues' SQLite lane (SPEC-0023 §6), an interface with one backend: a SQLite file the fork
+// owns, `<data>/operator/queue.sqlite`, durable across restarts. A message for a session that is running a turn
+// is held in its memory lane instead (messaging/lanes.ts) and comes here when the turn ends; the message log
+// (messaging/log.ts) keeps every message's history in the same file. When a message is delivered stays OpenCode's
+// business (operator/queue.ts), since it depends on whether its session is running.
 
 export const Target = Schema.Literals(["session", "main", "active"]).annotate({
   identifier: "OperatorQueueTarget",
@@ -24,16 +25,24 @@ export const Priority = Schema.Literals(["low", "normal", "high", "urgent"]).ann
 })
 export type Priority = typeof Priority.Type
 
-export const Status = Schema.Literals(["queued", "delivered", "failed", "cancelled"]).annotate({
+export const Status = Schema.Literals(["queued", "in memory", "delivered", "failed", "cancelled"]).annotate({
   identifier: "OperatorQueueStatus",
+  description: "in memory: held for a session that is running a turn (its memory lane), until the turn ends",
 })
 export type Status = typeof Status.Type
 
 export const Sender = Schema.Struct({
-  kind: Schema.Literals(["user", "agent", "system"]),
+  kind: Schema.Literals(["user", "agent", "system", "external"]),
   agent: Schema.optional(Schema.String),
   sessionID: Schema.optional(Schema.String),
+  project: Schema.optional(Schema.String).annotate({ description: "The sender's project, when it isn't this one" }),
 }).annotate({ identifier: "OperatorQueueSender" })
+
+export const Lane = Schema.Literals(["memory", "sqlite"]).annotate({
+  identifier: "OperatorQueueLane",
+  description: "memory: held while its session ran a turn; sqlite: waited in the queue for its session to be idle",
+})
+export type Lane = typeof Lane.Type
 export type Sender = typeof Sender.Type
 
 export const Item = Schema.Struct({
@@ -47,6 +56,8 @@ export const Item = Schema.Struct({
   steer: Schema.Boolean.annotate({ description: "Delivered at once, even into a running session" }),
   sender: Sender,
   correlationID: Schema.optional(Schema.String),
+  replyTo: Schema.optional(Schema.String).annotate({ description: "The message this one answers" }),
+  lane: Schema.optional(Lane),
   status: Status,
   createdAt: Schema.Finite,
   deliveredAt: Schema.optional(Schema.Finite),
@@ -55,9 +66,13 @@ export const Item = Schema.Struct({
 }).annotate({ identifier: "OperatorQueueItem" })
 export type Item = typeof Item.Type
 
-export type NewItem = Omit<Item, "id" | "status" | "createdAt" | "deliveredAt" | "deliveredTo" | "error">
+export type NewItem = Omit<Item, "id" | "status" | "createdAt" | "deliveredAt" | "deliveredTo" | "error"> &
+  Partial<Pick<Item, "id" | "status" | "createdAt" | "deliveredAt" | "deliveredTo">>
 
 export interface Backend {
+  /** The file it keeps its tables in (the message log keeps its own there too). */
+  readonly file: string
+  /** Adds a message (queued unless given otherwise); an id, time and status can be given, as a moved one keeps its. */
   enqueue(item: NewItem): Item
   get(id: string): Item | undefined
   /** Items in delivery order: priority first (urgent to low), then oldest first. */
@@ -91,6 +106,8 @@ type Row = {
   delivered_at: number | null
   delivered_to: string | null
   error: string | null
+  lane: string | null
+  reply_to: string | null
 }
 
 function itemOf(row: Row): Item {
@@ -105,6 +122,8 @@ function itemOf(row: Row): Item {
     steer: !!row.steer,
     sender: JSON.parse(row.sender) as Sender,
     ...(row.correlation_id ? { correlationID: row.correlation_id } : {}),
+    ...(row.reply_to ? { replyTo: row.reply_to } : {}),
+    ...(row.lane ? { lane: row.lane as Lane } : {}),
     status: row.status as Status,
     createdAt: row.created_at,
     ...(row.delivered_at ? { deliveredAt: row.delivered_at } : {}),
@@ -139,13 +158,20 @@ export function sqlite(file: string): Backend {
     delivered_to TEXT,
     error TEXT
   )`)
+  // Columns added since (SPEC-0023): the lane a message went through, and the message it answers.
+  const columns = new Set(
+    (db.query("PRAGMA table_info(queue_item)").all() as Array<{ name: string }>).map((row) => row.name),
+  )
+  if (!columns.has("lane")) db.exec("ALTER TABLE queue_item ADD COLUMN lane TEXT")
+  if (!columns.has("reply_to")) db.exec("ALTER TABLE queue_item ADD COLUMN reply_to TEXT")
   db.exec("CREATE INDEX IF NOT EXISTS queue_item_agent ON queue_item (project, agent, status)")
   db.exec("CREATE INDEX IF NOT EXISTS queue_item_status ON queue_item (status)")
   const order = "ORDER BY priority DESC, created_at ASC, id ASC"
   return {
+    file,
     enqueue(item) {
       const row: Row = {
-        id: newID(),
+        id: item.id ?? newID(),
         project: item.project,
         agent: item.agent,
         target: item.target,
@@ -155,14 +181,17 @@ export function sqlite(file: string): Backend {
         steer: item.steer ? 1 : 0,
         sender: JSON.stringify(item.sender),
         correlation_id: item.correlationID ?? null,
-        status: "queued",
-        created_at: Date.now(),
-        delivered_at: null,
-        delivered_to: null,
+        status: item.status ?? "queued",
+        created_at: item.createdAt ?? Date.now(),
+        delivered_at: item.deliveredAt ?? null,
+        delivered_to: item.deliveredTo ?? null,
         error: null,
+        lane: item.lane ?? null,
+        reply_to: item.replyTo ?? null,
       }
+      const names = Object.keys(row)
       db.query(
-        `INSERT INTO queue_item VALUES ($id, $project, $agent, $target, $session_id, $text, $priority, $steer, $sender, $correlation_id, $status, $created_at, $delivered_at, $delivered_to, $error)`,
+        `INSERT OR REPLACE INTO queue_item (${names.join(", ")}) VALUES (${names.map((name) => `$${name}`).join(", ")})`,
       ).run(Object.fromEntries(Object.entries(row).map(([key, value]) => [`$${key}`, value])) as never)
       return itemOf(row)
     },
