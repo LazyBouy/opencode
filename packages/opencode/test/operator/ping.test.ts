@@ -7,6 +7,7 @@ import { OperatorAgentSessions } from "@/operator/agent-sessions"
 import { OperatorLayout } from "@/operator/layout"
 import { OperatorPingDefaults } from "@/operator/messaging/defaults"
 import { OperatorMessageLog } from "@/operator/messaging/log"
+import { OperatorProjectInbox } from "@/operator/messaging/inbox"
 import { OperatorPing } from "@/operator/messaging/ping"
 import { OperatorMessagingSettings } from "@/operator/messaging/settings"
 import { OperatorPermissionLive } from "@/operator/permission-live"
@@ -38,6 +39,7 @@ const it = testEffect(
       OperatorPermissionLocks.node,
       OperatorAgentSessions.node,
       OperatorQueue.node,
+      OperatorProjectInbox.node,
       OperatorPing.node,
     ]),
     [...replacements, [InstanceStore.bootstrapNode, noopBootstrap]],
@@ -141,7 +143,7 @@ unix("with the default lines a model's ping send reaches the agent, headed with 
     for (let attempt = 0; attempt < 250 && !(yield* firstText()); attempt++) yield* Effect.sleep("20 millis")
     const read = (yield* firstText())!
     expect(read.text).toBe(
-      `Message from build (project ${path.basename(project)}) · correlation ${id} · id ${id}:\nhello plan`,
+      `Message from build (project ${path.basename(project)}, session ${sender.id}) · correlation ${id} · id ${id}:\nhello plan`,
     )
     expect(read.metadata?.message).toMatchObject({ id, from: { kind: "agent", agent: "build", session: sender.id } })
     expect(OperatorMessageLog.log().get(id)).toMatchObject({
@@ -306,6 +308,40 @@ unix("wait gets the reply sent with replyTo, times out, ends on abort, and is re
       call({ verb: "send", target: { type: "session", id: sender.id }, message: { body: "me" }, wait: true }),
     )
     expect(own.card).toMatchObject({ status: "refused", reason: "waiting on your own session; it could never answer" })
+
+    // The conversation: the message and its reply, oldest first, and the sessions they went between.
+    const talk = yield* (yield* OperatorProjectInbox.Service).conversation(id)
+    expect(talk.messages.map((item) => item.id)).toEqual([id, answered.card.messages![0]!.id!])
+    expect(talk.sessions.map((item) => item.id).toSorted()).toEqual([sender.id, delivered.deliveredTo!].toSorted())
+    expect(talk.sessions.find((item) => item.id === delivered.deliveredTo)).toMatchObject({
+      agent: "plan",
+      title: "plan · main session",
+      exists: true,
+    })
+  }),
+)
+
+unix("discover names each agent's sessions; session: new gives the conversation a session of its own", () =>
+  Effect.gen(function* () {
+    const { ping, call } = yield* setup()
+    const sessions = yield* Session.Service
+    const main = (yield* (yield* OperatorAgentSessions.Service).ensureMain("plan")).session
+    const found = yield* ping.run(call({ verb: "discover" }))
+    expect(found.output).toContain(`· main ${main.id} "plan · main session"`)
+
+    const sent = yield* ping.run(
+      call({
+        verb: "send",
+        target: { type: "agent", id: "plan", session: "new" },
+        message: { body: "Draft the release notes\nfor 2.0" },
+      }),
+    )
+    expect(sent.card.messages).toMatchObject([{ to: "plan (a new session)", status: "queued" }])
+    const delivered = yield* settled(sent.card.messages![0]!.id!, "delivered")
+    expect(delivered.target).toBe("new")
+    expect(delivered.deliveredTo).not.toBe(main.id)
+    const made = yield* sessions.get(delivered.deliveredTo as never)
+    expect(made).toMatchObject({ title: "plan · Draft the release notes", agent: "plan" })
   }),
 )
 

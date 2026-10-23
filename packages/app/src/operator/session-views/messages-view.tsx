@@ -5,6 +5,7 @@ import type { MessagePartProps } from "@opencode-ai/session-ui/message-part"
 import { createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { QueueRecordById } from "../pages/agent-queue"
+import { useOpenConversation } from "./conversation"
 import { type MessageMark, messageMarkOf, pingCardOf, waited } from "./messages"
 
 type Key = Parameters<ReturnType<typeof useLanguage>["t"]>[0]
@@ -15,6 +16,7 @@ export function MessageMarkView(props: { parts: () => ReadonlyArray<{ type: stri
   const language = useLanguage()
   const dialog = useDialog()
   const mark = createMemo(() => messageMarkOf(props.parts()))
+  const openConversation = useOpenConversation()
   const sender = (found: MessageMark) =>
     found.from.kind === "agent"
       ? (found.from.agent ?? "—")
@@ -46,6 +48,13 @@ export function MessageMarkView(props: { parts: () => ReadonlyArray<{ type: stri
             <button type="button" data-slot="operator-link" onClick={() => open(found())}>
               {language.t("operator.messages.mark.record")}
             </button>
+            <button
+              type="button"
+              data-slot="operator-link"
+              onClick={() => openConversation(found().correlationID, found().folder)}
+            >
+              {language.t("operator.conversation.openButton")}
+            </button>
           </div>
         </div>
       )}
@@ -58,6 +67,7 @@ export function MessageMarkView(props: { parts: () => ReadonlyArray<{ type: stri
 export function PingCardView(props: { part: MessagePartProps["part"] }) {
   const language = useLanguage()
   const card = createMemo(() => pingCardOf(props.part as never))
+  const openConversation = useOpenConversation()
   const [now, setNow] = createSignal(Date.now())
   const timer = setInterval(() => {
     if (card()?.status === "waiting") setNow(Date.now())
@@ -79,6 +89,13 @@ export function PingCardView(props: { part: MessagePartProps["part"] }) {
             </span>
             <Show when={found().reason}>
               <span>{found().reason}</span>
+            </Show>
+            <Show when={found().correlationID}>
+              {(id) => (
+                <button type="button" data-slot="operator-link" onClick={() => openConversation(id())}>
+                  {language.t("operator.conversation.openButton")}
+                </button>
+              )}
             </Show>
           </div>
           <For each={found().messages ?? []}>

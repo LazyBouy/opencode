@@ -77,6 +77,8 @@ export interface Interface {
   readonly setMain: (agent: string, sessionID: string | undefined) => Effect.Effect<State, NotFoundError>
   /** The agent's main session, made (in its home folder) and kept when it has none. */
   readonly ensureMain: (agent: string) => Effect.Effect<{ session: SessionRef; created: boolean }, NotFoundError>
+  /** A new session of the agent (in its home folder), with this title. */
+  readonly create: (agent: string, title: string) => Effect.Effect<SessionRef, NotFoundError>
   /** Where messages for the agent go when they name no session. */
   readonly setTarget: (agent: string, target: DefaultTarget) => Effect.Effect<State, NotFoundError>
   /** The agent new sessions start with (config `default_agent`, else OpenCode's). */
@@ -193,26 +195,32 @@ const layer = Layer.effect(
       return yield* state(name)
     })
 
+    // A session of the agent, in its home folder when it has one, as a session started as the agent is.
+    const create = Effect.fn("OperatorAgentSessions.create")(function* (name: string, title: string) {
+      yield* known(name)
+      const root = yield* project()
+      const home = (yield* operatorAgents.list()).find((item) => item.name === name)?.home
+      const folder = home ? path.resolve(root, home) : root
+      const made = yield* instances.provide({ directory: folder }, sessions.create({ agent: name, title }))
+      return {
+        id: made.id,
+        title: made.title,
+        directory: made.directory,
+        updated: made.time.updated,
+      } satisfies SessionRef
+    })
+
     const ensureMain = Effect.fn("OperatorAgentSessions.ensureMain")(function* (name: string) {
       const current = yield* state(name)
       if (current.main) return { session: current.main, created: false }
       const root = yield* project()
-      // In the agent's home folder when it has one, as a session started as the agent is.
-      const home = (yield* operatorAgents.list()).find((item) => item.name === name)?.home
-      const folder = home ? path.resolve(root, home) : root
-      const made = yield* instances.provide(
-        { directory: folder },
-        sessions.create({ agent: name, title: `${name} · main session` }),
-      )
+      const made = yield* create(name, `${name} · main session`)
       yield* Effect.promise(() =>
         change((store) => {
           store[keyOf(root, name)] = { ...store[keyOf(root, name)], main: made.id }
         }),
       )
-      return {
-        session: { id: made.id, title: made.title, directory: made.directory, updated: made.time.updated },
-        created: true,
-      }
+      return { session: made, created: true }
     })
 
     const setTarget = Effect.fn("OperatorAgentSessions.setTarget")(function* (name: string, target: DefaultTarget) {
@@ -226,7 +234,7 @@ const layer = Layer.effect(
       return yield* state(name)
     })
 
-    return Service.of({ state, setMain, setTarget, ensureMain, defaultAgent: () => agents.defaultAgent() })
+    return Service.of({ state, setMain, setTarget, ensureMain, create, defaultAgent: () => agents.defaultAgent() })
   }),
 )
 

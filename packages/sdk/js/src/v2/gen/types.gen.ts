@@ -6831,7 +6831,7 @@ export type OperatorMainSession = {
   created: boolean
 }
 
-export type OperatorQueueTarget = "session" | "main" | "active"
+export type OperatorQueueTarget = "session" | "main" | "active" | "new"
 
 export type OperatorQueuePriority = "low" | "normal" | "high" | "urgent"
 
@@ -7423,6 +7423,23 @@ export type OperatorMessagingSettings = {
    * Seconds a ping that waits waits when it gives no timeout: 1 to 1800 (default 120)
    */
   wait: number
+}
+
+export type OperatorConversationSession = {
+  id: string
+  title?: string
+  agent?: string
+  directory?: string
+  /**
+   * False once the session was deleted
+   */
+  exists: boolean
+}
+
+export type OperatorConversation = {
+  correlationID: string
+  messages: Array<OperatorMessage>
+  sessions: Array<OperatorConversationSession>
 }
 
 export type OperatorProjectInboxCount = {
@@ -23441,6 +23458,39 @@ export type OperatorMessagingSetSettingsResponses = {
 
 export type OperatorMessagingSetSettingsResponse =
   OperatorMessagingSetSettingsResponses[keyof OperatorMessagingSetSettingsResponses]
+
+export type OperatorConversationGetData = {
+  body?: never
+  path: {
+    /**
+     * The correlation id
+     */
+    correlationID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/operator/conversation/{correlationID}"
+}
+
+export type OperatorConversationGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type OperatorConversationGetError = OperatorConversationGetErrors[keyof OperatorConversationGetErrors]
+
+export type OperatorConversationGetResponses = {
+  /**
+   * Oldest first, with the sessions involved
+   */
+  200: OperatorConversation
+}
+
+export type OperatorConversationGetResponse = OperatorConversationGetResponses[keyof OperatorConversationGetResponses]
 
 export type OperatorMessagingCountsData = {
   body?: never

@@ -146,6 +146,22 @@ export function createInboxMock() {
         proj_smoke_timeline: { waiting: count("with manager"), deadLetters: count("dead letter") },
       })
     }
+    // A conversation: the messages sharing a correlation id, oldest first, and their sessions.
+    const conversation = path.match(/^\/operator\/conversation\/([^/]+)$/)
+    if (conversation) {
+      const id = decodeURIComponent(conversation[1]!)
+      const messages = state.messages
+        .filter((item) => item.correlationID === id)
+        .toSorted((a, b) => a.createdAt - b.createdAt)
+      const sessions = [
+        ...new Set(
+          messages
+            .flatMap((item) => [item.from.session, ...(item.copies ?? []).map((copy) => copy.sessionID)])
+            .filter(Boolean),
+        ),
+      ].map((session) => ({ id: session, title: `${session} title`, agent: "build", exists: true }))
+      return json(route, { correlationID: id, messages, sessions })
+    }
     const inbox = path.match(/^\/operator\/project-inbox\/([^/]+)(\/messages|\/rules|\/rules\/test|\/settings)?$/)
     if (inbox) {
       const part = inbox[2]

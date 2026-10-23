@@ -112,3 +112,17 @@ test("the queue shows each message's lane, sender and correlation; a reply links
   await record.getByRole("button", { name: /Can you review section 2/ }).click()
   await expect(page.getByTestId("queue-record")).toContainText("Can you review section 2?")
 })
+
+test("a message can go to a new session of the agent, made when it's delivered", async ({ page }) => {
+  const state = await mockOperator(page)
+  await page.goto(`/operator/agents/build${dir}&tab=queue`)
+  const form = page.getByTestId("agent-queue-form")
+  await form.getByRole("textbox", { name: "Message" }).fill("Start the 2.0 release notes")
+  await form.locator('[data-component="select-v2-root"][aria-label="Send to"] [data-component="select-v2"]').click()
+  await page
+    .locator('[data-component="menu-v2-item"]')
+    .filter({ hasText: /^A new session$/ })
+    .click()
+  await form.getByRole("button", { name: "Queue message" }).click()
+  await expect.poll(() => state.queueSends.at(-1)).toMatchObject({ text: "Start the 2.0 release notes", target: "new" })
+})

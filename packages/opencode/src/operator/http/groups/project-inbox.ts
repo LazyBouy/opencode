@@ -29,6 +29,7 @@ export const OperatorProjectInboxPaths = {
   status: "/operator/messaging/status",
   messagingSettings: "/operator/messaging/settings",
   counts: "/operator/messaging/counts",
+  conversation: "/operator/conversation/:correlationID",
 } as const
 
 export class ApiProjectInboxInvalidError extends Schema.ErrorClass<{
@@ -318,6 +319,18 @@ export const OperatorProjectInboxApi = HttpApi.make("operator-project-inbox")
             identifier: "operator.messaging.setSettings",
             summary: "Change Settings → Messaging",
             description: "What isn't given stays.",
+          }),
+        ),
+        HttpApiEndpoint.get("conversation", OperatorProjectInboxPaths.conversation, {
+          params: { correlationID: Schema.String.annotate({ description: "The correlation id" }) },
+          query: WorkspaceRoutingQuery,
+          success: described(OperatorProjectInbox.Conversation, "Oldest first, with the sessions involved"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "operator.conversation.get",
+            summary: "A conversation",
+            description:
+              "Every message sharing a correlation id (a message, its replies, what an inbox routed), oldest first, and the sessions they went between.",
           }),
         ),
         HttpApiEndpoint.get("counts", OperatorProjectInboxPaths.counts, {

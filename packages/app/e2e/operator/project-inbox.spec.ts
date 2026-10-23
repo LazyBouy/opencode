@@ -31,6 +31,14 @@ test("the tabs list what entered the inbox, what waits for the manager, and the 
   await expect(record).toContainText("The agent build")
   await expect(page.getByTestId("inbox-copies")).toContainText("plan")
   await expect(page.getByTestId("inbox-trail")).toContainText("entered the Project inbox")
+
+  // Its conversation: the messages sharing its correlation id, and the sessions involved.
+  await page.getByRole("dialog").getByRole("button", { name: "Conversation" }).click()
+  const conversation = page.getByTestId("conversation")
+  await expect(conversation.getByTestId("conversation-message")).toHaveCount(1)
+  await expect(conversation).toContainText("Review the release notes")
+  await expect(conversation.getByTestId("conversation-sessions")).toContainText("ses_op_1 title")
+  await expect(conversation.getByTestId("conversation-sessions")).toContainText("ses_op_2 title")
 })
 
 test("a dead letter is forwarded, routed again, broadcast or deleted to Trash", async ({ page }) => {

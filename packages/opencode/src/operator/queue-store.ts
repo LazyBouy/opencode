@@ -14,9 +14,10 @@ import { Global } from "@opencode-ai/core/global"
 // (messaging/log.ts) keeps every message's history in the same file. When a message is delivered stays OpenCode's
 // business (operator/queue.ts), since it depends on whether its session is running.
 
-export const Target = Schema.Literals(["session", "main", "active"]).annotate({
+export const Target = Schema.Literals(["session", "main", "active", "new"]).annotate({
   identifier: "OperatorQueueTarget",
-  description: "session: the session it names; main / active: the agent's main or active session",
+  description:
+    "session: the session it names; main / active: the agent's main or active session; new: a new session of the agent, made when it's delivered",
 })
 export type Target = typeof Target.Type
 

@@ -1111,6 +1111,7 @@ html[data-theme="iphi"] [data-component="operator-inspector"] {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  padding: 0 16px 16px;
 }
 [data-component="operator-conversation"] [data-slot="operator-message"] {
   display: flex;
@@ -1814,4 +1815,37 @@ details[data-slot="operator-as-sent"] [data-component="operator-code"][data-mode
   padding: 16px 24px;
   overflow: auto;
   max-height: 100%;
+}
+
+/* A conversation (session-views/conversation.tsx): its messages, oldest first. */
+[data-component="operator-conversation"] {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 16px 16px;
+}
+
+[data-component="operator-conversation-list"] {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+[data-slot="operator-conversation-head"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+
+[data-component="operator-conversation-list"] [data-component="operator-code"] {
+  max-height: 200px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }

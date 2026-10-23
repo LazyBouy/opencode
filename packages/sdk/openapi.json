@@ -27392,6 +27392,69 @@
         ]
       }
     },
+    "/operator/conversation/{correlationID}": {
+      "get": {
+        "tags": ["operator project inbox"],
+        "operationId": "operator.conversation.get",
+        "parameters": [
+          {
+            "name": "correlationID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "description": "The correlation id"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Oldest first, with the sessions involved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorConversation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Every message sharing a correlation id (a message, its replies, what an inbox routed), oldest first, and the sessions they went between.",
+        "summary": "A conversation",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.operator.conversation.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/operator/messaging/counts": {
       "get": {
         "tags": ["operator project inbox"],
@@ -50995,7 +51058,7 @@
       },
       "OperatorQueueTarget": {
         "type": "string",
-        "enum": ["session", "main", "active"]
+        "enum": ["session", "main", "active", "new"]
       },
       "OperatorQueuePriority": {
         "type": "string",
@@ -52387,6 +52450,51 @@
           }
         },
         "required": ["perMinute", "perHour", "wait"],
+        "additionalProperties": false
+      },
+      "OperatorConversationSession": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "directory": {
+            "type": "string"
+          },
+          "exists": {
+            "type": "boolean",
+            "description": "False once the session was deleted"
+          }
+        },
+        "required": ["id", "exists"],
+        "additionalProperties": false
+      },
+      "OperatorConversation": {
+        "type": "object",
+        "properties": {
+          "correlationID": {
+            "type": "string"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorMessage"
+            }
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorConversationSession"
+            }
+          }
+        },
+        "required": ["correlationID", "messages", "sessions"],
         "additionalProperties": false
       },
       "OperatorProjectInboxCount": {

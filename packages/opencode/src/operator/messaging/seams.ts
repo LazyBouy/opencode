@@ -13,6 +13,7 @@ import { SessionStatus } from "@/session/status"
 import { SessionID } from "@/session/schema"
 import { OperatorAgentSessions } from "../agent-sessions"
 import { OperatorPermissionEffective } from "../permission-effective"
+import type { OperatorQueueStore } from "../queue-store"
 import { OperatorProjectRecords } from "../project-records"
 import { OperatorProjects } from "../projects"
 import type { OperatorPing } from "./ping"
@@ -37,11 +38,12 @@ export type Destination = { id: string; directory: string }
 
 export interface Interface {
   /**
-   * The session a message for the agent goes to: the one it names, else the agent's active or main session. With
-   * `make`, an agent without a main session gets one; without, none is a string saying so.
+   * The session a message for the agent goes to: the one it names, else the agent's active or main session, or a new
+   * one. With `make`, an agent without a main session gets one, and `new` makes its session (titled from `text`);
+   * without, none is a string saying so.
    */
   readonly destination: (
-    input: { agent: string; target: "session" | "main" | "active"; sessionID?: string },
+    input: { agent: string; target: OperatorQueueStore.Target; sessionID?: string; text?: string },
     make: boolean,
   ) => Effect.Effect<Destination | string>
   /** Whether the session is running a turn now. */
@@ -56,8 +58,14 @@ export interface Interface {
     text: string,
     metadata?: Record<string, unknown>,
   ) => Effect.Effect<void, unknown>
-  /** A session, by id: its folder, and the agent it runs as (a subagent's session has a parent). */
-  readonly session: (id: string) => Effect.Effect<(Destination & { agent?: string; parentID?: string }) | undefined>
+  /** A session, by id: its folder, title, and the agent it runs as (a subagent's session has a parent). */
+  readonly session: (
+    id: string,
+  ) => Effect.Effect<(Destination & { title?: string; agent?: string; parentID?: string }) | undefined>
+  /** The agent's main and active sessions in this project, for `discover`. */
+  readonly sessionsOf: (
+    agent: string,
+  ) => Effect.Effect<{ main?: { id: string; title: string }; active?: { id: string; title: string } }>
   /** The agent's default target for messages that name no session. */
   readonly defaultTarget: (agent: string) => Effect.Effect<"main" | "active", OperatorAgentSessions.NotFoundError>
   /** Calls `listener` with each session whose turn ended (it went idle), for as long as the scope lasts. */
@@ -81,9 +89,19 @@ const layer = Layer.effect(
     const agentList = yield* Agent.Service
 
     const destination = Effect.fn("OperatorMessagingSeams.destination")(function* (
-      input: { agent: string; target: "session" | "main" | "active"; sessionID?: string },
+      input: { agent: string; target: OperatorQueueStore.Target; sessionID?: string; text?: string },
       make: boolean,
     ) {
+      // A new session: made when the message is delivered, titled from its first words.
+      if (input.target === "new") {
+        if (!make) return `a new session of ${input.agent}`
+        const first = (input.text ?? "").trim().split("\n")[0] ?? ""
+        const title = `${input.agent} · ${first.length > 48 ? `${first.slice(0, 47)}…` : first || "message"}`
+        return yield* agentSessions.create(input.agent, title).pipe(
+          Effect.map((made): Destination | string => ({ id: made.id, directory: made.directory })),
+          Effect.catch((error) => Effect.succeed(error.message)),
+        )
+      }
       if (input.target === "session") {
         const found = yield* sessions
           .get(SessionID.make(input.sessionID ?? ""))
@@ -129,6 +147,7 @@ const layer = Layer.effect(
         ? {
             id: found.id,
             directory: found.directory,
+            ...(found.title ? { title: found.title } : {}),
             ...(found.agent ? { agent: found.agent } : {}),
             ...(found.parentID ? { parentID: found.parentID } : {}),
           }
@@ -136,6 +155,15 @@ const layer = Layer.effect(
     })
 
     const defaultTarget = (agent: string) => agentSessions.state(agent).pipe(Effect.map((state) => state.target))
+
+    const sessionsOf = (agent: string) =>
+      agentSessions.state(agent).pipe(
+        Effect.map((state) => ({
+          ...(state.main ? { main: { id: state.main.id, title: state.main.title } } : {}),
+          ...(state.active ? { active: { id: state.active.id, title: state.active.title } } : {}),
+        })),
+        Effect.orElseSucceed(() => ({})),
+      )
 
     const onIdle = (listener: (sessionID: string) => void) =>
       Effect.acquireRelease(
@@ -178,7 +206,7 @@ const layer = Layer.effect(
       () => Effect.sync(() => OperatorPermissionEffective.offers.delete(offered)),
     )
 
-    return Service.of({ destination, running, prompt, session, defaultTarget, onIdle, agents })
+    return Service.of({ destination, running, prompt, session, sessionsOf, defaultTarget, onIdle, agents })
   }),
 )
 
@@ -259,7 +287,9 @@ const pingTool = (description: string, limits: typeof OperatorPing.LIMITS) => {
           session: tool.schema
             .string()
             .optional()
-            .describe("With type agent: one of its sessions (default: its main or active session)"),
+            .describe(
+              'With type agent: one of its sessions (an id), or "new" for a new session of its own (default: its main or active session)',
+            ),
         })
         .optional()
         .describe("Who it's for (send; a reply's goes to the sender)"),

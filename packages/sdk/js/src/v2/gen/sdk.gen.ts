@@ -207,6 +207,8 @@ import type {
   OperatorConfigUpdateErrors,
   OperatorConfigUpdateResponses,
   OperatorConfigWriteScope,
+  OperatorConversationGetErrors,
+  OperatorConversationGetResponses,
   OperatorFolderCreateErrors,
   OperatorFolderCreateResponses,
   OperatorFolderInitErrors,
@@ -9873,6 +9875,44 @@ export class Messaging extends HeyApiClient {
   }
 }
 
+export class Conversation extends HeyApiClient {
+  /**
+   * A conversation
+   *
+   * Every message sharing a correlation id (a message, its replies, what an inbox routed), oldest first, and the sessions they went between.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      correlationID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "correlationID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorConversationGetResponses,
+      OperatorConversationGetErrors,
+      ThrowOnError
+    >({
+      url: "/operator/conversation/{correlationID}",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Operator extends HeyApiClient {
   /**
    * Get server status
@@ -10084,6 +10124,11 @@ export class Operator extends HeyApiClient {
   private _messaging?: Messaging
   get messaging(): Messaging {
     return (this._messaging ??= new Messaging({ client: this.client }))
+  }
+
+  private _conversation?: Conversation
+  get conversation(): Conversation {
+    return (this._conversation ??= new Conversation({ client: this.client }))
   }
 }
 

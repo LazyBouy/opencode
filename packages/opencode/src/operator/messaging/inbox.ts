@@ -75,6 +75,22 @@ export const Sample = Schema.Struct({
 }).annotate({ identifier: "OperatorInboxSample" })
 export type Sample = typeof Sample.Type
 
+/** A conversation: every message sharing a correlation id, oldest first, and the sessions they went between. */
+export const Conversation = Schema.Struct({
+  correlationID: Schema.String,
+  messages: Schema.Array(OperatorMessage.Message),
+  sessions: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      title: Schema.optional(Schema.String),
+      agent: Schema.optional(Schema.String),
+      directory: Schema.optional(Schema.String),
+      exists: Schema.Boolean.annotate({ description: "False once the session was deleted" }),
+    }).annotate({ identifier: "OperatorConversationSession" }),
+  ),
+}).annotate({ identifier: "OperatorConversation" })
+export type Conversation = typeof Conversation.Type
+
 export const TestResult = Schema.Struct({
   by: Schema.Literals(["rule", "manager", "as addressed", "broadcast", "dead letter"]),
   rule: Schema.optional(Schema.Struct({ id: Schema.String, name: Schema.String })),
@@ -120,6 +136,8 @@ export interface Interface {
   readonly test: (project: string, sample: Sample, rules?: ReadonlyArray<Rules.Rule>) => Effect.Effect<TestResult>
   /** Per project (unique id): messages waiting for the manager, and dead letters. */
   readonly counts: () => Effect.Effect<Record<string, { waiting: number; deadLetters: number }>>
+  /** Every message with this correlation id (at most 500), and the sessions involved. */
+  readonly conversation: (correlationID: string) => Effect.Effect<Conversation>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorProjectInbox") {}
@@ -607,7 +625,29 @@ const layer = Layer.effect(
         return log().list({ inbox: id, ...filter, limit: filter.limit ?? 200 })
       })
 
+    const conversation = Effect.fn("OperatorProjectInbox.conversation")(function* (correlationID: string) {
+      const messages = log().list({ correlationID, limit: 500 }).toReversed()
+      const ids = [
+        ...new Set(
+          messages.flatMap((message) => [message.from.session, message.sessionID].filter((id): id is string => !!id)),
+        ),
+      ]
+      const sessions: Conversation["sessions"][number][] = []
+      for (const id of ids) {
+        const found = yield* seams.session(id)
+        sessions.push({
+          id,
+          ...(found?.title ? { title: found.title } : {}),
+          ...(found?.agent ? { agent: found.agent } : {}),
+          ...(found ? { directory: found.directory } : {}),
+          exists: !!found,
+        })
+      }
+      return { correlationID, messages, sessions }
+    })
+
     return Service.of({
+      conversation,
       enter,
       messages,
       get,

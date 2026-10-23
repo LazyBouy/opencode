@@ -1862,6 +1862,7 @@ export const dict = {
   "operator.queue.target.main": "Main session",
   "operator.queue.target.active": "Active session",
   "operator.queue.target.session": "A session I choose",
+  "operator.queue.target.new": "A new session",
   "operator.queue.toDefault": "Where messages go ({{target}})",
   "operator.queue.now": "Main session: {{main}} · Active session: {{active}}",
   "operator.queue.noneYet": "none yet",
@@ -1917,7 +1918,7 @@ export const dict = {
   "operator.help.queueMessage":
     "What you want the agent to do. It arrives in the session as if you had typed it there.",
   "operator.help.queueSendTo":
-    "The session that gets the message: the agent's main session, its active session, or one you choose.",
+    "The session that gets the message: the agent's main session, its active session, one you choose, or a new session made for it when it's delivered.",
   "operator.help.queueSession": "One of this agent's sessions in this project.",
   "operator.help.queuePriority":
     "When several messages are waiting for the same agent, higher priority ones go first. Messages with the same priority go in the order they were queued.",
@@ -3110,6 +3111,18 @@ export const dict = {
     "Carries messages into other projects' inboxes when configured (OPENCODE_OPERATOR_RABBITMQ_URL); not built yet.",
   "operator.messaging.notConfigured": "Not configured",
   "operator.projects.section.inbox": "Project inbox",
+  "operator.conversation.title": "Conversation",
+  "operator.conversation.openButton": "Conversation",
+  "operator.conversation.hint":
+    "Every message sharing the correlation id, oldest first, and the sessions they went between:",
+  "operator.conversation.failed": "The conversation couldn't be loaded.",
+  "operator.conversation.sessions": "Sessions",
+  "operator.conversation.noSessions": "No session yet: the messages wait to be delivered.",
+  "operator.conversation.deleted": "deleted",
+  "operator.conversation.open": "Open",
+  "operator.conversation.empty": "No messages with this correlation id.",
+  "operator.conversation.inbox": "Project inbox",
+  "operator.conversation.answers": "answers {{id}}",
   "operator.column.inboxWaiting": "Waiting for the manager",
   "operator.column.deadLetters": "Dead letters",
   "operator.detailed.added.reminder.plan": "The plan agent's reminder (read-only mode)",

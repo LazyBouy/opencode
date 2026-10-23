@@ -108,6 +108,21 @@ test("a message from another agent is marked with its sender and opens its recor
   const record = page.getByRole("dialog").getByTestId("queue-record")
   await expect(record).toContainText("Review section 2.")
   await expect(record).toContainText("c_19")
+  await page.keyboard.press("Escape")
+
+  // Its conversation, from the mark.
+  state.inbox.messages.push({
+    ...state.inbox.messages[0]!,
+    id: "msg_in",
+    correlationID: "c_19",
+    body: { type: "text", text: "Review section 2." },
+    from: { kind: "agent", agent: "writer", session: "ses_writer", project: "proj_smoke_timeline" },
+  })
+  await mark.getByRole("button", { name: "Conversation" }).click()
+  const conversation = page.getByTestId("conversation")
+  await expect(conversation.getByTestId("conversation-message")).toHaveCount(1)
+  await expect(conversation).toContainText("Review section 2.")
+  await expect(conversation.getByTestId("conversation-sessions")).toContainText("ses_writer title")
 })
 
 test("a ping call that waits shows the time waited, then the reply", async ({ page }) => {

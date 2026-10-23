@@ -125,14 +125,15 @@ const senderName = (sender: OperatorQueueStore.Sender) =>
 
 /**
  * What a session reads for a queued message (§5). The user's own words as they are; anyone else's headed with who
- * sent it, for example "Message from researcher (project web) · high · correlation c_19 · id msg_…:", so the
- * recipient can answer it (`ping send` with `replyTo`). The part carries the mark.
+ * sent it and from which session, for example "Message from researcher (project web, session ses_…) · high ·
+ * correlation c_19 · id msg_…:", so the recipient can answer it (`ping send` with `replyTo`) or write to that session.
+ * The part carries the mark.
  */
 export function delivered(item: OperatorQueueStore.Item): { text: string; metadata?: { message: Mark } } {
   if (item.sender.kind === "user") return { text: item.text }
   const correlationID = item.correlationID ?? item.id
   const head = [
-    `${item.replyTo ? "Reply" : "Message"} from ${senderName(item.sender)} (project ${path.basename(item.project)})`,
+    `${item.replyTo ? "Reply" : "Message"} from ${senderName(item.sender)} (project ${path.basename(item.project)}${item.sender.sessionID ? `, session ${item.sender.sessionID}` : ""})`,
     ...(item.priority === "normal" ? [] : [item.priority]),
     `correlation ${correlationID}`,
     `id ${item.id}`,

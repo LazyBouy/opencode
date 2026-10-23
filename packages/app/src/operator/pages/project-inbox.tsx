@@ -36,6 +36,8 @@ import {
   tabOf,
 } from "./project-inbox-model"
 import { OptionalSelect, RulesTab } from "./project-inbox-rules"
+import { MessageStatus, useSenderWord } from "../ui/message-words"
+import { useOpenConversation } from "../session-views/conversation"
 
 type Key = Parameters<ReturnType<typeof useLanguage>["t"]>[0]
 
@@ -132,18 +134,6 @@ function useInboxUpdates(place: InboxPlace) {
     void queryClient.invalidateQueries({ queryKey: api.key("message") })
   })
   onCleanup(stop)
-}
-
-/** Who sent it, in words. */
-export function useSenderWord() {
-  const language = useLanguage()
-  return (message: Pick<OperatorMessage, "from" | "inbox">) => {
-    const sender = senderOf(message.from, message.inbox)
-    if (sender.kind === "agent") return language.t("operator.queue.sender.agent", { agent: sender.agent })
-    if (sender.kind === "otherProject")
-      return language.t("operator.queue.sender.otherProject", { agent: sender.agent, project: sender.project })
-    return language.t(`operator.queue.sender.${sender.kind}` as Key)
-  }
 }
 
 function MessagesTab(props: InboxPlace & { tab: Tab }) {
@@ -264,16 +254,6 @@ function MessagesTab(props: InboxPlace & { tab: Tab }) {
   )
 }
 
-export function MessageStatus(props: { status: string }) {
-  const language = useLanguage()
-  const warning = () => props.status === "dead letter" || props.status === "failed" || props.status === "with manager"
-  return (
-    <Tag data-warning={warning() ? "" : undefined}>
-      {language.t(`operator.messages.status.${statusSlug(props.status)}` as Key)}
-    </Tag>
-  )
-}
-
 // A message's record: the full text, who sent it and what it asked for, where it went, its trail, the sessions
 // involved; and for one waiting or dead, the actions.
 function MessageOverlay(props: InboxPlace) {
@@ -283,6 +263,7 @@ function MessageOverlay(props: InboxPlace) {
   const openSession = useOpenSession()
   const moveToTrash = useMoveToTrash()
   const sender = useSenderWord()
+  const openConversation = useOpenConversation()
   const [params, setParams] = useOverlayParams<{ msg?: string }>()
   const message = useQuery(() => ({
     queryKey: api.key("message", params.msg),
@@ -340,6 +321,13 @@ function MessageOverlay(props: InboxPlace) {
                       </ButtonV2>
                     )}
                   </Show>
+                  <ButtonV2
+                    size="small"
+                    variant="outline"
+                    onClick={() => openConversation(found().correlationID, props.directory())}
+                  >
+                    {language.t("operator.conversation.openButton")}
+                  </ButtonV2>
                   <Show when={actionable()}>
                     <ButtonV2 size="small" variant="contrast" onClick={() => setForm("forwarding", true)}>
                       {language.t("operator.inbox.forward")}

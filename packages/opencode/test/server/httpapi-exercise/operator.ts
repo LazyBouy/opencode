@@ -1888,4 +1888,15 @@ export const operatorScenarios: Scenario[] = [
     .at((ctx) => ({ path: "/operator/messaging/settings", headers: ctx.headers(), body: { perMinute: 0 } }))
     .status(400),
   http.protected.get("/operator/messaging/counts", "operator.messaging.counts").json(200, object),
+  http.protected
+    .get("/operator/conversation/{correlationID}", "operator.conversation.get")
+    .at((ctx) => ({
+      path: route("/operator/conversation/{correlationID}", { correlationID: "c_none" }),
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => {
+      object(body)
+      array(body.messages)
+      check(body.correlationID === "c_none" && (body.messages as unknown[]).length === 0, "an empty conversation")
+    }),
 ]

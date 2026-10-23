@@ -103,9 +103,9 @@ export type Result = { title: string; output: string; card: Card }
 
 export const DESCRIPTION = [
   "Send messages to the other agents of this project, to its Project inbox, and to your own other sessions.",
-  "- discover: lists the agents (and whether each is running), the groups and the Project inbox you may send to.",
-  "- send: sends message.body to target: an agent ({type: agent, id: name}, optionally its session), a session ({type: session, id: ses_…}), a group ({type: group, id: name}: one message per member) or the Project inbox ({type: project_inbox}: its rules, else its manager, decide where it goes). A blank id sends to every agent, or every group.",
-  "The recipient sees who sent the message, with its id and correlation id. A message for a session that is running reads at its turn's end, unless steer is true (read at its next step); one for an idle session starts its next turn, so each message costs the recipient a model turn.",
+  "- discover: lists the agents (whether each is running, and its main and active sessions), the groups and the Project inbox you may send to.",
+  '- send: sends message.body to target: an agent ({type: agent, id: name}: its main or active session; with session: an id, one of its sessions; session: "new", a new session of its own for this conversation), a session ({type: session, id: ses_…}), a group ({type: group, id: name}: one message per member) or the Project inbox ({type: project_inbox}: its rules, else its manager, decide where it goes). A blank id sends to every agent, or every group.',
+  "The recipient sees who sent the message and from which session, with its id and correlation id. A message for a session that is running reads at its turn's end, unless steer is true (read at its next step); one for an idle session starts its next turn, so each message costs the recipient a model turn.",
   "To answer a message you received, send with replyTo set to its id: the reply goes to the sender's session, whatever target says.",
   `wait: true keeps this call waiting for the reply (same correlation id), up to timeout seconds (at most ${LIMITS.waitMax}); you spend that time waiting. Never wait on your own session.`,
   `Sends are rate-limited per agent; a group send counts as one, with at most ${LIMITS.recipients} recipients.`,
@@ -138,7 +138,8 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/OperatorPing") {}
 
-type Recipient = { agent: string; sessionID?: string; to: string }
+/** Where a message goes: an agent's default session, a session it names, or a new session (`fresh`). */
+type Recipient = { agent: string; sessionID?: string; fresh?: boolean; to: string }
 
 const layer = Layer.effect(
   Service,
@@ -187,8 +188,16 @@ const layer = Layer.effect(
         const destination = yield* seams.destination({ agent: agent.name, target: "active" }, false)
         const running = typeof destination !== "string" && (yield* seams.running(destination))
         const about = agent.description ? ` — ${agent.description.replace(/\s+/g, " ").slice(0, 200)}` : ""
+        // Its sessions, so a message can name one (target.session).
+        const sessions = yield* seams.sessionsOf(agent.name)
+        const where = [
+          ...(sessions.main ? [`main ${sessions.main.id} "${sessions.main.title}"`] : []),
+          ...(sessions.active && sessions.active.id !== sessions.main?.id
+            ? [`active ${sessions.active.id} "${sessions.active.title}"`]
+            : []),
+        ]
         agents.push(
-          `- ${agent.name}${agent.name === call.agent ? " (you)" : ""}${about} · ${running ? "running" : "idle"}`,
+          `- ${agent.name}${agent.name === call.agent ? " (you)" : ""}${about} · ${running ? "running" : "idle"}${where.length ? ` · ${where.join(" · ")}` : " · no session yet"}`,
         )
       }
       const groups: string[] = []
@@ -287,13 +296,18 @@ const layer = Layer.effect(
             label = `agent ${id}`
             if (!(yield* seams.agents()).some((agent) => agent.name === id))
               return refused("send", `no agent ${id}`, label)
-            if (target.session) {
+            const fresh = target.session?.trim() === "new"
+            if (target.session && !fresh) {
               const found = yield* seams.session(target.session)
               if (!found) return refused("send", `no session ${target.session} here`, label)
               if (found.agent && found.agent !== id)
                 return refused("send", `session ${target.session} runs as ${found.agent}, not ${id}`, label)
             }
-            recipients = [{ agent: id, ...(target.session ? { sessionID: target.session } : {}), to: id }]
+            recipients = [
+              fresh
+                ? { agent: id, fresh: true, to: `${id} (a new session)` }
+                : { agent: id, ...(target.session ? { sessionID: target.session } : {}), to: id },
+            ]
             pattern = `agent/${id}`
           }
         } else {
@@ -317,7 +331,7 @@ const layer = Layer.effect(
       // Waiting on its own session could never be answered (§7.4).
       const waits = !!args.wait
       if (waits) {
-        for (const recipient of recipients) {
+        for (const recipient of recipients.filter((item) => !item.fresh)) {
           const destination = recipient.sessionID
             ? recipient.sessionID
             : yield* seams.defaultTarget(recipient.agent).pipe(
@@ -391,7 +405,11 @@ const layer = Layer.effect(
             recipient.agent,
             {
               text: body,
-              ...(recipient.sessionID ? { target: "session" as const, sessionID: recipient.sessionID } : {}),
+              ...(recipient.sessionID
+                ? { target: "session" as const, sessionID: recipient.sessionID }
+                : recipient.fresh
+                  ? { target: "new" as const }
+                  : {}),
               priority: args.priority ?? "normal",
               steer: args.steer ?? false,
               correlationID,

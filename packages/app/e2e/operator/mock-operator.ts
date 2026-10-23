@@ -948,7 +948,7 @@ export async function mockOperator(page: Page) {
     if (url.pathname.startsWith("/operator/telemetry/")) return telemetry.handle(route, url, method)
     if (url.pathname === "/operator/hook" || url.pathname.startsWith("/operator/hook/"))
       return hooks.handle(route, url, method)
-    if (/^\/operator\/(project-inbox|messages|messaging)\//.test(url.pathname)) {
+    if (/^\/operator\/(project-inbox|messages|messaging|conversation)\//.test(url.pathname)) {
       const answered = inbox.handle(route, url, method)
       if (answered) return answered
     }

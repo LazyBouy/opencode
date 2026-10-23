@@ -108,5 +108,6 @@ export const operatorProjectInboxHandlers = HttpApiBuilder.group(InstanceHttpApi
         }),
       )
       .handle("counts", () => inbox.counts())
+      .handle("conversation", (ctx) => inbox.conversation(ctx.params.correlationID))
   }),
 )

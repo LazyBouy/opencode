@@ -19,6 +19,7 @@ import { formatAgo, formatDateTime } from "../format"
 import { DataTable } from "../ui/data-table"
 import { Field } from "../ui/field"
 import { RecordField, RecordView } from "../ui/record-overlay"
+import { useOpenConversation } from "../session-views/conversation"
 import { requestError } from "./config-helpers"
 
 // The agent's input queue in a project: where its messages go when they name no session (its main or
@@ -27,7 +28,7 @@ import { requestError } from "./config-helpers"
 
 const PRIORITIES: OperatorQueuePriority[] = ["urgent", "high", "normal", "low"]
 // "default": the agent's default target; "session": a session chosen below.
-type Destination = "default" | "main" | "active" | "session"
+type Destination = "default" | "main" | "active" | "session" | "new"
 
 export function AgentQueue(props: { agent: string; directory: string }) {
   const language = useLanguage()
@@ -112,7 +113,9 @@ export function AgentQueue(props: { agent: string; directory: string }) {
           name: props.agent,
           directory: props.directory,
           text: form.text,
-          ...(form.destination === "main" || form.destination === "active" ? { target: form.destination } : {}),
+          ...(form.destination === "main" || form.destination === "active" || form.destination === "new"
+            ? { target: form.destination }
+            : {}),
           ...(session ? { sessionID: session } : {}),
           priority: form.priority,
           steer: form.steer,
@@ -190,7 +193,7 @@ export function AgentQueue(props: { agent: string; directory: string }) {
             <SelectV2<Destination>
               appearance="base"
               aria-label={language.t("operator.queue.sendTo")}
-              options={["default", "main", "active", "session"]}
+              options={["default", "main", "active", "session", "new"]}
               current={form.destination}
               label={destinationLabel}
               onSelect={(value) => value && setForm("destination", value)}
@@ -432,6 +435,7 @@ function QueueRecord(props: {
   const dialog = useDialog()
   const locale = () => language.intl()
   const sender = () => senderText(language, props.item)
+  const openConversation = useOpenConversation()
   return (
     <RecordView
       title={<QueueStatus item={props.item} />}
@@ -527,7 +531,13 @@ function QueueRecord(props: {
             label={language.t("operator.queue.correlation")}
             help={language.t("operator.help.queueCorrelation")}
           >
-            {props.item.correlationID}
+            <button
+              type="button"
+              data-slot="operator-link"
+              onClick={() => openConversation(props.item.correlationID!, props.item.project)}
+            >
+              {props.item.correlationID}
+            </button>
           </RecordField>
         </Show>
         <RecordField label={language.t("operator.queue.id")} help={language.t("operator.help.queueId")}>
