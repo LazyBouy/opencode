@@ -38,7 +38,7 @@ export type State = {
 export interface Transport {
   /** Publishes a message for a project's inbox (by the project's id); to the outbox while the broker is down. */
   send(project: string, message: Message): Promise<"published" | "outbox">
-  /** Consumes the projects' queues (more are added as messages go to them), routing each message. */
+  /** Consumes those of the projects' queues that exist (more are added as messages go to them), routing each message. */
   start(projects: ReadonlyArray<string>, route: Router): Promise<void>
   state(): State
   close(): Promise<void>
@@ -111,17 +111,22 @@ export function rabbitmq(
   // The broker logs its own errors; ours go to the outbox and the state.
   connection.on("error", () => undefined)
 
-  const exchanges = Promise.resolve().then(async () => {
-    await connection.exchangeDeclare({ exchange: EXCHANGE, type: "topic", durable: true })
-    await connection.exchangeDeclare({ exchange: DLX, type: "topic", durable: true })
-  })
-  exchanges.catch(() => undefined)
+  // The exchanges, declared once per connection (a broker down when the server starts is retried when it's back).
+  let exchanges: Promise<void> | undefined
+  const ensureExchanges = () =>
+    (exchanges ??= (async () => {
+      await connection.exchangeDeclare({ exchange: EXCHANGE, type: "topic", durable: true })
+      await connection.exchangeDeclare({ exchange: DLX, type: "topic", durable: true })
+    })().catch((error: unknown) => {
+      exchanges = undefined
+      throw error
+    }))
 
   // A project's queue, its failed queue and their bindings (declared once per connection's life here).
   const declare = (project: string) => {
     const found = declared.get(project)
     if (found) return found
-    const made = exchanges.then(async () => {
+    const made = ensureExchanges().then(async () => {
       await connection.queueDeclare({ queue: queueOf(project), ...queueOptions(project) })
       await connection.queueBind({ queue: queueOf(project), exchange: EXCHANGE, routingKey: project })
       await connection.queueDeclare({ queue: `${queueOf(project)}.failed`, durable: true })
@@ -187,9 +192,26 @@ export function rabbitmq(
         draining = undefined
       }
     })())
+  // The projects whose queues the server consumes, when they exist: a project no message went to has none, and none
+  // is made for it here (publishing makes it). Checked again on each connection, so messages left waiting in
+  // RabbitMQ while the server was away are taken.
+  let known: ReadonlyArray<string> = []
+  const scan = async () => {
+    for (const project of known) {
+      if (closed || consumers.has(project)) continue
+      const exists = await connection
+        .queueDeclare({ queue: queueOf(project), passive: true })
+        .then(() => true)
+        .catch(() => false)
+      if (exists) consume(project)
+    }
+  }
+
   connection.on("connection", () => {
     declared.clear()
+    exchanges = undefined
     void drain()
+    void scan()
   })
   const timer = setInterval(() => {
     if (connection.ready && waitingBox().size()) void drain()
@@ -211,10 +233,8 @@ export function rabbitmq(
     },
     async start(projects, router) {
       route = router
-      for (const project of projects) {
-        await declare(project).catch(() => undefined)
-        consume(project)
-      }
+      known = projects
+      await scan()
     },
     state: () => ({
       connection: connection.ready ? "connected" : "down",

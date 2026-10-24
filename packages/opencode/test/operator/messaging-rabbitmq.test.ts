@@ -119,6 +119,37 @@ describe("the inbox transport", () => {
   )
 
   withBroker(
+    "at start, only existing queues are consumed: none is made for a project no message went to",
+    async () => {
+      const [used, unused] = [projectId(), projectId()]
+      const admin = new Connection(BROKER!)
+      // A message left in a project's queue (published by a server that didn't consume it).
+      const before = OperatorInboxTransport.rabbitmq(BROKER!, tmpFile())
+      await until(() => before.state().connection === "connected")
+      expect(await before.send(used, message("msg_left", used))).toBe("published")
+      await before.close()
+      const after = OperatorInboxTransport.rabbitmq(BROKER!, tmpFile())
+      try {
+        const routed: string[] = []
+        await until(() => after.state().connection === "connected")
+        await after.start([used, unused], async (arrived) => void routed.push(arrived.id))
+        await until(() => routed.includes("msg_left"))
+        const missing = await admin
+          .queueDeclare({ queue: OperatorInboxTransport.queueOf(unused), passive: true })
+          .then(() => "exists")
+          .catch(() => "missing")
+        expect(missing).toBe("missing")
+      } finally {
+        await after.close()
+        await admin.queueDelete({ queue: OperatorInboxTransport.queueOf(used) }).catch(() => undefined)
+        await admin.queueDelete({ queue: `${OperatorInboxTransport.queueOf(used)}.failed` }).catch(() => undefined)
+        await admin.close()
+      }
+    },
+    60_000,
+  )
+
+  withBroker(
     "while the broker can't be reached, messages wait in the outbox; it's emptied once one is",
     async () => {
       const project = projectId()
