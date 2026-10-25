@@ -103,6 +103,11 @@ export const TEXTS: Record<string, string> = {
   "provider.<id>.models.<model>.provider.api": "This model's API base URL",
   "provider.<id>.models.<model>.provider.npm": "The AI SDK package for this model",
   "provider.<id>.models.<model>.reasoning": "It reasons (thinks) before it answers",
+  "provider.<id>.models.<model>.reasoning_options[].type":
+    "The control: effort (named levels), toggle (thinking on or off) or budget_tokens (a token budget)",
+  "provider.<id>.models.<model>.reasoning_options[].values": "For effort: the levels it accepts, such as low or high",
+  "provider.<id>.models.<model>.reasoning_options[].min": "For budget_tokens: the smallest budget it accepts",
+  "provider.<id>.models.<model>.reasoning_options[].max": "For budget_tokens: the largest budget it accepts",
   "provider.<id>.models.<model>.release_date": "When it was released (YYYY-MM-DD)",
   "provider.<id>.models.<model>.status": "Its status: alpha, beta, active or deprecated",
   "provider.<id>.models.<model>.temperature": "It accepts a temperature",

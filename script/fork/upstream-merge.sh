@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Merges upstream OpenCode (anomalyco/opencode, branch dev) into the current branch, then runs this
+# Merges upstream OpenCode 1 (anomalyco/opencode, branch v1) into the current branch, then runs this
 # fork's checks in the resource-limited Docker dev stack. Needs only git and Docker on the host.
+# Upstream's dev branch is OpenCode 2, a separate product this fork doesn't follow (FORK.md).
 #
 #   script/fork/upstream-merge.sh          fetch, merge, then check
 #   script/fork/upstream-merge.sh --check  only check (after resolving conflicts and committing)
@@ -12,6 +13,7 @@ root="$(git rev-parse --show-toplevel)"
 cd "$root"
 compose=(docker compose -f docker/dev/compose.yaml)
 upstream_url="https://github.com/anomalyco/opencode.git"
+upstream_branch=v1
 # Paths only this fork writes; everything else is upstream's.
 fork_only='^(docker/|script/fork/|CLAUDE\.md|FORK\.md)|/src/(merge|operator)/|/test/(merge|operator)/|/test/fixtures/merge/|test/lib/fake-claude\.ts|merge-claude-spike\.ts|schema/src/session-merge\.ts|v1/config/(fork|merge)\.ts|session_merge_binding\.ts|merge-indicator\.|merge-summary\.tsx|styles/skins/|themes/iphi\.json|theme/iphi\.test\.ts|assets/iphi\.json|public/assets/fonts/|e2e/operator/|theme-iphi\.spec\.ts|httpapi-exercise/operator\.ts|^packages/sdk/|^packages/client/src/generated|\.gen\.ts$|core/schema\.json$'
 
@@ -26,13 +28,21 @@ if [[ "${1:-}" != "--check" ]]; then
     echo "Commit or stash your changes before merging upstream." >&2
     exit 1
   fi
-  git fetch upstream dev
-  if ! git merge --no-edit upstream/dev; then
+  git fetch upstream "$upstream_branch"
+  if ! git merge --no-edit "upstream/$upstream_branch"; then
     echo >&2
     echo "Merge stopped on conflicts. Resolve them (FORK.md lists the fork's edits), commit, then run:" >&2
     echo "  script/fork/upstream-merge.sh --check" >&2
     exit 1
   fi
+fi
+
+# The image's Bun must be the one upstream pins (packageManager), or the checks run on another Bun.
+want_bun="$(sed -n 's/.*"packageManager": "bun@\([^"]*\)".*/\1/p' package.json)"
+image_bun="$(sed -n 's/^ARG BUN_VERSION=//p' docker/dev/Dockerfile)"
+if [[ "$want_bun" != "$image_bun" ]]; then
+  echo "package.json pins Bun $want_bun, docker/dev/Dockerfile installs $image_bun: set BUN_VERSION to $want_bun." >&2
+  exit 1
 fi
 
 echo "== Building the dev image"
@@ -83,7 +93,7 @@ while read -r file; do
     echo "  $file"
     missing=1
   fi
-done < <(git diff --name-only "$(git merge-base HEAD upstream/dev 2>/dev/null || git merge-base HEAD dev)" HEAD | grep -vE "$fork_only" || true)
+done < <(git diff --name-only "$(git merge-base HEAD "upstream/$upstream_branch" 2>/dev/null || git merge-base HEAD dev)" HEAD | grep -vE "$fork_only" || true)
 [[ $missing == 0 ]] && echo "  none"
 
 if ! git diff --quiet; then

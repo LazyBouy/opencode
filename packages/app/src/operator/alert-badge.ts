@@ -6,7 +6,7 @@ import type { OperatorPage } from "./pages"
 // Firing alerts (observability_spec.md §14.5), kept light: the sidebar's badge, the Alerts tab and the Inbox share one
 // query, refreshed every 30 s (the server evaluates every 60 s).
 
-/** Firing alerts, newest first. */
+/** Firing alerts, newest first. A server without the console's API (another OpenCode) has none. */
 export function useFiringAlerts() {
   const api = useOperatorClient()
   return useQuery(() => ({
@@ -16,7 +16,7 @@ export function useFiringAlerts() {
       api
         .client()
         .operator.telemetry.alertEvents({ firing: "1" }, { throwOnError: true })
-        .then((result) => result.data!),
+        .then((result): OperatorTelemetryAlertEvent[] => (Array.isArray(result.data) ? result.data : [])),
   }))
 }
 

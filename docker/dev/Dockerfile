@@ -4,7 +4,8 @@
 FROM ubuntu:24.04 AS base
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG BUN_VERSION=1.3.14
+# Keep in step with the root package.json's packageManager (upstream's pin).
+ARG BUN_VERSION=1.4.4
 # The merge adapter's stdio permission protocol was verified against this Claude Code release.
 ARG CLAUDE_CODE_VERSION=2.1.123
 # Node runs only the web UI's dev server (compose.yaml): its proxy forwards the terminal's WebSocket to the

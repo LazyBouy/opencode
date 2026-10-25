@@ -19,12 +19,24 @@ export const UpgradeCommand = {
         type: "string",
         choices: ["curl", "npm", "pnpm", "bun", "brew", "choco", "scoop"],
       })
+      .option("major", {
+        // fork: OpenCode 2 is a separate product; this fork stays on OpenCode 1 (FORK.md).
+        describe: "not available: this build stays on OpenCode 1",
+        type: "boolean",
+      })
   },
-  handler: async (args: { target?: string; method?: string }) => {
+  handler: async (args: { target?: string; method?: string; major?: boolean }) => {
     UI.empty()
     UI.println(UI.logo("  "))
     UI.empty()
     prompts.intro("Upgrade")
+    // fork: OpenCode 2 is a separate product; this build doesn't install it or replace itself with it (FORK.md).
+    if (args.major) {
+      prompts.log.error("This build of OpenCode stays on OpenCode 1. OpenCode 2 is a separate product.")
+      prompts.log.info(`To install OpenCode 2 on its own, see ${Installation.MAJOR_INSTRUCTIONS}`)
+      prompts.outro("Done")
+      return
+    }
     const detectedMethod = await Installation.method()
     const method = (args.method as Installation.Method) ?? detectedMethod
     if (method === "unknown") {
@@ -43,7 +55,15 @@ export const UpgradeCommand = {
       }
     }
     prompts.log.info("Using method: " + method)
-    const target = args.target ? args.target.replace(/^v/, "") : await Installation.latest()
+
+    const target = args.target
+      ? args.target.replace(/^v/, "")
+      : await Installation.latest(method).catch(() => undefined)
+    if (!target) {
+      prompts.log.error("Couldn't check for updates")
+      prompts.outro("Done")
+      return
+    }
 
     if (InstallationVersion === target) {
       prompts.log.warn(`opencode upgrade skipped: ${target} is already installed`)
