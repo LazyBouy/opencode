@@ -33,3 +33,6 @@ logs/
 *.bun-build
 tsconfig.tsbuildinfo
 /artifacts/
+
+# Fork: specs/ stays out of git (the user's spec documents). Files upstream already tracks there stay tracked.
+/specs/

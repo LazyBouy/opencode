@@ -11,6 +11,7 @@ Read these alongside this file:
 - `AGENTS.md` (root) holds the style guide, import rules, commit/branch conventions, and V2 Session invariants. Packages and some subdirectories have their own `AGENTS.md` with stricter local rules: `packages/opencode/test/`, `packages/opencode/test/server/`, `packages/opencode/src/session/llm/`, `packages/opencode/src/server/routes/instance/httpapi/`, `packages/core/src/tool/`, `packages/llm/`, `packages/schema/`, `packages/app/` (and `app/e2e/`), `packages/ui/`, `packages/session-ui/`, `packages/desktop/`.
 - `CONTEXT.md` is the domain glossary for the Session runtime (System Context, Context Epoch, Admitted Prompt, Session Drain, ...) and the client-contract design. Use its terms.
 - `specs/` holds design docs, especially `specs/v2/*` (session, tools, config, provider-model) and `specs/tui-package.md`.
+- The fork's own requirements (specs, ADRs, issues, research notes, handovers) are maintained in `/root/projects/project_master/opencode/` (start at its `INDEX.md`), which is the source of truth. `specs/docs/` is a legacy copy; `/root/projects/project_master/opencode/MIGRATION.md` maps its old paths, which code comments and `FORK.md` still cite, to the new IDs.
 
 ## Commands
 
