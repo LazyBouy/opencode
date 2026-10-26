@@ -127,6 +127,12 @@ docker compose -f docker/dev/compose.yaml run --rm \
   tools bun run --cwd packages/opencode test test/operator/messaging-rabbitmq.test.ts
 ```
 
+## Services on the host
+
+The server reaches the host as `host.docker.internal` (`extra_hosts` in `compose.yaml`), for example a remote MCP
+server or Activepieces' step tools at `http://host.docker.internal:3000/api/v1/opencode/mcp`. The host service has to
+listen on all interfaces, not only `127.0.0.1`.
+
 ## Merging upstream releases
 
 `script/fork/upstream-merge.sh` merges upstream OpenCode and runs the fork's checks in these

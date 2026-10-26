@@ -38,6 +38,10 @@ services:
       # Empty (the default): SQLite and the server's memory.
       OPENCODE_OPERATOR_RABBITMQ_URL: ${OPENCODE_OPERATOR_RABBITMQ_URL:-}
       OPENCODE_OPERATOR_REDIS_URL: ${OPENCODE_OPERATOR_REDIS_URL:-}
+    # host.docker.internal is the host, so the server can call services running there (a remote MCP server, for
+    # example Activepieces' step tools). Docker Desktop defines it on its own; Docker Engine on Linux only with this.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       # Your whole home folder, at the same path as on the host (the production model; README.md): Global's
       # folder (~/.config/opencode), OpenCode's data and state, Claude Code's ~/.claude and the workspace
