@@ -1,6 +1,8 @@
 // Route scenarios for this fork's endpoints (merge, operator console). Kept out of index.ts so
 // upstream changes to the shared scenario list merge without conflicts.
+import fs from "fs/promises"
 import os from "os"
+import path from "path"
 import { Effect } from "effect"
 import { array, boolean, check, isRecord, object } from "./assertions"
 import { http, route } from "./dsl"
@@ -1898,5 +1900,63 @@ export const operatorScenarios: Scenario[] = [
       object(body)
       array(body.messages)
       check(body.correlationID === "c_none" && (body.messages as unknown[]).length === 0, "an empty conversation")
+    }),
+  // A file's exact bytes (ISSUE-0006): whitespace kept, which /file/content trims.
+  http.protected
+    .get("/operator/file/raw", "operator.projectFile.raw")
+    .seeded((ctx) => ctx.file("out/raw/hello.txt", " Hello\n"))
+    .at((ctx) => ({
+      path: `/operator/file/raw?${new URLSearchParams({ path: "out/raw/hello.txt" })}`,
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => {
+      object(body)
+      check(
+        body.content === Buffer.from(" Hello\n").toString("base64") && body.size === 7,
+        `the bytes as written: ${JSON.stringify(body)}`,
+      )
+      check(body.mime === "text/plain", "the type from the name")
+    }),
+  http.protected
+    .get("/operator/file/raw", "operator.projectFile.raw.missing")
+    .at((ctx) => ({
+      path: `/operator/file/raw?${new URLSearchParams({ path: "out/raw/missing.txt" })}`,
+      headers: ctx.headers(),
+    }))
+    .json(404, object, "status"),
+  http.protected
+    .get("/operator/file/raw", "operator.projectFile.raw.outside")
+    .at((ctx) => ({
+      path: `/operator/file/raw?${new URLSearchParams({ path: "../outside.txt" })}`,
+      headers: ctx.headers(),
+    }))
+    .json(400, object, "status"),
+  http.protected
+    .get("/operator/file/raw", "operator.projectFile.raw.symlink")
+    .seeded((ctx) =>
+      Effect.promise(async () => {
+        const outside = path.join(os.tmpdir(), "operator-file-raw-outside.txt")
+        await fs.writeFile(outside, "outside\n")
+        const link = path.join(ctx.directory ?? os.tmpdir(), "out", "raw", "link.txt")
+        await fs.mkdir(path.dirname(link), { recursive: true })
+        await fs.rm(link, { force: true })
+        await fs.symlink(outside, link)
+      }),
+    )
+    .at((ctx) => ({
+      path: `/operator/file/raw?${new URLSearchParams({ path: "out/raw/link.txt" })}`,
+      headers: ctx.headers(),
+    }))
+    .json(400, object, "status"),
+  http.protected
+    .get("/operator/file/raw", "operator.projectFile.raw.tooLarge")
+    .seeded((ctx) => ctx.file("out/raw/large.txt", "0123456789"))
+    .at((ctx) => ({
+      path: `/operator/file/raw?${new URLSearchParams({ path: "out/raw/large.txt", maxBytes: "4" })}`,
+      headers: ctx.headers(),
+    }))
+    .json(413, (body) => {
+      object(body)
+      check(isRecord(body.data) && body.data.size === 10, `the file's size: ${JSON.stringify(body)}`)
     }),
 ]

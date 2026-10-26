@@ -416,6 +416,8 @@ import type {
   OperatorPermissionLocks,
   OperatorPermissionPendingErrors,
   OperatorPermissionPendingResponses,
+  OperatorProjectFileRawErrors,
+  OperatorProjectFileRawResponses,
   OperatorProjectGroup,
   OperatorProjectInboxEnterErrors,
   OperatorProjectInboxEnterResponses,
@@ -9913,6 +9915,46 @@ export class Conversation extends HeyApiClient {
   }
 }
 
+export class ProjectFile extends HeyApiClient {
+  /**
+   * Read a file's exact bytes
+   *
+   * A file in the project folder exactly as it is on disk, as base64, with its size and type. A path that leaves the folder, directly or through a symlink, is refused; a missing path or a folder is not found.
+   */
+  public raw<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      path: string
+      maxBytes?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "path" },
+            { in: "query", key: "maxBytes" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      OperatorProjectFileRawResponses,
+      OperatorProjectFileRawErrors,
+      ThrowOnError
+    >({
+      url: "/operator/file/raw",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Operator extends HeyApiClient {
   /**
    * Get server status
@@ -10129,6 +10171,11 @@ export class Operator extends HeyApiClient {
   private _conversation?: Conversation
   get conversation(): Conversation {
     return (this._conversation ??= new Conversation({ client: this.client }))
+  }
+
+  private _projectFile?: ProjectFile
+  get projectFile(): ProjectFile {
+    return (this._projectFile ??= new ProjectFile({ client: this.client }))
   }
 }
 

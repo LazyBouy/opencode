@@ -7477,6 +7477,44 @@ export type OperatorProjectInboxCounts = {
   [key: string]: OperatorProjectInboxCount
 }
 
+export type OperatorRawFile = {
+  /**
+   * The path asked for
+   */
+  path: string
+  /**
+   * Bytes
+   */
+  size: number
+  mime: string
+  /**
+   * The file's bytes, base64
+   */
+  content: string
+}
+
+export type OperatorFileRefusedError = {
+  name: "OperatorFileRefusedError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorFileNotFoundError = {
+  name: "OperatorFileNotFoundError"
+  data: {
+    message: string
+  }
+}
+
+export type OperatorFileTooLargeError = {
+  name: "OperatorFileTooLargeError"
+  data: {
+    message: string
+    size: number
+  }
+}
+
 export type UnauthorizedError = {
   _tag: "UnauthorizedError"
   message: string
@@ -23535,6 +23573,47 @@ export type OperatorMessagingCountsResponses = {
 }
 
 export type OperatorMessagingCountsResponse = OperatorMessagingCountsResponses[keyof OperatorMessagingCountsResponses]
+
+export type OperatorProjectFileRawData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    /**
+     * The file, relative to the project folder
+     */
+    path: string
+    maxBytes?: string
+  }
+  url: "/operator/file/raw"
+}
+
+export type OperatorProjectFileRawErrors = {
+  /**
+   * OperatorFileRefusedError | InvalidRequestError
+   */
+  400: OperatorFileRefusedError | InvalidRequestError
+  /**
+   * OperatorFileNotFoundError
+   */
+  404: OperatorFileNotFoundError
+  /**
+   * OperatorFileTooLargeError
+   */
+  413: OperatorFileTooLargeError
+}
+
+export type OperatorProjectFileRawError = OperatorProjectFileRawErrors[keyof OperatorProjectFileRawErrors]
+
+export type OperatorProjectFileRawResponses = {
+  /**
+   * The file
+   */
+  200: OperatorRawFile
+}
+
+export type OperatorProjectFileRawResponse = OperatorProjectFileRawResponses[keyof OperatorProjectFileRawResponses]
 
 export type V2HealthGetData = {
   body?: never
