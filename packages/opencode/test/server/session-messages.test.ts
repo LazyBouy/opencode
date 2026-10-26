@@ -111,6 +111,39 @@ describe("session messages endpoint", () => {
   )
 
   it.instance(
+    "lists a session whose prompt asked for structured output",
+    withoutWatcher(
+      Effect.gen(function* () {
+        const session = yield* sessionScoped
+        const store = yield* SessionNs.Service
+        const id = MessageID.ascending()
+        const format = { type: "json_schema" as const, schema: { type: "object" }, retryCount: 2 }
+        yield* store.updateMessage({
+          id,
+          sessionID: session.id,
+          role: "user",
+          time: { created: Date.now() },
+          agent: "test",
+          model,
+          tools: {},
+          format,
+        } satisfies SessionV1.User)
+
+        const all = yield* request(`/session/${session.id}/message`)
+        const page = yield* request(`/session/${session.id}/message?limit=5`)
+        const single = yield* request(`/session/${session.id}/message/${id}`)
+
+        expect(all.status).toBe(200)
+        expect(page.status).toBe(200)
+        expect(single.status).toBe(200)
+        const body = yield* json<SessionV1.WithParts[]>(all)
+        expect(body.map((item) => item.info)).toEqual([expect.objectContaining({ id, format })])
+      }),
+    ),
+    { git: true },
+  )
+
+  it.instance(
     "keeps full-history responses when limit is omitted",
     withoutWatcher(
       Effect.gen(function* () {

@@ -7587,16 +7587,6 @@ export type ProviderNotFoundError = {
   message: string
 }
 
-export type OutputFormat1 =
-  | {
-      type: "text"
-    }
-  | {
-      type: "json_schema"
-      schema: JsonSchema
-      retryCount?: number
-    }
-
 export type SessionStatus2 = {
   id: string
   metadata?: {
