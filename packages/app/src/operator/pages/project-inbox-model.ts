@@ -76,6 +76,7 @@ export type Draft = {
   fromProject: "any" | "this" | "list"
   fromProjects: string
   fromAgents: string
+  fromSessions: string
   recipient: "" | "agent" | "group" | "session" | "none" | "any"
   recipientId: string
   priority: "" | OperatorQueuePriority
@@ -105,6 +106,7 @@ export function draftOf(rule?: OperatorInboxRule): Draft {
     fromProject: fromProject === undefined ? "any" : fromProject === "this" ? "this" : "list",
     fromProjects: Array.isArray(fromProject) ? fromProject.join(", ") : "",
     fromAgents: (match.fromAgent ?? []).join(", "),
+    fromSessions: (match.fromSession ?? []).join(", "),
     recipient: match.recipient?.type ?? "",
     recipientId: match.recipient?.id ?? "",
     priority: match.priority ?? "",
@@ -128,6 +130,7 @@ export function ruleOf(draft: Draft, id: string, preset?: OperatorInboxRule["pre
         ? { fromProject: words(draft.fromProjects) }
         : {}),
     ...(words(draft.fromAgents).length ? { fromAgent: words(draft.fromAgents) } : {}),
+    ...(words(draft.fromSessions).length ? { fromSession: words(draft.fromSessions) } : {}),
     ...(draft.recipient
       ? {
           recipient: {
@@ -164,6 +167,7 @@ export function matchParts(match: OperatorInboxMatch): Array<{ key: string; valu
         ? [{ key: "fromProjects", value: match.fromProject.join(", ") }]
         : []),
     ...(match.fromAgent?.length ? [{ key: "fromAgents", value: match.fromAgent.join(", ") }] : []),
+    ...(match.fromSession?.length ? [{ key: "fromSessions", value: match.fromSession.join(", ") }] : []),
     ...(match.recipient
       ? match.recipient.type === "none" || match.recipient.type === "any"
         ? [{ key: `recipient.${match.recipient.type}` }]

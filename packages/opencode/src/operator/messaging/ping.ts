@@ -134,6 +134,31 @@ const refused = (verb: Args["verb"], reason: string, target?: string): Result =>
   card: { verb, ...(target ? { target } : {}), status: "refused", reason },
 })
 
+type Lines = ReadonlyArray<OperatorPermissionModel.Line<unknown>>
+
+// A line that names sessions: its target starts with `session/` (`SEND(session/ses_…)`, `SEND(session/*)`).
+const NAMES_SESSION = /^[^(]*\(session\//
+
+// A send to one session is decided by a line that names sessions, when such a line decides it (SPEC-0024 S1):
+// then it's checked and asked as `session/<id>`. Otherwise (undefined) the session's agent decides, as before.
+function sessionPattern(lines: Lines | undefined, sessionID: string) {
+  if (!lines) return undefined
+  const { line } = OperatorPermissionModel.decide(lines, "ping", `SEND(session/${sessionID})`)
+  return line && NAMES_SESSION.test(line.pattern) ? `session/${sessionID}` : undefined
+}
+
+// The sessions a `ping` line names exactly and that may be sent to (allow or ask), for discover (SPEC-0024 S1).
+function namedSessions(lines: Lines | undefined) {
+  if (!lines) return []
+  const ids = lines.flatMap((line) => {
+    const id = line.permission === "ping" ? /^SEND\(session\/([^*?()]+)\)$/.exec(line.pattern)?.[1] : undefined
+    return id ? [id] : []
+  })
+  return [...new Set(ids)].filter(
+    (id) => OperatorPermissionModel.decide(lines, "ping", `SEND(session/${id})`).action !== "deny",
+  )
+}
+
 export interface Interface {
   readonly run: (call: Call) => Effect.Effect<Result, unknown>
 }
@@ -152,15 +177,21 @@ const layer = Layer.effect(
 
     yield* Effect.promise(() => OperatorPingDefaults.ensure().catch(() => false))
 
-    // How the session's lines decide an input (deny when none matches, as the fork's asks are decided).
-    const decider = (sessionID: string, agent: string) =>
+    // The session's effective lines; none when they can't be read.
+    const linesOf = (sessionID: string, agent: string) =>
       Effect.gen(function* () {
         const handler = OperatorPermissionEffective.handlers.effective
         const found = handler ? yield* handler({ sessionID, agent }).pipe(Effect.option) : undefined
-        const lines = found?._tag === "Some" ? found.value.lines : undefined
-        return (pattern: string): "allow" | "ask" | "deny" =>
-          lines ? OperatorPermissionModel.decide(lines, "ping", pattern).action : "ask"
+        return found?._tag === "Some" ? found.value.lines : undefined
       })
+
+    // How the lines decide an input (deny when none matches, as the fork's asks are decided).
+    const decideWith =
+      (lines: Lines | undefined) =>
+      (pattern: string): "allow" | "ask" | "deny" =>
+        lines ? OperatorPermissionModel.decide(lines, "ping", pattern).action : "ask"
+
+    const decider = (sessionID: string, agent: string) => linesOf(sessionID, agent).pipe(Effect.map(decideWith))
 
     // The project's agents a message can go to: its members, else every agent that runs sessions of its own.
     const agentsOf = (record: OperatorProjectRecords.Record) =>
@@ -175,7 +206,8 @@ const layer = Layer.effect(
         )
 
     const discover = Effect.fnUntraced(function* (call: Call, project: string, record: OperatorProjectRecords.Record) {
-      const decide = yield* decider(call.sessionID, call.agent)
+      const effective = yield* linesOf(call.sessionID, call.agent)
+      const decide = decideWith(effective)
       // Listed when discovering it isn't denied and sending to it could be allowed.
       const shown = (target: string) => {
         const discovering = decide(`DISCOVER(${target})`)
@@ -209,6 +241,13 @@ const layer = Layer.effect(
         if (action === "ask") asks.push(`DISCOVER(group/${group.name})`)
         groups.push(`- ${group.name}: ${group.members.join(", ") || "no members"}`)
       }
+      // Sessions a line names exactly (SPEC-0024 S1): reachable even where their agent isn't.
+      const sessions: string[] = []
+      for (const id of namedSessions(effective)) {
+        const found = yield* seams.session(id)
+        if (!found) continue
+        sessions.push(`- ${id}: ${found.agent ?? "no agent yet"}${found.title ? ` "${found.title}"` : ""}`)
+      }
       const inboxShown = shown("inbox")
       if (inboxShown === "ask") asks.push("DISCOVER(inbox)")
       // Other projects of this namespace: their id, name and goal, not their agents or groups (§7.2).
@@ -235,6 +274,7 @@ const layer = Layer.effect(
         `Agents of project ${name} you may message:`,
         ...(agents.length ? agents : ["(none)"]),
         ...(groups.length ? ["Groups:", ...groups] : []),
+        ...(sessions.length ? ['Sessions you may message ({type: "session", id}):', ...sessions] : []),
         ...(inboxShown
           ? [
               `The Project inbox ({type: project_inbox}): ${record.manager ? `its rules, else the manager ${record.manager}` : "its rules"} route what it gets.`,
@@ -262,7 +302,8 @@ const layer = Layer.effect(
       const settings = yield* Effect.promise(() => OperatorMessagingSettings.read())
       const over = limited(limitKey, Date.now(), settings)
       if (over) return refused("send", `the rate limit: at most ${over}`)
-      const decide = yield* decider(call.sessionID, call.agent)
+      const effective = yield* linesOf(call.sessionID, call.agent)
+      const decide = decideWith(effective)
 
       // Who it goes to, the permission patterns that decide it, and what the card says it was for.
       let recipients: Recipient[] = []
@@ -273,6 +314,8 @@ const layer = Layer.effect(
       // The Project inboxes it enters instead of sessions (§8.1, §9.1): this project's, or other projects'.
       const inboxes: Array<{ key: string; id: string; to: OperatorMessage.To; label: string }> = []
       let always: string | undefined
+      // The one session it goes to, when it names one (SPEC-0024 S1).
+      let toSession: string | undefined
       let hops = 0
       const here = yield* Effect.promise(() => OperatorMessagePlaces.idOf(project))
       if (args.replyTo) {
@@ -299,6 +342,7 @@ const layer = Layer.effect(
         } else {
           recipients = [{ agent: original.from.agent, sessionID: original.from.session, to: original.from.agent }]
           pattern = `agent/${original.from.agent}`
+          toSession = original.from.session
         }
         correlationID = original.correlationID
       } else {
@@ -367,6 +411,7 @@ const layer = Layer.effect(
           if (!agent) return refused("send", `session ${id} hasn't run yet`, label)
           recipients = [{ agent, sessionID: id, to: `${agent} (session ${id})` }]
           pattern = `agent/${agent}`
+          toSession = id
         } else if (target.type === "agent") {
           const agents = yield* agentsOf(record)
           if (!id) {
@@ -394,6 +439,7 @@ const layer = Layer.effect(
                 : { agent: id, ...(target.session ? { sessionID: target.session } : {}), to: id },
             ]
             pattern = `agent/${id}`
+            if (target.session && !fresh) toSession = target.session
           }
         } else {
           // A group: one message per member but the sender; a blank id, every group's members.
@@ -406,6 +452,12 @@ const layer = Layer.effect(
           recipients = members.map((name) => ({ agent: name, to: name }))
           anyone = true
         }
+      }
+      // A send to one session: a line that names sessions decides it, when one does (SPEC-0024 S1).
+      const named = toSession ? sessionPattern(effective, toSession) : undefined
+      if (named) {
+        pattern = named
+        always = "session/*"
       }
       if (decide(`SEND(${pattern})`) === "deny")
         return refused("send", `the ping permission denies SEND(${pattern})`, label)

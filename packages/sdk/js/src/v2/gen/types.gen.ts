@@ -7344,6 +7344,7 @@ export type OperatorInboxMatch = {
    */
   fromProject?: "this" | Array<string>
   fromAgent?: Array<string>
+  fromSession?: Array<string>
   recipient?: OperatorInboxRecipient
   priority?: OperatorQueuePriority
   type?: "text" | "file-location"
@@ -7384,6 +7385,7 @@ export type OperatorInboxSample = {
   type?: "text" | "file-location"
   fromProject?: string
   fromAgent?: string
+  fromSession?: string
   fromKind?: "user" | "agent" | "system" | "external"
   to?: OperatorInboxTarget
   priority?: OperatorQueuePriority

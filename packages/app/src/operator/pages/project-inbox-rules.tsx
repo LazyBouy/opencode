@@ -274,6 +274,7 @@ function RulesTest(props: InboxScope & { rules: () => OperatorInboxRule[] }) {
   const [sample, setSample] = createStore({
     text: "",
     fromAgent: "",
+    fromSession: "",
     to: "" as "" | "agent" | "group" | "session",
     toId: "",
     priority: "normal" as (typeof PRIORITIES)[number],
@@ -292,6 +293,7 @@ function RulesTest(props: InboxScope & { rules: () => OperatorInboxRule[] }) {
           sample: {
             text: sample.text,
             ...(sample.fromAgent.trim() ? { fromAgent: sample.fromAgent.trim() } : {}),
+            ...(sample.fromSession.trim() ? { fromSession: sample.fromSession.trim() } : {}),
             ...(sample.to && sample.toId.trim() ? { to: { type: sample.to, id: sample.toId.trim() } } : {}),
             priority: sample.priority,
             ...(sample.replyTo.trim() ? { replyTo: sample.replyTo.trim() } : {}),
@@ -320,6 +322,16 @@ function RulesTest(props: InboxScope & { rules: () => OperatorInboxRule[] }) {
           appearance="base"
           value={sample.fromAgent}
           onInput={(event) => setSample("fromAgent", event.currentTarget.value)}
+        />
+      </Field>
+      <Field
+        label={language.t("operator.inbox.test.fromSession")}
+        hint={language.t("operator.inbox.help.testFromSession")}
+      >
+        <TextInputV2
+          appearance="base"
+          value={sample.fromSession}
+          onInput={(event) => setSample("fromSession", event.currentTarget.value)}
         />
       </Field>
       <Field
@@ -416,7 +428,15 @@ function RuleOverlay(props: InboxScope) {
     }
   }
   const text = (
-    key: "name" | "fromProjects" | "fromAgents" | "recipientId" | "contains" | "pattern" | "correlationPrefix",
+    key:
+      | "name"
+      | "fromProjects"
+      | "fromAgents"
+      | "fromSessions"
+      | "recipientId"
+      | "contains"
+      | "pattern"
+      | "correlationPrefix",
   ) => <TextInputV2 appearance="base" value={draft[key]} onInput={(event) => edit(key, event.currentTarget.value)} />
   const field = (label: Key, help: Key, control: () => JSX.Element, group = false) => (
     <Field label={language.t(label)} hint={language.t(help)} group={group}>
@@ -460,6 +480,7 @@ function RuleOverlay(props: InboxScope) {
               true,
             )}
             {field("operator.inbox.field.fromAgents", "operator.inbox.help.fromAgents", () => text("fromAgents"))}
+            {field("operator.inbox.field.fromSessions", "operator.inbox.help.fromSessions", () => text("fromSessions"))}
             {field(
               "operator.inbox.field.recipient",
               "operator.inbox.help.recipient",

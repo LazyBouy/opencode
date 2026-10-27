@@ -52367,6 +52367,12 @@
               "type": "string"
             }
           },
+          "fromSession": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "recipient": {
             "$ref": "#/components/schemas/OperatorInboxRecipient"
           },
@@ -52476,6 +52482,9 @@
             "type": "string"
           },
           "fromAgent": {
+            "type": "string"
+          },
+          "fromSession": {
             "type": "string"
           },
           "fromKind": {

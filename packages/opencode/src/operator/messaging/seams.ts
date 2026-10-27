@@ -250,6 +250,7 @@ const pingTool = (description: string, limits: typeof OperatorPing.LIMITS) => {
         .optional()
         .describe('"this", or projects\' ids; left out: any'),
       fromAgent: tool.schema.array(tool.schema.string()).optional(),
+      fromSession: tool.schema.array(tool.schema.string()).optional().describe("Sent from one of these sessions"),
       recipient: tool.schema
         .object({
           type: tool.schema.enum(["agent", "group", "session", "none", "any"]),

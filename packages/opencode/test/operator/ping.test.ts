@@ -345,6 +345,77 @@ unix("discover names each agent's sessions; session: new gives the conversation 
   }),
 )
 
+unix("a line that names a session lets sends reach that session, not its agent's other sessions (SPEC-0024)", () =>
+  Effect.gen(function* () {
+    const { ping, call, record, sender, asked } = yield* setup()
+    yield* record({ status: "paused" })
+    yield* send(sender.id, "hi", "build")
+    const allowed = yield* session()
+    yield* send(allowed.id, "hi", "plan")
+    const other = yield* session()
+    yield* send(other.id, "hi", "plan")
+    yield* (yield* OperatorSessionPermissions.Service).save(sender.id, [
+      { permission: "ping", pattern: "SEND(agent/*)", action: "deny" },
+      { permission: "ping", pattern: `SEND(session/${allowed.id})`, action: "allow" },
+    ])
+
+    // To the named session: by its id, or by its agent with that session.
+    const bySession = yield* ping.run(
+      call({ verb: "send", target: { type: "session", id: allowed.id }, message: { body: "in the channel" } }),
+    )
+    expect(bySession.card.messages).toMatchObject([{ status: "queued" }])
+    expect(asked.at(-1)).toEqual({ patterns: [`SEND(session/${allowed.id})`], always: ["SEND(session/*)"] })
+    const byAgent = yield* ping.run(
+      call({
+        verb: "send",
+        target: { type: "agent", id: "plan", session: allowed.id },
+        message: { body: "also in the channel" },
+      }),
+    )
+    expect(byAgent.card.messages).toMatchObject([{ status: "queued" }])
+
+    // Not to the agent by name, nor to its other session: those are decided as sends to plan.
+    const byName = yield* ping.run(
+      call({ verb: "send", target: { type: "agent", id: "plan" }, message: { body: "to the main session" } }),
+    )
+    expect(byName.card).toMatchObject({ status: "refused", reason: "the ping permission denies SEND(agent/plan)" })
+    const elsewhere = yield* ping.run(
+      call({ verb: "send", target: { type: "session", id: other.id }, message: { body: "another run" } }),
+    )
+    expect(elsewhere.card).toMatchObject({ status: "refused", reason: "the ping permission denies SEND(agent/plan)" })
+
+    // A reply goes to the sender's session: allowed to the named one, refused to the other.
+    const fromAllowed = yield* ping.run(
+      call(
+        { verb: "send", target: { type: "session", id: sender.id }, message: { body: "question" } },
+        { sessionID: allowed.id, agent: "plan" },
+      ),
+    )
+    const fromOther = yield* ping.run(
+      call(
+        { verb: "send", target: { type: "session", id: sender.id }, message: { body: "question" } },
+        { sessionID: other.id, agent: "plan" },
+      ),
+    )
+    expect([fromAllowed.card.status, fromOther.card.status]).toEqual(["sent", "sent"])
+    const answered = yield* ping.run(
+      call({ verb: "send", replyTo: fromAllowed.card.messages![0].id, message: { body: "answer" } }),
+    )
+    expect(answered.card.messages).toMatchObject([{ status: "queued" }])
+    const blocked = yield* ping.run(
+      call({ verb: "send", replyTo: fromOther.card.messages![0].id, message: { body: "answer" } }),
+    )
+    expect(blocked.card).toMatchObject({ status: "refused", reason: "the ping permission denies SEND(agent/plan)" })
+
+    // Discover lists the session the line names, though plan itself isn't listed.
+    const found = yield* ping.run(call({ verb: "discover" }))
+    expect(found.output).not.toContain("- plan")
+    expect(found.output).toContain('Sessions you may message ({type: "session", id}):')
+    expect(found.output).toContain(`- ${allowed.id}: plan`)
+    expect(found.output).not.toContain(other.id)
+  }),
+)
+
 unix("the rate limits: 30 sends a minute per agent, a group counting as one", () =>
   Effect.gen(function* () {
     const { ping, call, record } = yield* setup()

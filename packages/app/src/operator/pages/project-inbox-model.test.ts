@@ -47,6 +47,7 @@ describe("the Project inbox page's parts", () => {
       match: {
         fromProject: ["p2", "p3"],
         fromAgent: ["writer"],
+        fromSession: ["ses_a", "ses_b"],
         recipient: { type: "group" as const, id: "review" },
         priority: "high" as const,
         contains: "deploy",
@@ -60,6 +61,8 @@ describe("the Project inbox page's parts", () => {
       },
     }
     expect(ruleOf(draftOf(rule), "ops")).toEqual(rule)
+    expect(draftOf(rule).fromSessions).toBe("ses_a, ses_b")
+    expect(matchParts(rule.match).find((part) => part.key === "fromSessions")?.value).toBe("ses_a, ses_b")
     const blank = ruleOf({ ...draftOf(), name: " Plain ", action: "manager" }, "r1")
     expect(blank).toEqual({ id: "r1", name: "Plain", enabled: true, match: {}, action: { kind: "manager" } })
     expect(
@@ -74,6 +77,7 @@ describe("the Project inbox page's parts", () => {
     expect(matchParts(rule.match).map((part) => part.key)).toEqual([
       "fromProjects",
       "fromAgents",
+      "fromSessions",
       "recipient",
       "priority",
       "contains",

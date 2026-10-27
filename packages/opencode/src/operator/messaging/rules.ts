@@ -25,6 +25,9 @@ export const Match = Schema.Struct({
     description: "this: from this project; a list: from those projects (their ids); left out: from anywhere",
   }),
   fromAgent: Schema.optional(Schema.Array(Schema.String)).annotate({ description: "Sent by one of these agents" }),
+  fromSession: Schema.optional(Schema.Array(Schema.String)).annotate({
+    description: "Sent from one of these sessions (their ids); a message from outside has none",
+  }),
   recipient: Schema.optional(Recipient).annotate({ description: "The recipient the message asks for" }),
   priority: Schema.optional(Priority).annotate({ description: "At least this priority" }),
   type: Schema.optional(Schema.Literals(["text", "file-location"])),
@@ -173,6 +176,8 @@ function compileOne(rule: Rule): Compiled {
         if (match.fromProject === "this" ? from !== project : !match.fromProject.includes(from)) return false
       }
       if (match.fromAgent?.length && !(message.from.agent && match.fromAgent.includes(message.from.agent))) return false
+      if (match.fromSession?.length && !(message.from.session && match.fromSession.includes(message.from.session)))
+        return false
       if (match.recipient) {
         const asked = recipientOf(message)
         if (match.recipient.type === "any") {
@@ -223,6 +228,7 @@ export function describe(rule: Rule): string {
         ? `from ${match.fromProject.join(", ")}`
         : undefined,
     match.fromAgent?.length ? `sent by ${match.fromAgent.join(", ")}` : undefined,
+    match.fromSession?.length ? `from sessions ${match.fromSession.join(", ")}` : undefined,
     match.recipient
       ? match.recipient.type === "none"
         ? "naming no recipient"

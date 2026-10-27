@@ -148,6 +148,48 @@ unix("the routing order: the first matching rule, then the manager, then as addr
   }),
 )
 
+unix("a rule can match the session a message was sent from (SPEC-0024)", () =>
+  Effect.gen(function* () {
+    const { inbox, project, id, enter } = yield* setup()
+    const channel = rule(
+      "channel",
+      { fromSession: ["ses_channel"], recipient: { type: "agent", id: "plan" } },
+      { kind: "forward", to: [{ type: "agent", id: "build" }] },
+    )
+    yield* inbox.setRules(project, [channel, OperatorInboxRules.PRESETS.replies()])
+    expect(OperatorInboxRules.describe(channel)).toContain("from sessions ses_channel")
+
+    // From that session: the rule decides, whatever the correlation id.
+    const fromChannel = yield* enter("draft ready", {
+      from: { kind: "agent", agent: "build", session: "ses_channel", project: id },
+      to: { type: "agent", id: "plan" },
+    })
+    expect(fromChannel).toMatchObject({ status: "routed", routedBy: "rule channel", routedTo: ["build"] })
+    expect(copiesOf(fromChannel.id)).toMatchObject([{ agent: "build" }])
+
+    // The same agent from another session, and a message from outside: not this rule.
+    const elsewhere = yield* enter("draft ready", {
+      from: { kind: "agent", agent: "build", session: "ses_other", project: id },
+      to: { type: "agent", id: "plan" },
+    })
+    expect(elsewhere).toMatchObject({ status: "routed", routedBy: "as addressed", routedTo: ["plan"] })
+    const outside = yield* enter("draft ready", { from: { kind: "external" }, to: { type: "agent", id: "plan" } })
+    expect(outside.routedBy).toBe("as addressed")
+
+    // The rule test takes the sending session too.
+    const tested = yield* inbox.test(project, {
+      text: "draft ready",
+      fromAgent: "build",
+      fromSession: "ses_channel",
+      to: { type: "agent", id: "plan" },
+    })
+    expect(tested).toMatchObject({ by: "rule", rule: { id: "channel" } })
+    expect(
+      (yield* inbox.test(project, { text: "draft ready", fromAgent: "build", to: { type: "agent", id: "plan" } })).by,
+    ).toBe("as addressed")
+  }),
+)
+
 unix("the presets: replies go to their sender's session; As addressed skips the manager", () =>
   Effect.gen(function* () {
     const { inbox, project, id, record, enter } = yield* setup()
