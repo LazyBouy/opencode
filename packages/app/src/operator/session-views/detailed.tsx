@@ -1,7 +1,7 @@
 import { partView, renderable, type MessagePartProps } from "@opencode-ai/session-ui/message-part"
 import { useData } from "@opencode-ai/session-ui/context"
 import { useQuery } from "@tanstack/solid-query"
-import { createMemo, onCleanup, Show } from "solid-js"
+import { createMemo, For, onCleanup, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useOperatorClient } from "../data"
 import type { Mark } from "./hook-marks"
@@ -14,7 +14,7 @@ import { useSessionView } from "./view"
 // message-part.tsx (`partView`) lets reasoning show whatever the setting, shows todo updates, and
 // after the last part of each answer (one assistant message is one model step) shows the step's
 // marker: its model, tokens, cost and time, from the call record when the session was recorded (else
-// from the message), with "Open in Transcript".
+// from the message), with "Open in Transcript", and the sources the model cited (SPEC-0025).
 
 // While mounted (the operator sidebar mounts it), the session page's parts follow the view.
 export function useDetailedParts() {
@@ -48,6 +48,7 @@ type Assistant = {
   providerID?: string
   cost?: number
   tokens?: { input?: number; output?: number; reasoning?: number; cache?: { read?: number; write?: number } }
+  sources?: { url: string; title?: string }[]
 }
 
 // The step's marker, after the last part of its assistant message, in the Detailed view only.
@@ -132,6 +133,18 @@ function StepMarker(props: { message: Assistant }) {
           )}
         </Show>
       </div>
+      <Show when={(props.message.sources ?? []).length > 0}>
+        <div data-component="operator-step-sources" data-testid="step-sources">
+          <span>{language.t("operator.detailed.sources")}</span>
+          <For each={props.message.sources}>
+            {(source) => (
+              <a href={source.url} target="_blank" rel="noreferrer">
+                {source.title ?? source.url}
+              </a>
+            )}
+          </For>
+        </div>
+      </Show>
       <StepHookContext message={props.message} directory={session.data?.directory} />
     </>
   )

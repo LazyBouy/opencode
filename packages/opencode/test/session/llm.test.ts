@@ -334,6 +334,50 @@ describe("session.llm.ai-sdk adapter", () => {
     ).toEqual([])
   })
 
+  test("carries a step's cited URL sources on its step-finish, once each (SPEC-0025)", async () => {
+    const finishStep = {
+      type: "finish-step" as const,
+      response: { id: "msg_test", timestamp: new Date(0), modelId: "sonar" },
+      finishReason: "stop" as const,
+      rawFinishReason: "stop",
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2,
+        inputTokenDetails: { noCacheTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 },
+        outputTokenDetails: { textTokens: 1, reasoningTokens: undefined },
+      },
+      providerMetadata: { perplexity: {} },
+    }
+    const events = await adapt([
+      { type: "source", sourceType: "url", id: "s1", url: "https://example.com/a", title: "A" },
+      { type: "source", sourceType: "url", id: "s2", url: "https://example.com/a", title: "A again" },
+      { type: "source", sourceType: "url", id: "s3", url: "https://example.com/b" },
+      uncheckedAdapterEvent({
+        type: "source",
+        sourceType: "document",
+        id: "s4",
+        mediaType: "application/pdf",
+        title: "Doc",
+      }),
+      finishStep,
+      finishStep,
+    ])
+
+    expect(events).toHaveLength(2)
+    expect(events[0]).toMatchObject({
+      type: "step-finish",
+      providerMetadata: {
+        perplexity: {},
+        [LLMAISDK.CITED_SOURCES_METADATA]: {
+          sources: [{ url: "https://example.com/a", title: "A" }, { url: "https://example.com/b" }],
+        },
+      },
+    })
+    if (events[1].type !== "step-finish") throw new Error("expected step-finish")
+    expect(events[1].providerMetadata?.[LLMAISDK.CITED_SOURCES_METADATA]).toBeUndefined()
+  })
+
   test("preserves tool-error cause", async () => {
     const error = new PermissionV1.RejectedError()
     const events = await Effect.runPromise(
@@ -918,6 +962,106 @@ describe("session.llm.stream", () => {
       }),
     },
   )
+
+  const optionCases = [
+    {
+      title: "sends the user message's model options over the agent's (SPEC-0025)",
+      agentName: "test",
+      options: {
+        temperature: 0.2,
+        topP: 0.5,
+        maxOutputTokens: 300,
+        frequencyPenalty: 0.5,
+        presencePenalty: -0.3,
+        seed: 7,
+      },
+      expected: {
+        temperature: 0.2,
+        top_p: 0.5,
+        max_tokens: 300,
+        frequency_penalty: 0.5,
+        presence_penalty: -0.3,
+        seed: 7,
+      },
+    },
+    {
+      title: "caps a message's max output tokens at the model's output limit (SPEC-0025)",
+      agentName: "test",
+      options: { maxOutputTokens: 10_000_000 },
+      expected: { temperature: 0.4, top_p: 0.8 },
+      capped: true,
+    },
+    {
+      title: "keeps the agent's values for a request of another agent (SPEC-0025)",
+      agentName: "compaction",
+      options: { temperature: 0.2, frequencyPenalty: 0.5 },
+      expected: { temperature: 0.4, top_p: 0.8 },
+      absent: ["frequency_penalty", "presence_penalty", "seed"],
+    },
+  ]
+  optionCases.forEach((input) => {
+    it.instance(
+      input.title,
+      () =>
+        Effect.gen(function* () {
+          const fixture = loadFixture(vivgridFixture.providerID, vivgridFixture.modelID)
+          const request = waitRequest(
+            "/chat/completions",
+            new Response(createChatStream("Hello"), {
+              status: 200,
+              headers: { "Content-Type": "text/event-stream" },
+            }),
+          )
+          const resolved = yield* Provider.use.getModel(
+            ProviderV2.ID.make(vivgridFixture.providerID),
+            ModelV2.ID.make(fixture.model.id),
+          )
+          const sessionID = SessionID.make("session-test-options")
+          const agent = {
+            name: input.agentName,
+            mode: "primary",
+            options: {},
+            permission: [{ permission: "*", pattern: "*", action: "allow" }],
+            temperature: 0.4,
+            topP: 0.8,
+          } satisfies Agent.Info
+          const user = {
+            id: MessageID.make("msg_user-options"),
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: "test",
+            model: { providerID: ProviderV2.ID.make(vivgridFixture.providerID), modelID: resolved.id },
+            options: input.options,
+          } satisfies SessionV1.User
+
+          yield* drain({
+            user,
+            sessionID,
+            model: resolved,
+            agent,
+            system: ["You are a helpful assistant."],
+            messages: [{ role: "user", content: "Hello" }],
+            tools: {},
+          })
+
+          const body = (yield* Effect.promise(() => request)).body
+          expect(body).toMatchObject(input.expected)
+          if (input.capped) expect(body.max_tokens).toBe(resolved.limit.output)
+          for (const key of input.absent ?? []) expect(body[key]).toBeUndefined()
+        }),
+      {
+        config: () => ({
+          enabled_providers: [vivgridFixture.providerID],
+          provider: {
+            [vivgridFixture.providerID]: {
+              options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+            },
+          },
+        }),
+      },
+    )
+  })
 
   it.instance(
     "surfaces network_error finish reasons as retryable stream failures",

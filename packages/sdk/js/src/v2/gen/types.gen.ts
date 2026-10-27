@@ -237,6 +237,15 @@ export type OutputFormatJsonSchema = {
 
 export type OutputFormat = OutputFormatText | OutputFormatJsonSchema
 
+export type MessageModelOptions = {
+  temperature?: number
+  topP?: number
+  maxOutputTokens?: number
+  frequencyPenalty?: number
+  presencePenalty?: number
+  seed?: number
+}
+
 export type UserMessage = {
   id: string
   sessionID: string
@@ -257,6 +266,7 @@ export type UserMessage = {
     variant?: string
   }
   system?: string
+  options?: MessageModelOptions
   tools?: {
     [key: string]: boolean
   }
@@ -331,6 +341,11 @@ export type ApiError = {
   }
 }
 
+export type CitedSource = {
+  url: string
+  title?: string
+}
+
 export type AssistantMessage = {
   id: string
   sessionID: string
@@ -372,6 +387,7 @@ export type AssistantMessage = {
   structured?: unknown
   variant?: string
   finish?: string
+  sources?: Array<CitedSource>
 }
 
 export type Message = UserMessage | AssistantMessage
@@ -18322,6 +18338,7 @@ export type SessionPromptData = {
     }
     format?: OutputFormat
     system?: string
+    options?: MessageModelOptions
     variant?: string
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
@@ -18669,6 +18686,7 @@ export type SessionPromptAsyncData = {
     }
     format?: OutputFormat
     system?: string
+    options?: MessageModelOptions
     variant?: string
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }

@@ -6,7 +6,7 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { eq } from "drizzle-orm"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { expect } from "bun:test"
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Schema } from "effect"
 import path from "path"
 import { fileURLToPath } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -625,6 +625,67 @@ it.instance("legacy prompt emits message events without session.next events", ()
     expect(seen).toContain(MessageV2.Event.Updated.type)
     expect(seen).toContain(MessageV2.Event.PartUpdated.type)
     expect(seen.filter((type) => type.startsWith("session.next."))).toEqual([])
+  }),
+)
+
+it.instance("prompt keeps the model options it was sent with on its user message (SPEC-0025)", () =>
+  Effect.gen(function* () {
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({})
+
+    const sent = yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      model: ref,
+      noReply: true,
+      options: { temperature: 0.2, maxOutputTokens: 512 },
+      parts: [{ type: "text", text: "with options" }],
+    })
+    const empty = yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      model: ref,
+      noReply: true,
+      options: {},
+      parts: [{ type: "text", text: "empty options" }],
+    })
+    const plain = yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      model: ref,
+      noReply: true,
+      parts: [{ type: "text", text: "no options" }],
+    })
+
+    const stored = yield* MessageV2.get({ sessionID: chat.id, messageID: sent.info.id })
+    expect(stored.info.role === "user" && stored.info.options).toEqual({ temperature: 0.2, maxOutputTokens: 512 })
+    for (const message of [empty, plain]) {
+      const read = yield* MessageV2.get({ sessionID: chat.id, messageID: message.info.id })
+      expect(read.info.role === "user" && read.info.options).toBeUndefined()
+    }
+  }),
+)
+
+it.instance("prompt input refuses model options out of range (SPEC-0025)", () =>
+  Effect.gen(function* () {
+    const decode = Schema.decodeUnknownExit(SessionPrompt.PromptInput)
+    const base = { sessionID: "ses_options", parts: [{ type: "text", text: "hi" }] }
+    for (const options of [
+      { temperature: 2.5 },
+      { topP: -0.1 },
+      { maxOutputTokens: 0 },
+      { maxOutputTokens: 1.5 },
+      { frequencyPenalty: 3 },
+      { presencePenalty: -2.5 },
+      { seed: 0.5 },
+    ])
+      expect(Exit.isFailure(decode({ ...base, options }))).toBe(true)
+    const accepted = decode({
+      ...base,
+      options: { temperature: 2, topP: 1, maxOutputTokens: 1, frequencyPenalty: -2, presencePenalty: 2, seed: -3 },
+    })
+    expect(Exit.isSuccess(accepted)).toBe(true)
   }),
 )
 

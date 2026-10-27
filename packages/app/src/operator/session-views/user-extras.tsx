@@ -11,7 +11,15 @@ import { useSessionHookRuns } from "./hook-runs"
 import { useSessionView } from "./view"
 
 type Key = Parameters<ReturnType<typeof useLanguage>["t"]>[0]
-type UserMessage = { id: string; sessionID: string }
+type UserMessage = { id: string; sessionID: string; system?: string; options?: ModelOptions }
+type ModelOptions = {
+  temperature?: number
+  topP?: number
+  maxOutputTokens?: number
+  frequencyPenalty?: number
+  presencePenalty?: number
+  seed?: number
+}
 type Part = { id: string; type: string; text?: string; synthetic?: boolean; metadata?: Record<string, unknown> }
 
 // The Detailed view, under a user message: what the chat hides about that exchange. OpenCode's own texts
@@ -75,9 +83,34 @@ function Extras(props: { message: UserMessage; parts: () => ReadonlyArray<Part> 
     </button>
   )
   const number = (value: number) => new Intl.NumberFormat(language.intl()).format(value)
+  // The model options and system text the message was sent with (SPEC-0025), for the requests that answer it.
+  const options = createMemo(() =>
+    OPTION_KEYS.flatMap((key) => {
+      const value = props.message.options?.[key]
+      if (value === undefined) return []
+      return [language.t(`operator.detailed.option.${key}`, { value: key === "seed" ? String(value) : number(value) })]
+    }),
+  )
+  const system = () => props.message.system?.trim()
 
   return (
     <div data-component="operator-user-extras" data-testid="detailed-extras">
+      <Show when={system()}>
+        {(text) => (
+          <details data-slot="operator-extra" data-kind="system" data-testid="detailed-system">
+            <summary>
+              <Tag>{language.t("operator.detailed.messageSystem")}</Tag> {firstLine(text())}
+            </summary>
+            <pre data-component="operator-code">{text()}</pre>
+          </details>
+        )}
+      </Show>
+      <Show when={options().length > 0}>
+        <div data-slot="operator-extra" data-kind="options" data-testid="detailed-options">
+          <Tag>{language.t("operator.detailed.options")}</Tag>
+          <span data-slot="operator-note">{options().join(" · ")}</span>
+        </div>
+      </Show>
       <For each={synthetic()}>
         {(part) => (
           <details data-slot="operator-extra" data-kind="synthetic">
@@ -164,6 +197,8 @@ function CompactionHookMarks(props: { message: UserMessage }) {
   })
   return <HookMarkList marks={marks()} testid="compaction-hook-marks" />
 }
+
+const OPTION_KEYS = ["temperature", "topP", "maxOutputTokens", "frequencyPenalty", "presencePenalty", "seed"] as const
 
 function firstLine(text: string) {
   const line = text.split("\n").find((item) => item.trim()) ?? ""

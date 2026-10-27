@@ -225,22 +225,30 @@ const live: Layer.Layer<
       // Runtime seam: native is an opt-in adapter over @opencode-ai/llm. It
       // either returns a ready LLMEvent stream or a concrete fallback reason.
       if (flags.experimentalNativeLlm) {
-        const native = LLMNativeRuntime.stream({
-          model: input.model,
-          provider: item,
-          auth: info,
-          llmClient,
-          messages: prepared.messages,
-          tools: prepared.tools,
-          toolChoice: input.toolChoice,
-          temperature: prepared.params.temperature,
-          topP: prepared.params.topP,
-          topK: prepared.params.topK,
-          maxOutputTokens: prepared.params.maxOutputTokens,
-          providerOptions: prepared.params.options,
-          headers: prepared.headers,
-          abort: input.abort,
-        })
+        // fork (SPEC-0025): the native runtime takes no penalties or seed, so a message that sets them uses the AI SDK.
+        const penalized = [
+          prepared.params.frequencyPenalty,
+          prepared.params.presencePenalty,
+          prepared.params.seed,
+        ].some((value) => value !== undefined)
+        const native = penalized
+          ? { type: "unsupported" as const, reason: "the message sets penalties or a seed" }
+          : LLMNativeRuntime.stream({
+              model: input.model,
+              provider: item,
+              auth: info,
+              llmClient,
+              messages: prepared.messages,
+              tools: prepared.tools,
+              toolChoice: input.toolChoice,
+              temperature: prepared.params.temperature,
+              topP: prepared.params.topP,
+              topK: prepared.params.topK,
+              maxOutputTokens: prepared.params.maxOutputTokens,
+              providerOptions: prepared.params.options,
+              headers: prepared.headers,
+              abort: input.abort,
+            })
         if (native.type === "supported") {
           yield* Effect.logInfo("llm runtime selected", {
             "llm.runtime": "native",
@@ -319,6 +327,9 @@ const live: Layer.Layer<
           tools: prepared.tools,
           toolChoice: input.toolChoice,
           maxOutputTokens: prepared.params.maxOutputTokens,
+          frequencyPenalty: prepared.params.frequencyPenalty,
+          presencePenalty: prepared.params.presencePenalty,
+          seed: prepared.params.seed,
           abortSignal: input.abort,
           headers: prepared.headers,
           maxRetries: input.retries ?? 0,

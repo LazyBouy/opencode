@@ -56,6 +56,9 @@ export type Prepared = {
     readonly topP?: number
     readonly topK?: number
     readonly maxOutputTokens?: number
+    readonly frequencyPenalty?: number
+    readonly presencePenalty?: number
+    readonly seed?: number
     readonly options: Record<string, any>
   }
   readonly messageTransformOptions: Record<string, any>
@@ -138,7 +141,10 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
           ...input.messages,
         ]
 
-  const params = yield* input.plugin.trigger(
+  // fork (SPEC-0025): the user message's model options replace the agent's and the model's values for the turn
+  // that answers it; title, summary and compaction requests (another agent, or the small model) keep theirs.
+  const asked = !input.small && input.agent.name === input.user.agent ? input.user.options : undefined
+  const hooked = yield* input.plugin.trigger(
     "chat.params",
     {
       sessionID: input.sessionID,
@@ -149,14 +155,23 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     },
     {
       temperature: input.model.capabilities.temperature
-        ? (input.agent.temperature ?? ProviderTransform.temperature(input.model))
+        ? (asked?.temperature ?? input.agent.temperature ?? ProviderTransform.temperature(input.model))
         : undefined,
-      topP: input.agent.topP ?? ProviderTransform.topP(input.model),
+      topP: asked?.topP ?? input.agent.topP ?? ProviderTransform.topP(input.model),
       topK: ProviderTransform.topK(input.model),
-      maxOutputTokens: ProviderTransform.maxOutputTokens(input.model, input.flags.outputTokenMax),
+      maxOutputTokens:
+        asked?.maxOutputTokens !== undefined
+          ? Math.min(asked.maxOutputTokens, input.model.limit.output || asked.maxOutputTokens)
+          : ProviderTransform.maxOutputTokens(input.model, input.flags.outputTokenMax),
       options,
     },
   )
+  const params = {
+    ...hooked,
+    ...(asked?.frequencyPenalty !== undefined ? { frequencyPenalty: asked.frequencyPenalty } : {}),
+    ...(asked?.presencePenalty !== undefined ? { presencePenalty: asked.presencePenalty } : {}),
+    ...(asked?.seed !== undefined ? { seed: asked.seed } : {}),
+  }
 
   const { headers } = yield* input.plugin.trigger(
     "chat.headers",

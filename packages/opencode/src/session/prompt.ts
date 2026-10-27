@@ -673,6 +673,7 @@ const layer = Layer.effect(
           variant,
         },
         system: input.system,
+        options: modelOptionsOf(input.options),
         format: input.format,
       }
 
@@ -1536,6 +1537,11 @@ const ModelRef = Schema.Struct({
   modelID: ModelV2.ID,
 })
 
+// fork (SPEC-0025): the prompt's model options, kept with its user message; an empty object counts as none.
+function modelOptionsOf(options: SessionV1.ModelOptions | undefined): SessionV1.ModelOptions | undefined {
+  return options && Object.values(options).some((value) => value !== undefined) ? options : undefined
+}
+
 export const PromptInput = Schema.Struct({
   sessionID: SessionID,
   messageID: Schema.optional(MessageID),
@@ -1548,6 +1554,7 @@ export const PromptInput = Schema.Struct({
   }),
   format: Schema.optional(SessionV1.Format),
   system: Schema.optional(Schema.String),
+  options: Schema.optional(SessionV1.ModelOptions),
   variant: Schema.optional(Schema.String),
   parts: Schema.Array(
     Schema.Union([

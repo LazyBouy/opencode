@@ -10,17 +10,27 @@ const sessionID = "ses_smoke_target"
 function withStep(sessionID: string, limit: number, before?: string) {
   const page = pageMessages(sessionID, limit, before) as { items: Array<{ info: { role: string }; parts: unknown[] }> }
   if (sessionID !== "ses_smoke_target" || before) return page
-  const items = structuredClone(page.items)
+  const items = structuredClone(page.items) as Array<{ info: Record<string, unknown>; parts: unknown[] }>
+  const lastUser = items.findLast((message) => message.info.role === "user")
+  // The model options and system text the last user message was sent with (SPEC-0025).
+  if (lastUser) {
+    lastUser.info.options = { temperature: 0.2, maxOutputTokens: 512, seed: 12345 }
+    lastUser.info.system = "Answer in one short paragraph."
+  }
   // OpenCode's own text saved with the last user message (hidden in the chat).
-  items
-    .findLast((message) => message.info.role === "user")
-    ?.parts.push({
-      id: "prt_zz_0_synthetic",
-      type: "text",
-      synthetic: true,
-      text: "Called the Read tool with login.ts",
-    })
+  lastUser?.parts.push({
+    id: "prt_zz_0_synthetic",
+    type: "text",
+    synthetic: true,
+    text: "Called the Read tool with login.ts",
+  })
   const last = items.findLast((message) => message.info.role === "assistant")
+  // The web sources the last answer cited (SPEC-0025).
+  if (last)
+    last.info.sources = [
+      { url: "https://example.com/login", title: "Login guide" },
+      { url: "https://example.com/routes" },
+    ]
   last?.parts.push(
     {
       id: "prt_zz_1_reasoning",
@@ -187,6 +197,24 @@ test("Detailed shows, under the message, OpenCode's saved and in-memory texts an
   // Nothing of it in the User view.
   await page.getByTestId("session-view-switch").getByRole("button", { name: "User" }).click()
   await expect(page.getByTestId("detailed-extras")).toHaveCount(0)
+})
+
+test("Detailed shows a message's model options and system text, and the sources a step cites (SPEC-0025)", async ({
+  page,
+}) => {
+  await page.goto(`/server/${base64Encode(fixture.serverKey)}/session/${sessionID}?view=detailed`)
+  const extras = page.getByTestId("detailed-extras").last()
+  await expect(extras.getByTestId("detailed-options")).toContainText("temperature 0.2")
+  await expect(extras.getByTestId("detailed-options")).toContainText("max 512 tokens")
+  await expect(extras.getByTestId("detailed-options")).toContainText("seed 12345")
+  await expect(extras.getByTestId("detailed-system")).toContainText("Answer in one short paragraph.")
+  const sources = page.getByTestId("step-sources").last()
+  await expect(sources.getByRole("link", { name: "Login guide" })).toHaveAttribute("href", "https://example.com/login")
+  await expect(sources.getByRole("link", { name: "https://example.com/routes" })).toBeVisible()
+  // Nothing of it in the User view.
+  await page.getByTestId("session-view-switch").getByRole("button", { name: "User" }).click()
+  await expect(page.getByTestId("detailed-options")).toHaveCount(0)
+  await expect(page.getByTestId("step-sources")).toHaveCount(0)
 })
 
 test("Transcript search looks through what calls sent and received", async ({ page }) => {

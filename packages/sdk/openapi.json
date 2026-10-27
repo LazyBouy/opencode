@@ -14868,6 +14868,9 @@
                   "system": {
                     "type": "string"
                   },
+                  "options": {
+                    "$ref": "#/components/schemas/MessageModelOptions"
+                  },
                   "variant": {
                     "type": "string"
                   },
@@ -15749,6 +15752,9 @@
                   },
                   "system": {
                     "type": "string"
+                  },
+                  "options": {
+                    "$ref": "#/components/schemas/MessageModelOptions"
                   },
                   "variant": {
                     "type": "string"
@@ -33786,6 +33792,39 @@
           }
         ]
       },
+      "MessageModelOptions": {
+        "type": "object",
+        "properties": {
+          "temperature": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 2
+          },
+          "topP": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "maxOutputTokens": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "frequencyPenalty": {
+            "type": "number",
+            "minimum": -2,
+            "maximum": 2
+          },
+          "presencePenalty": {
+            "type": "number",
+            "minimum": -2,
+            "maximum": 2
+          },
+          "seed": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false
+      },
       "UserMessage": {
         "type": "object",
         "properties": {
@@ -33855,6 +33894,9 @@
           },
           "system": {
             "type": "string"
+          },
+          "options": {
+            "$ref": "#/components/schemas/MessageModelOptions"
           },
           "tools": {
             "type": "object",
@@ -34063,6 +34105,19 @@
         "required": ["name", "data"],
         "additionalProperties": false
       },
+      "CitedSource": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": ["url"],
+        "additionalProperties": false
+      },
       "AssistantMessage": {
         "type": "object",
         "properties": {
@@ -34194,6 +34249,12 @@
           },
           "finish": {
             "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CitedSource"
+            }
           }
         },
         "required": [

@@ -113,6 +113,7 @@ import type {
   McpStatusResponses,
   MergeAdapterListErrors,
   MergeAdapterListResponses,
+  MessageModelOptions,
   ModelRef,
   MoveSessionDestination,
   OperatorAgentCreateErrors,
@@ -12585,6 +12586,7 @@ export class Session3 extends HeyApiClient {
       }
       format?: OutputFormat
       system?: string
+      options?: MessageModelOptions
       variant?: string
       parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
     },
@@ -12605,6 +12607,7 @@ export class Session3 extends HeyApiClient {
             { in: "body", key: "tools" },
             { in: "body", key: "format" },
             { in: "body", key: "system" },
+            { in: "body", key: "options" },
             { in: "body", key: "variant" },
             { in: "body", key: "parts" },
           ],
@@ -12938,6 +12941,7 @@ export class Session3 extends HeyApiClient {
       }
       format?: OutputFormat
       system?: string
+      options?: MessageModelOptions
       variant?: string
       parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
     },
@@ -12958,6 +12962,7 @@ export class Session3 extends HeyApiClient {
             { in: "body", key: "tools" },
             { in: "body", key: "format" },
             { in: "body", key: "system" },
+            { in: "body", key: "options" },
             { in: "body", key: "variant" },
             { in: "body", key: "parts" },
           ],

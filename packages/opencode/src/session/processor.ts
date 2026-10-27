@@ -11,6 +11,7 @@ import { Plugin } from "@/plugin"
 import { Snapshot } from "@/snapshot"
 import { Session } from "./session"
 import { LLM } from "./llm"
+import { LLMAISDK } from "./llm/ai-sdk"
 import { MessageV2 } from "./message-v2"
 import { isOverflow } from "./overflow"
 import { PartID } from "./schema"
@@ -80,6 +81,14 @@ interface ProcessorContext extends Input {
 }
 
 type StreamEvent = LLMEvent
+
+// fork (SPEC-0025): the URL sources the AI SDK mapper puts on a step-finish event (llm/ai-sdk.ts).
+const isCitedSources = Schema.is(Schema.Array(SessionV1.CitedSource))
+
+function citedSources(metadata: Record<string, Record<string, unknown>> | undefined): SessionV1.CitedSource[] {
+  const sources = metadata?.[LLMAISDK.CITED_SOURCES_METADATA]?.sources
+  return isCitedSources(sources) ? [...sources] : []
+}
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionProcessor") {}
 
@@ -470,6 +479,14 @@ const layer = Layer.effect(
             ctx.assistantMessage.finish = value.reason
             ctx.assistantMessage.cost += usage.cost
             ctx.assistantMessage.tokens = usage.tokens
+            const cited = citedSources(value.providerMetadata)
+            if (cited.length > 0) {
+              const known = ctx.assistantMessage.sources ?? []
+              ctx.assistantMessage.sources = [
+                ...known,
+                ...cited.filter((source) => !known.some((item) => item.url === source.url)),
+              ]
+            }
             yield* session.updatePart({
               id: PartID.ascending(),
               reason: value.reason,

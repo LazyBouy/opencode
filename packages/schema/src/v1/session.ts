@@ -6,7 +6,7 @@ import { FileDiff } from "../file-diff"
 import { Project } from "../project"
 import { Provider } from "../provider"
 import { Model } from "../model"
-import { NonNegativeInt, optional, statics } from "../schema"
+import { NonNegativeInt, PositiveInt, optional, statics } from "../schema"
 import { ascending } from "../identifier"
 import { SessionID } from "../session-id"
 import { SessionMerge } from "../session-merge"
@@ -335,6 +335,27 @@ const messageBase = {
   sessionID: partBase.sessionID,
 }
 
+const between = (minimum: number, maximum: number) =>
+  Schema.Finite.check(Schema.isGreaterThanOrEqualTo(minimum), Schema.isLessThanOrEqualTo(maximum))
+
+// fork (SPEC-0025): sampling settings a prompt carries for the model requests that answer it.
+export const ModelOptions = Schema.Struct({
+  temperature: Schema.optional(between(0, 2)),
+  topP: Schema.optional(between(0, 1)),
+  maxOutputTokens: Schema.optional(PositiveInt),
+  frequencyPenalty: Schema.optional(between(-2, 2)),
+  presencePenalty: Schema.optional(between(-2, 2)),
+  seed: Schema.optional(Schema.Int),
+}).annotate({ identifier: "MessageModelOptions" })
+export type ModelOptions = Types.DeepMutable<Schema.Schema.Type<typeof ModelOptions>>
+
+// fork (SPEC-0025): a web source the model cited in its answer.
+export const CitedSource = Schema.Struct({
+  url: Schema.String,
+  title: Schema.optional(Schema.String),
+}).annotate({ identifier: "CitedSource" })
+export type CitedSource = Types.DeepMutable<Schema.Schema.Type<typeof CitedSource>>
+
 export const User = Schema.Struct({
   ...messageBase,
   role: Schema.Literal("user"),
@@ -356,6 +377,7 @@ export const User = Schema.Struct({
     variant: Schema.optional(Schema.String),
   }),
   system: Schema.optional(Schema.String),
+  options: Schema.optional(ModelOptions),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
 }).annotate({ identifier: "UserMessage" })
 export type User = Types.DeepMutable<Schema.Schema.Type<typeof User>>
@@ -488,6 +510,7 @@ export const Assistant = Schema.Struct({
   structured: Schema.optional(Schema.Any),
   variant: Schema.optional(Schema.String),
   finish: Schema.optional(Schema.String),
+  sources: Schema.optional(Schema.Array(CitedSource)),
 }).annotate({ identifier: "AssistantMessage" })
 export type Assistant = Omit<Types.DeepMutable<Schema.Schema.Type<typeof Assistant>>, "error"> & {
   error?: AssistantError

@@ -16,8 +16,14 @@ export function adapterState() {
     currentReasoningID: undefined as string | undefined,
     toolNames: {} as Record<string, string>,
     copilotTotalNanoAiu: undefined as number | undefined,
+    sources: [] as CitedSource[],
   }
 }
+
+// fork (SPEC-0025): the URL sources a step cites ride on its step-finish event, under this metadata key.
+export const CITED_SOURCES_METADATA = "opencode-cited-sources"
+
+type CitedSource = { url: string; title?: string }
 
 function finishReason(value: string | undefined): FinishReason {
   return Schema.is(FinishReason)(value) ? value : "unknown"
@@ -90,7 +96,7 @@ export function toLLMEvents(
         return Effect.fail(new ProviderError.ResponseStreamError("Provider finish_reason: network_error"))
       return Effect.sync(() => {
         const original = providerMetadata(event.providerMetadata)
-        const metadata =
+        const billed =
           state.copilotTotalNanoAiu === undefined
             ? original
             : {
@@ -100,7 +106,10 @@ export function toLLMEvents(
                   totalNanoAiu: state.copilotTotalNanoAiu,
                 },
               }
+        const metadata =
+          state.sources.length === 0 ? billed : { ...billed, [CITED_SOURCES_METADATA]: { sources: state.sources } }
         state.copilotTotalNanoAiu = undefined
+        state.sources = []
         return [
           LLMEvent.stepFinish({
             index: state.step++,
@@ -267,8 +276,14 @@ export function toLLMEvents(
     case "error":
       return Effect.fail(event.error)
 
-    case "abort":
     case "source":
+      return Effect.sync(() => {
+        if (event.sourceType === "url" && !state.sources.some((source) => source.url === event.url))
+          state.sources.push(event.title ? { url: event.url, title: event.title } : { url: event.url })
+        return []
+      })
+
+    case "abort":
     case "file":
     case "tool-output-denied":
     case "tool-approval-request":
