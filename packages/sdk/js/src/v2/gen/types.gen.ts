@@ -6816,6 +6816,7 @@ export type OperatorSessionPermissions = {
    * OpenCode's own lines can be deleted (not in the OpenCode namespace)
    */
   canDeleteOpenCode: boolean
+  correlationID?: string
 }
 
 export type OperatorSessionPermissionsNotFoundError = {
@@ -21597,6 +21598,10 @@ export type OperatorSessionPermissionsSaveData = {
       permission: string
       pattern: string
     }>
+    /**
+     * Up to 200 characters, no line breaks; empty clears it
+     */
+    correlationID?: string
   }
   path: {
     sessionID: string

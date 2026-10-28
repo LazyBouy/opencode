@@ -10,6 +10,7 @@ import { OperatorMessageLog } from "@/operator/messaging/log"
 import { OperatorProjectInbox } from "@/operator/messaging/inbox"
 import { OperatorPing } from "@/operator/messaging/ping"
 import { OperatorMessagingSettings } from "@/operator/messaging/settings"
+import { OperatorSessionCorrelation } from "@/operator/messaging/session-correlation"
 import { OperatorPermissionLive } from "@/operator/permission-live"
 import { OperatorPermissionLocks } from "@/operator/permission-locks"
 import { OperatorProjectRecords } from "@/operator/project-records"
@@ -232,6 +233,46 @@ unix("send to a session and to a group (one message each, one correlation); memb
     )
     expect(notMember.card).toMatchObject({ status: "refused", reason: "build is not a member of this project" })
     expect(sender.id).toBeTruthy()
+  }),
+)
+
+unix("a session's default correlation id goes on sends that name none, not on named ids or replies (SPEC-0026)", () =>
+  Effect.gen(function* () {
+    const { ping, call, record, sender } = yield* setup()
+    yield* record({ status: "paused" })
+    const toPlan = (extra: Partial<OperatorPing.Args> = {}) =>
+      call({ verb: "send", target: { type: "agent", id: "plan" }, message: { body: "hi" }, ...extra })
+
+    // No default: the id is made up from the first message, and discover says nothing about it.
+    const plain = yield* ping.run(toPlan())
+    expect(plain.card.correlationID).toBe(plain.card.messages![0]!.id)
+    expect((yield* ping.run(call({ verb: "discover" }))).output).not.toContain("carry the correlation id")
+
+    yield* Effect.promise(() => OperatorSessionCorrelation.set(sender.id, "iphiflow_ch_test"))
+    const stamped = yield* ping.run(toPlan())
+    expect(stamped.card.correlationID).toBe("iphiflow_ch_test")
+    expect(stamped.output).toContain("correlation iphiflow_ch_test")
+    expect(OperatorMessageLog.log().get(stamped.card.messages![0]!.id!)).toMatchObject({
+      correlationID: "iphiflow_ch_test",
+    })
+    expect((yield* ping.run(call({ verb: "discover" }))).output).toContain(
+      "Messages you send carry the correlation id iphiflow_ch_test unless you name another (correlationID).",
+    )
+
+    // A send that names its own id keeps it.
+    expect((yield* ping.run(toPlan({ correlationID: "c_own" }))).card.correlationID).toBe("c_own")
+
+    // A reply keeps the original's id, whatever the replying session's default.
+    const planSession = yield* session()
+    yield* Effect.promise(() => OperatorSessionCorrelation.set(planSession.id, "iphiflow_ch_other"))
+    const original = OperatorMessageLog.log().get(plain.card.messages![0]!.id!)!
+    const reply = yield* ping.run(
+      call(
+        { verb: "send", replyTo: original.id, message: { body: "back" } },
+        { sessionID: planSession.id, agent: "plan" },
+      ),
+    )
+    expect(reply.card.correlationID).toBe(plain.card.correlationID)
   }),
 )
 

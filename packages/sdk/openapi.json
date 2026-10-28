@@ -22803,7 +22803,7 @@
             }
           }
         },
-        "description": "Replace the session's own rules (applied at once, after its agent's) and record where each came from. An empty list resets the session to its agent. A rule that would change a rule the agent locks is refused.",
+        "description": "Replace the session's own rules (applied at once, after its agent's) and record where each came from. An empty list resets the session to its agent. A rule that would change a rule the agent locks is refused. With correlationID, also set or clear the session's default correlation id for ping.",
         "summary": "Replace a session's own permission rules",
         "requestBody": {
           "content": {
@@ -22829,6 +22829,11 @@
                       "required": ["permission", "pattern"],
                       "additionalProperties": false
                     }
+                  },
+                  "correlationID": {
+                    "type": "string",
+                    "pattern": "^[^\\r\\n]{0,200}$",
+                    "description": "Up to 200 characters, no line breaks; empty clears it"
                   }
                 },
                 "required": ["rules"],
@@ -51128,6 +51133,9 @@
           "canDeleteOpenCode": {
             "type": "boolean",
             "description": "OpenCode's own lines can be deleted (not in the OpenCode namespace)"
+          },
+          "correlationID": {
+            "type": "string"
           }
         },
         "required": [

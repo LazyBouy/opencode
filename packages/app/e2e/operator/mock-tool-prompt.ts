@@ -279,6 +279,7 @@ export function sessionPermissionsFor(
   own: Rule[] = [],
   locks: Array<{ permission: string; pattern: string }> = [],
   deleted: Key[] = [],
+  correlationID: string | null = null,
 ) {
   const agent = permissionsFor(directory, "build", [], { locks })
   const inherited = agent.levelRows
@@ -309,5 +310,6 @@ export function sessionPermissionsFor(
       .map(({ permission, pattern, action }) => ({ permission, pattern, action })),
     allLocked: inherited.every((row) => locks.some((lock) => sameKey(lock, row))),
     canDeleteOpenCode: false,
+    ...(correlationID ? { correlationID } : {}),
   }
 }

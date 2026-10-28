@@ -19,6 +19,7 @@ import { OperatorMessage } from "./message"
 import { OperatorInboxRules as Rules } from "./rules"
 import { OperatorMessagingSeams } from "./seams"
 import { OperatorMessagingSettings } from "./settings"
+import { OperatorSessionCorrelation } from "./session-correlation"
 import { OperatorPingVerbs } from "./verbs"
 
 // What the `ping` tool does (SPEC-0023 §7, §8.3), inside a project: `discover` what the agent may send to, and
@@ -270,7 +271,11 @@ const layer = Layer.effect(
           }),
         )
       const name = path.basename(project)
+      const correlation = yield* Effect.promise(() => OperatorSessionCorrelation.of(call.sessionID))
       const output = [
+        ...(correlation
+          ? [`Messages you send carry the correlation id ${correlation} unless you name another (correlationID).`]
+          : []),
         `Agents of project ${name} you may message:`,
         ...(agents.length ? agents : ["(none)"]),
         ...(groups.length ? ["Groups:", ...groups] : []),
@@ -490,6 +495,8 @@ const layer = Layer.effect(
       )
 
       const firstID = OperatorMessage.newId()
+      // A send that names no correlation id carries the session's default, if a client set one (SPEC-0026).
+      if (!args.replyTo) correlationID ??= yield* Effect.promise(() => OperatorSessionCorrelation.of(call.sessionID))
       correlationID ??= firstID
       const timeout = Math.min(Math.max(Math.round(args.timeout ?? settings.wait), 1), LIMITS.waitMax)
       // Registered before anything is sent, so a quick reply can't pass it by.

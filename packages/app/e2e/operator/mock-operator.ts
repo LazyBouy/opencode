@@ -601,9 +601,15 @@ export interface OperatorMock {
   projectRecords: Record<string, Record<string, unknown>>
   sessionPermissionWrites: Array<{
     sessionID: string
-    body: { rules: Array<Record<string, string>>; deleted?: Array<{ permission: string; pattern: string }> }
+    body: {
+      rules: Array<Record<string, string>>
+      deleted?: Array<{ permission: string; pattern: string }>
+      correlationID?: string
+    }
   }>
   sessionDeleted: Record<string, Array<{ permission: string; pattern: string }>>
+  // A session's default correlation id for ping (SPEC-0026).
+  sessionCorrelations: Record<string, string | null>
   // Namespace and project permission levels, and every save.
   levels: Partial<Record<"namespace" | "project", Level>>
   levelWrites: Array<{ level: "namespace" | "project"; body: Level }>
@@ -917,6 +923,7 @@ export async function mockOperator(page: Page) {
     sessionPermissionWrites: [],
     sessionRules: {},
     sessionDeleted: {},
+    sessionCorrelations: {},
     levels: {},
     levelWrites: [],
     projectRecordWrites: [],
@@ -1364,10 +1371,12 @@ export async function mockOperator(page: Page) {
         const body = route.request().postDataJSON() as {
           rules: Array<Record<string, string>>
           deleted?: Array<{ permission: string; pattern: string }>
+          correlationID?: string
         }
         state.sessionPermissionWrites.push({ sessionID: id, body })
         state.sessionRules[id] = body.rules as never
         if (body.deleted) state.sessionDeleted[id] = body.deleted
+        if (body.correlationID !== undefined) state.sessionCorrelations[id] = body.correlationID || null
       }
       return json(
         route,
@@ -1377,6 +1386,7 @@ export async function mockOperator(page: Page) {
           state.sessionRules[id],
           state.locks.build?.locks,
           state.sessionDeleted[id] ?? [],
+          state.sessionCorrelations[id] ?? null,
         ),
       )
     }

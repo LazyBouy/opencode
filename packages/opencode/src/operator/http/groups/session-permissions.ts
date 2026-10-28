@@ -1,3 +1,4 @@
+import { OperatorSessionCorrelation } from "@/operator/messaging/session-correlation"
 import { OperatorSessionPermissions } from "@/operator/session-permissions"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Schema } from "effect"
@@ -56,6 +57,10 @@ export const OperatorSessionPermissionApi = HttpApi.make("operator-session-permi
             deleted: Schema.optional(
               Schema.Array(Schema.Struct({ permission: Schema.String, pattern: Schema.String })),
             ).annotate({ description: "Inherited lines the session deletes (unchanged when absent)" }),
+            correlationID: Schema.optional(OperatorSessionCorrelation.Value).annotate({
+              description:
+                "The correlation id ping sends from this session carry when they name none (SPEC-0026): empty clears it, unchanged when absent",
+            }),
           }),
           success: described(OperatorSessionPermissions.Info, "The session's permissions after the save"),
           error: [ApiSessionPermissionsNotFoundError, ApiSessionPermissionsLockedError],
@@ -64,7 +69,7 @@ export const OperatorSessionPermissionApi = HttpApi.make("operator-session-permi
             identifier: "operator.sessionPermissions.save",
             summary: "Replace a session's own permission rules",
             description:
-              "Replace the session's own rules (applied at once, after its agent's) and record where each came from. An empty list resets the session to its agent. A rule that would change a rule the agent locks is refused.",
+              "Replace the session's own rules (applied at once, after its agent's) and record where each came from. An empty list resets the session to its agent. A rule that would change a rule the agent locks is refused. With correlationID, also set or clear the session's default correlation id for ping.",
           }),
         ),
       )

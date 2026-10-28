@@ -18,16 +18,18 @@ export const operatorSessionPermissionsHandlers = HttpApiBuilder.group(
       return handlers
         .handle("get", (ctx) => permissions.get(ctx.params.sessionID).pipe(Effect.mapError(notFound)))
         .handle("save", (ctx) =>
-          permissions.save(ctx.params.sessionID, ctx.payload.rules, ctx.payload.deleted).pipe(
-            Effect.mapError((error) =>
-              error._tag === "OperatorSessionPermissionsLocked"
-                ? new ApiSessionPermissionsLockedError({
-                    name: "OperatorSessionPermissionsLockedError",
-                    data: { message: error.message },
-                  })
-                : notFound(error),
+          permissions
+            .save(ctx.params.sessionID, ctx.payload.rules, ctx.payload.deleted, ctx.payload.correlationID)
+            .pipe(
+              Effect.mapError((error) =>
+                error._tag === "OperatorSessionPermissionsLocked"
+                  ? new ApiSessionPermissionsLockedError({
+                      name: "OperatorSessionPermissionsLockedError",
+                      data: { message: error.message },
+                    })
+                  : notFound(error),
+              ),
             ),
-          ),
         )
     }),
 )

@@ -1,6 +1,7 @@
-import { expect } from "bun:test"
-import { Effect } from "effect"
+import { expect, test } from "bun:test"
+import { Effect, Schedule, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { OperatorSessionCorrelation } from "@/operator/messaging/session-correlation"
 import { OperatorSessionPermissions } from "@/operator/session-permissions"
 import { OperatorToolPrompt } from "@/operator/tool-prompt"
 import { Session } from "@/session/session"
@@ -71,6 +72,48 @@ unix("rules keep where they came from: Always allow stays Always allow after a s
     ])
   }),
 )
+
+unix(
+  "the default correlation id is set with the rules, kept, cleared by an empty value, and dropped with the session (SPEC-0026)",
+  () =>
+    Effect.gen(function* () {
+      yield* configure()
+      const permissions = yield* OperatorSessionPermissions.Service
+      const sessions = yield* Session.Service
+      const current = yield* session()
+      expect((yield* permissions.get(current.id)).correlationID).toBeUndefined()
+
+      const lines = [rule("ping", "SEND(session/*)", "allow")]
+      const set = yield* permissions.save(current.id, lines, undefined, "iphiflow_ch_1")
+      expect(set.correlationID).toBe("iphiflow_ch_1")
+      expect(set.written).toEqual(lines)
+      expect((yield* permissions.get(current.id)).correlationID).toBe("iphiflow_ch_1")
+
+      // Absent: unchanged, whatever the rules become.
+      expect((yield* permissions.save(current.id, [])).correlationID).toBe("iphiflow_ch_1")
+      // Empty: cleared, and the rules are saved as given.
+      const cleared = yield* permissions.save(current.id, lines, undefined, "")
+      expect(cleared.correlationID).toBeUndefined()
+      expect(cleared.written).toEqual(lines)
+
+      yield* permissions.save(current.id, [], undefined, "iphiflow_ch_2")
+      yield* sessions.remove(current.id)
+      yield* Effect.promise(() => OperatorSessionCorrelation.of(current.id)).pipe(
+        Effect.flatMap((left) => (left === undefined ? Effect.void : Effect.fail("not yet" as const))),
+        Effect.retry({ times: 100, schedule: Schedule.spaced("50 millis") }),
+        Effect.orDie,
+      )
+    }),
+)
+
+test("a default correlation id is up to 200 characters without line breaks; empty clears it", () => {
+  const decode = Schema.decodeUnknownSync(OperatorSessionCorrelation.Value)
+  expect(decode("x".repeat(200))).toHaveLength(200)
+  expect(decode("")).toBe("")
+  expect(() => decode("x".repeat(201))).toThrow()
+  expect(() => decode("a\nb")).toThrow()
+  expect(() => decode("a\rb")).toThrow()
+})
 
 unix("a subagent session's rules from task are labelled as added by task", () =>
   Effect.gen(function* () {

@@ -7621,7 +7621,7 @@ export class SessionPermissions extends HeyApiClient {
   /**
    * Replace a session's own permission rules
    *
-   * Replace the session's own rules (applied at once, after its agent's) and record where each came from. An empty list resets the session to its agent. A rule that would change a rule the agent locks is refused.
+   * Replace the session's own rules (applied at once, after its agent's) and record where each came from. An empty list resets the session to its agent. A rule that would change a rule the agent locks is refused. With correlationID, also set or clear the session's default correlation id for ping.
    */
   public save<ThrowOnError extends boolean = false>(
     parameters: {
@@ -7633,6 +7633,7 @@ export class SessionPermissions extends HeyApiClient {
         permission: string
         pattern: string
       }>
+      correlationID?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7646,6 +7647,7 @@ export class SessionPermissions extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "body", key: "rules" },
             { in: "body", key: "deleted" },
+            { in: "body", key: "correlationID" },
           ],
         },
       ],

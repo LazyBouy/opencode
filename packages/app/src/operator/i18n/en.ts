@@ -3222,7 +3222,10 @@ export const dict = {
   "operator.sessionPermissions.reset": "Reset to agent",
   "operator.sessionPermissions.resetTitle": "Reset this session to its agent?",
   "operator.sessionPermissions.resetBody":
-    "Every rule of this session is removed, including Always allow answers and rules added by task. The session then follows its agent's rules.",
+    "Every rule of this session is removed, including Always allow answers and rules added by task, and its default correlation id is cleared. The session then follows its agent's rules.",
+  "operator.sessionPermissions.correlation":
+    "Messages this session sends with ping carry the correlation id {{id}} unless they name another.",
+  "operator.sessionPermissions.correlationClear": "Clear",
   "operator.inspector.permissions": "Permissions",
   "operator.agentPermissions.edit": "Edit permissions",
   "operator.agentPermissions.save": "Save permissions",

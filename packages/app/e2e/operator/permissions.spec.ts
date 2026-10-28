@@ -193,8 +193,42 @@ test("a session's own lines: added on the Sessions page, saved with the session,
   await panel.getByRole("button", { name: "Reset to agent" }).click()
   await page.getByRole("dialog").last().getByRole("button", { name: "Reset to agent" }).click()
   await expect.poll(() => state.sessionPermissionWrites.length).toBe(2)
-  expect(state.sessionPermissionWrites[1].body).toEqual({ rules: [], deleted: [] })
+  expect(state.sessionPermissionWrites[1].body).toEqual({ rules: [], deleted: [], correlationID: "" })
   await expect(panel).toContainText("No lines added here.")
+})
+
+test("a session's default correlation id shows in its permissions, and Clear and Reset clear it (SPEC-0026)", async ({
+  page,
+}) => {
+  const state = await mockOperator(page)
+  state.sessionRules.ses_op_1 = [{ permission: "ping", pattern: "SEND(session/*)", action: "allow" }]
+  state.sessionCorrelations.ses_op_1 = "iphiflow_ch_42"
+  await page.goto(`/operator/sessions${dir}&session=ses_op_1&stab=permissions`)
+  const panel = page.getByTestId("session-permissions")
+  const note = panel.getByTestId("session-permissions-correlation")
+  await expect(note).toContainText(
+    "Messages this session sends with ping carry the correlation id iphiflow_ch_42 unless they name another.",
+  )
+
+  // Clear: only the default goes; the saved rules are sent back as they are.
+  await note.getByRole("button", { name: "Clear" }).click()
+  await expect.poll(() => state.sessionPermissionWrites.length).toBe(1)
+  expect(state.sessionPermissionWrites[0].body).toEqual({
+    rules: [{ permission: "ping", pattern: "SEND(session/*)", action: "allow" }],
+    deleted: [],
+    correlationID: "",
+  })
+  await expect(note).toHaveCount(0)
+
+  // Reset to agent clears it too.
+  state.sessionCorrelations.ses_op_1 = "iphiflow_ch_43"
+  await page.reload()
+  await expect(panel.getByTestId("session-permissions-correlation")).toContainText("iphiflow_ch_43")
+  await panel.getByRole("button", { name: "Reset to agent" }).click()
+  await page.getByRole("dialog").last().getByRole("button", { name: "Reset to agent" }).click()
+  await expect.poll(() => state.sessionPermissionWrites.length).toBe(2)
+  expect(state.sessionPermissionWrites[1].body).toEqual({ rules: [], deleted: [], correlationID: "" })
+  await expect(panel.getByTestId("session-permissions-correlation")).toHaveCount(0)
 })
 
 test("Change access on a session's tool prompt opens that session's rules", async ({ page }) => {

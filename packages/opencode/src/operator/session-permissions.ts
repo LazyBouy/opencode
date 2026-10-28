@@ -18,6 +18,7 @@ import { OperatorLayout } from "./layout"
 import { OperatorNamespaceScope } from "./namespace-scope"
 import { OperatorPermissionLive } from "./permission-live"
 import { OperatorPermissionLocks } from "./permission-locks"
+import { OperatorSessionCorrelation } from "./messaging/session-correlation"
 import { OperatorPermissionModel } from "./permission-model"
 import { OperatorPermissionRules } from "./permission-rules"
 
@@ -88,6 +89,7 @@ export function forget(sessionID: string) {
     changeDeleted((store) => {
       delete store[sessionID]
     }),
+    OperatorSessionCorrelation.forget(sessionID),
   ])
 }
 
@@ -145,6 +147,9 @@ export const Info = Schema.Struct({
   canDeleteOpenCode: Schema.Boolean.annotate({
     description: "OpenCode's own lines can be deleted (not in the OpenCode namespace)",
   }),
+  correlationID: Schema.optional(Schema.String).annotate({
+    description: "The correlation id ping sends from this session carry when they name none (SPEC-0026); absent: none",
+  }),
 }).annotate({ identifier: "OperatorSessionPermissions" })
 export type Info = typeof Info.Type
 
@@ -157,11 +162,15 @@ export class LockedError extends Schema.TaggedErrorClass<LockedError>()("Operato
 
 export interface Interface {
   readonly get: (sessionID: string) => Effect.Effect<Info, NotFoundError>
-  /** Replaces the session's own rules and the inherited lines it deletes (Reset to agent: none). */
+  /**
+   * Replaces the session's own rules and the inherited lines it deletes (Reset to agent: none), and
+   * sets its default correlation id when one is given (SPEC-0026; empty: cleared, absent: unchanged).
+   */
   readonly save: (
     sessionID: string,
     rules: ReadonlyArray<Rule>,
     deleted?: ReadonlyArray<Key>,
+    correlationID?: string,
   ) => Effect.Effect<Info, NotFoundError | LockedError>
   /** Adds rules after the session's own (Allow for session), with where they came from. */
   readonly add: (sessionID: string, rules: ReadonlyArray<Rule>, origin: Origin) => Effect.Effect<void, NotFoundError>
@@ -273,6 +282,7 @@ const layer = Layer.effect(
           (yield* Effect.promise(() => OperatorNamespaceScope.layerOf(info.directory))).namespace,
           yield* Effect.promise(() => OperatorLayout.snapshot()),
         ),
+        correlationID: yield* Effect.promise(() => OperatorSessionCorrelation.of(sessionID)),
       }
     })
 
@@ -280,6 +290,7 @@ const layer = Layer.effect(
       sessionID: string,
       next: ReadonlyArray<Rule>,
       deleted?: ReadonlyArray<Key>,
+      correlationID?: string,
     ) {
       const info = yield* session(sessionID)
       const list = next.map((rule) => ({
@@ -321,6 +332,8 @@ const layer = Layer.effect(
         yield* Effect.promise(() => writeDeleted(sessionID, deleted))
       }
       yield* Effect.promise(() => replace(sessionID, list, "user"))
+      if (correlationID !== undefined)
+        yield* Effect.promise(() => OperatorSessionCorrelation.set(sessionID, correlationID))
       // Approvals kept in memory for the session stop applying: its rules are what you saved.
       OperatorPermissionHook.reset(sessionID)
       // Saved with the session; OpenCode publishes the session's update, and applies the rules from the

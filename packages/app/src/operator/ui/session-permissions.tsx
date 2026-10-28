@@ -57,11 +57,18 @@ export function SessionPermissions(props: {
   })
   onCleanup(stop)
 
-  const write = async (rules: Rule[], deleted: Key[]) => {
+  // `clearsCorrelation` also clears the session's default correlation id (SPEC-0026: an empty value).
+  const write = async (rules: Rule[], deleted: Key[], clearsCorrelation = false) => {
     setStore({ saving: true, error: "" })
     await api
       .client()
-      .operator.sessionPermissions.save({ sessionID: props.sessionID, directory: props.directory, rules, deleted })
+      .operator.sessionPermissions.save({
+        sessionID: props.sessionID,
+        directory: props.directory,
+        rules,
+        deleted,
+        ...(clearsCorrelation ? { correlationID: "" } : {}),
+      })
       .then(async (result) => {
         queryClient.setQueryData(api.key("session-permissions", props.directory, props.sessionID), result.data)
         showToast({ title: language.t("operator.sessionPermissions.saved") })
@@ -81,7 +88,12 @@ export function SessionPermissions(props: {
       confirm: language.t("operator.sessionPermissions.reset"),
       danger: true,
     })
-    if (ok) await write([], [])
+    if (ok) await write([], [], true)
+  }
+  // Clears only the default correlation id: the saved rules stay as they are.
+  const clearCorrelation = async () => {
+    const value = JSON.parse(saved()) as { rules: Rule[]; deleted: Key[] }
+    await write(value.rules, value.deleted, true)
   }
 
   return (
@@ -95,6 +107,16 @@ export function SessionPermissions(props: {
         {(data) => (
           <>
             <p data-slot="operator-note">{language.t("operator.sessionPermissions.about", { agent: data().agent })}</p>
+            <Show when={data().correlationID}>
+              {(id) => (
+                <div class="flex items-center gap-2" data-testid="session-permissions-correlation">
+                  <p data-slot="operator-note">{language.t("operator.sessionPermissions.correlation", { id: id() })}</p>
+                  <ButtonV2 variant="neutral" disabled={store.saving} onClick={() => void clearCorrelation()}>
+                    {language.t("operator.sessionPermissions.correlationClear")}
+                  </ButtonV2>
+                </div>
+              )}
+            </Show>
             <div data-slot="operator-permission-layout">
               <div class="flex flex-col gap-4 min-w-0" data-testid="session-permissions-own">
                 <Show
@@ -133,7 +155,7 @@ export function SessionPermissions(props: {
             <div data-slot="operator-actions">
               <ButtonV2
                 variant="danger"
-                disabled={store.saving || (!data().written.length && !data().deleted.length)}
+                disabled={store.saving || (!data().written.length && !data().deleted.length && !data().correlationID)}
                 onClick={() => void reset()}
               >
                 {language.t("operator.sessionPermissions.reset")}
