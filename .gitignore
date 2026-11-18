@@ -32,3 +32,6 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# Fork: specs/ stays out of git (the user's spec documents). Files upstream already tracks there stay tracked.
+/specs/
